@@ -8,7 +8,7 @@
   </a>
 </p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/opencode.ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -27,7 +27,7 @@ AI coding agent, built for the terminal.
 curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+npm i -g opencode.ai@latest        # or bun/pnpm/yarn
 brew install sst/tap/opencode      # macOS
 paru -S opencode-bin               # Arch Linux
 ```
@@ -83,9 +83,6 @@ Start with a `provider.toml` file in `~/.config/opencode/providers`
 name = "OpenRouter"
 env = ["OPENROUTER_API_KEY"]
 npm = "@openrouter/ai-sdk-provider"
-
-[options]
-baseURL = "https://api.openrouter.ai" # optional settings
 ```
 
 And models in `~/.config/opencode/providers/openrouter/models/[model-id]`

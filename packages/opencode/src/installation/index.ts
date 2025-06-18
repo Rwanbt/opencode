@@ -74,7 +74,7 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      if (output.includes("opencode-ai")) {
+      if (output.includes("opencode-ai") || output.includes("opencode.ai")) {
         return check.name
       }
     }
@@ -95,11 +95,13 @@ export namespace Installation {
         case "curl":
           return $`curl -fsSL https://opencode.ai/install | bash`
         case "npm":
-          return $`npm install -g opencode-ai@${target}`
+          return $`npm remove -g opencode-ai && npm install -g opencode.ai@${target}`
         case "pnpm":
-          return $`pnpm install -g opencode-ai@${target}`
+          return $`pnpm remove -g opencode-ai && pnpm install -g opencode.ai@${target}`
         case "bun":
-          return $`bun install -g opencode-ai@${target}`
+          return $`bun remove -g opencode-ai && bun install -g opencode.ai@${target}`
+        case "yarn":
+          return $`yarn remove -g opencode-ai && yarn add -g opencode.ai@${target}`
         default:
           throw new Error(`Unknown method: ${method}`)
       }

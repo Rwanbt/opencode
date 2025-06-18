@@ -1,6 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.2.14",

@@ -18,7 +18,7 @@
       },
     },
     "packages/opencode": {
-      "name": "opencode",
+      "name": "opencode.ai",
       "version": "0.0.0",
       "dependencies": {
         "@clack/prompts": "0.11.0",
@@ -1200,7 +1200,7 @@
 
     "openapi-types": ["openapi-types@12.1.3", "", {}, "sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw=="],
 
-    "opencode": ["opencode@workspace:packages/opencode"],
+    "opencode.ai": ["opencode.ai@workspace:packages/opencode"],
 
     "opencontrol": ["opencontrol@0.0.6", "", { "dependencies": { "@modelcontextprotocol/sdk": "1.6.1", "@tsconfig/bun": "1.0.7", "hono": "4.7.4", "zod": "3.24.2", "zod-to-json-schema": "3.24.3" }, "bin": { "opencontrol": "bin/index.mjs" } }, "sha512-QeCrpOK5D15QV8kjnGVeD/BHFLwcVr+sn4T6KKmP0WAMs2pww56e4h+eOGHb5iPOufUQXbdbBKi6WV2kk7tefQ=="],
 
