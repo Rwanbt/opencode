@@ -21,8 +21,6 @@ mkdir -p packages/sdk
 
 mv opencode-go/ packages/sdk/go
 rm -rf packages/sdk/go/.git
-rm -rf packages/sdk/go/go.mod
-rm -rf packages/sdk/go/go.sum
 
 mv opencode-typescript/ packages/sdk/js
 rm -rf packages/sdk/js/.git
