@@ -16,12 +16,17 @@ echo "Running stl builds create..."
 stl builds create --branch dev --pull --allow-empty --+target go --+target typescript
 
 echo "Cleaning up..."
-rm -rf packages/tui/sdk
-mv opencode-go/ packages/tui/sdk/
-rm -rf packages/tui/sdk/.git
 rm -rf packages/sdk
-mv opencode-typescript/ packages/sdk/
-rm -rf packages/sdk/.git
+mkdir -p packages/sdk
+
+mv opencode-go/ packages/sdk/go
+rm -rf packages/sdk/go/.git
+rm -rf packages/sdk/go/go.mod
+rm -rf packages/sdk/go/go.sum
+
+mv opencode-typescript/ packages/sdk/js
+rm -rf packages/sdk/js/.git
+rm -rf packages/sdk/js/yarn.lock
 
 # Only run production build if not in dev mode
 if [ "$DEV_MODE" = false ]; then

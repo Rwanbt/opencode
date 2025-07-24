@@ -23,8 +23,7 @@ require (
 )
 
 replace (
-	github.com/charmbracelet/x/input => ./input
-	github.com/sst/opencode-sdk-go => ./sdk
+	github.com/charmbracelet/x/input => ./packages/tui/input
 )
 
 require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
