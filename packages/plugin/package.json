@@ -1,4 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin"
+  "private": false,
+  "name": "@opencode-ai/plugin",
+  "type": "module",
+  "version": "0.0.1",
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "typescript": "catalog:"
+  }
 }
