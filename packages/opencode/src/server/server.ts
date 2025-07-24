@@ -716,7 +716,7 @@ export namespace Server {
           "json",
           z.object({
             service: z.string().openapi({ description: "Service name for the log entry" }),
-            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
+            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level", ref: "LogLevel" }),
             message: z.string().openapi({ description: "Log message" }),
             extra: z
               .record(z.string(), z.any())
