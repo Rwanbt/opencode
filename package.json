@@ -12,7 +12,8 @@
   },
   "workspaces": {
     "packages": [
-      "packages/*"
+      "packages/*",
+      "packages/sdk/js"
     ],
     "catalog": {
       "@types/node": "22.13.9",
