@@ -1,3 +1,8 @@
-export { createClient } from "./gen/client"
-export { client } from "./gen/client.gen"
-export { Default as opencode } from "./gen/sdk.gen"
+import { createClient } from "./gen/client/client"
+import { type Config } from "./gen/client/types"
+import { OpencodeClient } from "./gen/sdk.gen"
+
+export function createOpencodeClient(config?: Config) {
+  const client = createClient(config)
+  return new OpencodeClient({ client })
+}

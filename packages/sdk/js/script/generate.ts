@@ -1,17 +1,19 @@
 #!/usr/bin/env bun
 
+const dir = new URL("..", import.meta.url).pathname
+process.chdir(dir)
+
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 
-console.log("=== Generating SDKs ===")
+console.log("=== Generating JS SDK ===")
 console.log()
 
-import { createClient, defaultPlugins } from "@hey-api/openapi-ts"
+import { createClient } from "@hey-api/openapi-ts"
 
-const dir = new URL("..", import.meta.url).pathname
-await fs.rmdir(path.join(dir, "src/gen"), { recursive: true })
-await $`bun run ../../opencode/src/index.ts generate > openapi.json`.cwd(dir)
+await fs.rm(path.join(dir, "src/gen"), { recursive: true, force: true })
+await $`bun run ../../opencode/src/index.ts generate > openapi.json`
 
 await createClient({
   input: "./openapi.json",
@@ -23,7 +25,7 @@ await createClient({
     },
     {
       name: "@hey-api/sdk",
-      asClass: true,
+      instance: "OpencodeClient",
       exportFromIndex: false,
       auth: false,
     },

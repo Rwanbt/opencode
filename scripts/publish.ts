@@ -1,10 +1,9 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
+const version = process.env["OPENCODE_VERSION"]
+if (!version) {
+  throw new Error("OPENCODE_VERSION is required")
+}
 
-import pkg from "../package.json"
-
-const version = process.env["VERSION"]
-
-console.log("publishing stainless")
-await import("./stainless.ts")
+await import(`../packages/sdk/stainless/generate.ts`)
+await import(`../packages/sdk/js/script/publish.ts`)
