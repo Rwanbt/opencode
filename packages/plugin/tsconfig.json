@@ -6,7 +6,11 @@
     "module": "preserve",
     "declaration": true,
     "moduleResolution": "bundler",
-    "lib": ["dom.iterable"]
+    "customConditions": [
+      "development"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
