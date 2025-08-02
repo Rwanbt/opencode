@@ -14,12 +14,12 @@ process.env["OPENCODE_VERSION"] = version
 for await (const file of new Bun.Glob("**/package.json").scan({
   absolute: true,
 })) {
-  const pkg = await Bun.file(file).text()
-  pkg.replaceAll(/"version": "[^"]+"/, `"version": "${version}"`)
+  let pkg = await Bun.file(file).text()
+  pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${version}"`)
   await Bun.file(file).write(pkg)
 }
 
-await import(`../packages/opencode/script/publish.ts`)
+// await import(`../packages/opencode/script/publish.ts`)
 await import(`../packages/sdk/js/script/publish.ts`)
 await import(`../packages/plugin/script/publish.ts`)
 // await import(`../packages/sdk/stainless/generate.ts`)
