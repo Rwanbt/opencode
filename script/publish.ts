@@ -11,6 +11,13 @@ if (!version) {
 }
 process.env["OPENCODE_VERSION"] = version
 
+const pkgjsons = await Array.fromAsync(
+  new Bun.Glob("**/package.json").scan({
+    absolute: true,
+  }),
+)
+
+const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for await (const file of new Bun.Glob("**/package.json").scan({
   absolute: true,
 })) {
@@ -27,11 +34,16 @@ await import(`../packages/plugin/script/publish.ts`)
 if (!snapshot) {
   await $`git commit -am "release: v${version}"`
   await $`git tag v${version}`
-  await $`git push origin HEAD --tags`
+  await $`git push origin HEAD --tags --no-verify`
 }
 if (snapshot) {
   await $`git commit --allow-empty -m "Snapshot release v${version}"`
   await $`git tag v${version}`
-  await $`git push origin v${version}`
+  await $`git push origin v${version} --no-verify`
   await $`git reset --soft HEAD~1`
+  for await (const file of new Bun.Glob("**/package.json").scan({
+    absolute: true,
+  })) {
+    $`await git checkout ${tree} ${file}`
+  }
 }
