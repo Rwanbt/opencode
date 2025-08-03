@@ -18,9 +18,7 @@ const pkgjsons = await Array.fromAsync(
 )
 
 const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
-for await (const file of new Bun.Glob("**/package.json").scan({
-  absolute: true,
-})) {
+for (const file of pkgjsons) {
   let pkg = await Bun.file(file).text()
   pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${version}"`)
   await Bun.file(file).write(pkg)
@@ -43,9 +41,7 @@ if (snapshot) {
   await $`git push origin v${version} --no-verify`
   await $`git checkout dev`
   await $`git branch -D snapshot-${version}`
-  for await (const file of new Bun.Glob("**/package.json").scan({
-    absolute: true,
-  })) {
+  for (const file of pkgjsons) {
     $`await git checkout ${tree} ${file}`
   }
 }
