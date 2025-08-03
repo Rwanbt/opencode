@@ -15,7 +15,7 @@ const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
     absolute: true,
   }),
-).then((arr) => arr.filter((x) => !x.includes("node_modules")))
+).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
 
 const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for (const file of pkgjsons) {
