@@ -2,6 +2,9 @@
 
 import { $ } from "bun"
 
+console.log("=== Publishing ===")
+console.log()
+
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 const version = snapshot
   ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
@@ -10,6 +13,7 @@ if (!version) {
   throw new Error("OPENCODE_VERSION is required")
 }
 process.env["OPENCODE_VERSION"] = version
+console.log("version:", version)
 
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
@@ -21,13 +25,21 @@ const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for (const file of pkgjsons) {
   let pkg = await Bun.file(file).text()
   pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${version}"`)
-  console.log("versioned", file, version)
+  console.log("updated:", file)
   await Bun.file(file).write(pkg)
 }
 
+console.log("=== opencode ===")
 await import(`../packages/opencode/script/publish.ts`)
+console.log()
+
+console.log("=== sdk ===")
 await import(`../packages/sdk/js/script/publish.ts`)
+console.log()
+
+console.log("=== plugin ===")
 await import(`../packages/plugin/script/publish.ts`)
+console.log()
 // await import(`../packages/sdk/stainless/generate.ts`)
 
 if (!snapshot) {
