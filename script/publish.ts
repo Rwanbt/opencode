@@ -21,6 +21,7 @@ const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for (const file of pkgjsons) {
   let pkg = await Bun.file(file).text()
   pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${version}"`)
+  console.log("versioned", file, version)
   await Bun.file(file).write(pkg)
 }
 
