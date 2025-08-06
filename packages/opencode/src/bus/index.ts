@@ -37,6 +37,10 @@ export namespace Bus {
             .object({
               type: z.literal(type),
               properties: def.properties,
+              context: z.object({
+                projectID: z.string().optional(),
+                sessionID: z.string().optional(),
+              }),
             })
             .openapi({
               ref: "Event" + "." + def.type,

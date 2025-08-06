@@ -11,7 +11,6 @@ export namespace ConfigHooks {
 
   export function init() {
     log.info("init")
-    const app = App.info()
 
     Bus.subscribe(File.Event.Edited, async (payload) => {
       const cfg = await Config.get()

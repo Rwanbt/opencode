@@ -6,6 +6,8 @@ import { Global } from "../global"
 import path from "path"
 import os from "os"
 import { z } from "zod"
+import { Project } from "../project/project"
+import { Worktree } from "../project/worktree"
 
 export namespace App {
   const log = Log.create({ service: "app" })
@@ -87,17 +89,30 @@ export namespace App {
       info,
     }
 
+    const projects = await Project.list()
+    const project = projects
+      .toSorted((a, b) => a.worktree.length - b.worktree.length)
+      .find((x) => Filesystem.contains(x.worktree, input.cwd))
+
+    if (!project) {
+      throw new Error("No project found")
+    }
+
     return ctx.provide(app, async () => {
-      try {
-        const result = await cb(app.info)
-        return result
-      } finally {
-        for (const [key, entry] of app.services.entries()) {
-          if (!entry.shutdown) continue
-          log.info("shutdown", { name: key })
-          await entry.shutdown?.(await entry.state)
-        }
-      }
+      return Project.provide(project, async () => {
+        return Worktree.provide(project.worktree, async () => {
+          try {
+            const result = await cb(app.info)
+            return result
+          } finally {
+            for (const [key, entry] of app.services.entries()) {
+              if (!entry.shutdown) continue
+              log.info("shutdown", { name: key })
+              await entry.shutdown?.(await entry.state)
+            }
+          }
+        })
+      })
     })
   }
 

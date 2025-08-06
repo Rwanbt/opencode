@@ -2,7 +2,6 @@ import { Log } from "../util/log"
 import path from "path"
 import os from "os"
 import { z } from "zod"
-import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
@@ -14,110 +13,115 @@ import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
+import { State } from "../project/state"
+import { Project } from "../project/project"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
-  export const state = App.state("config", async (app) => {
-    const auth = await Auth.all()
-    let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
-      for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
+  export const state = State.create(
+    () => Project.use().worktree,
+    async () => {
+      const auth = await Auth.all()
+      let result = await global()
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
+        for (const resolved of found.toReversed()) {
+          result = mergeDeep(result, await loadFile(resolved))
+        }
       }
-    }
 
-    // Override with custom config if provided
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
-        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
-        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+      // Override with custom config if provided
+      if (Flag.OPENCODE_CONFIG) {
+        result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+        log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
       }
-    }
 
-    result.agent = result.agent || {}
-    const markdownAgents = [
-      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
-    ]
-    for (const item of markdownAgents) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
-      if (!md.data) continue
-
-      const config = {
-        name: path.basename(item, ".md"),
-        ...md.data,
-        prompt: md.content.trim(),
+      for (const [key, value] of Object.entries(auth)) {
+        if (value.type === "wellknown") {
+          process.env[value.key] = value.token
+          const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+          result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        }
       }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result.agent = mergeDeep(result.agent, {
-          [config.name]: parsed.data,
-        })
-        continue
+
+      result.agent = result.agent || {}
+      const markdownAgents = [
+        ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
+        ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+      ]
+      for (const item of markdownAgents) {
+        const content = await Bun.file(item).text()
+        const md = matter(content)
+        if (!md.data) continue
+
+        const config = {
+          name: path.basename(item, ".md"),
+          ...md.data,
+          prompt: md.content.trim(),
+        }
+        const parsed = Agent.safeParse(config)
+        if (parsed.success) {
+          result.agent = mergeDeep(result.agent, {
+            [config.name]: parsed.data,
+          })
+          continue
+        }
+        throw new InvalidError({ path: item }, { cause: parsed.error })
       }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
-    }
 
-    // Load mode markdown files
-    result.mode = result.mode || {}
-    const markdownModes = [
-      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
-    ]
-    for (const item of markdownModes) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
-      if (!md.data) continue
+      // Load mode markdown files
+      result.mode = result.mode || {}
+      const markdownModes = [
+        ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
+        ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
+      ]
+      for (const item of markdownModes) {
+        const content = await Bun.file(item).text()
+        const md = matter(content)
+        if (!md.data) continue
 
-      const config = {
-        name: path.basename(item, ".md"),
-        ...md.data,
-        prompt: md.content.trim(),
+        const config = {
+          name: path.basename(item, ".md"),
+          ...md.data,
+          prompt: md.content.trim(),
+        }
+        const parsed = Mode.safeParse(config)
+        if (parsed.success) {
+          result.mode = mergeDeep(result.mode, {
+            [config.name]: parsed.data,
+          })
+          continue
+        }
+        throw new InvalidError({ path: item }, { cause: parsed.error })
       }
-      const parsed = Mode.safeParse(config)
-      if (parsed.success) {
-        result.mode = mergeDeep(result.mode, {
-          [config.name]: parsed.data,
-        })
-        continue
+
+      result.plugin = result.plugin || []
+      result.plugin.push(
+        ...[
+          ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
+          ...(await Filesystem.globUp(".opencode/plugin/*.ts", app.path.cwd, app.path.root)),
+        ].map((x) => "file://" + x),
+      )
+
+      // Handle migration from autoshare to share field
+      if (result.autoshare === true && !result.share) {
+        result.share = "auto"
       }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
-    }
+      if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
+        result.keybinds.messages_undo = result.keybinds.messages_revert
+      }
 
-    result.plugin = result.plugin || []
-    result.plugin.push(
-      ...[
-        ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/plugin/*.ts", app.path.cwd, app.path.root)),
-      ].map((x) => "file://" + x),
-    )
+      if (!result.username) {
+        const os = await import("os")
+        result.username = os.userInfo().username
+      }
 
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
+      log.info("loaded", result)
 
-    if (!result.username) {
-      const os = await import("os")
-      result.username = os.userInfo().username
-    }
-
-    log.info("loaded", result)
-
-    return result
-  })
+      return result
+    },
+  )
 
   export const McpLocal = z
     .object({

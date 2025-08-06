@@ -1,4 +1,3 @@
-import path from "path"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
 import {
@@ -30,7 +29,7 @@ import { ProviderTransform } from "../provider/transform"
 import type { ModelsDev } from "../provider/models"
 import { Share } from "../share/share"
 import { Snapshot } from "../snapshot"
-import { Storage } from "../storage/storage"
+import { StorageNext } from "../storage/storage-next"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
 import { SystemPrompt } from "./system"
@@ -42,9 +41,16 @@ import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
+import { Project } from "../project/project"
+import { Context } from "../util/context"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  const context = Context.create<Info>("session")
+
+  export const use = context.use
+  export const provide = context.provide
 
   const OUTPUT_TOKEN_MAX = 32_000
 
@@ -62,6 +68,9 @@ export namespace Session {
   export const Info = z
     .object({
       id: Identifier.schema("session"),
+      projectID: z.string(),
+      directory: z.string(),
+      worktree: z.string(),
       parentID: Identifier.schema("session").optional(),
       share: z
         .object({
@@ -129,8 +138,6 @@ export namespace Session {
   const state = App.state(
     "session",
     () => {
-      const sessions = new Map<string, Info>()
-      const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
       const autoCompacting = new Map<string, boolean>()
       const queued = new Map<
@@ -145,8 +152,6 @@ export namespace Session {
       >()
 
       return {
-        sessions,
-        messages,
         pending,
         autoCompacting,
         queued,
@@ -160,19 +165,30 @@ export namespace Session {
   )
 
   export async function create(parentID?: string) {
-    const result: Info = {
-      id: Identifier.descending("session"),
-      version: Installation.VERSION,
+    const app = App.info()
+    return createNext({
       parentID,
-      title: createDefaultTitle(!!parentID),
+      directory: app.path.cwd,
+    })
+  }
+
+  export async function createNext(input: { id?: string; parentID?: string; directory: string }) {
+    const project = Project.use()
+    const result: Info = {
+      id: Identifier.descending("session", input.id),
+      version: Installation.VERSION,
+      projectID: project.id,
+      worktree: project.worktree,
+      directory: input.directory,
+      parentID: input.parentID,
+      title: createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
       },
     }
     log.info("created", result)
-    state().sessions.set(result.id, result)
-    await Storage.writeJSON("session/info/" + result.id, result)
+    await StorageNext.write(["session", project.id, result.id], result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -191,17 +207,13 @@ export namespace Session {
   }
 
   export async function get(id: string) {
-    const result = state().sessions.get(id)
-    if (result) {
-      return result
-    }
-    const read = await Storage.readJSON<Info>("session/info/" + id)
-    state().sessions.set(id, read)
+    const project = Project.use()
+    const read = await StorageNext.read<Info>(["session", project.id, id])
     return read as Info
   }
 
   export async function getShare(id: string) {
-    return Storage.readJSON<ShareInfo>("session/share/" + id)
+    return StorageNext.read<ShareInfo>(["share", id])
   }
 
   export async function share(id: string) {
@@ -218,7 +230,7 @@ export namespace Session {
         url: share.url,
       }
     })
-    await Storage.writeJSON<ShareInfo>("session/share/" + id, share)
+    await StorageNext.write(["share", id], share)
     await Share.sync("session/info/" + id, session)
     for (const msg of await messages(id)) {
       await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
@@ -232,7 +244,7 @@ export namespace Session {
   export async function unshare(id: string) {
     const share = await getShare(id)
     if (!share) return
-    await Storage.remove("session/share/" + id)
+    await StorageNext.remove(["share", id])
     await update(id, (draft) => {
       draft.share = undefined
     })
@@ -240,17 +252,15 @@ export namespace Session {
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const { sessions } = state()
-    const session = await get(id)
-    if (!session) return
-    editor(session)
-    session.time.updated = Date.now()
-    sessions.set(id, session)
-    await Storage.writeJSON("session/info/" + id, session)
-    Bus.publish(Event.Updated, {
-      info: session,
+    const project = Project.use()
+    const result = await StorageNext.update<Info>(["session", project.id, id], (draft) => {
+      editor(draft)
+      draft.time.updated = Date.now()
     })
-    return session
+    Bus.publish(Event.Updated, {
+      info: result,
+    })
+    return result
   }
 
   export async function messages(sessionID: string) {
@@ -258,11 +268,11 @@ export namespace Session {
       info: MessageV2.Info
       parts: MessageV2.Part[]
     }[]
-    for (const p of await Storage.list("session/message/" + sessionID)) {
-      const read = await Storage.readJSON<MessageV2.Info>(p)
+    for (const p of await StorageNext.list(["message", sessionID])) {
+      const read = await StorageNext.read<MessageV2.Info>(p)
       result.push({
         info: read,
-        parts: await getParts(sessionID, read.id),
+        parts: await getParts(read.id),
       })
     }
     result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
@@ -271,15 +281,15 @@ export namespace Session {
 
   export async function getMessage(sessionID: string, messageID: string) {
     return {
-      info: await Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID),
-      parts: await getParts(sessionID, messageID),
+      info: await StorageNext.read<MessageV2.Info>(["message", sessionID, messageID]),
+      parts: await getParts(messageID),
     }
   }
 
-  export async function getParts(sessionID: string, messageID: string) {
+  export async function getParts(messageID: string) {
     const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
-      const read = await Storage.readJSON<MessageV2.Part>(item)
+    for (const item of await StorageNext.list(["part", messageID])) {
+      const read = await StorageNext.read<MessageV2.Part>(item)
       result.push(read)
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
@@ -287,17 +297,17 @@ export namespace Session {
   }
 
   export async function* list() {
-    for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json")
-      yield get(sessionID)
+    const project = Project.use()
+    for (const item of await StorageNext.list(["session", project.id])) {
+      yield StorageNext.read<Info>(item)
     }
   }
 
   export async function children(parentID: string) {
+    const project = Project.use()
     const result = [] as Session.Info[]
-    for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json")
-      const session = await get(sessionID)
+    for (const item of await StorageNext.list(["session", project.id])) {
+      const session = await StorageNext.read<Info>(item)
       if (session.parentID !== parentID) continue
       result.push(session)
     }
@@ -316,6 +326,7 @@ export namespace Session {
   }
 
   export async function remove(sessionID: string, emitEvent = true) {
+    const project = Project.use()
     try {
       abort(sessionID)
       const session = await get(sessionID)
@@ -323,10 +334,13 @@ export namespace Session {
         await remove(child.id, false)
       }
       await unshare(sessionID).catch(() => {})
-      await Storage.remove(`session/info/${sessionID}`).catch(() => {})
-      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
-      state().sessions.delete(sessionID)
-      state().messages.delete(sessionID)
+      for (const msg of await StorageNext.list(["message", sessionID])) {
+        for (const part of await StorageNext.list(["part", msg.at(-1)!])) {
+          await StorageNext.remove(part)
+        }
+        await StorageNext.remove(msg)
+      }
+      await StorageNext.remove(["session", project.id, sessionID])
       if (emitEvent) {
         Bus.publish(Event.Deleted, {
           info: session,
@@ -338,14 +352,14 @@ export namespace Session {
   }
 
   async function updateMessage(msg: MessageV2.Info) {
-    await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
+    await StorageNext.write(["message", msg.sessionID, msg.id], msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
   }
 
   async function updatePart(part: MessageV2.Part) {
-    await Storage.writeJSON(["session", "part", part.sessionID, part.messageID, part.id].join("/"), part)
+    await StorageNext.write(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
     })
@@ -403,7 +417,7 @@ export namespace Session {
       const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
       msgs = preserve
       for (const msg of remove) {
-        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await StorageNext.remove(["message", input.sessionID, msg.info.id])
         await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
       }
       const last = preserve.at(-1)
@@ -412,7 +426,7 @@ export namespace Session {
         const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
         last.parts = preserveParts
         for (const part of removeParts) {
-          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await StorageNext.remove(["part", last.info.id, part.id])
           await Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
             messageID: last.info.id,
@@ -1164,7 +1178,7 @@ export namespace Session {
             error: assistantMsg.error,
           })
         }
-        const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
+        const p = await getParts(assistantMsg.id)
         for (const part of p) {
           if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
             updatePart({
