@@ -1,4 +1,3 @@
-import { App } from "../app/app"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
@@ -69,9 +68,9 @@ export namespace LSP {
         }
         servers[name] = {
           ...existing,
-          root: existing?.root ?? (async (_file, app) => app.path.root),
+          root: existing?.root ?? (async () => Paths.directory),
           extensions: item.extensions ?? existing.extensions,
-          spawn: async (_app, root) => {
+          spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
                 cwd: root,
