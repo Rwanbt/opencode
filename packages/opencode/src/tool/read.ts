@@ -5,7 +5,6 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
-import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
 import { Paths } from "../project/path"
 

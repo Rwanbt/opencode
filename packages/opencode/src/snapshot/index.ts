@@ -1,4 +1,3 @@
-import { App } from "../app/app"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"

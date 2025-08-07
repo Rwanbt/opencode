@@ -3,7 +3,6 @@ import { Tool } from "./tool"
 import { EditTool } from "./edit"
 import DESCRIPTION from "./multiedit.txt"
 import path from "path"
-import { App } from "../app/app"
 import { Paths } from "../project/path"
 
 export const MultiEditTool = Tool.define("multiedit", {
