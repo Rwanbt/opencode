@@ -18,108 +18,120 @@ import { Instance } from "../project/instance"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
-  export const state = Instance.state(
-    async () => {
-      const auth = await Auth.all()
-      let result = await global()
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-        for (const resolved of found.toReversed()) {
-          result = mergeDeep(result, await loadFile(resolved))
-        }
+  export const state = Instance.state(async () => {
+    const auth = await Auth.all()
+    let result = await global()
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        result = mergeDeep(result, await loadFile(resolved))
       }
+    }
 
-      // Override with custom config if provided
-      if (Flag.OPENCODE_CONFIG) {
-        result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
-        log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    // Override with custom config if provided
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
+    }
 
-      for (const [key, value] of Object.entries(auth)) {
-        if (value.type === "wellknown") {
-          process.env[value.key] = value.token
-          const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
-          result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
-        }
+    result.agent = result.agent || {}
+    const markdownAgents = [
+      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/agent/*.md", Instance.directory, Instance.worktree)),
+    ]
+    for (const item of markdownAgents) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
       }
-
-      result.agent = result.agent || {}
-      const markdownAgents = [
-        ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/agent/*.md", Instance.directory, Instance.worktree)),
-      ]
-      for (const item of markdownAgents) {
-        const content = await Bun.file(item).text()
-        const md = matter(content)
-        if (!md.data) continue
-
-        const config = {
-          name: path.basename(item, ".md"),
-          ...md.data,
-          prompt: md.content.trim(),
-        }
-        const parsed = Agent.safeParse(config)
-        if (parsed.success) {
-          result.agent = mergeDeep(result.agent, {
-            [config.name]: parsed.data,
-          })
-          continue
-        }
-        throw new InvalidError({ path: item }, { cause: parsed.error })
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result.agent = mergeDeep(result.agent, {
+          [config.name]: parsed.data,
+        })
+        continue
       }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
 
-      // Load mode markdown files
-      result.mode = result.mode || {}
-      const markdownModes = [
-        ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, Instance.worktree)),
-      ]
-      for (const item of markdownModes) {
-        const content = await Bun.file(item).text()
-        const md = matter(content)
-        if (!md.data) continue
+    // Load mode markdown files
+    result.mode = result.mode || {}
+    const markdownModes = [
+      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, Instance.worktree)),
+    ]
+    for (const item of markdownModes) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
 
-        const config = {
-          name: path.basename(item, ".md"),
-          ...md.data,
-          prompt: md.content.trim(),
-        }
-        const parsed = Mode.safeParse(config)
-        if (parsed.success) {
-          result.mode = mergeDeep(result.mode, {
-            [config.name]: parsed.data,
-          })
-          continue
-        }
-        throw new InvalidError({ path: item }, { cause: parsed.error })
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
       }
-
-      result.plugin = result.plugin || []
-      result.plugin.push(
-        ...[
-          ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-          ...(await Filesystem.globUp(".opencode/plugin/*.ts", Instance.directory, Instance.worktree)),
-        ].map((x) => "file://" + x),
-      )
-
-      // Handle migration from autoshare to share field
-      if (result.autoshare === true && !result.share) {
-        result.share = "auto"
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result.agent = mergeDeep(result.mode, {
+          [config.name]: {
+            ...parsed.data,
+            mode: "primary" as const,
+          },
+        })
+        continue
       }
-      if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-        result.keybinds.messages_undo = result.keybinds.messages_revert
-      }
+    }
 
-      if (!result.username) {
-        const os = await import("os")
-        result.username = os.userInfo().username
-      }
+    if (!result.username) {
+      const os = await import("os")
+      result.username = os.userInfo().username
+    }
 
-      log.info("loaded", result)
+    result.plugin = result.plugin || []
+    result.plugin.push(
+      ...[
+        ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
+        ...(await Filesystem.globUp(".opencode/plugin/*.ts", Instance.directory, Instance.worktree)),
+      ].map((x) => "file://" + x),
+    )
 
-      return result
-    },
-  )
+    // Handle migration from autoshare to share field
+    if (result.autoshare === true && !result.share) {
+      result.share = "auto"
+    }
+    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
+      result.keybinds.messages_undo = result.keybinds.messages_revert
+    }
+
+    // Handle migration from autoshare to share field
+    if (result.autoshare === true && !result.share) {
+      result.share = "auto"
+    }
+    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
+      result.keybinds.messages_undo = result.keybinds.messages_revert
+    }
+    if (result.keybinds?.switch_mode && !result.keybinds.switch_agent) {
+      result.keybinds.switch_agent = result.keybinds.switch_mode
+    }
+    if (result.keybinds?.switch_mode_reverse && !result.keybinds.switch_agent_reverse) {
+      result.keybinds.switch_agent_reverse = result.keybinds.switch_mode_reverse
+    }
+
+    return result
+  })
 
   export const McpLocal = z
     .object({
@@ -151,7 +163,7 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Mode = z
+  export const Agent = z
     .object({
       model: z.string().optional(),
       temperature: z.number().optional(),
@@ -159,24 +171,26 @@ export namespace Config {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
+      description: z.string().optional().describe("Description of when to use the agent"),
+      mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
     })
     .openapi({
-      ref: "ModeConfig",
+      ref: "AgentConfig",
     })
-  export type Mode = z.infer<typeof Mode>
-
-  export const Agent = Mode.extend({
-    description: z.string(),
-  }).openapi({
-    ref: "AgentConfig",
-  })
+  export type Agent = z.infer<typeof Agent>
 
   export const Keybinds = z
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      switch_mode: z.string().optional().default("tab").describe("Next mode"),
-      switch_mode_reverse: z.string().optional().default("shift+tab").describe("Previous Mode"),
+      switch_mode: z.string().optional().default("none").describe("@deprecated use switch_agent. Next mode"),
+      switch_mode_reverse: z
+        .string()
+        .optional()
+        .default("none")
+        .describe("@deprecated use switch_agent_reverse. Previous mode"),
+      switch_agent: z.string().optional().default("tab").describe("Next agent"),
+      switch_agent_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
@@ -259,19 +273,21 @@ export namespace Config {
         .describe("Custom username to display in conversations instead of system username"),
       mode: z
         .object({
-          build: Mode.optional(),
-          plan: Mode.optional(),
+          build: Agent.optional(),
+          plan: Agent.optional(),
         })
-        .catchall(Mode)
+        .catchall(Agent)
         .optional()
-        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
+        .describe("@deprecated Use `agent` field instead."),
       agent: z
         .object({
+          plan: Agent.optional(),
+          build: Agent.optional(),
           general: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
-        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
+        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
         .record(
           ModelsDev.Provider.partial()

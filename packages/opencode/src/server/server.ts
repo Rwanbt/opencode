@@ -16,11 +16,11 @@ import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
-import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { lazy } from "../util/lazy"
 import { Instance } from "../project/instance"
+import { Agent } from "../agent/agent"
 
 const ERRORS = {
   400: {
@@ -221,7 +221,7 @@ export namespace Server {
         },
       )
       .get(
-        "/session/:sessionID",
+        "/session/:id",
         describeRoute({
           description: "Get session",
           operationId: "session.get",
@@ -871,23 +871,23 @@ export namespace Server {
         },
       )
       .get(
-        "/mode",
+        "/agent",
         describeRoute({
-          description: "List all modes",
-          operationId: "app.modes",
+          description: "List all agents",
+          operationId: "app.agents",
           responses: {
             200: {
-              description: "List of modes",
+              description: "List of agents",
               content: {
                 "application/json": {
-                  schema: resolver(Mode.Info.array()),
+                  schema: resolver(Agent.Info.array()),
                 },
               },
             },
           },
         }),
         async (c) => {
-          const modes = await Mode.list()
+          const modes = await Agent.list()
           return c.json(modes)
         },
       )
@@ -1026,7 +1026,7 @@ export namespace Server {
       .post(
         "/tui/execute-command",
         describeRoute({
-          description: "Execute a TUI command (e.g. switch_mode)",
+          description: "Execute a TUI command (e.g. switch_agent)",
           operationId: "tui.executeCommand",
           responses: {
             200: {
