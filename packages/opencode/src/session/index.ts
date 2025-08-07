@@ -42,15 +42,11 @@ import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
 import { Project } from "../project/project"
-import { Context } from "../util/context"
+import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
-
-  const context = Context.create<Info>("session")
-
-  export const use = context.use
-  export const provide = context.provide
 
   const OUTPUT_TOKEN_MAX = 32_000
 
@@ -135,8 +131,8 @@ export namespace Session {
     ),
   }
 
-  const state = App.state(
-    "session",
+  const state = State.create(
+    () => Paths.directory,
     () => {
       const pending = new Map<string, AbortController>()
       const autoCompacting = new Map<string, boolean>()

@@ -9,6 +9,7 @@ import { NamedError } from "../util/error"
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
+import { State } from "../project/state"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -20,7 +21,7 @@ export namespace MCP {
     }),
   )
 
-  const state = App.state(
+  const state = State.create(
     "mcp",
     async () => {
       const cfg = await Config.get()

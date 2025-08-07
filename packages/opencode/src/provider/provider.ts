@@ -1,5 +1,4 @@
 import z from "zod"
-import { App } from "../app/app"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -10,6 +9,8 @@ import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
+import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -216,149 +217,152 @@ export namespace Provider {
     },
   }
 
-  const state = App.state("provider", async () => {
-    const config = await Config.get()
-    const database = await ModelsDev.get()
+  const state = State.create(
+    () => Paths.directory,
+    async () => {
+      const config = await Config.get()
+      const database = await ModelsDev.get()
 
-    const providers: {
-      [providerID: string]: {
-        source: Source
-        info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string) => Promise<any>
-        options: Record<string, any>
-      }
-    } = {}
-    const models = new Map<string, { info: ModelsDev.Model; language: LanguageModel }>()
-    const sdk = new Map<string, SDK>()
-
-    log.info("init")
-
-    function mergeProvider(
-      id: string,
-      options: Record<string, any>,
-      source: Source,
-      getModel?: (sdk: any, modelID: string) => Promise<any>,
-    ) {
-      const provider = providers[id]
-      if (!provider) {
-        const info = database[id]
-        if (!info) return
-        if (info.api && !options["baseURL"]) options["baseURL"] = info.api
-        providers[id] = {
-          source,
-          info,
-          options,
-          getModel,
+      const providers: {
+        [providerID: string]: {
+          source: Source
+          info: ModelsDev.Provider
+          getModel?: (sdk: any, modelID: string) => Promise<any>
+          options: Record<string, any>
         }
-        return
+      } = {}
+      const models = new Map<string, { info: ModelsDev.Model; language: LanguageModel }>()
+      const sdk = new Map<string, SDK>()
+
+      log.info("init")
+
+      function mergeProvider(
+        id: string,
+        options: Record<string, any>,
+        source: Source,
+        getModel?: (sdk: any, modelID: string) => Promise<any>,
+      ) {
+        const provider = providers[id]
+        if (!provider) {
+          const info = database[id]
+          if (!info) return
+          if (info.api && !options["baseURL"]) options["baseURL"] = info.api
+          providers[id] = {
+            source,
+            info,
+            options,
+            getModel,
+          }
+          return
+        }
+        provider.options = mergeDeep(provider.options, options)
+        provider.source = source
+        provider.getModel = getModel ?? provider.getModel
       }
-      provider.options = mergeDeep(provider.options, options)
-      provider.source = source
-      provider.getModel = getModel ?? provider.getModel
-    }
 
-    const configProviders = Object.entries(config.provider ?? {})
+      const configProviders = Object.entries(config.provider ?? {})
 
-    for (const [providerID, provider] of configProviders) {
-      const existing = database[providerID]
-      const parsed: ModelsDev.Provider = {
-        id: providerID,
-        npm: provider.npm ?? existing?.npm,
-        name: provider.name ?? existing?.name ?? providerID,
-        env: provider.env ?? existing?.env ?? [],
-        api: provider.api ?? existing?.api,
-        models: existing?.models ?? {},
-      }
+      for (const [providerID, provider] of configProviders) {
+        const existing = database[providerID]
+        const parsed: ModelsDev.Provider = {
+          id: providerID,
+          npm: provider.npm ?? existing?.npm,
+          name: provider.name ?? existing?.name ?? providerID,
+          env: provider.env ?? existing?.env ?? [],
+          api: provider.api ?? existing?.api,
+          models: existing?.models ?? {},
+        }
 
-      for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[modelID]
-        const parsedModel: ModelsDev.Model = {
-          id: modelID,
-          name: model.name ?? existing?.name ?? modelID,
-          release_date: model.release_date ?? existing?.release_date,
-          attachment: model.attachment ?? existing?.attachment ?? false,
-          reasoning: model.reasoning ?? existing?.reasoning ?? false,
-          temperature: model.temperature ?? existing?.temperature ?? false,
-          tool_call: model.tool_call ?? existing?.tool_call ?? true,
-          cost:
-            !model.cost && !existing?.cost
-              ? {
-                  input: 0,
-                  output: 0,
-                  cache_read: 0,
-                  cache_write: 0,
-                }
-              : {
-                  cache_read: 0,
-                  cache_write: 0,
-                  ...existing?.cost,
-                  ...model.cost,
-                },
-          options: {
-            ...existing?.options,
-            ...model.options,
-          },
-          limit: model.limit ??
-            existing?.limit ?? {
-              context: 0,
-              output: 0,
+        for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+          const existing = parsed.models[modelID]
+          const parsedModel: ModelsDev.Model = {
+            id: modelID,
+            name: model.name ?? existing?.name ?? modelID,
+            release_date: model.release_date ?? existing?.release_date,
+            attachment: model.attachment ?? existing?.attachment ?? false,
+            reasoning: model.reasoning ?? existing?.reasoning ?? false,
+            temperature: model.temperature ?? existing?.temperature ?? false,
+            tool_call: model.tool_call ?? existing?.tool_call ?? true,
+            cost:
+              !model.cost && !existing?.cost
+                ? {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  }
+                : {
+                    cache_read: 0,
+                    cache_write: 0,
+                    ...existing?.cost,
+                    ...model.cost,
+                  },
+            options: {
+              ...existing?.options,
+              ...model.options,
             },
+            limit: model.limit ??
+              existing?.limit ?? {
+                context: 0,
+                output: 0,
+              },
+          }
+          parsed.models[modelID] = parsedModel
         }
-        parsed.models[modelID] = parsedModel
+        database[providerID] = parsed
       }
-      database[providerID] = parsed
-    }
 
-    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
-    // load env
-    for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => process.env[item]).at(0)
-      if (!apiKey) continue
-      mergeProvider(
-        providerID,
-        // only include apiKey if there's only one potential option
-        provider.env.length === 1 ? { apiKey } : {},
-        "env",
-      )
-    }
-
-    // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, { apiKey: provider.key }, "api")
+      const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
+      // load env
+      for (const [providerID, provider] of Object.entries(database)) {
+        if (disabled.has(providerID)) continue
+        const apiKey = provider.env.map((item) => process.env[item]).at(0)
+        if (!apiKey) continue
+        mergeProvider(
+          providerID,
+          // only include apiKey if there's only one potential option
+          provider.env.length === 1 ? { apiKey } : {},
+          "env",
+        )
       }
-    }
 
-    // load custom
-    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
-      const result = await fn(database[providerID])
-      if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
+      // load apikeys
+      for (const [providerID, provider] of Object.entries(await Auth.all())) {
+        if (disabled.has(providerID)) continue
+        if (provider.type === "api") {
+          mergeProvider(providerID, { apiKey: provider.key }, "api")
+        }
       }
-    }
 
-    // load config
-    for (const [providerID, provider] of configProviders) {
-      mergeProvider(providerID, provider.options ?? {}, "config")
-    }
-
-    for (const [providerID, provider] of Object.entries(providers)) {
-      if (Object.keys(provider.info.models).length === 0) {
-        delete providers[providerID]
-        continue
+      // load custom
+      for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
+        if (disabled.has(providerID)) continue
+        const result = await fn(database[providerID])
+        if (result && (result.autoload || providers[providerID])) {
+          mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
+        }
       }
-      log.info("found", { providerID })
-    }
 
-    return {
-      models,
-      providers,
-      sdk,
-    }
-  })
+      // load config
+      for (const [providerID, provider] of configProviders) {
+        mergeProvider(providerID, provider.options ?? {}, "config")
+      }
+
+      for (const [providerID, provider] of Object.entries(providers)) {
+        if (Object.keys(provider.info.models).length === 0) {
+          delete providers[providerID]
+          continue
+        }
+        log.info("found", { providerID })
+      }
+
+      return {
+        models,
+        providers,
+        sdk,
+      }
+    },
+  )
 
   export async function list() {
     return state().then((state) => state.providers)

@@ -7,7 +7,7 @@ import path from "path"
 import os from "os"
 import { z } from "zod"
 import { Project } from "../project/project"
-import { Worktree } from "../project/worktree"
+import { Paths } from "../project/path"
 
 export namespace App {
   const log = Log.create({ service: "app" })
@@ -100,39 +100,26 @@ export namespace App {
 
     return ctx.provide(app, async () => {
       return Project.provide(project, async () => {
-        return Worktree.provide(project.worktree, async () => {
-          try {
-            const result = await cb(app.info)
-            return result
-          } finally {
-            for (const [key, entry] of app.services.entries()) {
-              if (!entry.shutdown) continue
-              log.info("shutdown", { name: key })
-              await entry.shutdown?.(await entry.state)
+        return Paths.provide(
+          {
+            worktree: app.info.path.root,
+            directory: app.info.path.cwd,
+          },
+          async () => {
+            try {
+              const result = await cb(app.info)
+              return result
+            } finally {
+              for (const [key, entry] of app.services.entries()) {
+                if (!entry.shutdown) continue
+                log.info("shutdown", { name: key })
+                await entry.shutdown?.(await entry.state)
+              }
             }
-          }
-        })
+          },
+        )
       })
     })
-  }
-
-  export function state<State>(
-    key: any,
-    init: (app: Info) => State,
-    shutdown?: (state: Awaited<State>) => Promise<void>,
-  ) {
-    return () => {
-      const app = ctx.use()
-      const services = app.services
-      if (!services.has(key)) {
-        log.info("registering service", { name: key })
-        services.set(key, {
-          state: init(app.info),
-          shutdown,
-        })
-      }
-      return services.get(key)?.state as State
-    }
   }
 
   export function info() {

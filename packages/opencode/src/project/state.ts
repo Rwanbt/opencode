@@ -21,7 +21,7 @@ export namespace State {
   }
 
   export async function dispose() {
-    for (const [key, entry] of entries.entries()) {
+    for (const [_, entry] of entries.entries()) {
       if (!entry.dispose) continue
       await entry.dispose(await entry.state)
     }

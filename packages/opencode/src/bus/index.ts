@@ -1,18 +1,11 @@
 import { z, type ZodType } from "zod"
-import { App } from "../app/app"
 import { Log } from "../util/log"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
 
-  const state = App.state("bus", () => {
-    const subscriptions = new Map<any, Subscription[]>()
-
-    return {
-      subscriptions,
-    }
-  })
+  const subscriptions = new Map<any, Subscription[]>()
 
   export type EventDefinition = ReturnType<typeof event>
 
@@ -63,7 +56,7 @@ export namespace Bus {
     })
     const pending = []
     for (const key of [def.type, "*"]) {
-      const match = state().subscriptions.get(key)
+      const match = subscriptions.get(key)
       for (const sub of match ?? []) {
         pending.push(sub(payload))
       }
@@ -96,7 +89,6 @@ export namespace Bus {
 
   function raw(type: string, callback: (event: any) => void) {
     log.info("subscribing", { type })
-    const subscriptions = state().subscriptions
     let match = subscriptions.get(type) ?? []
     match.push(callback)
     subscriptions.set(type, match)

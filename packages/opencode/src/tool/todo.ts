@@ -1,7 +1,8 @@
 import { z } from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
-import { App } from "../app/app"
+import { State } from "../project/state"
+import { Project } from "../project/project"
 
 const TodoInfo = z.object({
   content: z.string().describe("Brief description of the task"),
@@ -11,12 +12,15 @@ const TodoInfo = z.object({
 })
 type TodoInfo = z.infer<typeof TodoInfo>
 
-const state = App.state("todo-tool", () => {
-  const todos: {
-    [sessionId: string]: TodoInfo[]
-  } = {}
-  return todos
-})
+const state = State.create(
+  () => Project.use().id,
+  () => {
+    const todos: {
+      [sessionId: string]: TodoInfo[]
+    } = {}
+    return todos
+  },
+)
 
 export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,

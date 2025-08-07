@@ -14,18 +14,19 @@ import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { State } from "../project/state"
-import { Project } from "../project/project"
+import { Paths } from "../project/path"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
   export const state = State.create(
-    () => Project.use().worktree,
+    () => Paths.use().directory,
     async () => {
+      const paths = Paths.use()
       const auth = await Auth.all()
       let result = await global()
       for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
+        const found = await Filesystem.findUp(file, paths.directory, paths.worktree)
         for (const resolved of found.toReversed()) {
           result = mergeDeep(result, await loadFile(resolved))
         }
@@ -48,7 +49,7 @@ export namespace Config {
       result.agent = result.agent || {}
       const markdownAgents = [
         ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+        ...(await Filesystem.globUp(".opencode/agent/*.md", paths.directory, paths.worktree)),
       ]
       for (const item of markdownAgents) {
         const content = await Bun.file(item).text()
@@ -74,7 +75,7 @@ export namespace Config {
       result.mode = result.mode || {}
       const markdownModes = [
         ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
+        ...(await Filesystem.globUp(".opencode/mode/*.md", paths.directory, paths.worktree)),
       ]
       for (const item of markdownModes) {
         const content = await Bun.file(item).text()
@@ -100,7 +101,7 @@ export namespace Config {
       result.plugin.push(
         ...[
           ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-          ...(await Filesystem.globUp(".opencode/plugin/*.ts", app.path.cwd, app.path.root)),
+          ...(await Filesystem.globUp(".opencode/plugin/*.ts", paths.directory, paths.worktree)),
         ].map((x) => "file://" + x),
       )
 
@@ -328,32 +329,7 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
         })
         .optional(),
-      experimental: z
-        .object({
-          hook: z
-            .object({
-              file_edited: z
-                .record(
-                  z.string(),
-                  z
-                    .object({
-                      command: z.string().array(),
-                      environment: z.record(z.string(), z.string()).optional(),
-                    })
-                    .array(),
-                )
-                .optional(),
-              session_completed: z
-                .object({
-                  command: z.string().array(),
-                  environment: z.record(z.string(), z.string()).optional(),
-                })
-                .array()
-                .optional(),
-            })
-            .optional(),
-        })
-        .optional(),
+      experimental: z.object({}).optional(),
     })
     .strict()
     .openapi({

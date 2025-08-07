@@ -1,9 +1,10 @@
-import { App } from "../app/app"
 import { z } from "zod"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
+import { State } from "../project/state"
+import { Project } from "../project/project"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -35,8 +36,8 @@ export namespace Permission {
     ),
   }
 
-  const state = App.state(
-    "permission",
+  const state = State.create(
+    () => Project.use().id,
     () => {
       const pending: {
         [sessionID: string]: {

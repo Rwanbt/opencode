@@ -1,43 +1,47 @@
 import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
-import { App } from "../app/app"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
+import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = App.state("plugin", async (app) => {
-    const client = createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.app().fetch(...args),
-    })
-    const config = await Config.get()
-    const hooks = []
-    for (let plugin of config.plugin ?? []) {
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const [pkg, version] = plugin.split("@")
-        plugin = await BunProc.install(pkg, version ?? "latest")
+  const state = State.create(
+    () => Paths.directory,
+    async () => {
+      const client = createOpencodeClient({
+        baseUrl: "http://localhost:4096",
+        fetch: async (...args) => Server.app().fetch(...args),
+      })
+      const config = await Config.get()
+      const hooks = []
+      for (let plugin of config.plugin ?? []) {
+        log.info("loading plugin", { path: plugin })
+        if (!plugin.startsWith("file://")) {
+          const [pkg, version] = plugin.split("@")
+          plugin = await BunProc.install(pkg, version ?? "latest")
+        }
+        const mod = await import(plugin)
+        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+          const init = await fn({
+            client,
+            app: null as any,
+            $: Bun.$,
+          })
+          hooks.push(init)
+        }
       }
-      const mod = await import(plugin)
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn({
-          client,
-          app,
-          $: Bun.$,
-        })
-        hooks.push(init)
-      }
-    }
 
-    return {
-      hooks,
-    }
-  })
+      return {
+        hooks,
+      }
+    },
+  )
 
   export async function trigger<
     Name extends keyof Required<Hooks>,

@@ -5,7 +5,7 @@ import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
 import { State } from "../project/state"
-import { Session } from "../session"
+import { Paths } from "../project/path"
 
 export namespace Agent {
   export const Info = z
@@ -26,7 +26,7 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
   const state = State.create(
-    () => Session.use().directory,
+    () => Paths.use().directory,
     async () => {
       const cfg = await Config.get()
       const result: Record<string, Info> = {

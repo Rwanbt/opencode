@@ -7,7 +7,7 @@ import { z } from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { State } from "../project/state"
-import { Worktree } from "../project/worktree"
+import { Paths } from "../project/path"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -56,7 +56,7 @@ export namespace LSP {
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
   const state = State.create(
-    () => Worktree.use(),
+    () => Paths.use().worktree,
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = LSPServer

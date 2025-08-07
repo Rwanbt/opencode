@@ -7,35 +7,40 @@ import path from "path"
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
 import { mergeDeep } from "remeda"
+import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
 
-  const state = App.state("format", async () => {
-    const enabled: Record<string, boolean> = {}
-    const cfg = await Config.get()
+  const state = State.create(
+    () => Paths.use().directory,
+    async () => {
+      const enabled: Record<string, boolean> = {}
+      const cfg = await Config.get()
 
-    const formatters = { ...Formatter } as Record<string, Formatter.Info>
-    for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
-      if (item.disabled) {
-        delete formatters[name]
-        continue
+      const formatters = { ...Formatter } as Record<string, Formatter.Info>
+      for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
+        if (item.disabled) {
+          delete formatters[name]
+          continue
+        }
+        const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
+          command: [],
+          extensions: [],
+          ...item,
+        })
+        result.enabled = async () => true
+        result.name = name
+        formatters[name] = result
       }
-      const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
-        command: [],
-        extensions: [],
-        ...item,
-      })
-      result.enabled = async () => true
-      result.name = name
-      formatters[name] = result
-    }
 
-    return {
-      enabled,
-      formatters,
-    }
-  })
+      return {
+        enabled,
+        formatters,
+      }
+    },
+  )
 
   async function isEnabled(item: Formatter.Info) {
     const s = await state()
