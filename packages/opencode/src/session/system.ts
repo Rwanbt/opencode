@@ -1,4 +1,3 @@
-import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
@@ -13,6 +12,8 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import { Project } from "../project/project"
+import { Paths } from "../project/path"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -27,21 +28,21 @@ export namespace SystemPrompt {
   }
 
   export async function environment() {
-    const app = App.info()
+    const project = Project.use()
     return [
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${app.path.cwd}`,
-        `  Is directory a git repo: ${app.git ? "yes" : "no"}`,
+        `  Working directory: ${Paths.directory}`,
+        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<project>`,
         `  ${
-          app.git
+          project.vcs === "git"
             ? await Ripgrep.tree({
-                cwd: app.path.cwd,
+                cwd: Paths.directory,
                 limit: 200,
               })
             : ""
@@ -58,12 +59,11 @@ export namespace SystemPrompt {
   ]
 
   export async function custom() {
-    const { cwd, root } = App.info().path
     const config = await Config.get()
     const paths = new Set<string>()
 
     for (const item of CUSTOM_FILES) {
-      const matches = await Filesystem.findUp(item, cwd, root)
+      const matches = await Filesystem.findUp(item, Paths.directory, Paths.worktree)
       matches.forEach((path) => paths.add(path))
     }
 
@@ -72,7 +72,7 @@ export namespace SystemPrompt {
 
     if (config.instructions) {
       for (const instruction of config.instructions) {
-        const matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+        const matches = await Filesystem.globUp(instruction, Paths.directory, Paths.worktree).catch(() => [])
         matches.forEach((path) => paths.add(path))
       }
     }

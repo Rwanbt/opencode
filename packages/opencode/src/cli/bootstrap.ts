@@ -12,7 +12,6 @@ export async function bootstrap<T>(input: App.Input, cb: (app: App.Info) => Prom
     Plugin.init()
     LSP.init()
     Snapshot.init()
-
     return cb(app)
   })
 }

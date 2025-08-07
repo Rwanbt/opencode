@@ -4,9 +4,10 @@ import { $ } from "bun"
 import { createPatch } from "diff"
 import path from "path"
 import * as git from "isomorphic-git"
-import { App } from "../app/app"
 import fs from "fs"
 import { Log } from "../util/log"
+import { Paths } from "../project/path"
+import { Project } from "../project/project"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -34,10 +35,10 @@ export namespace File {
   }
 
   export async function status() {
-    const app = App.info()
-    if (!app.git) return []
+    const project = Project.use()
+    if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    const diffOutput = await $`git diff --numstat HEAD`.cwd(Paths.directory).quiet().nothrow().text()
 
     const changedFiles: Info[] = []
 
@@ -54,13 +55,17 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`.cwd(app.path.cwd).quiet().nothrow().text()
+    const untrackedOutput = await $`git ls-files --others --exclude-standard`
+      .cwd(Paths.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(app.path.root, filepath)).text()
+          const content = await Bun.file(path.join(Paths.worktree, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -75,7 +80,11 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`
+      .cwd(Paths.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -91,27 +100,27 @@ export namespace File {
 
     return changedFiles.map((x) => ({
       ...x,
-      path: path.relative(app.path.cwd, path.join(app.path.root, x.path)),
+      path: path.relative(Paths.directory, path.join(Paths.worktree, x.path)),
     }))
   }
 
   export async function read(file: string) {
     using _ = log.time("read", { file })
-    const app = App.info()
-    const full = path.join(app.path.cwd, file)
+    const project = Project.use()
+    const full = path.join(Paths.directory, file)
     const content = await Bun.file(full)
       .text()
       .catch(() => "")
       .then((x) => x.trim())
-    if (app.git) {
-      const rel = path.relative(app.path.root, full)
+    if (project.vcs === "git") {
+      const rel = path.relative(Paths.worktree, full)
       const diff = await git.status({
         fs,
-        dir: app.path.root,
+        dir: Paths.worktree,
         filepath: rel,
       })
       if (diff !== "unmodified") {
-        const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
+        const original = await $`git show HEAD:${rel}`.cwd(Paths.worktree).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
         })

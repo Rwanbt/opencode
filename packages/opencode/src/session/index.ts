@@ -161,10 +161,9 @@ export namespace Session {
   )
 
   export async function create(parentID?: string) {
-    const app = App.info()
     return createNext({
       parentID,
-      directory: app.path.cwd,
+      directory: Paths.directory,
     })
   }
 
@@ -443,7 +442,6 @@ export namespace Session {
       },
     }
 
-    const app = App.info()
     const userParts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
@@ -714,8 +712,8 @@ export namespace Session {
       system,
       mode: inputMode,
       path: {
-        cwd: app.path.cwd,
-        root: app.path.root,
+        cwd: Paths.directory,
+        root: Paths.worktree,
       },
       cost: 0,
       tokens: {
@@ -869,8 +867,8 @@ export namespace Session {
             role: "assistant",
             system,
             path: {
-              cwd: app.path.cwd,
-              root: app.path.root,
+              cwd: Paths.directory,
+              root: Paths.worktree,
             },
             cost: 0,
             tokens: {
@@ -1266,7 +1264,6 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
-    const app = App.info()
     const system = [
       ...SystemPrompt.summarize(input.providerID),
       ...(await SystemPrompt.environment()),
@@ -1280,8 +1277,8 @@ export namespace Session {
       system,
       mode: "build",
       path: {
-        cwd: app.path.cwd,
-        root: app.path.root,
+        cwd: Paths.directory,
+        root: Paths.worktree,
       },
       summary: true,
       cost: 0,
@@ -1395,7 +1392,6 @@ export namespace Session {
     providerID: string
     messageID: string
   }) {
-    const app = App.info()
     await Session.chat({
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -1405,10 +1401,10 @@ export namespace Session {
         {
           id: Identifier.ascending("part"),
           type: "text",
-          text: PROMPT_INITIALIZE.replace("${path}", app.path.root),
+          text: PROMPT_INITIALIZE.replace("${path}", Paths.worktree),
         },
       ],
     })
-    await App.initialize()
+    await Project.setInitialized()
   }
 }

@@ -11,6 +11,10 @@ export namespace Project {
     id: z.string(),
     worktree: z.string(),
     vcs: z.literal("git").optional(),
+    time: z.object({
+      created: z.number(),
+      initialized: z.number().optional(),
+    }),
   })
   export type Info = z.infer<typeof Info>
 
@@ -25,9 +29,12 @@ export namespace Project {
     const git = await matches.next().then((x) => x.value)
     await matches.return()
     if (!git) {
-      await StorageNext.write(["project", "global"], {
+      await StorageNext.write<Info>(["project", "global"], {
         id: "global",
         worktree: "/",
+        time: {
+          created: Date.now(),
+        },
       })
       return
     }
@@ -56,8 +63,18 @@ export namespace Project {
       id,
       worktree,
       vcs: "git",
+      time: {
+        created: Date.now(),
+      },
     })
   })
+
+  export async function setInitialized() {
+    const project = use()
+    await StorageNext.update<Info>(["project", project.id], (draft) => {
+      draft.time.initialized = Date.now()
+    })
+  }
 
   export async function list() {
     await init()

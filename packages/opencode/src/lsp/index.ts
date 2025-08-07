@@ -108,7 +108,7 @@ export namespace LSP {
     const result: LSPClient.Info[] = []
     for (const server of Object.values(LSPServer)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
-      const root = await server.root(file, App.info())
+      const root = await server.root(file)
       if (!root) continue
       if (s.broken.has(root + server.id)) continue
 
@@ -117,7 +117,7 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(App.info(), root)
+      const handle = await server.spawn(root)
       if (!handle) continue
       const client = await LSPClient.create({
         serverID: server.id,

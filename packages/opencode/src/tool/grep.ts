@@ -1,9 +1,9 @@
 import { z } from "zod"
 import { Tool } from "./tool"
-import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
+import { Paths } from "../project/path"
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -17,8 +17,7 @@ export const GrepTool = Tool.define("grep", {
       throw new Error("pattern is required")
     }
 
-    const app = App.info()
-    const searchPath = params.path || app.path.cwd
+    const searchPath = params.path || Paths.directory
 
     const rgPath = await Ripgrep.filepath()
     const args = ["-n", params.pattern]

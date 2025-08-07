@@ -19,6 +19,8 @@ import { Identifier } from "../../id/id"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
+import { Project } from "../../project/project"
+import { Paths } from "../../project/path"
 
 type GitHubAuthor = {
   login: string
@@ -178,8 +180,8 @@ export const GithubInstallCommand = cmd({
       }
 
       async function getAppInfo() {
-        const app = App.info()
-        if (!app.git) {
+        const project = Project.use()
+        if (project.vcs !== "git") {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
@@ -195,7 +197,7 @@ export const GithubInstallCommand = cmd({
           throw new UI.CancelledError()
         }
         const [owner, repo] = parsed[1].split("/")
-        return { owner, repo, root: app.path.root }
+        return { owner, repo, root: Paths.worktree }
       }
 
       async function promptProvider() {

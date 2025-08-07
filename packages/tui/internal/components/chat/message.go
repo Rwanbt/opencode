@@ -54,6 +54,8 @@ func WithBackgroundColor(color compat.AdaptiveColor) renderingOption {
 func WithNoBorder() renderingOption {
 	return func(c *blockRenderer) {
 		c.border = false
+		c.paddingLeft++
+		c.paddingRight++
 	}
 }
 
@@ -302,7 +304,7 @@ func renderText(
 		return renderContentBlock(
 			app,
 			content,
-			width+2,
+			width,
 			WithNoBorder(),
 			WithBackgroundColor(t.Background()),
 		)

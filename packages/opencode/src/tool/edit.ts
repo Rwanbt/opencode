@@ -10,12 +10,12 @@ import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import { Permission } from "../permission"
 import DESCRIPTION from "./edit.txt"
-import { App } from "../app/app"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
+import { Paths } from "../project/path"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -34,9 +34,8 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const app = App.info()
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
-    if (!Filesystem.contains(app.path.cwd, filePath)) {
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Paths.directory, params.filePath)
+    if (!Filesystem.contains(Paths.directory, filePath)) {
       throw new Error(`File ${filePath} is not in the current working directory`)
     }
 
@@ -121,7 +120,7 @@ export const EditTool = Tool.define("edit", {
         diagnostics,
         diff,
       },
-      title: `${path.relative(app.path.root, filePath)}`,
+      title: `${path.relative(Paths.worktree, filePath)}`,
       output,
     }
   },

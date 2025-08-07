@@ -7,6 +7,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
+import { Paths } from "../project/path"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -23,8 +24,7 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.join(process.cwd(), filepath)
     }
-    const app = App.info()
-    if (!Filesystem.contains(app.path.cwd, filepath)) {
+    if (!Filesystem.contains(Paths.directory, filepath)) {
       throw new Error(`File ${filepath} is not in the current working directory`)
     }
 
@@ -77,7 +77,7 @@ export const ReadTool = Tool.define("read", {
     FileTime.read(ctx.sessionID, filepath)
 
     return {
-      title: path.relative(App.info().path.root, filepath),
+      title: path.relative(Paths.worktree, filepath),
       output,
       metadata: {
         preview,

@@ -1,5 +1,4 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
-import type { App } from "../app/app"
 import path from "path"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -7,6 +6,7 @@ import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
+import { Paths } from "../project/path"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -16,18 +16,18 @@ export namespace LSPServer {
     initialization?: Record<string, any>
   }
 
-  type RootFunction = (file: string, app: App.Info) => Promise<string | undefined>
+  type RootFunction = (file: string) => Promise<string | undefined>
 
   const NearestRoot = (patterns: string[]): RootFunction => {
-    return async (file, app) => {
+    return async (file) => {
       const files = Filesystem.up({
         targets: patterns,
         start: path.dirname(file),
-        stop: app.path.root,
+        stop: Paths.worktree,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return app.path.root
+      if (!first.value) return Paths.worktree
       return path.dirname(first.value)
     }
   }
@@ -37,15 +37,15 @@ export namespace LSPServer {
     extensions: string[]
     global?: boolean
     root: RootFunction
-    spawn(app: App.Info, root: string): Promise<Handle | undefined>
+    spawn(root: string): Promise<Handle | undefined>
   }
 
   export const Typescript: Info = {
     id: "typescript",
     root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
-    async spawn(app, root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})
+    async spawn(root) {
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Paths.directory).catch(() => {})
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
@@ -67,13 +67,13 @@ export namespace LSPServer {
 
   export const Gopls: Info = {
     id: "golang",
-    root: async (file, app) => {
-      const work = await NearestRoot(["go.work"])(file, app)
+    root: async (file) => {
+      const work = await NearestRoot(["go.work"])(file)
       if (work) return work
-      return NearestRoot(["go.mod", "go.sum"])(file, app)
+      return NearestRoot(["go.mod", "go.sum"])(file)
     },
     extensions: [".go"],
-    async spawn(_, root) {
+    async spawn(root) {
       let bin = Bun.which("gopls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
@@ -109,7 +109,7 @@ export namespace LSPServer {
     id: "ruby-lsp",
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
-    async spawn(_, root) {
+    async spawn(root) {
       let bin = Bun.which("ruby-lsp", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
@@ -149,7 +149,7 @@ export namespace LSPServer {
     id: "pyright",
     extensions: [".py", ".pyi"],
     root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
-    async spawn(_, root) {
+    async spawn(root) {
       const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
         cwd: root,
         env: {
@@ -167,7 +167,7 @@ export namespace LSPServer {
     id: "elixir-ls",
     extensions: [".ex", ".exs"],
     root: NearestRoot(["mix.exs", "mix.lock"]),
-    async spawn(_, root) {
+    async spawn(root) {
       let binary = Bun.which("elixir-ls")
       if (!binary) {
         const elixirLsPath = path.join(Global.Path.bin, "elixir-ls")
@@ -222,7 +222,7 @@ export namespace LSPServer {
     id: "zls",
     extensions: [".zig", ".zon"],
     root: NearestRoot(["build.zig"]),
-    async spawn(_, root) {
+    async spawn(root) {
       let bin = Bun.which("zls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
@@ -327,7 +327,7 @@ export namespace LSPServer {
     id: "csharp",
     root: NearestRoot([".sln", ".csproj", "global.json"]),
     extensions: [".cs"],
-    async spawn(_, root) {
+    async spawn(root) {
       let bin = Bun.which("csharp-ls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })

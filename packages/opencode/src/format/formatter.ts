@@ -1,5 +1,5 @@
-import { App } from "../app/app"
 import { BunProc } from "../bun"
+import { Paths } from "../project/path"
 import { Filesystem } from "../util/filesystem"
 
 export interface Info {
@@ -63,8 +63,7 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp("package.json", app.path.cwd, app.path.root)
+    const items = await Filesystem.findUp("package.json", Paths.directory, Paths.worktree)
     for (const item of items) {
       const json = await Bun.file(item).json()
       if (json.dependencies?.prettier) return true
@@ -109,8 +108,7 @@ export const biome: Info = {
     ".gql",
   ],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp("biome.json", app.path.cwd, app.path.root)
+    const items = await Filesystem.findUp("biome.json", Paths.directory, Paths.worktree)
     return items.length > 0
   },
 }
@@ -129,8 +127,7 @@ export const clang: Info = {
   command: ["clang-format", "-i", "$FILE"],
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp(".clang-format", app.path.cwd, app.path.root)
+    const items = await Filesystem.findUp(".clang-format", Paths.directory, Paths.worktree)
     return items.length > 0
   },
 }
@@ -150,10 +147,9 @@ export const ruff: Info = {
   extensions: [".py", ".pyi"],
   async enabled() {
     if (!Bun.which("ruff")) return false
-    const app = App.info()
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, app.path.cwd, app.path.root)
+      const found = await Filesystem.findUp(config, Paths.directory, Paths.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
           const content = await Bun.file(found[0]).text()
@@ -165,7 +161,7 @@ export const ruff: Info = {
     }
     const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
     for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, app.path.cwd, app.path.root)
+      const found = await Filesystem.findUp(dep, Paths.directory, Paths.worktree)
       if (found.length > 0) {
         const content = await Bun.file(found[0]).text()
         if (content.includes("ruff")) return true

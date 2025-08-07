@@ -1,4 +1,3 @@
-import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
@@ -75,7 +74,7 @@ export namespace Format {
         log.info("running", { command: item.command })
         const proc = Bun.spawn({
           cmd: item.command.map((x) => x.replace("$FILE", file)),
-          cwd: App.info().path.cwd,
+          cwd: Paths.directory,
           env: item.environment,
           stdout: "ignore",
           stderr: "ignore",

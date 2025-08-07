@@ -20,6 +20,7 @@ import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { lazy } from "../util/lazy"
+import { Paths } from "../project/path"
 
 const ERRORS = {
   400: {
@@ -692,10 +693,9 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const app = App.info()
           const pattern = c.req.valid("query").pattern
           const result = await Ripgrep.search({
-            cwd: app.path.cwd,
+            cwd: Paths.directory,
             pattern,
             limit: 10,
           })
@@ -726,9 +726,8 @@ export namespace Server {
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const app = App.info()
           const result = await Ripgrep.files({
-            cwd: app.path.cwd,
+            cwd: Paths.directory,
             query,
             limit: 10,
           })
