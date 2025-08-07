@@ -2,7 +2,7 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -40,7 +40,7 @@ export const ListTool = Tool.define("list", {
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
   async execute(params) {
-    const searchPath = path.resolve(Paths.directory, params.path || ".")
+    const searchPath = path.resolve(Instance.directory, params.path || ".")
 
     const glob = new Bun.Glob("**/*")
     const files = []
@@ -101,7 +101,7 @@ export const ListTool = Tool.define("list", {
     const output = `${searchPath}/\n` + renderDir(".", 0)
 
     return {
-      title: path.relative(Paths.worktree, searchPath),
+      title: path.relative(Instance.worktree, searchPath),
       metadata: {
         count: files.length,
         truncated: files.length >= LIMIT,

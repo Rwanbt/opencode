@@ -8,7 +8,7 @@ import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
 import { withTimeout } from "../util/timeout"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -122,7 +122,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Paths.directory, input.path)
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const file = Bun.file(input.path)
           const text = await file.text()
           const version = files[input.path]
@@ -154,7 +154,7 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Paths.directory, input.path)
+        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
         log.info("waiting for diagnostics", input)
         let unsub: () => void
         return await withTimeout(

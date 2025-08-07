@@ -1,5 +1,5 @@
 import { Ripgrep } from "../../../file/ripgrep"
-import { Paths } from "../../../project/path"
+import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
@@ -17,7 +17,7 @@ const TreeCommand = cmd({
     }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
-      console.log(await Ripgrep.tree({ cwd: Paths.directory, limit: args.limit }))
+      console.log(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }))
     })
   },
 })
@@ -41,7 +41,7 @@ const FilesCommand = cmd({
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
       const files = await Ripgrep.files({
-        cwd: Paths.directory,
+        cwd: Instance.directory,
         query: args.query,
         glob: args.glob ? [args.glob] : undefined,
         limit: args.limit,

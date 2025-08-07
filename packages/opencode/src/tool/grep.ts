@@ -3,7 +3,7 @@ import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -17,7 +17,7 @@ export const GrepTool = Tool.define("grep", {
       throw new Error("pattern is required")
     }
 
-    const searchPath = params.path || Paths.directory
+    const searchPath = params.path || Instance.directory
 
     const rgPath = await Ripgrep.filepath()
     const args = ["-n", params.pattern]

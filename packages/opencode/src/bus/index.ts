@@ -1,15 +1,12 @@
 import { z, type ZodType } from "zod"
 import { Log } from "../util/log"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
 
-  const state = State.create(
-    () => Paths.directory,
-    () => {
+  const state = Instance.state(() => {
       const subscriptions = new Map<any, Subscription[]>()
 
       return {

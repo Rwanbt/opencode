@@ -20,7 +20,7 @@ import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { Project } from "../../project/project"
-import { Paths } from "../../project/path"
+import { Instance } from "../../project/instance"
 
 type GitHubAuthor = {
   login: string
@@ -197,7 +197,7 @@ export const GithubInstallCommand = cmd({
           throw new UI.CancelledError()
         }
         const [owner, repo] = parsed[1].split("/")
-        return { owner, repo, root: Paths.worktree }
+        return { owner, repo, root: Instance.worktree }
       }
 
       async function promptProvider() {

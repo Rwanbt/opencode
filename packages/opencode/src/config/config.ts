@@ -13,19 +13,17 @@ import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
-  export const state = State.create(
-    () => Paths.directory,
+  export const state = Instance.state(
     async () => {
       const auth = await Auth.all()
       let result = await global()
       for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, Paths.directory, Paths.worktree)
+        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
           result = mergeDeep(result, await loadFile(resolved))
         }
@@ -48,7 +46,7 @@ export namespace Config {
       result.agent = result.agent || {}
       const markdownAgents = [
         ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/agent/*.md", Paths.directory, Paths.worktree)),
+        ...(await Filesystem.globUp(".opencode/agent/*.md", Instance.directory, Instance.worktree)),
       ]
       for (const item of markdownAgents) {
         const content = await Bun.file(item).text()
@@ -74,7 +72,7 @@ export namespace Config {
       result.mode = result.mode || {}
       const markdownModes = [
         ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/mode/*.md", Paths.directory, Paths.worktree)),
+        ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, Instance.worktree)),
       ]
       for (const item of markdownModes) {
         const content = await Bun.file(item).text()
@@ -100,7 +98,7 @@ export namespace Config {
       result.plugin.push(
         ...[
           ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-          ...(await Filesystem.globUp(".opencode/plugin/*.ts", Paths.directory, Paths.worktree)),
+          ...(await Filesystem.globUp(".opencode/plugin/*.ts", Instance.directory, Instance.worktree)),
         ].map((x) => "file://" + x),
       )
 

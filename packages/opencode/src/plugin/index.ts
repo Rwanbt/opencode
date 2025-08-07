@@ -5,14 +5,12 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     async () => {
       const client = createOpencodeClient({
         baseUrl: "http://localhost:4096",

@@ -10,7 +10,7 @@ import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
 import { Wildcard } from "../util/wildcard"
 import { $ } from "bun"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 const MAX_OUTPUT_LENGTH = 30000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
@@ -82,9 +82,9 @@ export const BashTool = Tool.define("bash", {
             .text()
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
-          if (resolved && !Filesystem.contains(Paths.directory, resolved)) {
+          if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
             throw new Error(
-              `This command references paths outside of ${Paths.directory} so it is not allowed to be executed.`,
+              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
             )
           }
         }
@@ -123,7 +123,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     const process = exec(params.command, {
-      cwd: Paths.directory,
+      cwd: Instance.directory,
       signal: ctx.abort,
       maxBuffer: MAX_OUTPUT_LENGTH,
       timeout,

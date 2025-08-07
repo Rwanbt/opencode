@@ -6,7 +6,7 @@ import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -23,11 +23,11 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: patterns,
         start: path.dirname(file),
-        stop: Paths.worktree,
+        stop: Instance.worktree,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return Paths.worktree
+      if (!first.value) return Instance.worktree
       return path.dirname(first.value)
     }
   }
@@ -45,7 +45,7 @@ export namespace LSPServer {
     root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Paths.directory).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,

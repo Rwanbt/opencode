@@ -1,5 +1,5 @@
 import { BunProc } from "../bun"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 export interface Info {
@@ -63,7 +63,7 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    const items = await Filesystem.findUp("package.json", Paths.directory, Paths.worktree)
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
       const json = await Bun.file(item).json()
       if (json.dependencies?.prettier) return true
@@ -108,7 +108,7 @@ export const biome: Info = {
     ".gql",
   ],
   async enabled() {
-    const items = await Filesystem.findUp("biome.json", Paths.directory, Paths.worktree)
+    const items = await Filesystem.findUp("biome.json", Instance.directory, Instance.worktree)
     return items.length > 0
   },
 }
@@ -127,7 +127,7 @@ export const clang: Info = {
   command: ["clang-format", "-i", "$FILE"],
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
-    const items = await Filesystem.findUp(".clang-format", Paths.directory, Paths.worktree)
+    const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.worktree)
     return items.length > 0
   },
 }
@@ -149,7 +149,7 @@ export const ruff: Info = {
     if (!Bun.which("ruff")) return false
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, Paths.directory, Paths.worktree)
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
           const content = await Bun.file(found[0]).text()
@@ -161,7 +161,7 @@ export const ruff: Info = {
     }
     const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
     for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, Paths.directory, Paths.worktree)
+      const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         const content = await Bun.file(found[0]).text()
         if (content.includes("ruff")) return true

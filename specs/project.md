@@ -58,6 +58,8 @@ POST /log
 
 GET /provider?directory=<resolve path> -> Provider
 GET /config?directory=<resolve path> -> Config // think only tui uses this?
-GET /agent?directory=<resolve path> -> Mode
+
+GET /project/:projectID/agent?directory=<resolve path> -> Agent
+GET /project/:projectID/find/file?directory=<resolve path> -> File
 
 ```

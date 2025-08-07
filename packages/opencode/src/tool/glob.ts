@@ -3,7 +3,7 @@ import path from "path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -17,8 +17,8 @@ export const GlobTool = Tool.define("glob", {
       ),
   }),
   async execute(params) {
-    let search = params.path ?? Paths.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Paths.directory, search)
+    let search = params.path ?? Instance.directory
+    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
 
     const limit = 100
     const files = []
@@ -54,7 +54,7 @@ export const GlobTool = Tool.define("glob", {
     }
 
     return {
-      title: path.relative(Paths.worktree, search),
+      title: path.relative(Instance.worktree, search),
       metadata: {
         count: files.length,
         truncated,

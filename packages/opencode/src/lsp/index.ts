@@ -5,8 +5,7 @@ import { LSPServer } from "./server"
 import { z } from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -54,8 +53,7 @@ export namespace LSP {
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = LSPServer
@@ -68,7 +66,7 @@ export namespace LSP {
         }
         servers[name] = {
           ...existing,
-          root: existing?.root ?? (async () => Paths.directory),
+          root: existing?.root ?? (async () => Instance.directory),
           extensions: item.extensions ?? existing.extensions,
           spawn: async (root) => {
             return {

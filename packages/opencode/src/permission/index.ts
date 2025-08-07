@@ -3,8 +3,7 @@ import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -36,8 +35,7 @@ export namespace Permission {
     ),
   }
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     () => {
       const pending: {
         [sessionID: string]: {

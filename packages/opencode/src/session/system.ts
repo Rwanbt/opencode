@@ -13,7 +13,7 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Project } from "../project/project"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -33,7 +33,7 @@ export namespace SystemPrompt {
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${Paths.directory}`,
+        `  Working directory: ${Instance.directory}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
@@ -42,7 +42,7 @@ export namespace SystemPrompt {
         `  ${
           project.vcs === "git"
             ? await Ripgrep.tree({
-                cwd: Paths.directory,
+                cwd: Instance.directory,
                 limit: 200,
               })
             : ""
@@ -63,7 +63,7 @@ export namespace SystemPrompt {
     const paths = new Set<string>()
 
     for (const item of CUSTOM_FILES) {
-      const matches = await Filesystem.findUp(item, Paths.directory, Paths.worktree)
+      const matches = await Filesystem.findUp(item, Instance.directory, Instance.worktree)
       matches.forEach((path) => paths.add(path))
     }
 
@@ -72,7 +72,7 @@ export namespace SystemPrompt {
 
     if (config.instructions) {
       for (const instruction of config.instructions) {
-        const matches = await Filesystem.globUp(instruction, Paths.directory, Paths.worktree).catch(() => [])
+        const matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
         matches.forEach((path) => paths.add(path))
       }
     }

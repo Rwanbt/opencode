@@ -1,11 +1,9 @@
-import { Paths } from "../project/path"
-import { State } from "../project/state"
+import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
-  export const state = State.create(
-    () => Paths.directory,
+  export const state = Instance.state(
     () => {
       const read: {
         [sessionID: string]: {

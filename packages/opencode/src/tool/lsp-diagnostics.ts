@@ -3,7 +3,7 @@ import { Tool } from "./tool"
 import path from "path"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp-diagnostics.txt"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const LspDiagnosticTool = Tool.define("lsp_diagnostics", {
   description: DESCRIPTION,
@@ -11,12 +11,12 @@ export const LspDiagnosticTool = Tool.define("lsp_diagnostics", {
     path: z.string().describe("The path to the file to get diagnostics."),
   }),
   execute: async (args) => {
-    const normalized = path.isAbsolute(args.path) ? args.path : path.join(Paths.directory, args.path)
+    const normalized = path.isAbsolute(args.path) ? args.path : path.join(Instance.directory, args.path)
     await LSP.touchFile(normalized, true)
     const diagnostics = await LSP.diagnostics()
     const file = diagnostics[normalized]
     return {
-      title: path.relative(Paths.worktree, normalized),
+      title: path.relative(Instance.worktree, normalized),
       metadata: {
         diagnostics,
       },

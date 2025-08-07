@@ -6,7 +6,7 @@ import path from "path"
 import * as git from "isomorphic-git"
 import fs from "fs"
 import { Log } from "../util/log"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 import { Project } from "../project/project"
 
 export namespace File {
@@ -38,7 +38,7 @@ export namespace File {
     const project = Project.use()
     if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(Paths.directory).quiet().nothrow().text()
+    const diffOutput = await $`git diff --numstat HEAD`.cwd(Instance.directory).quiet().nothrow().text()
 
     const changedFiles: Info[] = []
 
@@ -56,7 +56,7 @@ export namespace File {
     }
 
     const untrackedOutput = await $`git ls-files --others --exclude-standard`
-      .cwd(Paths.directory)
+      .cwd(Instance.directory)
       .quiet()
       .nothrow()
       .text()
@@ -65,7 +65,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Paths.worktree, filepath)).text()
+          const content = await Bun.file(path.join(Instance.worktree, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -81,7 +81,7 @@ export namespace File {
 
     // Get deleted files
     const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`
-      .cwd(Paths.directory)
+      .cwd(Instance.directory)
       .quiet()
       .nothrow()
       .text()
@@ -100,27 +100,27 @@ export namespace File {
 
     return changedFiles.map((x) => ({
       ...x,
-      path: path.relative(Paths.directory, path.join(Paths.worktree, x.path)),
+      path: path.relative(Instance.directory, path.join(Instance.worktree, x.path)),
     }))
   }
 
   export async function read(file: string) {
     using _ = log.time("read", { file })
     const project = Project.use()
-    const full = path.join(Paths.directory, file)
+    const full = path.join(Instance.directory, file)
     const content = await Bun.file(full)
       .text()
       .catch(() => "")
       .then((x) => x.trim())
     if (project.vcs === "git") {
-      const rel = path.relative(Paths.worktree, full)
+      const rel = path.relative(Instance.worktree, full)
       const diff = await git.status({
         fs,
-        dir: Paths.worktree,
+        dir: Instance.worktree,
         filepath: rel,
       })
       if (diff !== "unmodified") {
-        const original = await $`git show HEAD:${rel}`.cwd(Paths.worktree).quiet().nothrow().text()
+        const original = await $`git show HEAD:${rel}`.cwd(Instance.worktree).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
         })

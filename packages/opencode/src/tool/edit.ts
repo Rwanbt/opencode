@@ -15,7 +15,7 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -34,8 +34,8 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Paths.directory, params.filePath)
-    if (!Filesystem.contains(Paths.directory, filePath)) {
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    if (!Filesystem.contains(Instance.directory, filePath)) {
       throw new Error(`File ${filePath} is not in the current working directory`)
     }
 
@@ -120,7 +120,7 @@ export const EditTool = Tool.define("edit", {
         diagnostics,
         diff,
       },
-      title: `${path.relative(Paths.worktree, filePath)}`,
+      title: `${path.relative(Instance.worktree, filePath)}`,
       output,
     }
   },

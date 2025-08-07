@@ -8,8 +8,7 @@ import { NamedError } from "../util/error"
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -21,8 +20,7 @@ export namespace MCP {
     }),
   )
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     async () => {
       const cfg = await Config.get()
       const clients: {

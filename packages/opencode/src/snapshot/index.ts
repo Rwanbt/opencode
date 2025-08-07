@@ -6,7 +6,7 @@ import { Global } from "../global"
 import { z } from "zod"
 import { Config } from "../config/config"
 import { Project } from "../project/project"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -36,14 +36,14 @@ export namespace Snapshot {
         .env({
           ...process.env,
           GIT_DIR: git,
-          GIT_WORK_TREE: Paths.worktree,
+          GIT_WORK_TREE: Instance.worktree,
         })
         .quiet()
         .nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} add .`.quiet().cwd(Paths.directory).nothrow()
-    const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(Paths.directory).nothrow().text()
+    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
+    const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(Instance.directory).nothrow().text()
     return hash.trim()
   }
 
@@ -55,8 +55,8 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} add .`.quiet().cwd(Paths.directory).nothrow()
-    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Paths.directory).text()
+    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
+    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).text()
     return {
       hash,
       files: files
@@ -64,7 +64,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Paths.directory, x)),
+        .map((x) => path.join(Instance.directory, x)),
     }
   }
 
@@ -73,7 +73,7 @@ export namespace Snapshot {
     const git = gitdir()
     await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
       .quiet()
-      .cwd(Paths.worktree)
+      .cwd(Instance.worktree)
   }
 
   export async function revert(patches: Patch[]) {
@@ -85,7 +85,7 @@ export namespace Snapshot {
         log.info("reverting", { file, hash: item.hash })
         const result = await $`git --git-dir=${git} checkout ${item.hash} -- ${file}`
           .quiet()
-          .cwd(Paths.worktree)
+          .cwd(Instance.worktree)
           .nothrow()
         if (result.exitCode !== 0) {
           log.info("file not found in history, deleting", { file })
@@ -98,7 +98,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Paths.worktree).text()
+    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).text()
     return result.trim()
   }
 

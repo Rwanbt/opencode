@@ -6,14 +6,12 @@ import path from "path"
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
 import { mergeDeep } from "remeda"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     async () => {
       const enabled: Record<string, boolean> = {}
       const cfg = await Config.get()
@@ -74,7 +72,7 @@ export namespace Format {
         log.info("running", { command: item.command })
         const proc = Bun.spawn({
           cmd: item.command.map((x) => x.replace("$FILE", file)),
-          cwd: Paths.directory,
+          cwd: Instance.directory,
           env: item.environment,
           stdout: "ignore",
           stderr: "ignore",

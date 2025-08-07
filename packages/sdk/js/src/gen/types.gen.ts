@@ -5,6 +5,9 @@ export type Event =
       type: "installation.updated"
     } & EventInstallationUpdated)
   | ({
+      type: "storage.write"
+    } & EventStorageWrite)
+  | ({
       type: "lsp.client.diagnostics"
     } & EventLspClientDiagnostics)
   | ({
@@ -19,9 +22,6 @@ export type Event =
   | ({
       type: "message.part.removed"
     } & EventMessagePartRemoved)
-  | ({
-      type: "storage.write"
-    } & EventStorageWrite)
   | ({
       type: "file.edited"
     } & EventFileEdited)
@@ -57,6 +57,14 @@ export type EventInstallationUpdated = {
   type: string
   properties: {
     version: string
+  }
+}
+
+export type EventStorageWrite = {
+  type: string
+  properties: {
+    key: Array<string>
+    content?: unknown
   }
 }
 
@@ -383,14 +391,6 @@ export type EventMessagePartRemoved = {
   }
 }
 
-export type EventStorageWrite = {
-  type: string
-  properties: {
-    key: string
-    content?: unknown
-  }
-}
-
 export type EventFileEdited = {
   type: string
   properties: {
@@ -444,6 +444,8 @@ export type EventSessionUpdated = {
 
 export type Session = {
   id: string
+  projectID: string
+  directory: string
   parentID?: string
   share?: {
     url: string
@@ -675,22 +677,7 @@ export type Config = {
         }
   }
   experimental?: {
-    hook?: {
-      file_edited?: {
-        [key: string]: Array<{
-          command: Array<string>
-          environment?: {
-            [key: string]: string
-          }
-        }>
-      }
-      session_completed?: Array<{
-        command: Array<string>
-        environment?: {
-          [key: string]: string
-        }
-      }>
-    }
+    [key: string]: unknown
   }
 }
 

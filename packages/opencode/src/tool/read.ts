@@ -6,7 +6,7 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -23,7 +23,7 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.join(process.cwd(), filepath)
     }
-    if (!Filesystem.contains(Paths.directory, filepath)) {
+    if (!Filesystem.contains(Instance.directory, filepath)) {
       throw new Error(`File ${filepath} is not in the current working directory`)
     }
 
@@ -76,7 +76,7 @@ export const ReadTool = Tool.define("read", {
     FileTime.read(ctx.sessionID, filepath)
 
     return {
-      title: path.relative(Paths.worktree, filepath),
+      title: path.relative(Instance.worktree, filepath),
       output,
       metadata: {
         preview,

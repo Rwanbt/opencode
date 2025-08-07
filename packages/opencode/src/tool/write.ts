@@ -9,7 +9,7 @@ import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
-import { Paths } from "../project/path"
+import { Instance } from "../project/instance"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -18,8 +18,8 @@ export const WriteTool = Tool.define("write", {
     content: z.string().describe("The content to write to the file"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Paths.directory, params.filePath)
-    if (!Filesystem.contains(Paths.directory, filepath)) {
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    if (!Filesystem.contains(Instance.directory, filepath)) {
       throw new Error(`File ${filepath} is not in the current working directory`)
     }
 
@@ -61,7 +61,7 @@ export const WriteTool = Tool.define("write", {
     }
 
     return {
-      title: path.relative(Paths.worktree, filepath),
+      title: path.relative(Instance.worktree, filepath),
       metadata: {
         diagnostics,
         filepath,

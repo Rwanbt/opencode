@@ -41,8 +41,8 @@ import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
 import { Project } from "../project/project"
-import { State } from "../project/state"
-import { Paths } from "../project/path"
+
+import { Instance } from "../project/instance"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -65,7 +65,6 @@ export namespace Session {
       id: Identifier.schema("session"),
       projectID: z.string(),
       directory: z.string(),
-      worktree: z.string(),
       parentID: Identifier.schema("session").optional(),
       share: z
         .object({
@@ -130,8 +129,7 @@ export namespace Session {
     ),
   }
 
-  const state = State.create(
-    () => Paths.directory,
+  const state = Instance.state(
     () => {
       const pending = new Map<string, AbortController>()
       const autoCompacting = new Map<string, boolean>()
@@ -162,7 +160,7 @@ export namespace Session {
   export async function create(parentID?: string) {
     return createNext({
       parentID,
-      directory: Paths.directory,
+      directory: Instance.directory,
     })
   }
 
@@ -172,7 +170,6 @@ export namespace Session {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
       projectID: project.id,
-      worktree: project.worktree,
       directory: input.directory,
       parentID: input.parentID,
       title: createDefaultTitle(!!input.parentID),
@@ -711,8 +708,8 @@ export namespace Session {
       system,
       mode: inputMode,
       path: {
-        cwd: Paths.directory,
-        root: Paths.worktree,
+        cwd: Instance.directory,
+        root: Instance.worktree,
       },
       cost: 0,
       tokens: {
@@ -838,6 +835,7 @@ export namespace Session {
       },
       params,
     )
+    console.log(outputLimit)
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
@@ -866,8 +864,8 @@ export namespace Session {
             role: "assistant",
             system,
             path: {
-              cwd: Paths.directory,
-              root: Paths.worktree,
+              cwd: Instance.directory,
+              root: Instance.worktree,
             },
             cost: 0,
             tokens: {
@@ -1276,8 +1274,8 @@ export namespace Session {
       system,
       mode: "build",
       path: {
-        cwd: Paths.directory,
-        root: Paths.worktree,
+        cwd: Instance.directory,
+        root: Instance.worktree,
       },
       summary: true,
       cost: 0,
@@ -1400,7 +1398,7 @@ export namespace Session {
         {
           id: Identifier.ascending("part"),
           type: "text",
-          text: PROMPT_INITIALIZE.replace("${path}", Paths.worktree),
+          text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
         },
       ],
     })
