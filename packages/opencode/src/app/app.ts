@@ -115,10 +115,10 @@ export namespace App {
                 log.info("shutdown", { name: key })
                 await entry.shutdown?.(await entry.state)
               }
+              await Instance.dispose()
             }
           },
         )
-        await Instance.dispose()
         return result
       })
     })
