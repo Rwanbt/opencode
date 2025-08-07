@@ -14,7 +14,7 @@ export namespace Format {
   const log = Log.create({ service: "format" })
 
   const state = State.create(
-    () => Paths.use().directory,
+    () => Paths.directory,
     async () => {
       const enabled: Record<string, boolean> = {}
       const cfg = await Config.get()

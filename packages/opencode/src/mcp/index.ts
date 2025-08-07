@@ -2,7 +2,6 @@ import { experimental_createMCPClient, type Tool } from "ai"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { App } from "../app/app"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
@@ -10,6 +9,7 @@ import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -22,7 +22,7 @@ export namespace MCP {
   )
 
   const state = State.create(
-    "mcp",
+    () => Paths.directory,
     async () => {
       const cfg = await Config.get()
       const clients: {

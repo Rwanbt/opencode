@@ -1,7 +1,7 @@
 import { Bus } from "../bus"
 import { Installation } from "../installation"
 import { Session } from "../session"
-import { Storage } from "../storage/storage"
+import { StorageNext } from "../storage/storage-next"
 import { Log } from "../util/log"
 
 export namespace Share {
@@ -46,8 +46,8 @@ export namespace Share {
   }
 
   export function init() {
-    Bus.subscribe(Storage.Event.Write, async (payload) => {
-      await sync(payload.properties.key, payload.properties.content)
+    Bus.subscribe(StorageNext.Event.Write, async (payload) => {
+      await sync(payload.properties.key.join("/"), payload.properties.content)
     })
   }
 

@@ -4,7 +4,7 @@ import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
 import { State } from "../project/state"
-import { Project } from "../project/project"
+import { Paths } from "../project/path"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -37,7 +37,7 @@ export namespace Permission {
   }
 
   const state = State.create(
-    () => Project.use().id,
+    () => Paths.directory,
     () => {
       const pending: {
         [sessionID: string]: {

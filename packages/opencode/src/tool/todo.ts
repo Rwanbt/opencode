@@ -2,7 +2,7 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { State } from "../project/state"
-import { Project } from "../project/project"
+import { Paths } from "../project/path"
 
 const TodoInfo = z.object({
   content: z.string().describe("Brief description of the task"),
@@ -13,7 +13,7 @@ const TodoInfo = z.object({
 type TodoInfo = z.infer<typeof TodoInfo>
 
 const state = State.create(
-  () => Project.use().id,
+  () => Paths.directory,
   () => {
     const todos: {
       [sessionId: string]: TodoInfo[]

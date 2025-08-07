@@ -56,7 +56,7 @@ export namespace LSP {
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
   const state = State.create(
-    () => Paths.use().worktree,
+    () => Paths.directory,
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = LSPServer

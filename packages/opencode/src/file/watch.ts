@@ -5,6 +5,7 @@ import { App } from "../app/app"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
 import { Paths } from "../project/path"
+import { State } from "../project/state"
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
@@ -18,8 +19,8 @@ export namespace FileWatcher {
       }),
     ),
   }
-  const state = App.state(
-    () => Paths.use().worktree,
+  const state = State.create(
+    () => Paths.directory,
     () => {
       const app = App.use()
       if (!app.info.git) return {}

@@ -1,11 +1,22 @@
 import { z, type ZodType } from "zod"
 import { Log } from "../util/log"
+import { State } from "../project/state"
+import { Paths } from "../project/path"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
 
-  const subscriptions = new Map<any, Subscription[]>()
+  const state = State.create(
+    () => Paths.directory,
+    () => {
+      const subscriptions = new Map<any, Subscription[]>()
+
+      return {
+        subscriptions,
+      }
+    },
+  )
 
   export type EventDefinition = ReturnType<typeof event>
 
@@ -30,10 +41,6 @@ export namespace Bus {
             .object({
               type: z.literal(type),
               properties: def.properties,
-              context: z.object({
-                projectID: z.string().optional(),
-                sessionID: z.string().optional(),
-              }),
             })
             .openapi({
               ref: "Event" + "." + def.type,
@@ -56,7 +63,7 @@ export namespace Bus {
     })
     const pending = []
     for (const key of [def.type, "*"]) {
-      const match = subscriptions.get(key)
+      const match = state().subscriptions.get(key)
       for (const sub of match ?? []) {
         pending.push(sub(payload))
       }
@@ -89,6 +96,7 @@ export namespace Bus {
 
   function raw(type: string, callback: (event: any) => void) {
     log.info("subscribing", { type })
+    const subscriptions = state().subscriptions
     let match = subscriptions.get(type) ?? []
     match.push(callback)
     subscriptions.set(type, match)

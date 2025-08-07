@@ -4,8 +4,14 @@ import fs from "fs/promises"
 import { Global } from "../global"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
+import { Bus } from "../bus"
+import z from "zod"
 
 export namespace StorageNext {
+  export const Event = {
+    Write: Bus.event("storage.write", z.object({ key: z.string().array(), content: z.any() })),
+  }
+
   const log = Log.create({ service: "storage" })
 
   type Migration = (dir: string) => Promise<void>
@@ -49,6 +55,7 @@ export namespace StorageNext {
     const content = await Bun.file(target).json()
     fn(content)
     await Bun.write(target, JSON.stringify(content, null, 2))
+    Bus.publish(Event.Write, { key, content })
     return content as T
   }
 
@@ -57,6 +64,7 @@ export namespace StorageNext {
     const target = path.join(dir, ...key) + ".json"
     using _ = await Lock.write("storage")
     await Bun.write(target, JSON.stringify(content, null, 2))
+    Bus.publish(Event.Write, { key, content })
   }
 
   const glob = new Bun.Glob("**/*")

@@ -20,13 +20,12 @@ export namespace Config {
   const log = Log.create({ service: "config" })
 
   export const state = State.create(
-    () => Paths.use().directory,
+    () => Paths.directory,
     async () => {
-      const paths = Paths.use()
       const auth = await Auth.all()
       let result = await global()
       for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, paths.directory, paths.worktree)
+        const found = await Filesystem.findUp(file, Paths.directory, Paths.worktree)
         for (const resolved of found.toReversed()) {
           result = mergeDeep(result, await loadFile(resolved))
         }
@@ -49,7 +48,7 @@ export namespace Config {
       result.agent = result.agent || {}
       const markdownAgents = [
         ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/agent/*.md", paths.directory, paths.worktree)),
+        ...(await Filesystem.globUp(".opencode/agent/*.md", Paths.directory, Paths.worktree)),
       ]
       for (const item of markdownAgents) {
         const content = await Bun.file(item).text()
@@ -75,7 +74,7 @@ export namespace Config {
       result.mode = result.mode || {}
       const markdownModes = [
         ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/mode/*.md", paths.directory, paths.worktree)),
+        ...(await Filesystem.globUp(".opencode/mode/*.md", Paths.directory, Paths.worktree)),
       ]
       for (const item of markdownModes) {
         const content = await Bun.file(item).text()
@@ -101,7 +100,7 @@ export namespace Config {
       result.plugin.push(
         ...[
           ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-          ...(await Filesystem.globUp(".opencode/plugin/*.ts", paths.directory, paths.worktree)),
+          ...(await Filesystem.globUp(".opencode/plugin/*.ts", Paths.directory, Paths.worktree)),
         ].map((x) => "file://" + x),
       )
 

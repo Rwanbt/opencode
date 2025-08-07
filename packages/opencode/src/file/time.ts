@@ -1,18 +1,22 @@
-import { App } from "../app/app"
+import { Paths } from "../project/path"
+import { State } from "../project/state"
 import { Log } from "../util/log"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
-  export const state = App.state("tool.filetimes", () => {
-    const read: {
-      [sessionID: string]: {
-        [path: string]: Date | undefined
+  export const state = State.create(
+    () => Paths.directory,
+    () => {
+      const read: {
+        [sessionID: string]: {
+          [path: string]: Date | undefined
+        }
+      } = {}
+      return {
+        read,
       }
-    } = {}
-    return {
-      read,
-    }
-  })
+    },
+  )
 
   export function read(sessionID: string, file: string) {
     log.info("read", { sessionID, file })

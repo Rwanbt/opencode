@@ -8,6 +8,7 @@ import os from "os"
 import { z } from "zod"
 import { Project } from "../project/project"
 import { Paths } from "../project/path"
+import { State } from "../project/state"
 
 export namespace App {
   const log = Log.create({ service: "app" })
@@ -100,7 +101,7 @@ export namespace App {
 
     return ctx.provide(app, async () => {
       return Project.provide(project, async () => {
-        return Paths.provide(
+        const result = await Paths.provide(
           {
             worktree: app.info.path.root,
             directory: app.info.path.cwd,
@@ -118,6 +119,8 @@ export namespace App {
             }
           },
         )
+        await State.dispose(app.info.path.cwd)
+        return result
       })
     })
   }

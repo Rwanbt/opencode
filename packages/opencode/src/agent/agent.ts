@@ -26,7 +26,7 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
   const state = State.create(
-    () => Paths.use().directory,
+    () => Paths.directory,
     async () => {
       const cfg = await Config.get()
       const result: Record<string, Info> = {
