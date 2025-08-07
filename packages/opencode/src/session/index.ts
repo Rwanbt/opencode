@@ -39,13 +39,9 @@ import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
-<<<<<<< HEAD
 import { Project } from "../project/project"
-
 import { Instance } from "../project/instance"
-=======
 import { Agent } from "../agent/agent"
->>>>>>> dev
 
 export namespace Session {
   const log = Log.create({ service: "session" })
