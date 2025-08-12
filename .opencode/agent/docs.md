@@ -1,5 +1,7 @@
 ---
-description: You MUST use this agent when writing documentation
+model: openai/gpt-5
+reasoningEffort: medium
+description: ALWAYS use this when writing docs
 ---
 
 You are an expert technical documentation writer

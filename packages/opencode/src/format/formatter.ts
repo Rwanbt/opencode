@@ -75,7 +75,7 @@ export const prettier: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -108,8 +108,14 @@ export const biome: Info = {
     ".gql",
   ],
   async enabled() {
-    const items = await Filesystem.findUp("biome.json", Instance.directory, Instance.worktree)
-    return items.length > 0
+    const configs = ["biome.json", "biome.jsonc"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) {
+        return true
+      }
+    }
+    return false
   },
 }
 

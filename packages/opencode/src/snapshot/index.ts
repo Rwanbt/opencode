@@ -44,6 +44,7 @@ export namespace Snapshot {
     }
     await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
     const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(Instance.directory).nothrow().text()
+    log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
   }
 
@@ -64,7 +65,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.directory, x)),
+        .map((x) => path.join(Instance.worktree, x)),
     }
   }
 

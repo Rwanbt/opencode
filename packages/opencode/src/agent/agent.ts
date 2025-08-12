@@ -5,6 +5,7 @@ import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
+import { mergeDeep } from "remeda"
 
 export namespace Agent {
   export const Info = z
@@ -14,6 +15,11 @@ export namespace Agent {
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      permission: z.object({
+        edit: Config.Permission,
+        bash: z.record(z.string(), Config.Permission),
+        webfetch: Config.Permission.optional(),
+      }),
       model: z
         .object({
           modelID: z.string(),
@@ -22,6 +28,7 @@ export namespace Agent {
         .optional(),
       prompt: z.string().optional(),
       tools: z.record(z.boolean()),
+      options: z.record(z.string(), z.any()),
     })
     .openapi({
       ref: "Agent",
@@ -30,6 +37,13 @@ export namespace Agent {
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
+    const defaultPermission: Info["permission"] = {
+      edit: "allow",
+      bash: {
+        "*": "allow",
+      },
+      webfetch: "allow",
+    }
     const result: Record<string, Info> = {
       general: {
         name: "general",
@@ -39,15 +53,21 @@ export namespace Agent {
           todoread: false,
           todowrite: false,
         },
+        options: {},
+        permission: defaultPermission,
         mode: "subagent",
       },
       build: {
         name: "build",
         tools: {},
+        options: {},
+        permission: defaultPermission,
         mode: "primary",
       },
       plan: {
         name: "plan",
+        options: {},
+        permission: defaultPermission,
         tools: {
           write: false,
           edit: false,
@@ -66,19 +86,48 @@ export namespace Agent {
         item = result[key] = {
           name: key,
           mode: "all",
+          permission: defaultPermission,
+          options: {},
           tools: {},
         }
-      if (value.model) item.model = Provider.parseModel(value.model)
-      if (value.prompt) item.prompt = value.prompt
-      if (value.tools)
+      const { model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
+      item.options = {
+        ...item.options,
+        ...extra,
+      }
+      if (model) item.model = Provider.parseModel(model)
+      if (prompt) item.prompt = prompt
+      if (tools)
         item.tools = {
           ...item.tools,
-          ...value.tools,
+          ...tools,
         }
-      if (value.description) item.description = value.description
-      if (value.temperature != undefined) item.temperature = value.temperature
-      if (value.top_p != undefined) item.topP = value.top_p
-      if (value.mode) item.mode = value.mode
+      if (description) item.description = description
+      if (temperature != undefined) item.temperature = temperature
+      if (top_p != undefined) item.topP = top_p
+      if (mode) item.mode = mode
+
+      if (permission ?? cfg.permission) {
+        const merged = mergeDeep(cfg.permission ?? {}, permission ?? {})
+        if (merged.edit) item.permission.edit = merged.edit
+        if (merged.webfetch) item.permission.webfetch = merged.webfetch
+        if (merged.bash) {
+          if (typeof merged.bash === "string") {
+            item.permission.bash = {
+              "*": merged.bash,
+            }
+          }
+          // if granular permissions are provided, default to "ask"
+          if (typeof merged.bash === "object") {
+            item.permission.bash = mergeDeep(
+              {
+                "*": "ask",
+              },
+              merged.bash,
+            )
+          }
+        }
+      }
     }
     return result
   })
