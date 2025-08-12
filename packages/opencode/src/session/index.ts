@@ -877,7 +877,6 @@ export namespace Session {
         },
       },
     )
-    console.log(outputLimit)
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
