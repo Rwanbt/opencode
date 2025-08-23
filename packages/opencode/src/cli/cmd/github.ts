@@ -64,6 +64,7 @@ export const GithubInstallCommand = cmd({
       }
 
       async function getAppInfo() {
+        const app = App.info()
         const project = Project.use()
         if (project.vcs !== "git") {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
