@@ -55,9 +55,9 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "prompt to use",
       })
-      .option("mode", {
+      .option("agent", {
         type: "string",
-        describe: "mode to use",
+        describe: "agent to use",
       })
       .option("port", {
         type: "number",
@@ -82,11 +82,17 @@ export const TuiCommand = cmd({
       const result = await bootstrap({ cwd }, async (app) => {
         const sessionID = await (async () => {
           if (args.continue) {
-            const list = Session.list()
-            const first = await list.next()
-            await list.return()
-            if (first.done) return
-            return first.value.id
+            const it = Session.list()
+            try {
+              for await (const s of it) {
+                if (s.parentID === undefined) {
+                  return s.id
+                }
+              }
+              return
+            } finally {
+              await it.return()
+            }
           }
           if (args.session) {
             return args.session
@@ -129,7 +135,7 @@ export const TuiCommand = cmd({
             ...cmd,
             ...(args.model ? ["--model", args.model] : []),
             ...(args.prompt ? ["--prompt", args.prompt] : []),
-            ...(args.mode ? ["--mode", args.mode] : []),
+            ...(args.agent ? ["--agent", args.agent] : []),
             ...(sessionID ? ["--session", sessionID] : []),
           ],
           cwd,

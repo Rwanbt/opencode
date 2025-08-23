@@ -90,6 +90,13 @@ A general-purpose agent for researching complex questions, searching for code, a
      @general help me search for this function
      ```
 
+3. **Navigation between sessions**: When subagents create their own child sessions, you can navigate between the parent session and all child sessions using:
+
+   - **Ctrl+Right** (or your configured `session_child_cycle` keybind) to cycle forward through parent → child1 → child2 → ... → parent
+   - **Ctrl+Left** (or your configured `session_child_cycle_reverse` keybind) to cycle backward through parent ← child1 ← child2 ← ... ← parent
+
+   This allows you to seamlessly switch between the main conversation and specialized subagent work.
+
 ---
 
 ## Configure
@@ -171,8 +178,6 @@ Provide constructive feedback without making direct changes.
 ```
 
 The markdown file name becomes the agent name. For example, `review.md` creates a `review` agent.
-
-Let's look at these configuration options in detail.
 
 ---
 
@@ -528,7 +533,7 @@ For example, with OpenAI's reasoning models, you can control the reasoning effor
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5-turbo",
+      "model": "openai/gpt-5",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }

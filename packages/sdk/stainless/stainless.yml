@@ -85,6 +85,12 @@ resources:
     methods:
       get: get /config
 
+  command:
+    models:
+      command: Command
+    methods:
+      list: get /command
+
   session:
     models:
       session: Session
@@ -113,7 +119,9 @@ resources:
       toolStateError: ToolStateError
 
     methods:
+      get: get /session/{id}
       list: get /session
+      children: get /session/{id}/children
       create: post /session
       delete: delete /session/{id}
       init: post /session/{id}/init
@@ -124,6 +132,9 @@ resources:
       message: get /session/{id}/message/{messageID}
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      command: post /session/{id}/command
+      shell: post /session/{id}/shell
+      update: patch /session/{id}
       revert: post /session/{id}/revert
       unrevert: post /session/{id}/unrevert
 
@@ -144,6 +155,7 @@ resources:
       openThemes: post /tui/open-themes
       openModels: post /tui/open-models
       executeCommand: post /tui/execute-command
+      showToast: post /tui/show-toast
 
 settings:
   disable_mock_tests: true

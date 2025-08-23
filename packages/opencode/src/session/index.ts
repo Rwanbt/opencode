@@ -1,3 +1,5 @@
+import path from "path"
+import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
 import {
@@ -15,6 +17,7 @@ import {
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
+import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 
 import { Bus } from "../bus"
 import { Config } from "../config/config"
@@ -43,6 +46,11 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
+import { ulid } from "ulid"
+import { defer } from "../util/defer"
+import { Command } from "../command"
+import { $ } from "bun"
+import { App } from "../app/app"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -157,14 +165,15 @@ export namespace Session {
     },
   )
 
-  export async function create(parentID?: string) {
+  export async function create(parentID?: string, title?: string) {
     return createNext({
       parentID,
       directory: Instance.directory,
+      title,
     })
   }
 
-  export async function createNext(input: { id?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
     const project = Project.use()
     const result: Info = {
       id: Identifier.descending("session", input.id),
@@ -172,7 +181,7 @@ export namespace Session {
       projectID: project.id,
       directory: input.directory,
       parentID: input.parentID,
-      title: createDefaultTitle(!!input.parentID),
+      title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -528,6 +537,7 @@ export namespace Session {
                     abort: new AbortController().signal,
                     agent: input.agent!,
                     messageID: userMsg.id,
+                    extra: { bypassCwdCheck: true },
                     metadata: async () => {},
                   }),
                 )
@@ -670,7 +680,7 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    if (msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)) {
+    if (msgs.filter((m) => m.info.role === "user").length === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
@@ -725,6 +735,18 @@ export namespace Session {
         synthetic: true,
       })
     }
+
+    const lastAssistantMsg = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    if (lastAssistantMsg?.mode === "plan" && agent.name === "build") {
+      msgs.at(-1)?.parts.push({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: BUILD_SWITCH,
+        synthetic: true,
+      })
+    }
     let system = SystemPrompt.header(input.providerID)
     system.push(
       ...(() => {
@@ -763,6 +785,11 @@ export namespace Session {
       sessionID: input.sessionID,
     }
     await updateMessage(assistantMsg)
+    await using _ = defer(async () => {
+      if (assistantMsg.time.completed) return
+      await StorageNext.remove(["session", "message", input.sessionID, assistantMsg.id])
+      await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: assistantMsg.id })
+    })
     const tools: Record<string, AITool> = {}
 
     const processor = createProcessor(assistantMsg, model.info)
@@ -939,6 +966,13 @@ export namespace Session {
           toolName: "invalid",
         }
       },
+      headers:
+        input.providerID === "opencode"
+          ? {
+              "x-opencode-session": input.sessionID,
+              "x-opencode-request": userMsg.id,
+            }
+          : undefined,
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,
@@ -967,7 +1001,7 @@ export namespace Session {
             content: x,
           }),
         ),
-        ...MessageV2.toModelMessage(msgs),
+        ...MessageV2.toModelMessage(msgs.filter((m) => !(m.info.role === "assistant" && m.info.error))),
       ],
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
@@ -997,6 +1031,202 @@ export namespace Session {
     }
     state().queued.delete(input.sessionID)
     return result
+  }
+
+  export const ShellInput = z.object({
+    sessionID: Identifier.schema("session"),
+    agent: z.string(),
+    command: z.string(),
+  })
+  export type ShellInput = z.infer<typeof ShellInput>
+  export async function shell(input: ShellInput) {
+    using abort = lock(input.sessionID)
+    const msg: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      system: [],
+      mode: input.agent,
+      cost: 0,
+      path: {
+        cwd: Instance.directory,
+        root: Instance.worktree,
+      },
+      time: {
+        created: Date.now(),
+      },
+      role: "assistant",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: "",
+      providerID: "",
+    }
+    await updateMessage(msg)
+    const part: MessageV2.Part = {
+      type: "tool",
+      id: Identifier.ascending("part"),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      tool: "bash",
+      callID: ulid(),
+      state: {
+        status: "running",
+        time: {
+          start: Date.now(),
+        },
+        input: {
+          command: input.command,
+        },
+      },
+    }
+    await updatePart(part)
+    const app = App.info()
+    const shell = process.env["SHELL"] ?? "bash"
+    const shellName = path.basename(shell)
+
+    const scripts: Record<string, string> = {
+      nu: input.command,
+      fish: `eval "${input.command}"`,
+    }
+
+    const script =
+      scripts[shellName] ??
+      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+       eval "${input.command}"`
+
+    const isFishOrNu = shellName === "fish" || shellName === "nu"
+    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
+
+    const proc = spawn(shell, args, {
+      cwd: app.path.cwd,
+      signal: abort.signal,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        TERM: "dumb",
+      },
+    })
+
+    let output = ""
+
+    proc.stdout?.on("data", (chunk) => {
+      output += chunk.toString()
+      if (part.state.status === "running") {
+        part.state.metadata = {
+          output: output,
+          description: "",
+        }
+        updatePart(part)
+      }
+    })
+
+    proc.stderr?.on("data", (chunk) => {
+      output += chunk.toString()
+      if (part.state.status === "running") {
+        part.state.metadata = {
+          output: output,
+          description: "",
+        }
+        updatePart(part)
+      }
+    })
+
+    await new Promise<void>((resolve) => {
+      proc.on("close", () => {
+        resolve()
+      })
+    })
+    msg.time.completed = Date.now()
+    await updateMessage(msg)
+    if (part.state.status === "running") {
+      part.state = {
+        status: "completed",
+        time: {
+          ...part.state.time,
+          end: Date.now(),
+        },
+        input: part.state.input,
+        title: "",
+        metadata: {
+          output,
+          description: "",
+        },
+        output,
+      }
+      await updatePart(part)
+    }
+    return { info: msg, parts: [part] }
+  }
+
+  export const CommandInput = z.object({
+    messageID: Identifier.schema("message").optional(),
+    sessionID: Identifier.schema("session"),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    arguments: z.string(),
+    command: z.string(),
+  })
+  export type CommandInput = z.infer<typeof CommandInput>
+  const bashRegex = /!`([^`]+)`/g
+  const fileRegex = /@([^\s]+)/g
+
+  export async function command(input: CommandInput) {
+    const command = await Command.get(input.command)
+    const agent = input.agent ?? command.agent ?? "build"
+    const model =
+      input.model ??
+      command.model ??
+      (await Agent.get(agent).then((x) => (x.model ? `${x.model.providerID}/${x.model.modelID}` : undefined))) ??
+      (await Provider.defaultModel().then((x) => `${x.providerID}/${x.modelID}`))
+    let template = command.template.replace("$ARGUMENTS", input.arguments)
+
+    const bash = Array.from(template.matchAll(bashRegex))
+    if (bash.length > 0) {
+      const results = await Promise.all(
+        bash.map(async ([, cmd]) => {
+          try {
+            return await $`${{ raw: cmd }}`.nothrow().text()
+          } catch (error) {
+            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+          }
+        }),
+      )
+      let index = 0
+      template = template.replace(bashRegex, () => results[index++])
+    }
+
+    const parts = [
+      {
+        type: "text",
+        text: template,
+      },
+    ] as ChatInput["parts"]
+
+    const matches = template.matchAll(fileRegex)
+    const app = App.info()
+
+    for (const match of matches) {
+      const file = path.join(app.path.cwd, match[1])
+      parts.push({
+        type: "file",
+        url: `file://${file}`,
+        filename: match[1],
+        mime: "text/plain",
+      })
+    }
+
+    return chat({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      ...Provider.parseModel(model!),
+      agent,
+      parts,
+    })
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
@@ -1134,6 +1364,7 @@ export namespace Session {
                       status: "error",
                       input: value.input,
                       error: (value.error as any).toString(),
+                      metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                       time: {
                         start: match.state.time.start,
                         end: Date.now(),
@@ -1454,7 +1685,7 @@ export namespace Session {
     const tokens = {
       input: usage.inputTokens ?? 0,
       output: usage.outputTokens ?? 0,
-      reasoning: 0,
+      reasoning: usage?.reasoningTokens ?? 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error
