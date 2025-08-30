@@ -515,8 +515,8 @@ export namespace LSPServer {
 
   export const RustAnalyzer: Info = {
     id: "rust",
-    root: async (file, app) => {
-      const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(file, app)
+    root: async (root) => {
+      const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(root)
       if (crateRoot === undefined) {
         return undefined
       }
@@ -539,7 +539,7 @@ export namespace LSPServer {
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(app.path.root)) break
+        if (!currentDir.startsWith(Instance.worktree)) break
       }
 
       return crateRoot
