@@ -1,13 +1,15 @@
 import { Title } from "@solidjs/meta"
 import { onCleanup, onMount } from "solid-js"
 import "./index.css"
-import logo from "../asset/logo-ornate-dark.svg"
-import IMG_SPLASH from "../asset/screenshot-splash.webp"
-import IMG_VSCODE from "../asset/screenshot-vscode.webp"
-import IMG_GITHUB from "../asset/screenshot-github.webp"
+import logoLight from "../asset/logo-ornate-light.svg"
+import logoDark from "../asset/logo-ornate-dark.svg"
+import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
+import IMG_VSCODE from "../asset/lander/screenshot-vscode.png"
+import IMG_GITHUB from "../asset/lander/screenshot-github.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { createAsync, query, redirect, RouteDefinition } from "@solidjs/router"
-import { getActor, withActor } from "~/context/auth"
+import { createAsync, query, redirect } from "@solidjs/router"
+import { getActor } from "~/context/auth"
+import { withActor } from "~/context/auth.withActor"
 import { Account } from "@opencode/cloud-core/account.js"
 
 function CopyStatus() {
@@ -24,12 +26,10 @@ const isLoggedIn = query(async () => {
   const actor = await getActor()
   if (actor.type === "account") {
     const workspaces = await withActor(() => Account.workspaces())
-    throw redirect("/" + workspaces[0].id)
+    throw redirect(`/workspace/${workspaces[0].id}`)
   }
-  return
+  return false
 }, "isLoggedIn")
-
-
 
 export default function Home() {
   createAsync(() => isLoggedIn(), {
@@ -60,7 +60,8 @@ export default function Home() {
       <Title>opencode | AI coding agent built for the terminal</Title>
       <div data-component="content">
         <section data-component="top">
-          <img data-slot="logo" src={logo} alt="logo" />
+          <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
+          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
           <h1 data-slot="title">The AI coding agent built for the terminal.</h1>
         </section>
 
@@ -68,7 +69,7 @@ export default function Home() {
           <div data-slot="left">
             <a href="/docs">Get Started</a>
           </div>
-          <div data-slot="right">
+          <div data-slot="center">
             <button data-copy data-slot="command">
               <span>
                 <span>curl -fsSL&nbsp;</span>
@@ -78,6 +79,11 @@ export default function Home() {
               </span>
               <CopyStatus />
             </button>
+          </div>
+          <div data-slot="right">
+            <a href="/auth/authorize" target="_self">
+              Login
+            </a>
           </div>
         </section>
 
@@ -145,24 +151,30 @@ export default function Home() {
         </section>
 
         <section data-component="screenshots">
-          <div data-slot="left">
-            <div data-component="title">opencode TUI with tokyonight theme</div>
-            <div data-slot="filler">
-              <img src={IMG_SPLASH} alt="opencode TUI with tokyonight theme" />
-            </div>
+          <div class="left">
+            <figure>
+              <figcaption>opencode TUI with the tokyonight theme</figcaption>
+              <a href="/docs/cli">
+                <img src={IMG_SPLASH} alt="opencode TUI with tokyonight theme" />
+              </a>
+            </figure>
           </div>
-          <div data-slot="right">
-            <div data-slot="cell">
-              <div data-component="title">opencode in VS Code</div>
-              <div data-slot="filler">
-                <img src={IMG_VSCODE} alt="opencode in VS Code" />
-              </div>
+          <div class="right">
+            <div class="row1">
+              <figure>
+                <figcaption>opencode in VS Code</figcaption>
+                <a href="/docs/ide">
+                  <img src={IMG_VSCODE} alt="opencode in VS Code" />
+                </a>
+              </figure>
             </div>
-            <div data-slot="cell">
-              <div data-component="title">opencode in GitHub</div>
-              <div data-slot="filler">
-                <img src={IMG_GITHUB} alt="opencode in GitHub" />
-              </div>
+            <div class="row2">
+              <figure>
+                <figcaption>opencode in GitHub</figcaption>
+                <a href="/docs/github">
+                  <img src={IMG_GITHUB} alt="opencode in GitHub" />
+                </a>
+              </figure>
             </div>
           </div>
         </section>

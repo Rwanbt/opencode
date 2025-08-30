@@ -64,6 +64,11 @@ export const RunCommand = cmd({
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
+    if (message.trim().length === 0) {
+      UI.error("Message cannot be empty")
+      return
+    }
+
     await bootstrap({ cwd: process.cwd() }, async () => {
       const session = await (async () => {
         if (args.continue) {
@@ -171,12 +176,8 @@ export const RunCommand = cmd({
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(agent.model
-          ? agent.model
-          : {
-              providerID,
-              modelID,
-            }),
+        providerID,
+        modelID,
         agent: agent.name,
         parts: [
           {

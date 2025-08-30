@@ -17,6 +17,7 @@ export namespace App {
       hostname: z.string(),
       git: z.boolean(),
       path: z.object({
+        home: z.string(),
         config: z.string(),
         data: z.string(),
         root: z.string(),
@@ -77,6 +78,7 @@ export namespace App {
       },
       git: git !== undefined,
       path: {
+        home: os.homedir(),
         config: Global.Path.config,
         state: Global.Path.state,
         data,

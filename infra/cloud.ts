@@ -1,6 +1,5 @@
 import { WebhookEndpoint } from "pulumi-stripe"
 import { domain } from "./stage"
-import { web } from "./app"
 
 ////////////////
 // DATABASE
@@ -47,7 +46,7 @@ export const auth = new sst.cloudflare.Worker("AuthApi", {
 ////////////////
 
 export const stripeWebhook = new WebhookEndpoint("StripeWebhook", {
-  url: $interpolate`https://api.gateway.${domain}/stripe/webhook`,
+  url: $interpolate`https://console.${domain}/stripe/webhook`,
   enabledEvents: [
     "checkout.session.async_payment_failed",
     "checkout.session.async_payment_succeeded",
@@ -106,29 +105,21 @@ export const gateway = new sst.cloudflare.Worker("GatewayApi", {
 // CONSOLE
 ////////////////
 
-/*
-export const console = new sst.cloudflare.x.StaticSite("Console", {
+export const console = new sst.cloudflare.x.SolidStart("Console", {
   domain: `console.${domain}`,
-  path: "cloud/web",
-  build: {
-    command: "bun run build",
-    output: "dist/client",
-  },
+  path: "cloud/app",
+  link: [
+    database,
+    AUTH_API_URL,
+    STRIPE_WEBHOOK_SECRET,
+    STRIPE_SECRET_KEY,
+    ANTHROPIC_API_KEY,
+    OPENAI_API_KEY,
+    ZHIPU_API_KEY,
+  ],
   environment: {
-    VITE_DOCS_URL: web.url.apply((url) => url!),
-    VITE_API_URL: gateway.url.apply((url) => url!),
-    VITE_AUTH_URL: auth.url.apply((url) => url!),
-  },
-})
-*/
-
-new sst.x.DevCommand("Solid", {
-  link: [database],
-  dev: {
-    directory: "cloud/app",
-    command: "bun dev",
-  },
-  environment: {
+    //VITE_DOCS_URL: web.url.apply((url) => url!),
+    //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
   },
 })

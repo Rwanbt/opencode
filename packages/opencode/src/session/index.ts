@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
@@ -721,7 +722,9 @@ export namespace Session {
               draft.title = title.trim()
             })
         })
-        .catch(() => {})
+        .catch((error) => {
+          log.error("failed to generate title", { error, model: small.info.id })
+        })
     }
 
     const agent = await Agent.get(inputAgent)
@@ -866,11 +869,31 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          {
+            args,
+          },
+        )
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
           .map((x: any) => x.text)
           .join("\n\n")
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          result,
+        )
 
         return {
           output,
@@ -1041,6 +1064,25 @@ export namespace Session {
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
     using abort = lock(input.sessionID)
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      role: "user",
+    }
+    await updateMessage(userMsg)
+    const userPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      text: "The following tool was executed by the user",
+      synthetic: true,
+    }
+    await updatePart(userPart)
+
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
@@ -1177,13 +1219,21 @@ export namespace Session {
 
   export async function command(input: CommandInput) {
     const command = await Command.get(input.command)
-    const agent = input.agent ?? command.agent ?? "build"
+    const agent = command.agent ?? input.agent ?? "build"
+    const fmtModel = (model: { providerID: string; modelID: string }) => `${model.providerID}/${model.modelID}`
+
     const model =
-      input.model ??
       command.model ??
-      (await Agent.get(agent).then((x) => (x.model ? `${x.model.providerID}/${x.model.modelID}` : undefined))) ??
-      (await Provider.defaultModel().then((x) => `${x.providerID}/${x.modelID}`))
+      (command.agent && (await Agent.get(command.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      input.model ??
+      (input.agent && (await Agent.get(input.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      fmtModel(await Provider.defaultModel())
+
     let template = command.template.replace("$ARGUMENTS", input.arguments)
+
+    // intentionally doing match regex doing bash regex replacements
+    // this is because bash commands can output "@" references
+    const fileMatches = template.matchAll(fileRegex)
 
     const bash = Array.from(template.matchAll(bashRegex))
     if (bash.length > 0) {
@@ -1207,15 +1257,18 @@ export namespace Session {
       },
     ] as ChatInput["parts"]
 
-    const matches = template.matchAll(fileRegex)
     const app = App.info()
 
-    for (const match of matches) {
-      const file = path.join(app.path.cwd, match[1])
+    for (const match of fileMatches) {
+      const filename = match[1]
+      const filepath = filename.startsWith("~/")
+        ? path.join(os.homedir(), filename.slice(2))
+        : path.join(app.path.cwd, filename)
+
       parts.push({
         type: "file",
-        url: `file://${file}`,
-        filename: match[1],
+        url: `file://${filepath}`,
+        filename,
         mime: "text/plain",
       })
     }

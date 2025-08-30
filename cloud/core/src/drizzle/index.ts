@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js"
-import { Resource } from "sst"
+import { Resource } from "@opencode/cloud-resource"
 export * from "drizzle-orm"
 import postgres from "postgres"
 
-const createClient = memo(() => {
+const init = () => {
   const client = postgres({
     idle_timeout: 30000,
     connect_timeout: 30000,
@@ -17,9 +17,10 @@ const createClient = memo(() => {
     },
     max: 1,
   })
-
   return drizzle(client, {})
-})
+}
+
+const createClient = "NODE_ENV" in process.env ? memo(init) : init
 
 import { PgTransaction, type PgTransactionConfig } from "drizzle-orm/pg-core"
 import type { ExtractTablesWithRelations } from "drizzle-orm"
