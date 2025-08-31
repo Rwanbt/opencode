@@ -1,7 +1,7 @@
 import { Bus } from "../bus"
 import { Installation } from "../installation"
 import { Session } from "../session"
-import { StorageNext } from "../storage/storage-next"
+import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
 
 export namespace Share {
@@ -45,7 +45,25 @@ export namespace Share {
       })
   }
 
-  export function init() {}
+  export function init() {
+    Bus.subscribe(Session.Event.Updated, async (evt) => {
+      await sync("session/info/" + evt.properties.info.id, evt.properties.info)
+    })
+    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
+    })
+    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      await sync(
+        "session/part/" +
+          evt.properties.part.sessionID +
+          "/" +
+          evt.properties.part.messageID +
+          "/" +
+          evt.properties.part.id,
+        evt.properties.part,
+      )
+    })
+  }
 
   export const URL =
     process.env["OPENCODE_API"] ??

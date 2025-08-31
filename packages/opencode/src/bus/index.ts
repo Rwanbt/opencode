@@ -7,13 +7,12 @@ export namespace Bus {
   type Subscription = (event: any) => void
 
   const state = Instance.state(() => {
-      const subscriptions = new Map<any, Subscription[]>()
+    const subscriptions = new Map<any, Subscription[]>()
 
-      return {
-        subscriptions,
-      }
-    },
-  )
+    return {
+      subscriptions,
+    }
+  })
 
   export type EventDefinition = ReturnType<typeof event>
 

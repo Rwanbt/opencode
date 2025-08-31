@@ -2,7 +2,7 @@ import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
-import { StorageNext } from "../storage/storage-next"
+import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 
 export namespace Project {
@@ -37,7 +37,7 @@ export namespace Project {
             created: Date.now(),
           },
         }
-        await StorageNext.write<Info>(["project", "global"], project)
+        await Storage.write<Info>(["project", "global"], project)
         return project
       }
       let worktree = path.dirname(git)
@@ -69,7 +69,7 @@ export namespace Project {
           created: Date.now(),
         },
       }
-      await StorageNext.write<Info>(["project", id], project)
+      await Storage.write<Info>(["project", id], project)
       return project
     }
     if (cache.has(directory)) {
@@ -81,13 +81,13 @@ export namespace Project {
   }
 
   export async function setInitialized(projectID: string) {
-    await StorageNext.update<Info>(["project", projectID], (draft) => {
+    await Storage.update<Info>(["project", projectID], (draft) => {
       draft.time.initialized = Date.now()
     })
   }
 
   export async function list() {
-    const keys = await StorageNext.list(["project"])
-    return await Promise.all(keys.map((x) => StorageNext.read<Info>(x)))
+    const keys = await Storage.list(["project"])
+    return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
   }
 }
