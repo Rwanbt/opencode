@@ -45,11 +45,7 @@ export namespace Share {
       })
   }
 
-  export function init() {
-    Bus.subscribe(StorageNext.Event.Write, async (payload) => {
-      await sync(payload.properties.key.join("/"), payload.properties.content)
-    })
-  }
+  export function init() {}
 
   export const URL =
     process.env["OPENCODE_API"] ??

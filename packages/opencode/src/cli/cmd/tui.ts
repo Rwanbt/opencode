@@ -79,7 +79,7 @@ export const TuiCommand = cmd({
         UI.error("Failed to change directory to " + cwd)
         return
       }
-      const result = await bootstrap({ cwd }, async (app) => {
+      const result = await bootstrap(cwd, async () => {
         const sessionID = await (async () => {
           if (args.continue) {
             const it = Session.list()
@@ -146,7 +146,6 @@ export const TuiCommand = cmd({
             ...process.env,
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
-            OPENCODE_APP_INFO: JSON.stringify(app),
           },
           onExit: () => {
             server.stop()

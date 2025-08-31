@@ -15,7 +15,7 @@ export const ExportCommand = cmd({
     })
   },
   handler: async (args) => {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       let sessionID = args.sessionID
 
       if (!sessionID) {

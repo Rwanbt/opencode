@@ -51,7 +51,6 @@ import { ulid } from "ulid"
 import { defer } from "../util/defer"
 import { Command } from "../command"
 import { $ } from "bun"
-import { App } from "../app/app"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -175,11 +174,10 @@ export namespace Session {
   }
 
   export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
-    const project = Project.use()
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
-      projectID: project.id,
+      projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -189,7 +187,7 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await StorageNext.write(["session", project.id, result.id], result)
+    await StorageNext.write(["session", Instance.project.id, result.id], result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -208,8 +206,7 @@ export namespace Session {
   }
 
   export async function get(id: string) {
-    const project = Project.use()
-    const read = await StorageNext.read<Info>(["session", project.id, id])
+    const read = await StorageNext.read<Info>(["session", Instance.project.id, id])
     return read as Info
   }
 
@@ -253,7 +250,7 @@ export namespace Session {
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const project = Project.use()
+    const project = Instance.project
     const result = await StorageNext.update<Info>(["session", project.id, id], (draft) => {
       editor(draft)
       draft.time.updated = Date.now()
@@ -298,14 +295,14 @@ export namespace Session {
   }
 
   export async function* list() {
-    const project = Project.use()
+    const project = Instance.project
     for (const item of await StorageNext.list(["session", project.id])) {
       yield StorageNext.read<Info>(item)
     }
   }
 
   export async function children(parentID: string) {
-    const project = Project.use()
+    const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await StorageNext.list(["session", project.id])) {
       const session = await StorageNext.read<Info>(item)
@@ -327,7 +324,7 @@ export namespace Session {
   }
 
   export async function remove(sessionID: string, emitEvent = true) {
-    const project = Project.use()
+    const project = Instance.project
     try {
       abort(sessionID)
       const session = await get(sessionID)
@@ -1125,7 +1122,6 @@ export namespace Session {
       },
     }
     await updatePart(part)
-    const app = App.info()
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
@@ -1145,7 +1141,7 @@ export namespace Session {
     const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
 
     const proc = spawn(shell, args, {
-      cwd: app.path.cwd,
+      cwd: Instance.directory,
       signal: abort.signal,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
@@ -1256,8 +1252,6 @@ export namespace Session {
         text: template,
       },
     ] as ChatInput["parts"]
-
-    const app = App.info()
 
     for (const match of fileMatches) {
       const filename = match[1]

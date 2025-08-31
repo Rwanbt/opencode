@@ -3,7 +3,6 @@ import { Bus } from "../bus"
 import { $ } from "bun"
 import { createPatch } from "diff"
 import path from "path"
-import { App } from "../app/app"
 import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
@@ -48,7 +47,7 @@ export namespace File {
   }
 
   export async function status() {
-    const project = Project.use()
+    const project = Instance.project
     if (project.vcs !== "git") return []
 
     const diffOutput = await $`git diff --numstat HEAD`.cwd(Instance.directory).quiet().nothrow().text()
@@ -119,7 +118,7 @@ export namespace File {
 
   export async function read(file: string) {
     using _ = log.time("read", { file })
-    const project = Project.use()
+    const project = Instance.project
     const full = path.join(Instance.directory, file)
     const content = await Bun.file(full)
       .text()
@@ -141,22 +140,22 @@ export namespace File {
 
   export async function list(dir?: string) {
     const exclude = [".git", ".DS_Store"]
-    const app = App.info()
+    const project = Instance.project
     let ignored = (_: string) => false
-    if (app.git) {
-      const gitignore = Bun.file(path.join(app.path.root, ".gitignore"))
+    if (project.vcs === "git") {
+      const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
       if (await gitignore.exists()) {
         const ig = ignore().add(await gitignore.text())
         ignored = ig.ignores.bind(ig)
       }
     }
-    const resolved = dir ? path.join(app.path.cwd, dir) : app.path.cwd
+    const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
     const nodes: Node[] = []
     for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(app.path.cwd, fullPath)
-      const relativeToRoot = path.relative(app.path.root, fullPath)
+      const relativePath = path.relative(Instance.directory, fullPath)
+      const relativeToRoot = path.relative(Instance.worktree, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({
         name: entry.name,

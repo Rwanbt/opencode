@@ -16,7 +16,7 @@ const TreeCommand = cmd({
       type: "number",
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       console.log(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }))
     })
   },
@@ -39,7 +39,7 @@ const FilesCommand = cmd({
         description: "Limit number of results",
       }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       const files = await Ripgrep.files({
         cwd: Instance.directory,
         query: args.query,

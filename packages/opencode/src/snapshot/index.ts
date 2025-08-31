@@ -5,7 +5,6 @@ import { Log } from "../util/log"
 import { Global } from "../global"
 import { z } from "zod"
 import { Config } from "../config/config"
-import { Project } from "../project/project"
 import { Instance } from "../project/instance"
 
 export namespace Snapshot {
@@ -26,8 +25,7 @@ export namespace Snapshot {
   }
 
   export async function track() {
-    const project = Project.use()
-    if (project.vcs !== "git") return
+    if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
@@ -104,7 +102,7 @@ export namespace Snapshot {
   }
 
   function gitdir() {
-    const project = Project.use()
+    const project = Instance.project
     return path.join(Global.Path.data, "snapshot", project.id)
   }
 }

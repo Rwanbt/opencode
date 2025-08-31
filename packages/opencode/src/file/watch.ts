@@ -1,7 +1,6 @@
 import { z } from "zod"
 import { Bus } from "../bus"
 import fs from "fs"
-import { App } from "../app/app"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
 import { Instance } from "../project/instance"
@@ -20,19 +19,14 @@ export namespace FileWatcher {
   }
   const state = Instance.state(
     () => {
-      const app = App.use()
-      if (!app.info.git) return {}
+      if (Instance.project.vcs !== "git") return {}
       try {
-        const watcher = fs.watch(app.info.path.cwd, { recursive: true }, (event, file) => {
+        const watcher = fs.watch(Instance.directory, { recursive: true }, (event, file) => {
           log.info("change", { file, event })
           if (!file) return
-          // for some reason async local storage is lost here
-          // https://github.com/oven-sh/bun/issues/20754
-          App.provideExisting(app, async () => {
-            Bus.publish(Event.Updated, {
-              file,
-              event,
-            })
+          Bus.publish(Event.Updated, {
+            file,
+            event,
           })
         })
         return { watcher }

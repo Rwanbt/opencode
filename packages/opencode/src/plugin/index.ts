@@ -7,7 +7,6 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
-import { App } from "../app/app"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -15,13 +14,15 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.app().fetch(...args),
+      fetch: async (...args) => Server.App.fetch(...args),
     })
     const config = await Config.get()
     const hooks = []
     const input = {
       client,
-      app: App.info(),
+      project: Instance.project,
+      worktree: Instance.worktree,
+      directory: Instance.directory,
       $: Bun.$,
     }
     const plugins = [...(config.plugin ?? [])]

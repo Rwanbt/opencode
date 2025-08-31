@@ -31,7 +31,7 @@ export namespace SystemPrompt {
   }
 
   export async function environment() {
-    const project = Project.use()
+    const project = Instance.project
     return [
       [
         `Here is some useful information about the environment you are running in:`,

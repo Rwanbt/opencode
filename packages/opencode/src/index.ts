@@ -107,6 +107,7 @@ try {
       name: e.name,
       message: e.message,
       cause: e.cause?.toString(),
+      stack: e.stack,
     })
   }
 

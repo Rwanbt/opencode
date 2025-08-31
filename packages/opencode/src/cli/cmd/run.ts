@@ -69,7 +69,7 @@ export const RunCommand = cmd({
       return
     }
 
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       const session = await (async () => {
         if (args.continue) {
           const it = Session.list()

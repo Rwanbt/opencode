@@ -6,8 +6,7 @@ import { map, pipe, sortBy, values } from "remeda"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
-import { App } from "../../app/app"
-import { Project } from "../../project/project"
+import { Instance } from "../../project/instance"
 
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
@@ -22,7 +21,7 @@ export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await Instance.provide(process.cwd(), async () => {
       UI.empty()
       prompts.intro("Install GitHub agent")
       const app = await getAppInfo()
@@ -64,8 +63,7 @@ export const GithubInstallCommand = cmd({
       }
 
       async function getAppInfo() {
-        const app = App.info()
-        const project = Project.use()
+        const project = Instance.project
         if (project.vcs !== "git") {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
@@ -90,7 +88,7 @@ export const GithubInstallCommand = cmd({
           throw new UI.CancelledError()
         }
         const [, owner, repo] = parsed
-        return { owner, repo, root: app.path.root }
+        return { owner, repo, root: Instance.worktree }
       }
 
       async function promptProvider() {
