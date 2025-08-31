@@ -8,6 +8,8 @@ import type {
   EventSubscribeResponses,
   ConfigGetData,
   ConfigGetResponses,
+  PathGetData,
+  PathGetResponses,
   SessionListData,
   SessionListResponses,
   SessionCreateData,
@@ -159,6 +161,18 @@ class Config extends _HeyApiClient {
   public providers<ThrowOnError extends boolean = false>(options?: Options<ConfigProvidersData, ThrowOnError>) {
     return (options?.client ?? this._client).get<ConfigProvidersResponses, unknown, ThrowOnError>({
       url: "/config/providers",
+      ...options,
+    })
+  }
+}
+
+class Path extends _HeyApiClient {
+  /**
+   * Get the current path
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<PathGetData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<PathGetResponses, unknown, ThrowOnError>({
+      url: "/path",
       ...options,
     })
   }
@@ -623,6 +637,7 @@ export class OpencodeClient extends _HeyApiClient {
   project = new Project({ client: this._client })
   event = new Event({ client: this._client })
   config = new Config({ client: this._client })
+  path = new Path({ client: this._client })
   session = new Session({ client: this._client })
   command = new Command({ client: this._client })
   find = new Find({ client: this._client })

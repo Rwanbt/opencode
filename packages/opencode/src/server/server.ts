@@ -21,7 +21,6 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
-import { ProjectRoute } from "./project"
 import { Project } from "../project/project"
 import { Global } from "../global"
 
@@ -85,6 +84,7 @@ export namespace Server {
         return next()
       })
     })
+    .use(zValidator("query", z.object({ directory: z.string().optional() })))
     .get(
       "/project",
       describeRoute({
