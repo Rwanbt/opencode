@@ -187,7 +187,7 @@ func renderContentBlock(
 			style = style.BorderRightForeground(borderColor)
 		}
 	} else {
-		style = style.PaddingLeft(renderer.paddingLeft + 1).PaddingRight(renderer.paddingRight + 1)
+		style = style.PaddingLeft(renderer.paddingLeft).PaddingRight(renderer.paddingRight)
 	}
 
 	content = style.Render(content)

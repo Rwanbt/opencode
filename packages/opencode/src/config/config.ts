@@ -157,6 +157,8 @@ export namespace Config {
       result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
     }
 
+    if (!result.username) result.username = os.userInfo().username
+
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"

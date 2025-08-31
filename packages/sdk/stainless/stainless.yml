@@ -45,6 +45,27 @@ resources:
           # This method is always streaming.
           param_discriminator: null
 
+  path:
+    models:
+      path: Path
+    methods:
+      get: get /path
+
+  app:
+    models:
+      app: App
+      provider: Provider
+      model: Model
+    methods:
+      log: post /log
+      providers: get /config/providers
+
+  agent:
+    models:
+      agent: Agent
+    methods:
+      list: get /agent
+
   find:
     models:
       symbol: Symbol
@@ -78,6 +99,12 @@ resources:
       command: Command
     methods:
       list: get /command
+
+  project:
+    models:
+      project: Project
+    methods:
+      list: get /project
 
   session:
     models:

@@ -460,11 +460,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
-	case opencode.EventListResponseEventIdeInstalled:
-		return a, toast.NewSuccessToast(
-			"Installed the opencode extension in "+msg.Properties.Ide,
-			toast.WithTitle(msg.Properties.Ide+" extension installed"),
-		)
+		/*
+			case opencode.EventListResponseEventIdeInstalled:
+				return a, toast.NewSuccessToast(
+					"Installed the opencode extension in "+msg.Properties.Ide,
+					toast.WithTitle(msg.Properties.Ide+" extension installed"),
+				)
+		*/
 	case opencode.EventListResponseEventSessionDeleted:
 		if a.app.Session != nil && msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &opencode.Session{}

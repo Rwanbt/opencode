@@ -12,6 +12,8 @@ export async function bootstrap<T>(directory: string, cb: () => Promise<T>) {
     Format.init()
     LSP.init()
     Snapshot.init()
-    return cb()
+    const result = await cb()
+    await Instance.dispose()
+    return result
   })
 }

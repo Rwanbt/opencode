@@ -30,7 +30,7 @@ func (cg *agentsContextGroup) GetChildEntries(
 
 	query = strings.TrimSpace(query)
 
-	agents, err := cg.app.Client.App.Agents(
+	agents, err := cg.app.Client.Agent.List(
 		context.Background(),
 	)
 	if err != nil {

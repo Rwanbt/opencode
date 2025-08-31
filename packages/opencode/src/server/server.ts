@@ -22,6 +22,8 @@ import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
 import { ProjectRoute } from "./project"
+import { Project } from "../project/project"
+import { Global } from "../global"
 
 const ERRORS = {
   400: {
@@ -83,7 +85,27 @@ export namespace Server {
         return next()
       })
     })
-    .route("/project", ProjectRoute)
+    .get(
+      "/project",
+      describeRoute({
+        description: "List all projects",
+        operationId: "project.list",
+        responses: {
+          200: {
+            description: "List of projects",
+            content: {
+              "application/json": {
+                schema: resolver(Project.Info.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const projects = await Project.list()
+        return c.json(projects)
+      },
+    )
     .get(
       "/doc",
       openAPISpecs(app, {
@@ -159,6 +181,38 @@ export namespace Server {
       }),
       async (c) => {
         return c.json(await Config.get())
+      },
+    )
+    .get(
+      "/path",
+      describeRoute({
+        description: "Get the current path",
+        operationId: "path.get",
+        responses: {
+          200: {
+            description: "Path",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      state: z.string(),
+                      config: z.string(),
+                    })
+                    .openapi({
+                      ref: "Path",
+                    }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json({
+          state: Global.Path.state,
+          config: Global.Path.config,
+        })
       },
     )
     .get(

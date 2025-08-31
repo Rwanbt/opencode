@@ -27,7 +27,7 @@ type Message struct {
 }
 
 type App struct {
-	Info              opencode.App
+	Project           opencode.Project
 	Agents            []opencode.Agent
 	Providers         []opencode.Provider
 	Version           string
@@ -101,7 +101,8 @@ type PermissionRespondedToMsg struct {
 func New(
 	ctx context.Context,
 	version string,
-	appInfo opencode.App,
+	project opencode.Project,
+	path *opencode.Path,
 	agents []opencode.Agent,
 	httpClient *opencode.Client,
 	initialModel *string,
@@ -109,8 +110,8 @@ func New(
 	initialAgent *string,
 	initialSession *string,
 ) (*App, error) {
-	util.RootPath = appInfo.Path.Root
-	util.CwdPath = appInfo.Path.Cwd
+	util.RootPath = project.Worktree
+	util.CwdPath, _ = os.Getwd()
 
 	configInfo, err := httpClient.Config.Get(ctx)
 	if err != nil {
@@ -121,7 +122,7 @@ func New(
 		configInfo.Keybinds.Leader = "ctrl+x"
 	}
 
-	appStatePath := filepath.Join(appInfo.Path.State, "tui")
+	appStatePath := filepath.Join(path.State, "tui")
 	appState, err := LoadState(appStatePath)
 	if err != nil {
 		appState = NewState()
@@ -168,9 +169,9 @@ func New(
 	}
 
 	if err := theme.LoadThemesFromDirectories(
-		appInfo.Path.Config,
-		appInfo.Path.Root,
-		appInfo.Path.Cwd,
+		path.Config,
+		util.RootPath,
+		util.CwdPath,
 	); err != nil {
 		slog.Warn("Failed to load themes from directories", "error", err)
 	}
@@ -193,7 +194,7 @@ func New(
 	}
 
 	app := &App{
-		Info:           appInfo,
+		Project:        project,
 		Agents:         agents,
 		Version:        version,
 		StatePath:      appStatePath,
@@ -749,12 +750,15 @@ func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) MarkProjectInitialized(ctx context.Context) error {
-	_, err := a.Client.App.Init(ctx)
-	if err != nil {
-		slog.Error("Failed to mark project as initialized", "error", err)
-		return err
-	}
 	return nil
+	/*
+		_, err := a.Client.App.Init(ctx)
+		if err != nil {
+			slog.Error("Failed to mark project as initialized", "error", err)
+			return err
+		}
+		return nil
+	*/
 }
 
 func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {

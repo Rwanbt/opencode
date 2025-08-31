@@ -37,9 +37,8 @@ func main() {
 
 	url := os.Getenv("OPENCODE_SERVER")
 
-	appInfoStr := os.Getenv("OPENCODE_APP_INFO")
-	var appInfo opencode.App
-	err := json.Unmarshal([]byte(appInfoStr), &appInfo)
+	var project opencode.Project
+	err := json.Unmarshal([]byte(os.Getenv("OPENCODE_PROJECT")), &project)
 	if err != nil {
 		slog.Error("Failed to unmarshal app info", "error", err)
 		os.Exit(1)
@@ -74,7 +73,7 @@ func main() {
 	)
 
 	// Fetch agents from the /agent endpoint
-	agentsPtr, err := httpClient.App.Agents(context.Background())
+	agentsPtr, err := httpClient.Agent.List(context.Background())
 	if err != nil {
 		slog.Error("Failed to fetch agents", "error", err)
 		os.Exit(1)
@@ -85,13 +84,18 @@ func main() {
 	}
 	agents := *agentsPtr
 
+	path, err := httpClient.Path.Get(context.Background())
+	if err != nil {
+		os.Exit(1)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	apiHandler := util.NewAPILogHandler(ctx, httpClient, "tui", slog.LevelDebug)
 	logger := slog.New(apiHandler)
 	slog.SetDefault(logger)
 
-	slog.Debug("TUI launched", "app", appInfoStr, "agents_count", len(agents), "url", url)
+	slog.Debug("TUI launched")
 
 	go func() {
 		err = clipboard.Init()
@@ -101,7 +105,7 @@ func main() {
 	}()
 
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent, sessionID)
+	app_, err := app.New(ctx, version, project, path, agents, httpClient, model, prompt, agent, sessionID)
 	if err != nil {
 		panic(err)
 	}
@@ -121,9 +125,6 @@ func main() {
 		stream := httpClient.Event.ListStreaming(ctx)
 		for stream.Next() {
 			evt := stream.Current().AsUnion()
-			if _, ok := evt.(opencode.EventListResponseEventStorageWrite); ok {
-				continue
-			}
 			program.Send(evt)
 		}
 		if err := stream.Err(); err != nil {
