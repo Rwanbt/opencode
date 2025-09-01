@@ -19,6 +19,8 @@ runs:
     - name: Install opencode
       shell: bash
       run: curl -fsSL https://opencode.ai/install | bash
+      env:
+        VERSION: 0.5.29
 
     - name: Run opencode
       shell: bash
