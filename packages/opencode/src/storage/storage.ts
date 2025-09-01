@@ -15,6 +15,7 @@ export namespace Storage {
     async (dir) => {
       const project = path.resolve(dir, "../project")
       for await (const projectDir of new Bun.Glob("*").scan({ cwd: project, onlyFiles: false })) {
+        log.info(`migrating project ${projectDir}`)
         let projectID = projectDir
         const fullProjectDir = path.join(project, projectDir)
         let worktree = "/"
@@ -57,6 +58,7 @@ export namespace Storage {
             }),
           )
 
+          log.info(`migrating sessions for project ${projectID}`)
           for await (const sessionFile of new Bun.Glob("storage/session/info/*.json").scan({
             cwd: fullProjectDir,
             absolute: true,
@@ -68,6 +70,7 @@ export namespace Storage {
             })
             const session = await Bun.file(sessionFile).json()
             await Bun.write(dest, JSON.stringify(session))
+            log.info(`migrating messages for session ${session.id}`)
             for await (const msgFile of new Bun.Glob(`storage/session/message/${session.id}/*.json`).scan({
               cwd: fullProjectDir,
               absolute: true,
@@ -80,6 +83,7 @@ export namespace Storage {
               const message = await Bun.file(msgFile).json()
               await Bun.write(dest, JSON.stringify(message))
 
+              log.info(`migrating parts for message ${message.id}`)
               for await (const partFile of new Bun.Glob(`storage/session/part/${session.id}/${message.id}/*.json`).scan(
                 {
                   cwd: fullProjectDir,
