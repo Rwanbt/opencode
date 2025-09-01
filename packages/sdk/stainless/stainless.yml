@@ -105,6 +105,7 @@ resources:
       project: Project
     methods:
       list: get /project
+      current: get /project/current
 
   session:
     models:

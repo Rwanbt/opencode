@@ -101,7 +101,7 @@ type PermissionRespondedToMsg struct {
 func New(
 	ctx context.Context,
 	version string,
-	project opencode.Project,
+	project *opencode.Project,
 	path *opencode.Path,
 	agents []opencode.Agent,
 	httpClient *opencode.Client,
@@ -113,7 +113,7 @@ func New(
 	util.RootPath = project.Worktree
 	util.CwdPath, _ = os.Getwd()
 
-	configInfo, err := httpClient.Config.Get(ctx)
+	configInfo, err := httpClient.Config.Get(ctx, opencode.ConfigGetParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -188,13 +188,13 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
-	customCommands, err := httpClient.Command.List(ctx)
+	customCommands, err := httpClient.Command.List(ctx, opencode.CommandListParams{})
 	if err != nil {
 		return nil, err
 	}
 
 	app := &App{
-		Project:        project,
+		Project:        *project,
 		Agents:         agents,
 		Version:        version,
 		StatePath:      appStatePath,
@@ -460,7 +460,7 @@ func findProviderByID(providers []opencode.Provider, providerID string) *opencod
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
-	providersResponse, err := a.Client.App.Providers(context.Background())
+	providersResponse, err := a.Client.App.Providers(context.Background(), opencode.AppProvidersParams{})
 	if err != nil {
 		slog.Error("Failed to list providers", "error", err)
 		// TODO: notify user
@@ -879,7 +879,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 		a.compactCancel = nil
 	}
 
-	_, err := a.Client.Session.Abort(ctx, sessionID)
+	_, err := a.Client.Session.Abort(ctx, sessionID, opencode.SessionAbortParams{})
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
 		return err
@@ -888,7 +888,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 }
 
 func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
-	response, err := a.Client.Session.List(ctx)
+	response, err := a.Client.Session.List(ctx, opencode.SessionListParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +900,7 @@ func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
 }
 
 func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
-	_, err := a.Client.Session.Delete(ctx, sessionID)
+	_, err := a.Client.Session.Delete(ctx, sessionID, opencode.SessionDeleteParams{})
 	if err != nil {
 		slog.Error("Failed to delete session", "error", err)
 		return err
@@ -920,7 +920,7 @@ func (a *App) UpdateSession(ctx context.Context, sessionID string, title string)
 }
 
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
-	response, err := a.Client.Session.Messages(ctx, sessionId)
+	response, err := a.Client.Session.Messages(ctx, sessionId, opencode.SessionMessagesParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -942,7 +942,7 @@ func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, er
 }
 
 func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
-	response, err := a.Client.App.Providers(ctx)
+	response, err := a.Client.App.Providers(ctx, opencode.AppProvidersParams{})
 	if err != nil {
 		return nil, err
 	}

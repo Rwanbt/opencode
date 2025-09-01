@@ -1257,7 +1257,7 @@ export namespace Session {
       const filename = match[1]
       const filepath = filename.startsWith("~/")
         ? path.join(os.homedir(), filename.slice(2))
-        : path.join(app.path.cwd, filename)
+        : path.join(Instance.worktree, filename)
 
       parts.push({
         type: "file",
@@ -1777,6 +1777,6 @@ export namespace Session {
         },
       ],
     })
-    await Project.setInitialized()
+    await Project.setInitialized(Instance.project.id)
   }
 }

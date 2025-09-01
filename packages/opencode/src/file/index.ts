@@ -7,7 +7,6 @@ import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
-import { Project } from "../project/project"
 
 export namespace File {
   const log = Log.create({ service: "file" })

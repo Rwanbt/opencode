@@ -1178,11 +1178,6 @@ export type WellKnownAuth = {
   token: string
 }
 
-/**
- * Working directory path (defaults to current working directory)
- */
-export type Directory = string
-
 export type ProjectListData = {
   body?: never
   path?: never

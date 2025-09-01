@@ -21,8 +21,8 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
-import { Project } from "../project/project"
 import { Global } from "../global"
+import { ProjectRoute } from "./project"
 
 const ERRORS = {
   400: {
@@ -86,27 +86,6 @@ export namespace Server {
     })
     .use(zValidator("query", z.object({ directory: z.string().optional() })))
     .get(
-      "/project",
-      describeRoute({
-        description: "List all projects",
-        operationId: "project.list",
-        responses: {
-          200: {
-            description: "List of projects",
-            content: {
-              "application/json": {
-                schema: resolver(Project.Info.array()),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        const projects = await Project.list()
-        return c.json(projects)
-      },
-    )
-    .get(
       "/doc",
       openAPISpecs(app, {
         documentation: {
@@ -119,6 +98,7 @@ export namespace Server {
         },
       }),
     )
+    .route("/project", ProjectRoute)
     .get(
       "/event",
       describeRoute({
@@ -198,6 +178,8 @@ export namespace Server {
                     .object({
                       state: z.string(),
                       config: z.string(),
+                      worktree: z.string(),
+                      directory: z.string(),
                     })
                     .openapi({
                       ref: "Path",
@@ -212,6 +194,8 @@ export namespace Server {
         return c.json({
           state: Global.Path.state,
           config: Global.Path.config,
+          worktree: Instance.worktree,
+          directory: Instance.directory,
         })
       },
     )

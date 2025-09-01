@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/internal/util"
+	"golang.org/x/sync/errgroup"
 )
 
 var Version = "dev"
@@ -36,13 +36,6 @@ func main() {
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
-
-	var project opencode.Project
-	err := json.Unmarshal([]byte(os.Getenv("OPENCODE_PROJECT")), &project)
-	if err != nil {
-		slog.Error("Failed to unmarshal app info", "error", err)
-		os.Exit(1)
-	}
 
 	stat, err := os.Stdin.Stat()
 	if err != nil {
@@ -72,21 +65,42 @@ func main() {
 		option.WithBaseURL(url),
 	)
 
-	// Fetch agents from the /agent endpoint
-	agentsPtr, err := httpClient.Agent.List(context.Background())
-	if err != nil {
-		slog.Error("Failed to fetch agents", "error", err)
-		os.Exit(1)
-	}
-	if agentsPtr == nil {
-		slog.Error("No agents returned from server")
-		os.Exit(1)
-	}
-	agents := *agentsPtr
+	var agents []opencode.Agent
+	var path *opencode.Path
+	var project *opencode.Project
 
-	path, err := httpClient.Path.Get(context.Background())
+	batch := errgroup.Group{}
+
+	batch.Go(func() error {
+		result, err := httpClient.Project.Current(context.Background(), opencode.ProjectCurrentParams{})
+		if err != nil {
+			return err
+		}
+		project = result
+		return nil
+	})
+
+	batch.Go(func() error {
+		result, err := httpClient.Agent.List(context.Background(), opencode.AgentListParams{})
+		if err != nil {
+			return err
+		}
+		agents = *result
+		return nil
+	})
+
+	batch.Go(func() error {
+		result, err := httpClient.Path.Get(context.Background(), opencode.PathGetParams{})
+		if err != nil {
+			return err
+		}
+		path = result
+		return nil
+	})
+
+	err = batch.Wait()
 	if err != nil {
-		os.Exit(1)
+		panic(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,7 +136,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 
 	go func() {
-		stream := httpClient.Event.ListStreaming(ctx)
+		stream := httpClient.Event.ListStreaming(ctx, opencode.EventListParams{})
 		for stream.Next() {
 			evt := stream.Current().AsUnion()
 			program.Send(evt)
