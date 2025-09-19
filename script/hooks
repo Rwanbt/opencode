@@ -8,6 +8,7 @@ mkdir -p .git/hooks
 
 cat > .git/hooks/pre-push << 'EOF'
 #!/bin/sh
+bun prettier --write --ignore-unknown $(git diff --name-only HEAD~1 HEAD)
 bun run typecheck
 EOF
 

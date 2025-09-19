@@ -67,7 +67,10 @@ export namespace MCP {
               return null
             })
             if (client) {
-              log.debug("transport connection succeeded", { key, transport: name })
+              log.debug("transport connection succeeded", {
+                key,
+                transport: name,
+              })
               clients[key] = client
               break
             }
@@ -76,7 +79,11 @@ export namespace MCP {
             const errorMessage = lastError
               ? `MCP server ${key} failed to connect: ${lastError.message}`
               : `MCP server ${key} failed to connect to ${mcp.url}`
-            log.error("remote mcp connection failed", { key, url: mcp.url, error: lastError?.message })
+            log.error("remote mcp connection failed", {
+              key,
+              url: mcp.url,
+              error: lastError?.message,
+            })
             Bus.publish(Session.Event.Error, {
               error: {
                 name: "UnknownError",

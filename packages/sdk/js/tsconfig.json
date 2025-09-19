@@ -9,5 +9,6 @@
     "lib": ["es2022", "dom", "dom.iterable"],
     "customConditions": ["development"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/gen"]
 }

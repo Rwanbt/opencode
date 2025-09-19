@@ -550,6 +550,25 @@ export type Session = {
   }
 }
 
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+  /**
+   * Unique identifier for the todo item
+   */
+  id: string
+}
+
 export type UserMessage = {
   id: string
   sessionID: string
@@ -695,11 +714,17 @@ export type FilePart = {
 
 export type ToolStatePending = {
   status: "pending"
+  raw: string
+  input: {
+    [key: string]: unknown
+  }
 }
 
 export type ToolStateRunning = {
   status: "running"
-  input: unknown
+  input: {
+    [key: string]: unknown
+  }
   title?: string
   metadata?: {
     [key: string]: unknown
@@ -1076,6 +1101,14 @@ export type EventFileEdited = {
   }
 }
 
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
 export type EventSessionIdle = {
   type: "session.idle"
   properties: {
@@ -1138,6 +1171,7 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
+  | EventTodoUpdated
   | EventSessionIdle
   | EventSessionUpdated
   | EventSessionDeleted
@@ -1403,6 +1437,29 @@ export type SessionChildrenResponses = {
 }
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
+
+export type SessionTodoData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/todo"
+}
+
+export type SessionTodoResponses = {
+  /**
+   * Todo list
+   */
+  200: Array<Todo>
+}
+
+export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
 export type SessionInitData = {
   body?: {

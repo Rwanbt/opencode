@@ -42,7 +42,7 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
         result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
@@ -593,7 +593,10 @@ export namespace Config {
               const errMsg = `bad file reference: "${match}"`
               if (error.code === "ENOENT") {
                 throw new InvalidError(
-                  { path: configFilepath, message: errMsg + ` ${resolvedPath} does not exist` },
+                  {
+                    path: configFilepath,
+                    message: errMsg + ` ${resolvedPath} does not exist`,
+                  },
                   { cause: error },
                 )
               }
@@ -647,7 +650,10 @@ export namespace Config {
       return data
     }
 
-    throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+    throw new InvalidError({
+      path: configFilepath,
+      issues: parsed.error.issues,
+    })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",

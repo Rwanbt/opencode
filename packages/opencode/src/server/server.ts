@@ -29,6 +29,7 @@ import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
+import { Todo } from "../session/todo"
 import { InstanceBootstrap } from "../project/bootstrap"
 
 const ERRORS = {
@@ -317,6 +318,34 @@ export namespace Server {
           const sessionID = c.req.valid("param").id
           const session = await Session.children(sessionID)
           return c.json(session)
+        },
+      )
+      .get(
+        "/session/:id/todo",
+        describeRoute({
+          description: "Get the todo list for a session",
+          operationId: "session.todo",
+          responses: {
+            200: {
+              description: "Todo list",
+              content: {
+                "application/json": {
+                  schema: resolver(Todo.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const todos = await Todo.get(sessionID)
+          return c.json(todos)
         },
       )
       .post(

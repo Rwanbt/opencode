@@ -1,5 +1,4 @@
 import path from "path"
-import { $ } from "bun"
 import { exec } from "child_process"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -7,6 +6,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
 import { Instance } from "../../project/instance"
+import { $ } from "bun"
 
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
@@ -196,7 +196,7 @@ export const GithubInstallCommand = cmd({
               `https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
             )
               .then((res) => res.json())
-              .then((data) => data.installation)
+              .then((data: any) => data.installation)
           }
         }
 

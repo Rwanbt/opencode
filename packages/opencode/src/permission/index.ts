@@ -41,7 +41,11 @@ export namespace Permission {
     Updated: Bus.event("permission.updated", Info),
     Replied: Bus.event(
       "permission.replied",
-      z.object({ sessionID: z.string(), permissionID: z.string(), response: z.string() }),
+      z.object({
+        sessionID: z.string(),
+        permissionID: z.string(),
+        response: z.string(),
+      }),
     ),
   }
 
