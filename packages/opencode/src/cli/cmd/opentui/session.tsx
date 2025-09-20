@@ -26,7 +26,6 @@ import type { PatchTool } from "../../../tool/patch"
 import type { WebFetchTool } from "../../../tool/webfetch"
 import type { TaskTool } from "../../../tool/task"
 import { useKeyboard, type BoxProps, type JSX } from "@opentui/solid"
-import { createStore } from "solid-js/store"
 
 export function Session() {
   const route = useRouteData("session")
@@ -132,28 +131,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
     <For each={props.parts}>
       {(part) => {
         const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-        function resize(el: BoxRenderable) {
-          const parent = el.parent
-          if (!parent) return
-          const children = parent.getChildren()
-          const index = children.indexOf(el)
-          const previous = children[index - 1]
-          if (!previous) return
-          console.log(previous.height, el.height)
-          if (el.height > 1 || previous.height > 1) {
-            el.marginTop = 1
-          }
-        }
         return (
           <Show when={component()}>
-            <box
-              onSizeChange={function () {
-                resize(this)
-              }}
-              ref={(el) => resize(el!)}
-            >
-              <Dynamic component={component()} part={part as any} message={props.message} />
-            </box>
+            <Dynamic component={component()} part={part as any} message={props.message} />
           </Show>
         )
       }}
@@ -165,6 +145,17 @@ const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
 }
+function resize(el: BoxRenderable) {
+  const parent = el.parent
+  if (!parent) return
+  const children = parent.getChildren()
+  const index = children.indexOf(el)
+  const previous = children[index - 1]
+  if (!previous) return
+  if (el.height > 1 || previous.height > 1) {
+    el.marginTop = 1
+  }
+}
 
 function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const sync = useSync()
@@ -172,7 +163,13 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const local = useLocal()
 
   return (
-    <box paddingLeft={3}>
+    <box
+      paddingLeft={3}
+      onSizeChange={function () {
+        resize(this)
+      }}
+      ref={(el) => resize(el!)}
+    >
       <text>{props.part.text.trim()}</text>
       <text>
         <span style={{ fg: local.agent.color(agent().name) }}>{Locale.titlecase(agent().name)}</span>{" "}
@@ -209,7 +206,13 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           }
 
     return (
-      <box {...container}>
+      <box
+        {...container}
+        onSizeChange={function () {
+          resize(this)
+        }}
+        ref={(el) => resize(el!)}
+      >
         <Dynamic
           component={ready}
           input={input}
