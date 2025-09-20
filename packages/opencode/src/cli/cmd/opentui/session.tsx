@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
+import { createEffect, createMemo, For, Match, Show, Switch, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRouteData } from "./context/route"
@@ -41,10 +41,6 @@ export function Session() {
   useKeyboard((evt) => {
     if (evt.name === "pageup") scroll.scrollBy(-scroll.height / 2)
     if (evt.name === "pagedown") scroll.scrollBy(scroll.height / 2)
-  })
-
-  const [store, setStore] = createStore({
-    items: [] as { multiline: boolean }[],
   })
 
   return (
