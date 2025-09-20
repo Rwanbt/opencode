@@ -4,7 +4,6 @@
   "name": "opencode",
   "type": "module",
   "private": true,
-  "randomField": "xyz789",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bun run --conditions=development --conditions=browser ./src/index.ts",
@@ -36,8 +35,8 @@
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opentui/core": "0.0.0-20250919-c2d2d461",
-    "@opentui/solid": "0.0.0-20250919-c2d2d461",
+    "@opentui/core": "0.1.24",
+    "@opentui/solid": "0.1.24",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",

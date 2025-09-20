@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Match, Show, Switch, type Component } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRouteData } from "./context/route"
@@ -26,6 +26,7 @@ import type { PatchTool } from "../../../tool/patch"
 import type { WebFetchTool } from "../../../tool/webfetch"
 import type { TaskTool } from "../../../tool/task"
 import { useKeyboard, type JSX } from "@opentui/solid"
+import { createStore } from "solid-js/store"
 
 export function Session() {
   const route = useRouteData("session")
@@ -40,6 +41,10 @@ export function Session() {
   useKeyboard((evt) => {
     if (evt.name === "pageup") scroll.scrollBy(-scroll.height)
     if (evt.name === "pagedown") scroll.scrollBy(scroll.height)
+  })
+
+  const [store, setStore] = createStore({
+    items: [] as { multiline: boolean }[],
   })
 
   return (
@@ -70,9 +75,6 @@ export function Session() {
           stickyStart="bottom"
           paddingTop={1}
           paddingBottom={1}
-          contentOptions={{
-            gap: 1,
-          }}
         >
           <For each={messages()}>
             {(message) => (
@@ -87,7 +89,7 @@ export function Session() {
             )}
           </For>
         </scrollbox>
-        <Show when={todo().length > 0}>
+        <Show when={todo().length > 0 && false}>
           <box paddingBottom={1}>
             <For each={todo()}>
               {(todo) => (
@@ -115,6 +117,7 @@ function UserMessage(props: { message: UserMessage; parts: Part[] }) {
       paddingTop={1}
       paddingBottom={1}
       paddingLeft={2}
+      marginTop={1}
       backgroundColor={Theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={Theme.secondary}
@@ -133,9 +136,26 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
     <For each={props.parts}>
       {(part) => {
         const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+        const [margin, setMargin] = createSignal(0)
         return (
           <Show when={component()}>
-            <Dynamic component={component()} part={part as any} message={props.message} />
+            <box
+              marginTop={margin()}
+              onSizeChange={function () {
+                const el = this
+                if (!el.parent) return
+                const children = el.parent!.getChildren()
+                const index = children.indexOf(el)
+                const previous = children[index - 1]
+                if (previous.height > 1 || el.height > 1) {
+                  setMargin(1)
+                  return
+                }
+                setMargin(0)
+              }}
+            >
+              <Dynamic component={component()} part={part as any} message={props.message} />
+            </box>
           </Show>
         )
       }}
@@ -175,12 +195,19 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     const input = props.part.state.input
 
     return (
-      <Dynamic
-        component={ready}
-        input={input}
-        metadata={metadata}
-        output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-      />
+      <box>
+        <Dynamic
+          component={ready}
+          input={input}
+          metadata={metadata}
+          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+        />
+        {props.part.state.status === "error" && (
+          <box paddingLeft={2}>
+            <text fg={Theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
+          </box>
+        )}
+      </box>
     )
   })
 
@@ -325,11 +352,9 @@ ToolRegistry.register<typeof GrepTool>({
   name: "grep",
   ready(props) {
     return (
-      <>
-        <ToolTitle icon="%" fallback="Searching content..." when={props.input.pattern}>
-          Grep "{props.input.pattern}" <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
-        </ToolTitle>
-      </>
+      <ToolTitle icon="%" fallback="Searching content..." when={props.input.pattern}>
+        Grep "{props.input.pattern}" <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+      </ToolTitle>
     )
   },
 })
@@ -399,7 +424,7 @@ ToolRegistry.register<typeof EditTool>({
   name: "edit",
   ready(props) {
     const code = createMemo(() => {
-      if (!props.metadata.diff) return "[no diff]"
+      if (!props.metadata.diff) return ""
       const text = props.metadata.diff.split("\n").slice(5).join("\n")
       const hast = highlightHast(text, Language.TS)
       const styled = hastToStyledText(hast as any, syntax)
@@ -410,9 +435,11 @@ ToolRegistry.register<typeof EditTool>({
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
           Edit {normalizePath(props.input.filePath!)}
         </ToolTitle>
-        <box>
-          <text>{code()}</text>
-        </box>
+        <Show when={code()}>
+          <box paddingLeft={1}>
+            <text>{code()}</text>
+          </box>
+        </Show>
       </box>
     )
   },
@@ -438,11 +465,11 @@ ToolRegistry.register<typeof PatchTool>({
 
 ToolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
-  ready() {
+  ready(props) {
     return (
       <>
-        <ToolTitle icon="%" fallback="Planning..." when={true}>
-          TodoWrite
+        <ToolTitle icon="~" fallback="Planning..." when={true}>
+          Updated todos
         </ToolTitle>
       </>
     )
