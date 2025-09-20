@@ -5,7 +5,7 @@ import { useRouteData } from "./context/route"
 import { useSync } from "./context/sync"
 import { SplitBorder } from "./component/border"
 import { Theme } from "./context/theme"
-import { hastToStyledText, RGBA, ScrollBoxRenderable, SyntaxStyle } from "@opentui/core"
+import { BoxRenderable, hastToStyledText, RGBA, ScrollBoxRenderable, SyntaxStyle } from "@opentui/core"
 import { Prompt } from "./component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage } from "@opencode-ai/sdk"
 import type { TextPart } from "ai"
@@ -25,7 +25,7 @@ import type { EditTool } from "../../../tool/edit"
 import type { PatchTool } from "../../../tool/patch"
 import type { WebFetchTool } from "../../../tool/webfetch"
 import type { TaskTool } from "../../../tool/task"
-import { useKeyboard, type JSX } from "@opentui/solid"
+import { useKeyboard, type BoxProps, type JSX } from "@opentui/solid"
 import { createStore } from "solid-js/store"
 
 export function Session() {
@@ -39,8 +39,8 @@ export function Session() {
   createEffect(() => sync.session.sync(route.sessionID))
 
   useKeyboard((evt) => {
-    if (evt.name === "pageup") scroll.scrollBy(-scroll.height)
-    if (evt.name === "pagedown") scroll.scrollBy(scroll.height)
+    if (evt.name === "pageup") scroll.scrollBy(-scroll.height / 2)
+    if (evt.name === "pagedown") scroll.scrollBy(scroll.height / 2)
   })
 
   const [store, setStore] = createStore({
@@ -136,23 +136,25 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
     <For each={props.parts}>
       {(part) => {
         const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-        const [margin, setMargin] = createSignal(0)
+        function resize(el: BoxRenderable) {
+          const parent = el.parent
+          if (!parent) return
+          const children = parent.getChildren()
+          const index = children.indexOf(el)
+          const previous = children[index - 1]
+          if (!previous) return
+          console.log(previous.height, el.height)
+          if (el.height > 1 || previous.height > 1) {
+            el.marginTop = 1
+          }
+        }
         return (
           <Show when={component()}>
             <box
-              marginTop={margin()}
               onSizeChange={function () {
-                const el = this
-                if (!el.parent) return
-                const children = el.parent!.getChildren()
-                const index = children.indexOf(el)
-                const previous = children[index - 1]
-                if (previous.height > 1 || el.height > 1) {
-                  setMargin(1)
-                  return
-                }
-                setMargin(0)
+                resize(this)
               }}
+              ref={(el) => resize(el!)}
             >
               <Dynamic component={component()} part={part as any} message={props.message} />
             </box>
@@ -194,8 +196,23 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
     const input = props.part.state.input
 
+    const container: BoxProps =
+      ToolRegistry.container(props.part.tool) === "block"
+        ? {
+            border: ["left"] as const,
+            paddingTop: 1,
+            paddingBottom: 1,
+            paddingLeft: 2,
+            backgroundColor: Theme.backgroundPanel,
+            customBorderChars: SplitBorder.customBorderChars,
+            borderColor: Theme.background,
+          }
+        : {
+            paddingLeft: 3,
+          }
+
     return (
-      <box>
+      <box {...container}>
         <Dynamic
           component={ready}
           input={input}
@@ -203,7 +220,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
           output={props.part.state.status === "completed" ? props.part.state.output : undefined}
         />
         {props.part.state.status === "error" && (
-          <box paddingLeft={2}>
+          <box paddingLeft={2} marginTop={1}>
             <text fg={Theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
           </box>
         )}
@@ -211,11 +228,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     )
   })
 
-  return (
-    <Show when={component()}>
-      <box paddingLeft={3}>{component()}</box>
-    </Show>
-  )
+  return <Show when={component()}>{component()}</Show>
 }
 
 type ToolProps<T extends Tool.Info> = {
@@ -225,13 +238,20 @@ type ToolProps<T extends Tool.Info> = {
 }
 
 const ToolRegistry = (() => {
-  const state: Record<string, { name: string; ready?: Component<ToolProps<any>> }> = {}
-  function register<T extends Tool.Info>(input: { name: string; ready?: Component<ToolProps<T>> }) {
+  const state: Record<string, { name: string; container: "inline" | "block"; ready?: Component<ToolProps<any>> }> = {}
+  function register<T extends Tool.Info>(input: {
+    name: string
+    container: "inline" | "block"
+    ready?: Component<ToolProps<T>>
+  }) {
     state[input.name] = input
     return input
   }
   return {
     register,
+    container(name: string) {
+      return state[name]?.container
+    },
     ready(name: string) {
       return state[name]?.ready
     },
@@ -240,7 +260,7 @@ const ToolRegistry = (() => {
 
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
   return (
-    <text fg={props.when ? Theme.textMuted : Theme.text}>
+    <text paddingLeft={3} fg={props.when ? Theme.textMuted : Theme.text}>
       <Show fallback={<>~ {props.fallback}</>} when={props.when}>
         <span style={{ bold: true }}>{props.icon}</span> {props.children}
       </Show>
@@ -250,21 +270,22 @@ function ToolTitle(props: { fallback: string; when: any; icon: string; children:
 
 ToolRegistry.register<typeof BashTool>({
   name: "bash",
+  container: "block",
   ready(props) {
     return (
-      <>
+      <box>
         <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
           {props.input.description}
         </ToolTitle>
         <Show when={props.input.command}>
-          <box>
-            <text fg={Theme.textMuted}>$ {props.input.command}</text>
+          <box paddingTop={1}>
+            <text fg={Theme.text}>$ {props.input.command}</text>
             <box>
-              <text fg={Theme.textMuted}>{props.output?.trim()}</text>
+              <text fg={Theme.text}>{props.output?.trim()}</text>
             </box>
           </box>
         </Show>
-      </>
+      </box>
     )
   },
 })
@@ -285,6 +306,7 @@ const syntax = new SyntaxStyle({
 
 ToolRegistry.register<typeof ReadTool>({
   name: "read",
+  container: "inline",
   ready(props) {
     return (
       <>
@@ -298,6 +320,7 @@ ToolRegistry.register<typeof ReadTool>({
 
 ToolRegistry.register<typeof WriteTool>({
   name: "write",
+  container: "block",
   ready(props) {
     const lines = createMemo(() => {
       return props.input.content?.split("\n") ?? []
@@ -337,6 +360,7 @@ ToolRegistry.register<typeof WriteTool>({
 
 ToolRegistry.register<typeof GlobTool>({
   name: "glob",
+  container: "inline",
   ready(props) {
     return (
       <>
@@ -350,9 +374,10 @@ ToolRegistry.register<typeof GlobTool>({
 
 ToolRegistry.register<typeof GrepTool>({
   name: "grep",
+  container: "inline",
   ready(props) {
     return (
-      <ToolTitle icon="%" fallback="Searching content..." when={props.input.pattern}>
+      <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
         Grep "{props.input.pattern}" <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
       </ToolTitle>
     )
@@ -361,6 +386,7 @@ ToolRegistry.register<typeof GrepTool>({
 
 ToolRegistry.register<typeof ListTool>({
   name: "list",
+  container: "inline",
   ready(props) {
     const dir = createMemo(() => {
       if (props.input.path) {
@@ -380,6 +406,7 @@ ToolRegistry.register<typeof ListTool>({
 
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
+  container: "block",
   ready(props) {
     return (
       <>
@@ -387,7 +414,7 @@ ToolRegistry.register<typeof TaskTool>({
           Task {props.input.description}
         </ToolTitle>
         <Show when={props.metadata.summary?.length}>
-          <box>
+          <box marginTop={1}>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
                 <text style={{ fg: Theme.textMuted }}>
@@ -404,6 +431,7 @@ ToolRegistry.register<typeof TaskTool>({
 
 ToolRegistry.register<typeof WebFetchTool>({
   name: "webfetch",
+  container: "block",
   ready(props) {
     return (
       <>
@@ -422,6 +450,7 @@ ToolRegistry.register<typeof WebFetchTool>({
 
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
+  container: "block",
   ready(props) {
     const code = createMemo(() => {
       if (!props.metadata.diff) return ""
@@ -447,6 +476,7 @@ ToolRegistry.register<typeof EditTool>({
 
 ToolRegistry.register<typeof PatchTool>({
   name: "patch",
+  container: "block",
   ready(props) {
     return (
       <>
@@ -465,13 +495,16 @@ ToolRegistry.register<typeof PatchTool>({
 
 ToolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
+  container: "block",
   ready(props) {
     return (
-      <>
-        <ToolTitle icon="~" fallback="Planning..." when={true}>
-          Updated todos
-        </ToolTitle>
-      </>
+      <For each={props.input.todos ?? []}>
+        {(todo) => (
+          <text style={{ fg: todo.status === "in_progress" ? Theme.success : Theme.textMuted }}>
+            [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+          </text>
+        )}
+      </For>
     )
   },
 })
