@@ -26,6 +26,7 @@ import type { PatchTool } from "../../../tool/patch"
 import type { WebFetchTool } from "../../../tool/webfetch"
 import type { TaskTool } from "../../../tool/task"
 import { useKeyboard, type BoxProps, type JSX } from "@opentui/solid"
+import { useSDK } from "./context/sdk"
 
 export function Session() {
   const route = useRouteData("session")
@@ -36,10 +37,17 @@ export function Session() {
   let scroll: ScrollBoxRenderable
 
   createEffect(() => sync.session.sync(route.sessionID))
+  const sdk = useSDK()
 
   useKeyboard((evt) => {
     if (evt.name === "pageup") scroll.scrollBy(-scroll.height / 2)
     if (evt.name === "pagedown") scroll.scrollBy(scroll.height / 2)
+    if (evt.name === "escape")
+      sdk.session.abort({
+        path: {
+          id: route.sessionID,
+        },
+      })
   })
 
   return (
