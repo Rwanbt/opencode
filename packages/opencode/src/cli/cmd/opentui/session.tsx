@@ -148,12 +148,17 @@ const PART_MAPPING = {
 function resize(el: BoxRenderable) {
   const parent = el.parent
   if (!parent) return
+  if (el.height > 1) {
+    el.marginTop = 1
+    return
+  }
   const children = parent.getChildren()
   const index = children.indexOf(el)
   const previous = children[index - 1]
   if (!previous) return
-  if (el.height > 1 || previous.height > 1) {
+  if (previous.height > 1) {
     el.marginTop = 1
+    return
   }
 }
 
@@ -163,13 +168,7 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   const local = useLocal()
 
   return (
-    <box
-      paddingLeft={3}
-      onSizeChange={function () {
-        resize(this)
-      }}
-      ref={(el) => resize(el!)}
-    >
+    <box paddingLeft={3} marginTop={1}>
       <text>{props.part.text.trim()}</text>
       <text>
         <span style={{ fg: local.agent.color(agent().name) }}>{Locale.titlecase(agent().name)}</span>{" "}
@@ -209,9 +208,10 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
       <box
         {...container}
         onSizeChange={function () {
-          resize(this)
+          setTimeout(() => {
+            resize(this)
+          }, 0)
         }}
-        ref={(el) => resize(el!)}
       >
         <Dynamic
           component={ready}
@@ -378,7 +378,7 @@ ToolRegistry.register<typeof GrepTool>({
   ready(props) {
     return (
       <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}" <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+        Grep "{props.input.pattern}"
       </ToolTitle>
     )
   },
