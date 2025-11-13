@@ -11,3 +11,9 @@ playground
 tmp
 dist
 .turbo
+
+# Test suite artifacts
+opencode/.bun/
+opencode/.local/
+opencode/.cache/
+opencode/node_modules
