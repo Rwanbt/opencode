@@ -5,7 +5,7 @@ import { Script } from "@opencode-ai/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 
 if (!Script.release) {
-  throw new Error("Missing OPENCODE_RELEASE_ID environment variable")
+  throw new Error("Missing OPENCODE_RELEASE environment variable")
 }
 
 const highlightsTemplate = `
@@ -75,7 +75,6 @@ await $`git fetch origin`
 await $`git cherry-pick HEAD..origin/dev`.nothrow()
 await $`git push origin HEAD --tags --no-verify --force-with-lease`
 await new Promise((resolve) => setTimeout(resolve, 5_000))
-
 await $`gh release edit ${Script.release} --draft --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"}`
 
 console.log("\n=== cli ===\n")
