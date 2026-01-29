@@ -4,6 +4,7 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
+      - ci
       - dev
       - snapshot-*
   workflow_dispatch:
@@ -29,7 +30,22 @@ permissions:
   packages: write
 
 jobs:
-  publish:
+  version:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-bun
+      - id: version
+        run: |
+          ./script/version.ts
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  build-cli:
+    needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
     steps:
@@ -69,9 +85,10 @@ jobs:
           git config --global user.name "opencode"
           git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
-      - name: Publish
-        id: publish
-        run: ./script/publish-start.ts
+      - name: Build
+        id: build
+        run: |
+          ./packages/script/build.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
@@ -86,12 +103,12 @@ jobs:
           path: packages/opencode/dist
 
     outputs:
-      release: ${{ steps.publish.outputs.release }}
+      release: ${{ steps.build-cli.outputs.release }}
       tag: ${{ steps.publish.outputs.tag }}
       version: ${{ steps.publish.outputs.version }}
 
-  publish-tauri:
-    needs: publish
+  build-tauri:
+    needs: build
     continue-on-error: false
     strategy:
       fail-fast: false

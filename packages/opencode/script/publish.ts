@@ -7,7 +7,14 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
-const { binaries } = await import("./build.ts")
+const binaries: Record<string, string> = {}
+for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
+  const pkg = await Bun.file(`./dist/${filepath}`).json()
+  binaries[pkg.name] = pkg.version
+}
+console.log("binaries", binaries)
+const version = Object.values(binaries)[0]
+
 {
   const name = `${pkg.name}-${process.platform}-${process.arch}`
   console.log(`smoke test: running dist/${name}/bin/opencode --version`)
@@ -28,7 +35,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
-      version: Script.version,
+      version: version,
       optionalDependencies: binaries,
     },
     null,
@@ -64,7 +71,7 @@ if (!Script.preview) {
 
   const image = "ghcr.io/anomalyco/opencode"
   const platforms = "linux/amd64,linux/arm64"
-  const tags = [`${image}:${Script.version}`, `${image}:latest`]
+  const tags = [`${image}:${version}`, `${image}:latest`]
   const tagFlags = tags.flatMap((t) => ["-t", t])
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
 }
