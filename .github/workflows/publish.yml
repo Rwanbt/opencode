@@ -42,6 +42,7 @@ jobs:
         run: |
           ./script/version.ts
         env:
+          GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
     outputs:
