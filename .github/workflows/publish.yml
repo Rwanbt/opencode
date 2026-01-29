@@ -78,6 +78,7 @@ jobs:
       version: ${{ steps.publish.outputs.version }}
 
   build-tauri:
+    if: false
     needs:
       - build-cli
       - version
@@ -191,10 +192,9 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
 
-  publish-release:
+  publish:
     needs:
       - build-cli
-      - build-tauri
     if: needs.publish.outputs.tag
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
@@ -232,6 +232,11 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
       - name: Setup SSH for AUR
         run: |
           sudo apt-get update
@@ -245,6 +250,8 @@ jobs:
 
       - run: ./script/publish-complete.ts
         env:
-          OPENCODE_VERSION: ${{ needs.publish.outputs.version  }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          NPM_CONFIG_PROVENANCE: false
