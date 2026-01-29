@@ -231,10 +231,6 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
           git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.version.outputs.tag }}
 
       - uses: ./.github/actions/setup-bun
 
