@@ -197,6 +197,10 @@ jobs:
       - build-cli
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Install OpenCode
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai
