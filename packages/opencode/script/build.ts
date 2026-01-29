@@ -15,8 +15,6 @@ process.chdir(dir)
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 
-console.log("release", Script.release)
-
 // Fetch and generate models.dev snapshot
 const modelsData = process.env.MODELS_DEV_API_JSON
   ? await Bun.file(process.env.MODELS_DEV_API_JSON).text()
@@ -189,7 +187,7 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.release} ./dist/*.zip ./dist/*.tar.gz --clobber`
+  await $`gh release upload ${Script.release} ./dist/*.zip ./dist/*.tar.gz --clobber`
 }
 
 export { binaries }
