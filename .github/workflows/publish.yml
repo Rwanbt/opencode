@@ -41,6 +41,9 @@ jobs:
       - id: version
         run: |
           ./script/version.ts
+        env:
+          OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_VERSION: ${{ inputs.version }}
     outputs:
       version: ${{ steps.version.outputs.version }}
 
@@ -57,45 +60,12 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai@1.0.169
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Setup Git Identity
-        run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
-
       - name: Build
         id: build
         run: |
           ./packages/script/build.ts
         env:
-          OPENCODE_BUMP: ${{ inputs.bump }}
-          OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: false
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -231,6 +201,33 @@ jobs:
     if: needs.publish.outputs.tag
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
+      - name: Install OpenCode
+        if: inputs.bump || inputs.version
+        run: bun i -g opencode-ai
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup Git Identity
+        run: |
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
