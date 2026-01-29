@@ -150,10 +150,7 @@ jobs:
           bun ./scripts/prepare.ts
         env:
           OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -251,7 +248,7 @@ jobs:
           git config --global user.name "opencode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
-      - run: ./script/publish-complete.ts
+      - run: ./script/publish.ts
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
