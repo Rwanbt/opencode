@@ -63,15 +63,17 @@ console.log("updated:", extensionToml)
 await Bun.file(extensionToml).write(toml)
 
 await $`bun install`
+await import(`../packages/sdk/js/script/build.ts`)
 
-if (!Script.preview) {
+if (!Script.preview || true) {
   await $`git commit -am "release: v${Script.version}"`
   await $`git tag v${Script.version}`
   await $`git fetch origin`
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  await $`gh release edit v${Script.version} --draft --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"}`
+  await $`gh release upload v${Script.version} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz --clobber`
 }
 
 console.log("\n=== cli ===\n")

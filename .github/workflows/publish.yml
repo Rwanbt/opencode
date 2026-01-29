@@ -46,6 +46,8 @@ jobs:
           OPENCODE_VERSION: ${{ inputs.version }}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      tag: ${{ steps.version.outputs.tag }}
 
   build-cli:
     needs: version
@@ -78,7 +80,6 @@ jobs:
       version: ${{ steps.publish.outputs.version }}
 
   build-tauri:
-    if: false
     needs:
       - build-cli
       - version
@@ -175,6 +176,9 @@ jobs:
             tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
             args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
             updaterJsonPreferNsis: true
+            releaseId: ${{ needs.version.outputs.release }}
+            tagName: ${{ needs.version.outputs.tag }}
+            releaseDraft: true
             releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,6 +195,7 @@ jobs:
   publish:
     needs:
       - build-cli
+      - build-tauri
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
@@ -235,26 +240,6 @@ jobs:
         with:
           name: opencode-cli
           path: packages/opencode/dist
-
-      - name: Debug - verify artifact contents
-        run: |
-          echo "=== Contents of packages/opencode/dist ==="
-          ls -la packages/opencode/dist/
-          echo ""
-          echo "=== All files recursively ==="
-          find packages/opencode/dist -type f 2>/dev/null | head -30
-          echo ""
-          echo "=== Check opencode-linux-x64 structure ==="
-          ls -la packages/opencode/dist/opencode-linux-x64/ 2>/dev/null || echo "Directory missing"
-          echo ""
-          echo "=== Check bin directory ==="
-          ls -la packages/opencode/dist/opencode-linux-x64/bin/ 2>/dev/null || echo "Bin dir missing"
-          echo ""
-          echo "=== Check file types ==="
-          find packages/opencode/dist -type f -name "opencode*" 2>/dev/null | head -5 | xargs file 2>/dev/null || echo "No files found"
-          echo ""
-          echo "=== Check permissions ==="
-          find packages/opencode/dist -type f -name "opencode" 2>/dev/null | xargs ls -la 2>/dev/null || echo "No executables found"
 
       - name: Make binaries executable
         run: |
