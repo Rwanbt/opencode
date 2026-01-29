@@ -178,10 +178,7 @@ jobs:
             tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
             args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
             updaterJsonPreferNsis: true
-            releaseId: ${{ needs.publish.outputs.release }}
-            tagName: ${{ needs.publish.outputs.tag }}
             releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-            releaseDraft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
