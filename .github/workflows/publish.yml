@@ -261,7 +261,7 @@ jobs:
       - run: ./script/publish.ts
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE_ID: ${{ needs.version.outputs.release }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

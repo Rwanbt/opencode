@@ -4,6 +4,10 @@ import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 
+if (!Script.release) {
+  throw new Error("Missing OPENCODE_RELEASE_ID environment variable")
+}
+
 const highlightsTemplate = `
 <!--
 Add highlights before publishing. Delete this section if no highlights.
@@ -71,16 +75,12 @@ await $`git fetch origin`
 await $`git cherry-pick HEAD..origin/dev`.nothrow()
 await $`git push origin HEAD --tags --no-verify --force-with-lease`
 await new Promise((resolve) => setTimeout(resolve, 5_000))
-const releaseID = process.env.OPENCODE_RELEASE_ID
-if (!releaseID) {
-  throw new Error("OPENCODE_RELEASE_ID environment variable is required")
-}
 
-await $`gh release edit ${releaseID} --draft --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"}`
-await $`gh release upload v${Script.version} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz --clobber`
+await $`gh release edit ${Script.release} --draft --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"}`
 
 console.log("\n=== cli ===\n")
 await import(`../packages/opencode/script/publish.ts`)
+await $`gh release upload v${Script.version} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz --clobber`
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)

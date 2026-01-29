@@ -10,6 +10,8 @@ const release = await $`gh release view v${Script.version} --json id,tagName`.js
 output += `release=${release.id}\n`
 output += `tag=${release.tagName}\n`
 
+console.log(output)
+
 if (process.env.GITHUB_OUTPUT) {
   await Bun.write(process.env.GITHUB_OUTPUT, output)
 }
