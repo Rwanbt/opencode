@@ -108,7 +108,9 @@ jobs:
       version: ${{ steps.publish.outputs.version }}
 
   build-tauri:
-    needs: build
+    needs:
+      - build-cli
+      - version
     continue-on-error: false
     strategy:
       fail-fast: false
