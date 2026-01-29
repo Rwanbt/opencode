@@ -195,7 +195,6 @@ jobs:
   publish:
     needs:
       - build-cli
-    if: needs.publish.outputs.tag
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Install OpenCode
