@@ -226,8 +226,8 @@ jobs:
 
   publish-release:
     needs:
-      - publish
-      - publish-tauri
+      - build-cli
+      - build-tauri
     if: needs.publish.outputs.tag
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
