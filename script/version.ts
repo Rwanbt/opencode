@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { Script } from "@opencode-ai/script"
 
 let output = `version=${Script.version}\n`
