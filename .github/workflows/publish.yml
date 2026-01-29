@@ -238,14 +238,23 @@ jobs:
 
       - name: Debug - verify artifact contents
         run: |
-          echo "Contents of packages/opencode/dist:"
+          echo "=== Contents of packages/opencode/dist ==="
           ls -la packages/opencode/dist/
           echo ""
-          echo "Looking for opencode binary:"
-          find packages/opencode/dist -name "opencode" -type f 2>/dev/null | head -5
+          echo "=== All files recursively ==="
+          find packages/opencode/dist -type f 2>/dev/null | head -30
           echo ""
-          echo "Check if linux-x64 binary exists:"
-          ls -la packages/opencode/dist/opencode-linux-x64/bin/ 2>/dev/null || echo "Directory not found"
+          echo "=== Check opencode-linux-x64 structure ==="
+          ls -la packages/opencode/dist/opencode-linux-x64/ 2>/dev/null || echo "Directory missing"
+          echo ""
+          echo "=== Check bin directory ==="
+          ls -la packages/opencode/dist/opencode-linux-x64/bin/ 2>/dev/null || echo "Bin dir missing"
+          echo ""
+          echo "=== Check file types ==="
+          find packages/opencode/dist -type f -name "opencode*" 2>/dev/null | head -5 | xargs file 2>/dev/null || echo "No files found"
+          echo ""
+          echo "=== Check permissions ==="
+          find packages/opencode/dist -type f -name "opencode" 2>/dev/null | xargs ls -la 2>/dev/null || echo "No executables found"
 
       - name: Setup SSH for AUR
         run: |
