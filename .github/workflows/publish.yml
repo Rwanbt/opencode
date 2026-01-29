@@ -237,6 +237,11 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
       - name: Setup SSH for AUR
         run: |
           sudo apt-get update
