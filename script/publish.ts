@@ -79,7 +79,7 @@ await $`gh release edit ${Script.release} --draft --title "v${Script.version}" -
 
 console.log("\n=== cli ===\n")
 await import(`../packages/opencode/script/publish.ts`)
-await $`gh release upload v${Script.version} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz --clobber`
+await $`gh release upload v${Script.release} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz --clobber`
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
