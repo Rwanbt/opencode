@@ -237,18 +237,6 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: opencode-cli
-          path: packages/opencode/dist
-
-      - name: Make binaries executable
-        run: |
-          echo "Adding execute permissions to all binaries..."
-          find packages/opencode/dist -type f \( -name "opencode" -o -name "opencode.exe" \) -exec chmod +x {} \;
-          echo "Permissions after fix:"
-          find packages/opencode/dist -type f -name "opencode" | head -3 | xargs ls -la
-
       - name: Setup SSH for AUR
         run: |
           sudo apt-get update
