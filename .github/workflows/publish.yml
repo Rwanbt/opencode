@@ -234,12 +234,18 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
-          path: /tmp/opencode-cli
+          path: packages/opencode/dist
 
-      - name: Move artifact to correct location
+      - name: Debug - verify artifact contents
         run: |
-          rm -rf packages/opencode/dist
-          mv /tmp/opencode-cli packages/opencode/dist
+          echo "Contents of packages/opencode/dist:"
+          ls -la packages/opencode/dist/
+          echo ""
+          echo "Looking for opencode binary:"
+          find packages/opencode/dist -name "opencode" -type f 2>/dev/null | head -5
+          echo ""
+          echo "Check if linux-x64 binary exists:"
+          ls -la packages/opencode/dist/opencode-linux-x64/bin/ 2>/dev/null || echo "Directory not found"
 
       - name: Setup SSH for AUR
         run: |
