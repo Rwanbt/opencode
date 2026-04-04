@@ -14,6 +14,10 @@ import { Permission } from "@/permission"
 import { SessionStatus } from "../session/status"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
+import { Instance } from "../project/instance"
+import { Workspace } from "../control-plane/workspace"
+import { Database, eq } from "../storage/db"
+import { SessionTable } from "../session/session.sql"
 
 const log = Log.create({ service: "task" })
 
@@ -153,6 +157,40 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       // Background mode: fire-and-forget, return task_id immediately
       if (mode === "background") {
+        // Try to create an isolated worktree for the background task
+        let workspace: Workspace.Info | undefined
+        try {
+          const project = Instance.current.project
+          if (project.vcs === "git") {
+            workspace = await Workspace.create({
+              type: "worktree",
+              branch: null, // Adaptor generates a unique branch
+              projectID: project.id,
+              extra: null,
+            })
+            // Link workspace to session for later lookup
+            try {
+              Database.use((db) =>
+                db.update(SessionTable)
+                  .set({ workspace_id: workspace!.id })
+                  .where(eq(SessionTable.id, session.id))
+                  .run(),
+              )
+            } catch { /* best-effort */ }
+            log.info("created worktree for background task", {
+              sessionID: session.id,
+              worktree: workspace.directory,
+              branch: workspace.branch,
+            })
+          }
+        } catch (err) {
+          log.warn("failed to create worktree for background task, running in main worktree", {
+            sessionID: session.id,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          workspace = undefined
+        }
+
         // Publish task created event
         await Bus.publish(SessionStatus.Event.TaskCreated, {
           sessionID: session.id,
@@ -162,8 +200,19 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
         await SessionStatus.set(session.id, { type: "queued" })
 
-        // Fire and forget - mirrors the prompt_async pattern
-        SessionPrompt.prompt(promptInput)
+        // Run the prompt in the worktree context if available
+        const runPrompt = async () => {
+          if (workspace?.directory) {
+            return Instance.provide({
+              directory: workspace.directory,
+              fn: () => SessionPrompt.prompt(promptInput),
+            })
+          }
+          return SessionPrompt.prompt(promptInput)
+        }
+
+        // Fire and forget
+        runPrompt()
           .then(async (result) => {
             const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
             await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
@@ -172,6 +221,26 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               parentID: ctx.sessionID,
               result: text.slice(0, 500),
             })
+            // Auto-cleanup worktree if no changes were made
+            if (workspace) {
+              try {
+                const summary = await Session.get(session.id).then((s) => s.summary)
+                const hasChanges = summary && (summary.additions > 0 || summary.deletions > 0)
+                if (!hasChanges) {
+                  await Workspace.remove(workspace.id)
+                  log.info("auto-cleaned empty worktree", { sessionID: session.id, workspaceID: workspace.id })
+                } else {
+                  log.info("worktree retained with changes", {
+                    sessionID: session.id,
+                    workspaceID: workspace.id,
+                    additions: summary?.additions,
+                    deletions: summary?.deletions,
+                  })
+                }
+              } catch (cleanupErr) {
+                log.warn("failed to cleanup worktree", { sessionID: session.id, error: cleanupErr })
+              }
+            }
           })
           .catch(async (err) => {
             const errorMsg = err instanceof Error ? err.message : String(err)
@@ -189,14 +258,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           metadata: {
             sessionId: session.id,
             model,
-            mode: "background",
+            mode: "background" as string,
+            worktreeId: workspace?.id ?? null,
+            worktreeDirectory: workspace?.directory ?? null,
+            worktreeBranch: workspace?.branch ?? null,
           },
           output: [
             `task_id: ${session.id} (for resuming or checking status later)`,
             `mode: background`,
             `status: queued`,
+            workspace ? `worktree: ${workspace.directory} (branch: ${workspace.branch})` : `worktree: none (no git repo)`,
             "",
-            `The task has been launched in the background. Use the task_id to check status or resume later.`,
+            `The task has been launched in the background in an isolated worktree. Use the task_id to check status or resume later.`,
           ].join("\n"),
         }
       }
@@ -235,6 +308,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             sessionId: session.id,
             model,
             mode: "foreground" as string,
+            worktreeId: null as string | null,
+            worktreeDirectory: null as string | null,
+            worktreeBranch: null as string | null,
           },
           output,
         }

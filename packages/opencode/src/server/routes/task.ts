@@ -7,6 +7,7 @@ import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionStatus } from "@/session/status"
+import { Workspace } from "../../control-plane/workspace"
 import { Bus } from "../../bus"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -14,11 +15,31 @@ import { Log } from "../../util/log"
 
 const log = Log.create({ service: "server.task" })
 
+async function getWorktreeInfo(session: { workspaceID?: string }) {
+  if (!session.workspaceID) return undefined
+  try {
+    const ws = await Workspace.get(session.workspaceID as any)
+    if (!ws || ws.type !== "worktree") return undefined
+    return { id: ws.id, directory: ws.directory, branch: ws.branch }
+  } catch {
+    return undefined
+  }
+}
+
+const WorktreeInfo = z
+  .object({
+    id: z.string(),
+    directory: z.string().nullable(),
+    branch: z.string().nullable(),
+  })
+  .optional()
+
 const TaskInfo = z
   .object({
     session: Session.Info,
     status: SessionStatus.Info,
     childCount: z.number().optional(),
+    worktree: WorktreeInfo,
   })
   .meta({ ref: "TaskInfo" })
 
@@ -66,16 +87,18 @@ export const TaskRoutes = lazy(() =>
         // Sort by most recently updated
         sessions.sort((a, b) => b.time.updated - a.time.updated)
 
-        // Merge with status info and child counts
+        // Merge with status info, child counts, and worktree info
         const statusMap = await SessionStatus.list()
         let tasks = await Promise.all(
           sessions.map(async (session) => {
             const status = statusMap.get(session.id) ?? await SessionStatus.get(session.id)
             const children = await Session.children(session.id)
+            const worktree = await getWorktreeInfo(session)
             return {
               session,
               status,
               childCount: children.length,
+              worktree,
             }
           }),
         )
@@ -122,7 +145,8 @@ export const TaskRoutes = lazy(() =>
         const session = await Session.get(id)
         const status = await SessionStatus.get(id)
         const children = await Session.children(id)
-        return c.json({ session, status, childCount: children.length })
+        const worktree = await getWorktreeInfo(session)
+        return c.json({ session, status, childCount: children.length, worktree })
       },
     )
     .get(

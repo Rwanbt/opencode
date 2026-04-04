@@ -652,6 +652,9 @@ it.live(
                   sessionId: SessionID.make("task"),
                   model: ref,
                   mode: "foreground" as string,
+                  worktreeId: null as string | null,
+                  worktreeDirectory: null as string | null,
+                  worktreeBranch: null as string | null,
                 },
                 output: "",
               }
