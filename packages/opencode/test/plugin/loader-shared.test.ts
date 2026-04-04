@@ -14,6 +14,7 @@ const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Instance } = await import("../../src/project/instance")
 const { Npm } = await import("../../src/npm")
 const { Bus } = await import("../../src/bus")
+const { GlobalBus } = await import("../../src/bus/global")
 const { Session } = await import("../../src/session")
 
 afterAll(() => {
@@ -42,17 +43,22 @@ async function errs(dir: string) {
     directory: dir,
     fn: async () => {
       const errors: string[] = []
-      const off = Bus.subscribe(Session.Event.Error, (evt) => {
-        const error = evt.properties.error
+      // Use GlobalBus instead of Bus.subscribe to avoid separate Effect runtime
+      // isolation - Bus.subscribe creates its own PubSub while Plugin.list()
+      // publishes via a different PubSub in its own runtime.
+      const handler = (evt: { payload: any }) => {
+        if (evt.payload?.type !== "session.error") return
+        const error = evt.payload?.properties?.error
         if (!error || typeof error !== "object") return
         if (!("data" in error)) return
         if (!error.data || typeof error.data !== "object") return
         if (!("message" in error.data)) return
         if (typeof error.data.message !== "string") return
         errors.push(error.data.message)
-      })
+      }
+      GlobalBus.on("event", handler)
       await Plugin.list()
-      off()
+      GlobalBus.off("event", handler)
       return errors
     },
   })

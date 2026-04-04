@@ -100,7 +100,7 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
+const { GlobalBus } = await import("../../src/bus/global")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
@@ -129,9 +129,12 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
       openShouldFail = true
 
       const events: Array<{ mcpName: string; url: string }> = []
-      const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-        events.push(evt.properties)
-      })
+      const handler = (evt: { payload: any }) => {
+        if (evt.payload?.type === "mcp.browser.open.failed") {
+          events.push(evt.payload.properties)
+        }
+      }
+      GlobalBus.on("event", handler)
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
       // Attach a handler immediately so callback shutdown rejections
@@ -146,7 +149,7 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
 
       await authPromise
 
-      unsubscribe()
+      GlobalBus.off("event", handler)
 
       // Verify the BrowserOpenFailed event was published
       expect(events.length).toBe(1)
@@ -180,9 +183,12 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
       openShouldFail = false
 
       const events: Array<{ mcpName: string; url: string }> = []
-      const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-        events.push(evt.properties)
-      })
+      const handler = (evt: { payload: any }) => {
+        if (evt.payload?.type === "mcp.browser.open.failed") {
+          events.push(evt.payload.properties)
+        }
+      }
+      GlobalBus.on("event", handler)
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
       const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
@@ -195,7 +201,7 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
 
       await authPromise
 
-      unsubscribe()
+      GlobalBus.off("event", handler)
 
       // Verify NO BrowserOpenFailed event was published
       expect(events.length).toBe(0)
