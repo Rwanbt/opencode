@@ -11,6 +11,11 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { SessionStatus } from "../session/status"
+import { Bus } from "../bus"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "task" })
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -23,6 +28,13 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  mode: z
+    .enum(["foreground", "background"])
+    .default("foreground")
+    .describe(
+      "'foreground' blocks until done (default). 'background' returns task_id immediately and runs the task asynchronously.",
+    )
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -46,6 +58,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const mode = params.mode ?? "foreground"
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -115,19 +128,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           sessionId: session.id,
           model,
+          mode,
         },
       })
 
       const messageID = MessageID.ascending()
-
-      function cancel() {
-        SessionPrompt.cancel(session.id)
-      }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const result = await SessionPrompt.prompt({
+      const promptInput = {
         messageID,
         sessionID: session.id,
         model: {
@@ -141,25 +149,104 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      })
+      }
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      // Background mode: fire-and-forget, return task_id immediately
+      if (mode === "background") {
+        // Publish task created event
+        await Bus.publish(SessionStatus.Event.TaskCreated, {
+          sessionID: session.id,
+          parentID: ctx.sessionID,
+          agent: agent.name,
+          description: params.description,
+        })
+        await SessionStatus.set(session.id, { type: "queued" })
 
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+        // Fire and forget - mirrors the prompt_async pattern
+        SessionPrompt.prompt(promptInput)
+          .then(async (result) => {
+            const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+            await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
+            await Bus.publish(SessionStatus.Event.TaskCompleted, {
+              sessionID: session.id,
+              parentID: ctx.sessionID,
+              result: text.slice(0, 500),
+            })
+          })
+          .catch(async (err) => {
+            const errorMsg = err instanceof Error ? err.message : String(err)
+            await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
+            await Bus.publish(SessionStatus.Event.TaskFailed, {
+              sessionID: session.id,
+              parentID: ctx.sessionID,
+              error: errorMsg,
+            })
+            log.error("background task failed", { sessionID: session.id, error: errorMsg })
+          })
 
-      return {
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-        output,
+        return {
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+            mode: "background",
+          },
+          output: [
+            `task_id: ${session.id} (for resuming or checking status later)`,
+            `mode: background`,
+            `status: queued`,
+            "",
+            `The task has been launched in the background. Use the task_id to check status or resume later.`,
+          ].join("\n"),
+        }
+      }
+
+      // Foreground mode: block until completion (existing behavior)
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+
+      try {
+        const result = await SessionPrompt.prompt(promptInput)
+
+        const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+        // Publish completion event
+        await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
+        await Bus.publish(SessionStatus.Event.TaskCompleted, {
+          sessionID: session.id,
+          parentID: ctx.sessionID,
+          result: text.slice(0, 500),
+        })
+
+        const output = [
+          `task_id: ${session.id} (for resuming to continue this task if needed)`,
+          "",
+          "<task_result>",
+          text,
+          "</task_result>",
+        ].join("\n")
+
+        return {
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+            mode: "foreground" as string,
+          },
+          output,
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
+        await Bus.publish(SessionStatus.Event.TaskFailed, {
+          sessionID: session.id,
+          parentID: ctx.sessionID,
+          error: errorMsg,
+        })
+        throw err
       }
     },
   }

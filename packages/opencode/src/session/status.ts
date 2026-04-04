@@ -7,6 +7,19 @@ import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
+  export const TaskStatus = z.enum([
+    "idle",
+    "busy",
+    "retry",
+    "queued",
+    "blocked",
+    "awaiting_input",
+    "completed",
+    "failed",
+    "cancelled",
+  ])
+  export type TaskStatus = z.infer<typeof TaskStatus>
+
   export const Info = z
     .union([
       z.object({
@@ -20,6 +33,28 @@ export namespace SessionStatus {
       }),
       z.object({
         type: z.literal("busy"),
+      }),
+      z.object({
+        type: z.literal("queued"),
+      }),
+      z.object({
+        type: z.literal("blocked"),
+        reason: z.string().optional(),
+      }),
+      z.object({
+        type: z.literal("awaiting_input"),
+        question: z.string().optional(),
+      }),
+      z.object({
+        type: z.literal("completed"),
+        result: z.string().optional(),
+      }),
+      z.object({
+        type: z.literal("failed"),
+        error: z.string().optional(),
+      }),
+      z.object({
+        type: z.literal("cancelled"),
       }),
     ])
     .meta({
@@ -40,6 +75,45 @@ export namespace SessionStatus {
       "session.idle",
       z.object({
         sessionID: SessionID.zod,
+      }),
+    ),
+    // Task lifecycle events
+    TaskCreated: BusEvent.define(
+      "task.created",
+      z.object({
+        sessionID: SessionID.zod,
+        parentID: SessionID.zod,
+        agent: z.string(),
+        description: z.string(),
+      }),
+    ),
+    TaskCompleted: BusEvent.define(
+      "task.completed",
+      z.object({
+        sessionID: SessionID.zod,
+        parentID: SessionID.zod,
+        result: z.string().optional(),
+      }),
+    ),
+    TaskFailed: BusEvent.define(
+      "task.failed",
+      z.object({
+        sessionID: SessionID.zod,
+        parentID: SessionID.zod,
+        error: z.string(),
+      }),
+    ),
+    TaskCancelled: BusEvent.define(
+      "task.cancelled",
+      z.object({
+        sessionID: SessionID.zod,
+      }),
+    ),
+    TaskBlocked: BusEvent.define(
+      "task.blocked",
+      z.object({
+        sessionID: SessionID.zod,
+        reason: z.string().optional(),
       }),
     ),
   }

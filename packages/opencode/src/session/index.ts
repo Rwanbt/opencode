@@ -73,6 +73,7 @@ export namespace Session {
       workspaceID: row.workspace_id ?? undefined,
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
+      status: row.status ?? "idle",
       title: row.title,
       version: row.version,
       summary,
@@ -94,6 +95,7 @@ export namespace Session {
       project_id: info.projectID,
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
+      status: info.status,
       slug: info.slug,
       directory: info.directory,
       title: info.title,
@@ -130,6 +132,7 @@ export namespace Session {
       workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
       parentID: SessionID.zod.optional(),
+      status: z.enum(["idle", "busy", "retry", "queued", "blocked", "awaiting_input", "completed", "failed", "cancelled"]).optional(),
       summary: z
         .object({
           additions: z.number(),
