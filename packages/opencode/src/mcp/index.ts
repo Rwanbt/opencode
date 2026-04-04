@@ -471,15 +471,19 @@ export namespace MCP {
 
       function watch(s: State, name: string, client: MCPClient, timeout?: number) {
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-          log.info("tools list changed notification received", { server: name })
-          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+          try {
+            log.info("tools list changed notification received", { server: name })
+            if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-          const listed = await Effect.runPromise(defs(name, client, timeout))
-          if (!listed) return
-          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+            const listed = await Effect.runPromise(defs(name, client, timeout))
+            if (!listed) return
+            if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-          s.defs[name] = listed
-          await Effect.runPromise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+            s.defs[name] = listed
+            await Effect.runPromise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+          } catch (err) {
+            log.error("tools list changed handler failed", { server: name, error: err })
+          }
         })
       }
 
