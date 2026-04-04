@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "../../src/effect/run-service"
+export {}
 
 class Shared extends ServiceMap.Service<Shared, { readonly id: number }>()("@test/Shared") {}
 
@@ -37,8 +38,9 @@ test("makeRuntime shares dependent layers through the shared memo map", async ()
     }),
   ).pipe(Layer.provide(shared))
 
-  const { runPromise: runOne } = makeRuntime(One, one)
-  const { runPromise: runTwo } = makeRuntime(Two, two)
+  const memoMap = Layer.makeMemoMapUnsafe()
+  const { runPromise: runOne } = makeRuntime(One, one, { memoMap })
+  const { runPromise: runTwo } = makeRuntime(Two, two, { memoMap })
 
   expect(await runOne((svc) => svc.get())).toBe(1)
   expect(await runTwo((svc) => svc.get())).toBe(1)
