@@ -229,14 +229,15 @@ export namespace SessionStatus {
       const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
         const data = yield* InstanceState.get(state)
         yield* bus.publish(Event.Status, { sessionID, status })
+        // Persist to DB first, then update in-memory state
+        // This prevents status loss if DB write fails
+        persistToDb(sessionID, status)
         if (status.type === "idle") {
           yield* bus.publish(Event.Idle, { sessionID })
           data.delete(sessionID)
-          persistToDb(sessionID, status)
           return
         }
         data.set(sessionID, status)
-        persistToDb(sessionID, status)
       })
 
       return Service.of({ get, list, set })

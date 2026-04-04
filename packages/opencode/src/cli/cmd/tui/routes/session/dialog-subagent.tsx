@@ -40,6 +40,10 @@ export function DialogSubagent(props: { sessionID: string }) {
     const t = statusType()
     return t === "busy" || t === "retry"
   })
+  const isCancellable = createMemo(() => {
+    const t = statusType()
+    return t !== "idle" && t !== "completed" && t !== "cancelled" && t !== "failed"
+  })
 
   return (
     <DialogSelect
@@ -61,7 +65,7 @@ export function DialogSubagent(props: { sessionID: string }) {
           title: "Cancel task",
           value: "subagent.cancel",
           description: "Stop the running task",
-          disabled: !isBusy() && statusType() !== "queued",
+          disabled: !isCancellable(),
           onSelect: async (dialog) => {
             try {
               await taskAction(sdk, "cancel", props.sessionID)

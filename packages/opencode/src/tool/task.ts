@@ -169,14 +169,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               extra: null,
             })
             // Link workspace to session for later lookup
-            try {
-              Database.use((db) =>
-                db.update(SessionTable)
-                  .set({ workspace_id: workspace!.id })
-                  .where(eq(SessionTable.id, session.id))
-                  .run(),
-              )
-            } catch { /* best-effort */ }
+            if (workspace?.id) {
+              try {
+                Database.use((db) =>
+                  db.update(SessionTable)
+                    .set({ workspace_id: workspace!.id })
+                    .where(eq(SessionTable.id, session.id))
+                    .run(),
+                )
+              } catch { /* best-effort */ }
+            }
             log.info("created worktree for background task", {
               sessionID: session.id,
               worktree: workspace.directory,
@@ -211,46 +213,61 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           return SessionPrompt.prompt(promptInput)
         }
 
-        // Fire and forget
+        // Fire and forget with proper error boundary
         runPrompt()
           .then(async (result) => {
-            const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-            await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
-            await Bus.publish(SessionStatus.Event.TaskCompleted, {
-              sessionID: session.id,
-              parentID: ctx.sessionID,
-              result: text.slice(0, 500),
-            })
-            // Auto-cleanup worktree if no changes were made
-            if (workspace) {
-              try {
-                const summary = await Session.get(session.id).then((s) => s.summary)
-                const hasChanges = summary && (summary.additions > 0 || summary.deletions > 0)
-                if (!hasChanges) {
-                  await Workspace.remove(workspace.id)
-                  log.info("auto-cleaned empty worktree", { sessionID: session.id, workspaceID: workspace.id })
-                } else {
-                  log.info("worktree retained with changes", {
-                    sessionID: session.id,
-                    workspaceID: workspace.id,
-                    additions: summary?.additions,
-                    deletions: summary?.deletions,
-                  })
+            try {
+              const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+              await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
+              await Bus.publish(SessionStatus.Event.TaskCompleted, {
+                sessionID: session.id,
+                parentID: ctx.sessionID,
+                result: text.slice(0, 500),
+              })
+              // Auto-cleanup worktree if no changes were made
+              if (workspace) {
+                try {
+                  const summary = await Session.get(session.id).then((s) => s.summary)
+                  const hasChanges = summary && (summary.additions > 0 || summary.deletions > 0)
+                  if (!hasChanges) {
+                    await Workspace.remove(workspace.id)
+                    log.info("auto-cleaned empty worktree", { sessionID: session.id, workspaceID: workspace.id })
+                  } else {
+                    log.info("worktree retained with changes", {
+                      sessionID: session.id,
+                      workspaceID: workspace.id,
+                      additions: summary?.additions,
+                      deletions: summary?.deletions,
+                    })
+                  }
+                } catch (cleanupErr) {
+                  log.warn("failed to cleanup worktree", { sessionID: session.id, error: cleanupErr })
                 }
-              } catch (cleanupErr) {
-                log.warn("failed to cleanup worktree", { sessionID: session.id, error: cleanupErr })
               }
+            } catch (innerErr) {
+              const errorMsg = innerErr instanceof Error ? innerErr.message : String(innerErr)
+              await SessionStatus.set(session.id, { type: "failed", error: errorMsg }).catch(() => {})
+              await Bus.publish(SessionStatus.Event.TaskFailed, {
+                sessionID: session.id,
+                parentID: ctx.sessionID,
+                error: errorMsg,
+              }).catch(() => {})
+              log.error("background task completion handler failed", { sessionID: session.id, error: errorMsg })
             }
           })
           .catch(async (err) => {
-            const errorMsg = err instanceof Error ? err.message : String(err)
-            await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
-            await Bus.publish(SessionStatus.Event.TaskFailed, {
-              sessionID: session.id,
-              parentID: ctx.sessionID,
-              error: errorMsg,
-            })
-            log.error("background task failed", { sessionID: session.id, error: errorMsg })
+            try {
+              const errorMsg = err instanceof Error ? err.message : String(err)
+              await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
+              await Bus.publish(SessionStatus.Event.TaskFailed, {
+                sessionID: session.id,
+                parentID: ctx.sessionID,
+                error: errorMsg,
+              })
+              log.error("background task failed", { sessionID: session.id, error: errorMsg })
+            } catch (catchErr) {
+              log.error("background task error handler failed", { sessionID: session.id, error: catchErr })
+            }
           })
 
         return {

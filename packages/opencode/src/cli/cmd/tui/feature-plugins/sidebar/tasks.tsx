@@ -52,10 +52,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     return found
   })
 
-  // Show only active (non-idle, non-completed) background tasks
-  const activeTasks = createMemo(() =>
-    tasks().filter((t) => t.status !== "idle" && t.status !== "completed"),
-  )
+  // Show only active tasks (exclude terminal states)
+  const activeTasks = createMemo(() => {
+    const activeStates = new Set(["queued", "busy", "blocked", "awaiting_input", "retry"])
+    return tasks().filter((t) => activeStates.has(t.status))
+  })
 
   return (
     <Show when={activeTasks().length > 0}>

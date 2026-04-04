@@ -220,9 +220,10 @@ export const TeamTool = Tool.define("team", async (ctx) => {
             : taskDef.prompt
 
           const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+          if (msg.info.role !== "assistant") throw new Error("Team tool must be called from an assistant message")
           const model = agent.model ?? {
-            modelID: (msg.info as any).modelID,
-            providerID: (msg.info as any).providerID,
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
           }
 
           const messageID = MessageID.ascending()
@@ -256,30 +257,42 @@ export const TeamTool = Tool.define("team", async (ctx) => {
 
           const taskPromise = runPrompt()
             .then(async (result) => {
-              const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-              taskEntry.status = "completed"
-              taskEntry.result = text.slice(0, 500)
-              taskEntry.cost = await getSessionCost(session.id)
-              await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
+              try {
+                const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+                taskEntry.status = "completed"
+                taskEntry.result = text.slice(0, 500)
+                taskEntry.cost = await getSessionCost(session.id)
+                await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
 
-              // Auto-cleanup worktree if no changes
-              if (workspace) {
-                try {
-                  const s = await Session.get(session.id)
-                  const hasChanges = s.summary && (s.summary.additions > 0 || s.summary.deletions > 0)
-                  if (!hasChanges) {
-                    await Workspace.remove(workspace.id)
-                  }
-                } catch { /* ignore cleanup errors */ }
+                // Auto-cleanup worktree if no changes
+                if (workspace) {
+                  try {
+                    const s = await Session.get(session.id)
+                    const hasChanges = s.summary && (s.summary.additions > 0 || s.summary.deletions > 0)
+                    if (!hasChanges) {
+                      await Workspace.remove(workspace.id)
+                    }
+                  } catch { /* ignore cleanup errors */ }
+                }
+              } catch (innerErr) {
+                const errorMsg = innerErr instanceof Error ? innerErr.message : String(innerErr)
+                taskEntry.status = "failed"
+                taskEntry.result = errorMsg
+                await SessionStatus.set(session.id, { type: "failed", error: errorMsg }).catch(() => {})
+                log.error("team member completion handler failed", { sessionID: session.id, error: errorMsg })
               }
             })
             .catch(async (err) => {
-              const errorMsg = err instanceof Error ? err.message : String(err)
-              taskEntry.status = "failed"
-              taskEntry.result = errorMsg
-              taskEntry.cost = await getSessionCost(session.id).catch(() => 0)
-              await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
-              log.error("team member failed", { sessionID: session.id, error: errorMsg })
+              try {
+                const errorMsg = err instanceof Error ? err.message : String(err)
+                taskEntry.status = "failed"
+                taskEntry.result = errorMsg
+                taskEntry.cost = await getSessionCost(session.id).catch(() => 0)
+                await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
+                log.error("team member failed", { sessionID: session.id, error: errorMsg })
+              } catch (catchErr) {
+                log.error("team member error handler failed", { sessionID: session.id, error: catchErr })
+              }
             })
 
           wavePromises.push(taskPromise)

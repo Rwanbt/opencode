@@ -283,25 +283,33 @@ export const TaskRoutes = lazy(() =>
           parts,
         })
           .then(async () => {
-            await SessionStatus.set(id, { type: "completed" })
-            if (session.parentID) {
-              await Bus.publish(SessionStatus.Event.TaskCompleted, {
-                sessionID: id,
-                parentID: session.parentID,
-              })
+            try {
+              await SessionStatus.set(id, { type: "completed" })
+              if (session.parentID) {
+                await Bus.publish(SessionStatus.Event.TaskCompleted, {
+                  sessionID: id,
+                  parentID: session.parentID,
+                })
+              }
+            } catch (innerErr) {
+              log.error("task resume completion handler failed", { sessionID: id, error: innerErr })
             }
           })
           .catch(async (err) => {
-            const errorMsg = err instanceof Error ? err.message : String(err)
-            await SessionStatus.set(id, { type: "failed", error: errorMsg })
-            if (session.parentID) {
-              await Bus.publish(SessionStatus.Event.TaskFailed, {
-                sessionID: id,
-                parentID: session.parentID,
-                error: errorMsg,
-              })
+            try {
+              const errorMsg = err instanceof Error ? err.message : String(err)
+              await SessionStatus.set(id, { type: "failed", error: errorMsg })
+              if (session.parentID) {
+                await Bus.publish(SessionStatus.Event.TaskFailed, {
+                  sessionID: id,
+                  parentID: session.parentID,
+                  error: errorMsg,
+                })
+              }
+              log.error("task resume failed", { sessionID: id, error: errorMsg })
+            } catch (catchErr) {
+              log.error("task resume error handler failed", { sessionID: id, error: catchErr })
             }
-            log.error("task resume failed", { sessionID: id, error: errorMsg })
           })
 
         return c.json(true)
@@ -357,25 +365,33 @@ export const TaskRoutes = lazy(() =>
           parts,
         })
           .then(async () => {
-            await SessionStatus.set(id, { type: "completed" })
-            if (session.parentID) {
-              await Bus.publish(SessionStatus.Event.TaskCompleted, {
-                sessionID: id,
-                parentID: session.parentID,
-              })
+            try {
+              await SessionStatus.set(id, { type: "completed" })
+              if (session.parentID) {
+                await Bus.publish(SessionStatus.Event.TaskCompleted, {
+                  sessionID: id,
+                  parentID: session.parentID,
+                })
+              }
+            } catch (innerErr) {
+              log.error("task followup completion handler failed", { sessionID: id, error: innerErr })
             }
           })
           .catch(async (err) => {
-            const errorMsg = err instanceof Error ? err.message : String(err)
-            await SessionStatus.set(id, { type: "failed", error: errorMsg })
-            if (session.parentID) {
-              await Bus.publish(SessionStatus.Event.TaskFailed, {
-                sessionID: id,
-                parentID: session.parentID,
-                error: errorMsg,
-              })
+            try {
+              const errorMsg = err instanceof Error ? err.message : String(err)
+              await SessionStatus.set(id, { type: "failed", error: errorMsg })
+              if (session.parentID) {
+                await Bus.publish(SessionStatus.Event.TaskFailed, {
+                  sessionID: id,
+                  parentID: session.parentID,
+                  error: errorMsg,
+                })
+              }
+              log.error("task followup failed", { sessionID: id, error: errorMsg })
+            } catch (catchErr) {
+              log.error("task followup error handler failed", { sessionID: id, error: catchErr })
             }
-            log.error("task followup failed", { sessionID: id, error: errorMsg })
           })
 
         return c.json(true)
