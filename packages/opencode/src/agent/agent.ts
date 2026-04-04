@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_ORCHESTRATOR from "./prompt/orchestrator.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -190,6 +191,32 @@ export namespace Agent {
               options: {},
               mode: "subagent",
               native: true,
+            },
+            orchestrator: {
+              name: "orchestrator",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  task: "allow",
+                  team: "allow",
+                  read: "allow",
+                  grep: "allow",
+                  glob: "allow",
+                  list: "allow",
+                  websearch: "allow",
+                  webfetch: "allow",
+                  question: "allow",
+                }),
+                user,
+              ),
+              description:
+                "Orchestration agent that coordinates multiple sub-agents to accomplish complex tasks. Use this when a task requires parallel research, implementation, and verification by different specialized agents.",
+              prompt: PROMPT_ORCHESTRATOR,
+              options: {},
+              mode: "subagent",
+              native: true,
+              steps: 50,
             },
             compaction: {
               name: "compaction",

@@ -139,6 +139,21 @@ export namespace SessionStatus {
         question: z.string(),
       }),
     ),
+    TeamCompleted: BusEvent.define(
+      "team.completed",
+      z.object({
+        sessionID: SessionID.zod,
+        tasks: z.array(
+          z.object({
+            sessionID: SessionID.zod,
+            status: z.string(),
+            description: z.string(),
+            result: z.string().optional(),
+          }),
+        ),
+        totalCost: z.number(),
+      }),
+    ),
   }
 
   /** Persist status to DB for states that should survive restarts. */

@@ -27,6 +27,7 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { TeamTool } from "./team"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -144,6 +145,7 @@ export namespace ToolRegistry {
       const edit = yield* build(EditTool)
       const write = yield* build(WriteTool)
       const task = yield* build(TaskTool)
+      const team = yield* build(TeamTool)
       const fetch = yield* build(WebFetchTool)
       const todo = yield* build(TodoWriteTool)
       const search = yield* build(WebSearchTool)
@@ -168,6 +170,7 @@ export namespace ToolRegistry {
           edit,
           write,
           task,
+          team,
           fetch,
           todo,
           search,
