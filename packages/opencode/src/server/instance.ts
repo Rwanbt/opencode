@@ -26,6 +26,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { TaskRoutes } from "./routes/task"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -49,6 +50,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
+    .route("/task", TaskRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())

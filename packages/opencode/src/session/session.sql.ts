@@ -21,6 +21,7 @@ export const SessionTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceID>(),
     parent_id: text().$type<SessionID>(),
+    status: text().$type<"idle" | "busy" | "retry" | "queued" | "blocked" | "awaiting_input" | "completed" | "failed" | "cancelled">().default("idle"),
     slug: text().notNull(),
     directory: text().notNull(),
     title: text().notNull(),

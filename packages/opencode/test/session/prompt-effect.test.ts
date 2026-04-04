@@ -96,6 +96,7 @@ const mcp = Layer.succeed(
     status: () => Effect.succeed({}),
     clients: () => Effect.succeed({}),
     tools: () => Effect.succeed({}),
+    toolsForAgent: () => Effect.succeed({}),
     prompts: () => Effect.succeed({}),
     resources: () => Effect.succeed({}),
     add: () => Effect.succeed({ status: { status: "disabled" as const } }),
@@ -639,6 +640,7 @@ it.live(
               subagent_type: z.string(),
               task_id: z.string().optional(),
               command: z.string().optional(),
+              mode: z.enum(["foreground", "background"]).default("foreground").optional(),
             }),
             execute: async (_args, ctx) => {
               ready.resolve()
@@ -649,6 +651,7 @@ it.live(
                 metadata: {
                   sessionId: SessionID.make("task"),
                   model: ref,
+                  mode: "foreground" as string,
                 },
                 output: "",
               }

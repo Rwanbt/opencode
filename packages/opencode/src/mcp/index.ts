@@ -212,10 +212,16 @@ export namespace MCP {
     defs: Record<string, MCPToolDef[]>
   }
 
+  export interface McpScope {
+    allow?: string[]
+    deny?: string[]
+  }
+
   export interface Interface {
     readonly status: () => Effect.Effect<Record<string, Status>>
     readonly clients: () => Effect.Effect<Record<string, MCPClient>>
     readonly tools: () => Effect.Effect<Record<string, Tool>>
+    readonly toolsForAgent: (scope?: McpScope) => Effect.Effect<Record<string, Tool>>
     readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
     readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
     readonly add: (name: string, mcp: Config.Mcp) => Effect.Effect<{ status: Record<string, Status> | Status }>
@@ -643,6 +649,44 @@ export namespace MCP {
         return result
       })
 
+      const toolsForAgent = Effect.fn("MCP.toolsForAgent")(function* (scope?: McpScope) {
+        const allTools = yield* tools()
+        if (!scope) return allTools
+        if (!scope.allow && !scope.deny) return allTools
+
+        const s = yield* InstanceState.get(state)
+        const connectedNames = Object.keys(s.clients).filter(
+          (name) => s.status[name]?.status === "connected",
+        )
+
+        // Build a set of allowed server names
+        let allowedServers: Set<string>
+        if (scope.allow) {
+          allowedServers = new Set(scope.allow)
+        } else {
+          allowedServers = new Set(connectedNames)
+        }
+        if (scope.deny) {
+          for (const denied of scope.deny) {
+            allowedServers.delete(denied)
+          }
+        }
+
+        // Filter tools by their server name prefix
+        const filtered: Record<string, Tool> = {}
+        for (const [key, tool] of Object.entries(allTools)) {
+          // Tool keys are sanitize(clientName) + "_" + sanitize(toolName)
+          // Check if any allowed server's sanitized name is a prefix
+          const isAllowed = connectedNames.some(
+            (serverName) => allowedServers.has(serverName) && key.startsWith(sanitize(serverName) + "_"),
+          )
+          if (isAllowed) {
+            filtered[key] = tool
+          }
+        }
+        return filtered
+      })
+
       function collectFromConnected<T extends { name: string }>(
         s: State,
         listFn: (c: Client) => Promise<T[]>,
@@ -853,6 +897,7 @@ export namespace MCP {
         status,
         clients,
         tools,
+        toolsForAgent,
         prompts,
         resources,
         add,
@@ -890,6 +935,8 @@ export namespace MCP {
   export const status = async () => runPromise((svc) => svc.status())
 
   export const tools = async () => runPromise((svc) => svc.tools())
+
+  export const toolsForAgent = async (scope?: McpScope) => runPromise((svc) => svc.toolsForAgent(scope))
 
   export const prompts = async () => runPromise((svc) => svc.prompts())
 
