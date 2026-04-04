@@ -3,8 +3,13 @@ import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { SessionID } from "./schema"
+import { SessionTable } from "./session.sql"
+import { Database, eq } from "../storage/db"
 import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "session-status" })
 
 export namespace SessionStatus {
   export const TaskStatus = z.enum([
@@ -19,6 +24,16 @@ export namespace SessionStatus {
     "cancelled",
   ])
   export type TaskStatus = z.infer<typeof TaskStatus>
+
+  /** States that should be persisted to DB (survive restarts). */
+  const PERSISTENT_STATES = new Set<string>([
+    "queued",
+    "blocked",
+    "awaiting_input",
+    "completed",
+    "failed",
+    "cancelled",
+  ])
 
   export const Info = z
     .union([
@@ -116,6 +131,50 @@ export namespace SessionStatus {
         reason: z.string().optional(),
       }),
     ),
+    TaskInputNeeded: BusEvent.define(
+      "task.input_needed",
+      z.object({
+        sessionID: SessionID.zod,
+        parentID: SessionID.zod,
+        question: z.string(),
+      }),
+    ),
+  }
+
+  /** Persist status to DB for states that should survive restarts. */
+  function persistToDb(sessionID: SessionID, status: Info) {
+    if (PERSISTENT_STATES.has(status.type)) {
+      try {
+        Database.use((db) =>
+          db
+            .update(SessionTable)
+            .set({ status: status.type })
+            .where(eq(SessionTable.id, sessionID))
+            .run(),
+        )
+      } catch (err) {
+        log.warn("failed to persist task status to db", { sessionID, status: status.type, error: err })
+      }
+    }
+  }
+
+  /** Read persisted status from DB for a session. */
+  function readFromDb(sessionID: SessionID): Info | undefined {
+    try {
+      const row = Database.use((db) =>
+        db
+          .select({ status: SessionTable.status })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get(),
+      )
+      if (row?.status && PERSISTENT_STATES.has(row.status)) {
+        return { type: row.status } as Info
+      }
+    } catch {
+      // DB not available yet or session doesn't exist
+    }
+    return undefined
   }
 
   export interface Interface {
@@ -137,7 +196,15 @@ export namespace SessionStatus {
 
       const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
         const data = yield* InstanceState.get(state)
-        return data.get(sessionID) ?? { type: "idle" as const }
+        const memStatus = data.get(sessionID)
+        if (memStatus) return memStatus
+        // Fallback to DB for persistent states (e.g. after restart)
+        const dbStatus = readFromDb(sessionID)
+        if (dbStatus) {
+          data.set(sessionID, dbStatus)
+          return dbStatus
+        }
+        return { type: "idle" as const }
       })
 
       const list = Effect.fn("SessionStatus.list")(function* () {
@@ -150,9 +217,11 @@ export namespace SessionStatus {
         if (status.type === "idle") {
           yield* bus.publish(Event.Idle, { sessionID })
           data.delete(sessionID)
+          persistToDb(sessionID, status)
           return
         }
         data.set(sessionID, status)
+        persistToDb(sessionID, status)
       })
 
       return Service.of({ get, list, set })

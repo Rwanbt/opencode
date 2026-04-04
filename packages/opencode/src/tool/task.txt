@@ -23,6 +23,13 @@ Usage notes:
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 
+Background mode:
+- Set mode to "background" to launch a task asynchronously without blocking. The task_id is returned immediately.
+- Background tasks run independently. Their status can be checked via the task API (GET /task/:id).
+- Use mode "foreground" (default) when you need the result before continuing.
+- Background tasks publish lifecycle events: task.created, task.completed, task.failed, task.cancelled, task.blocked.
+- The task status survives server restarts for persistent states (queued, completed, failed, etc.).
+
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
 <example_agent_descriptions>
