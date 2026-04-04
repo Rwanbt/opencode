@@ -30,6 +30,14 @@ Background mode:
 - Background tasks publish lifecycle events: task.created, task.completed, task.failed, task.cancelled, task.blocked.
 - The task status survives server restarts for persistent states (queued, completed, failed, etc.).
 
+Worktree isolation:
+- Background tasks in git repos automatically run in an isolated worktree (separate branch and directory).
+- This prevents file conflicts between the parent session and background tasks.
+- If the task makes no file changes, the worktree is automatically cleaned up on completion.
+- If the task makes changes, the worktree is retained so the user can review and merge the diff.
+- Worktree info (directory, branch) is returned in the task metadata.
+- Non-git projects fall back to running in the main directory without isolation.
+
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
 <example_agent_descriptions>
