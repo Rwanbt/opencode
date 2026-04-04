@@ -426,5 +426,89 @@ export const TaskRoutes = lazy(() =>
           messages,
         })
       },
+    )
+    .get(
+      "/:id/team",
+      describeRoute({
+        summary: "Get team view",
+        description:
+          "Get an aggregated view of a task and all its child tasks (team members), including cost, status, and file changes for each.",
+        operationId: "task.team",
+        responses: {
+          200: {
+            description: "Team view",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    session: Session.Info,
+                    members: z.array(
+                      z.object({
+                        session: Session.Info,
+                        status: SessionStatus.Info,
+                        cost: z.number(),
+                        worktree: WorktreeInfo,
+                      }),
+                    ),
+                    totalCost: z.number(),
+                    totalAdditions: z.number(),
+                    totalDeletions: z.number(),
+                    totalFiles: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          id: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const id = c.req.valid("param").id
+        const session = await Session.get(id)
+        const children = await Session.children(id)
+
+        let totalCost = 0
+        let totalAdditions = 0
+        let totalDeletions = 0
+        const allFiles = new Set<string>()
+
+        const members = await Promise.all(
+          children.map(async (child) => {
+            const status = await SessionStatus.get(child.id)
+            const worktree = await getWorktreeInfo(child)
+
+            // Calculate cost from messages
+            const messages = await Session.messages({ sessionID: child.id })
+            const cost = messages.reduce((sum, msg) => {
+              if (msg.info.role === "assistant") return sum + ((msg.info as any).cost ?? 0)
+              return sum
+            }, 0)
+            totalCost += cost
+
+            if (child.summary) {
+              totalAdditions += child.summary.additions
+              totalDeletions += child.summary.deletions
+              child.summary.diffs?.forEach((d) => allFiles.add(d.file))
+            }
+
+            return { session: child, status, cost, worktree }
+          }),
+        )
+
+        return c.json({
+          session,
+          members,
+          totalCost,
+          totalAdditions,
+          totalDeletions,
+          totalFiles: allFiles.size,
+        })
+      },
     ),
 )
