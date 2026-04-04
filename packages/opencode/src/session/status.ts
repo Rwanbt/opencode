@@ -158,18 +158,18 @@ export namespace SessionStatus {
 
   /** Persist status to DB for states that should survive restarts. */
   function persistToDb(sessionID: SessionID, status: Info) {
-    if (PERSISTENT_STATES.has(status.type)) {
-      try {
-        Database.use((db) =>
-          db
-            .update(SessionTable)
-            .set({ status: status.type })
-            .where(eq(SessionTable.id, sessionID))
-            .run(),
-        )
-      } catch (err) {
-        log.warn("failed to persist task status to db", { sessionID, status: status.type, error: err })
-      }
+    if (!PERSISTENT_STATES.has(status.type)) return
+    try {
+      // Database.use may throw if no Instance context is available (e.g. in tests)
+      Database.use((db) =>
+        db
+          .update(SessionTable)
+          .set({ status: status.type })
+          .where(eq(SessionTable.id, sessionID))
+          .run(),
+      )
+    } catch {
+      // Silently ignore - DB persistence is best-effort
     }
   }
 
@@ -187,7 +187,7 @@ export namespace SessionStatus {
         return { type: row.status } as Info
       }
     } catch {
-      // DB not available yet or session doesn't exist
+      // Silently ignore - DB may not be available (tests, no Instance context)
     }
     return undefined
   }

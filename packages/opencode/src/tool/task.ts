@@ -303,13 +303,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-        // Publish completion event
-        await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
+        // Publish completion event (best-effort, don't block on failure)
+        await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) }).catch(() => {})
         await Bus.publish(SessionStatus.Event.TaskCompleted, {
           sessionID: session.id,
           parentID: ctx.sessionID,
           result: text.slice(0, 500),
-        })
+        }).catch(() => {})
 
         const output = [
           `task_id: ${session.id} (for resuming to continue this task if needed)`,
@@ -333,12 +333,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err)
-        await SessionStatus.set(session.id, { type: "failed", error: errorMsg })
+        await SessionStatus.set(session.id, { type: "failed", error: errorMsg }).catch(() => {})
         await Bus.publish(SessionStatus.Event.TaskFailed, {
           sessionID: session.id,
           parentID: ctx.sessionID,
           error: errorMsg,
-        })
+        }).catch(() => {})
         throw err
       }
     },
