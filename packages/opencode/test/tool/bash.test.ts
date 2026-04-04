@@ -67,8 +67,8 @@ const forms = (dir: string) => {
   if (process.platform !== "win32") return [dir]
   const full = Filesystem.normalizePath(dir)
   const slash = full.replaceAll("\\", "/")
-  const root = slash.replace(/^[A-Za-z]:/, "")
-  return Array.from(new Set([full, slash, root, root.toLowerCase()]))
+  const msys = slash.replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`)
+  return Array.from(new Set([full, slash, msys, msys.toLowerCase()]))
 }
 
 const withShell = (item: { label: string; shell: string }, fn: () => Promise<void>) => async () => {

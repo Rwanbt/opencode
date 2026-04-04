@@ -4,7 +4,14 @@ import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
-import { afterAll } from "bun:test"
+import { afterAll, afterEach } from "bun:test"
+
+// Allow pending LSP/jsonrpc stream writes to flush between tests.
+// Without this, Instance.disposeAll() in individual test files can destroy
+// streams while queued writes are still in-flight, causing ERR_STREAM_DESTROYED.
+afterEach(async () => {
+  await sleep(10)
+})
 
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)

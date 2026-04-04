@@ -19,7 +19,11 @@ import { testEffect } from "../lib/effect"
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  // Allow pending LSP stream writes to flush before destroying streams.
+  // Without this, Instance.disposeAll() can destroy LSP jsonrpc streams
+  // while queued writes are still in-flight, causing ERR_STREAM_DESTROYED.
+  await Bun.sleep(50)
+  await Instance.disposeAll().catch(() => {})
 })
 
 const ctx = {
@@ -147,7 +151,7 @@ describe("tool.read external_directory permission", () => {
         const { items, next } = asks()
         const target = path.join(dir, "test.txt")
         const alt = target
-          .replace(/^[A-Za-z]:/, "")
+          .replace(/^([A-Za-z]):/, (_, d: string) => `/${d.toLowerCase()}`)
           .replaceAll("\\", "/")
           .toLowerCase()
 

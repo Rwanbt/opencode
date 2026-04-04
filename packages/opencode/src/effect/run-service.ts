@@ -22,8 +22,7 @@ export function makeRuntime<I, S, E>(
   options?: { memoMap?: Layer.MemoMap },
 ) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const effectiveMemoMap = options?.memoMap ?? memoMap
-  const getRuntime = () => (rt ??= ManagedRuntime.make(layer, { memoMap: effectiveMemoMap }))
+  const getRuntime = () => (rt ??= ManagedRuntime.make(layer, { memoMap: options?.memoMap ?? memoMap }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),
