@@ -16,9 +16,14 @@ function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>
   return effect
 }
 
-export function makeRuntime<I, S, E>(service: ServiceMap.Service<I, S>, layer: Layer.Layer<I, E>) {
+export function makeRuntime<I, S, E>(
+  service: ServiceMap.Service<I, S>,
+  layer: Layer.Layer<I, E>,
+  options?: { memoMap?: Layer.MemoMap },
+) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const getRuntime = () => (rt ??= ManagedRuntime.make(layer, { memoMap }))
+  const effectiveMemoMap = options?.memoMap ?? memoMap
+  const getRuntime = () => (rt ??= ManagedRuntime.make(layer, { memoMap: effectiveMemoMap }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),

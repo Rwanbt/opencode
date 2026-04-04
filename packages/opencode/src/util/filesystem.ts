@@ -163,7 +163,11 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const rel = relative(parent, child)
+    // On Windows, path.relative returns an absolute path (e.g. "D:\foo") when
+    // paths are on different drives. Such paths can never be contained.
+    if (win32 && /^[A-Za-z]:/.test(rel)) return false
+    return !rel.startsWith("..")
   }
 
   export async function findUp(

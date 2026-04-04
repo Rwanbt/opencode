@@ -100,10 +100,12 @@ export const Instance = {
    */
   containsPath(filepath: string) {
     if (Filesystem.contains(Instance.directory, filepath)) return true
+    const wt = Instance.worktree
     // Non-git projects set worktree to "/" which would match ANY absolute path.
-    // Skip worktree check in this case to preserve external_directory permissions.
-    if (Instance.worktree === "/") return false
-    return Filesystem.contains(Instance.worktree, filepath)
+    // On Windows "/" resolves to the drive root (e.g. "D:\"), so also check for
+    // single-character or drive-root patterns.
+    if (wt === "/" || wt === "\\" || /^[A-Z]:[/\\]?$/i.test(wt)) return false
+    return Filesystem.contains(wt, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that

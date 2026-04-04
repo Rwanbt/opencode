@@ -1457,6 +1457,16 @@ export namespace Config {
             result.permission = mergeDeep(perms, result.permission ?? {})
           }
 
+          // Migrate deprecated `mode` field to `agent`
+          if (result.mode) {
+            result.agent = mergeDeep(result.agent ?? {}, result.mode)
+            for (const [key, value] of Object.entries(result.mode)) {
+              if (result.agent![key] && !(result.agent![key] as any).mode) {
+                ;(result.agent![key] as any).mode = "primary"
+              }
+            }
+          }
+
           if (!result.username) result.username = os.userInfo().username
 
           if (result.autoshare === true && !result.share) {
