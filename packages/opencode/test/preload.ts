@@ -8,9 +8,15 @@ import { afterAll, afterEach } from "bun:test"
 
 // Suppress LSP stream errors during test cleanup globally.
 // vscode-jsonrpc can attempt writes after Instance.disposeAll() destroys
-// the underlying streams, producing unhandled rejections that fail random tests.
+// the underlying streams, producing unhandled errors that fail random tests.
 globalThis.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
   if (event.reason?.code === "ERR_STREAM_DESTROYED") event.preventDefault()
+})
+// Also catch synchronous throws from destroyed streams (bun reports these
+// as "Unhandled error between tests" and sets exit code 1)
+process.on("uncaughtException", (err: Error & { code?: string }) => {
+  if (err?.code === "ERR_STREAM_DESTROYED") return // swallow
+  throw err // re-throw all other errors
 })
 
 // Allow pending LSP/jsonrpc stream writes to flush between tests.
