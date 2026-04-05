@@ -35,6 +35,7 @@ const parameters = z.object({
   budget: z
     .object({
       max_cost: z.number().optional().describe("Maximum total cost in dollars"),
+      max_tokens: z.number().int().optional().describe("Maximum total tokens (input + output) across all tasks"),
       max_agents: z
         .number()
         .int()
@@ -93,6 +94,18 @@ async function getSessionCost(sessionID: SessionID): Promise<number> {
   }, 0)
 }
 
+/** Get total tokens (input + output) of a session's messages. */
+async function getSessionTokens(sessionID: SessionID): Promise<number> {
+  const messages = await Session.messages({ sessionID })
+  return messages.reduce((sum, msg) => {
+    if (msg.info.role === "assistant") {
+      const t = (msg.info as any).tokens
+      if (t) return sum + (t.input || 0) + (t.output || 0) + (t.reasoning || 0)
+    }
+    return sum
+  }, 0)
+}
+
 export const TeamTool = Tool.define("team", async (ctx) => {
   return {
     description: [
@@ -106,6 +119,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
       const config = await Config.get()
       const maxParallel = params.budget?.max_agents ?? MAX_TEAM_TASKS
       const maxCost = params.budget?.max_cost
+      const maxTokens = params.budget?.max_tokens
 
       // Validate agents exist
       const agents = await Agent.list()
@@ -139,10 +153,12 @@ export const TeamTool = Tool.define("team", async (ctx) => {
         status: string
         result: string | undefined
         cost: number
+        tokens: number
       }
       const taskSessions: TaskRecord[] = []
 
       let totalCost = 0
+      let totalTokens = 0
 
       // Execute waves sequentially, tasks within each wave in parallel
       for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
@@ -150,7 +166,11 @@ export const TeamTool = Tool.define("team", async (ctx) => {
 
         // Budget check before starting wave
         if (maxCost && totalCost >= maxCost) {
-          log.warn("team budget exceeded, stopping", { totalCost, maxCost })
+          log.warn("team cost budget exceeded, stopping", { totalCost, maxCost })
+          break
+        }
+        if (maxTokens && totalTokens >= maxTokens) {
+          log.warn("team token budget exceeded, stopping", { totalTokens, maxTokens })
           break
         }
 
@@ -190,6 +210,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
             status: "queued",
             result: undefined,
             cost: 0,
+            tokens: 0,
           }
           taskSessions.push(taskEntry)
 
@@ -262,6 +283,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
                 taskEntry.status = "completed"
                 taskEntry.result = text.slice(0, 500)
                 taskEntry.cost = await getSessionCost(session.id)
+                taskEntry.tokens = await getSessionTokens(session.id)
                 await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
 
                 // Auto-cleanup worktree if no changes
@@ -301,8 +323,9 @@ export const TeamTool = Tool.define("team", async (ctx) => {
         // Wait for all tasks in this wave to complete
         await Promise.all(wavePromises)
 
-        // Update total cost
+        // Update totals
         totalCost = taskSessions.reduce((sum, t) => sum + t.cost, 0)
+        totalTokens = taskSessions.reduce((sum, t) => sum + t.tokens, 0)
 
         log.info("team wave completed", {
           wave: waveIdx,
@@ -334,7 +357,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
       const output = [
         `## Team Run: ${params.description}`,
         "",
-        `**${completed.length}/${taskSessions.length} tasks completed** | Total cost: $${totalCost.toFixed(4)}`,
+        `**${completed.length}/${taskSessions.length} tasks completed** | Total cost: $${totalCost.toFixed(4)} | Total tokens: ${totalTokens.toLocaleString()}`,
         "",
         ...taskSessions.map((t) => {
           const icon = t.status === "completed" ? "[OK]" : t.status === "failed" ? "[FAIL]" : "[?]"
@@ -355,6 +378,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
           completed: completed.length,
           failed: failed.length,
           totalCost,
+          totalTokens,
         },
         output,
       }

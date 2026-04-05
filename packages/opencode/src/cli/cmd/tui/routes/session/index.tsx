@@ -1316,6 +1316,13 @@ function UserMessage(props: {
   )
 }
 
+/** Format token count as compact string: 1234 → "1.2k", 56 → "56" */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M"
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k"
+  return String(n)
+}
+
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const ctx = use()
   const local = useLocal()
@@ -1398,6 +1405,27 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+              </Show>
+              <Show when={props.message.tokens.output > 0}>
+                <span style={{ fg: theme.textMuted }}>
+                  {" · "}
+                  {formatTokens(props.message.tokens.input)}in{" "}
+                  {formatTokens(props.message.tokens.output)}out
+                  {props.message.tokens.reasoning > 0
+                    ? ` ${formatTokens(props.message.tokens.reasoning)}reason`
+                    : ""}
+                  {props.message.tokens.cache.read > 0
+                    ? ` ${formatTokens(props.message.tokens.cache.read)}cache`
+                    : ""}
+                </span>
+                <Show when={props.message.cost > 0}>
+                  <span style={{ fg: theme.textMuted }}>
+                    {" · $"}
+                    {props.message.cost < 0.01
+                      ? props.message.cost.toFixed(4)
+                      : props.message.cost.toFixed(2)}
+                  </span>
+                </Show>
               </Show>
             </text>
           </box>
