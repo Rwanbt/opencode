@@ -13,6 +13,7 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
+import * as DLP from "../security/dlp"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
@@ -159,6 +160,10 @@ export namespace LLM {
             ),
             ...input.messages,
           ]
+
+    // DLP: scan and redact sensitive content before sending to LLM
+    const dlpResult = DLP.scanMessages(messages as any)
+    const safeMessages = dlpResult.messages as typeof messages
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -310,7 +315,7 @@ export namespace LLM {
         ...headers,
       },
       maxRetries: input.retries ?? 0,
-      messages,
+      messages: safeMessages,
       model: wrapLanguageModel({
         model: language,
         middleware: [

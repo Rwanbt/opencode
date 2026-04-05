@@ -1067,6 +1067,31 @@ export namespace Config {
             })
             .optional()
             .describe("RAG system for semantic code search and cross-session memory"),
+          dlp: z
+            .object({
+              enabled: z.boolean().default(false).describe("Enable DLP (Data Loss Prevention) to redact secrets before sending to LLM"),
+            })
+            .optional()
+            .describe("Data Loss Prevention - redacts secrets, keys, and tokens from content sent to LLM providers"),
+          policy: z
+            .object({
+              enabled: z.boolean().default(false).describe("Enable policy engine for conditional permission rules"),
+              protected_paths: z.array(z.string()).optional().describe("Paths that always require confirmation (e.g., ['/prod/', '/deploy/'])"),
+              max_edit_lines: z.number().int().optional().describe("Warn when edits exceed this many lines (default: 500)"),
+              rules: z
+                .array(
+                  z.object({
+                    name: z.string().describe("Policy rule name"),
+                    match: z.string().describe("Regex pattern to match against file paths or commands"),
+                    message: z.string().describe("Warning/block message"),
+                    action: z.enum(["block", "warn"]).describe("Action to take on match"),
+                  }),
+                )
+                .optional()
+                .describe("Custom policy rules"),
+            })
+            .optional()
+            .describe("Policy engine for conditional permission rules beyond allow/deny/ask"),
         })
         .optional(),
     })
