@@ -219,6 +219,60 @@ Pour éviter toute confusion liée aux résumés générés par IA de ce projet 
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
+---
+
+## Future Roadmap
+
+Three major initiatives are planned on dedicated feature branches. Each is designed to be modular — they can be developed independently and merged when ready.
+
+### 🤝 Collaborative Mode ()
+
+**Goal**: Multiple developers interacting with agents simultaneously in real-time.
+
+| Component | Description |
+|-----------|-------------|
+| Multi-user auth | JWT-based authentication on the Hono server, user sessions, role-based access |
+| WebSocket broadcast | Real-time event streaming to all connected clients (agent activity, file changes, task status) |
+| File concurrency | Lock-based or CRDT-based conflict resolution when multiple agents/users edit the same file |
+| Presence UI | See who is connected, what they're working on, which agents are assigned to whom |
+| Shared context | Cross-user session history, shared learnings, team-wide RAG index |
+
+**Scale**: ~3000+ LOC, major architectural change. Requires refactoring the server for multi-tenant support.
+
+### 📱 Mobile Version ()
+
+**Goal**: Run OpenCode as a native mobile app on Android and iOS, with full agent capabilities.
+
+| Component | Description |
+|-----------|-------------|
+| **Tauri 2.0 migration** | Leverage Tauri's mobile targets (Android/iOS) to package the existing SolidJS frontend as a native app |
+| **Runtime adaptation** | Bundle the TypeScript agent core with Vite for WebView execution; delegate performance-critical tasks to Tauri's Rust layer |
+| **isomorphic-git** | Replace system  calls with isomorphic-git for pure-JS git operations within the mobile sandbox |
+| **File system access** | Use  for sandboxed file access + Document Picker integration |
+| **Remote mode** | Connect to a desktop OpenCode instance over a secure tunnel (Tailscale/Cloudflare) for full capability without local execution |
+| **Mobile-optimized UI** | Conversational interface that hides terminal complexity; swipe-based diff review; virtual keyboard optimizations |
+
+**Platform comparison**:
+- **Android** (via Termux or Tauri): Full Node.js support, broad file access, excellent performance
+- **iOS** (via Tauri/a-Shell): Sandbox restrictions, limited native packages, but strong Apple Silicon performance for local models
+
+**Scale**: ~2000+ LOC for the Tauri mobile shell, ~500 LOC for isomorphic-git adapter, ~300 LOC for remote mode.
+
+### 🔗 AnythingLLM Fusion ()
+
+**Goal**: Merge OpenCode's agentic coding capabilities with [AnythingLLM](https://github.com/mintplex-labs/anything-llm)'s document RAG and multi-user chat platform.
+
+| Component | Description |
+|-----------|-------------|
+| **Context bridge** | Pipe AnythingLLM's indexed documents (PDFs, wikis, Confluence, etc.) into OpenCode's system prompt as additional context |
+| **Agent skill plugin** | Expose OpenCode's core commands (, , edit, bash) as an AnythingLLM Agent Skill via HTTP API |
+| **Unified vector store** | Merge OpenCode's SQLite RAG with AnythingLLM's vector DB backends (LanceDB, Pinecone, Chroma) for a single knowledge layer |
+| **Multi-user workspace** | Leverage AnythingLLM's existing multi-user and workspace management for team environments |
+| **Containerized deployment** | Docker Compose setup running both backends, with shared auth and a unified API gateway |
+
+**Synergy**: AnythingLLM excels at document ingestion and RAG over non-code content. OpenCode excels at code manipulation, agentic tool use, and multi-provider LLM orchestration. Combined, they create a full-stack AI development platform that can reason over documentation AND write/execute code.
+
+**Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
 
 ---
 
