@@ -238,9 +238,14 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
-        connection.end()
-        connection.dispose()
-        await Process.stop(input.server.process)
+        // Send shutdown request to LSP server before closing the connection
+        try { await withTimeout(connection.sendRequest("shutdown"), 2000) } catch {}
+        try { connection.sendNotification("exit") } catch {}
+        // Small delay to let the notification flush through the stream
+        await new Promise((r) => setTimeout(r, 50))
+        try { connection.end() } catch {}
+        try { connection.dispose() } catch {}
+        await Process.stop(input.server.process).catch(() => {})
         l.info("shutdown")
       },
     }
