@@ -43,6 +43,21 @@
 
 ---
 
+> **Thông báo fork** - Đây là một fork tùy chỉnh của [anomalyco/opencode](https://github.com/anomalyco/opencode) với các bổ sung sau:
+>
+> - **Tác vụ nền** - Ủy thác công việc cho các subagent chạy bất đồng bộ với `mode: "background"`
+> - **Nhóm agent** - Điều phối nhiều agent song song với thực thi DAG dựa trên sóng
+> - **Cách ly Git worktree** - Các tác vụ nền tự động chạy trong worktree được cách ly
+> - **API quản lý tác vụ** - REST API đầy đủ cho vòng đời tác vụ (hủy, tiếp tục, theo dõi, thăng cấp)
+> - **Bảng điều khiển tác vụ TUI** - Thanh bên hiển thị tác vụ đang hoạt động + hộp thoại với hành động hủy/tiếp tục
+> - **Phạm vi agent MCP** - Cho phép/từ chối máy chủ MCP theo từng agent qua cấu hình
+> - **Theo dõi trạng thái phiên** - Vòng đời 9 trạng thái lưu trữ trong DB (đang chờ, bận, hoàn thành, thất bại...)
+> - **Agent điều phối** - Agent chỉ đọc ủy thác cho các agent build thông qua công cụ task/team
+>
+> Được đồng bộ với upstream. Xem [nhánh dev](https://github.com/Rwanbt/opencode/tree/dev) để biết các thay đổi mới nhất.
+
+---
+
 ### Cài đặt
 
 ```bash

@@ -43,6 +43,21 @@
 
 ---
 
+> **Napomena o forku** - Ovo je prilagođeni fork projekta [anomalyco/opencode](https://github.com/anomalyco/opencode) sa sljedećim dodacima:
+>
+> - **Pozadinski zadaci** - Delegirajte posao podagentima koji rade asinhrono sa `mode: "background"`
+> - **Timovi agenata** - Orkestrirajte više agenata paralelno sa izvršavanjem DAG baziranim na valovima
+> - **Git worktree izolacija** - Pozadinski zadaci automatski rade u izoliranim worktree okruženjima
+> - **API za upravljanje zadacima** - Potpuni REST API za životni ciklus zadataka (otkaži, nastavi, prati, promoviši)
+> - **TUI panel zadataka** - Bočna traka koja prikazuje aktivne zadatke + dijalog sa akcijama otkaži/nastavi
+> - **MCP opseg agenata** - Dozvolite/zabranite MCP servere po agentu putem konfiguracije
+> - **Praćenje statusa sesije** - Životni ciklus sa 9 stanja pohranjen u DB (u redu, zauzet, završen, neuspješan...)
+> - **Orkestracioni agent** - Agent samo za čitanje koji delegira agentima za izgradnju putem task/team alata
+>
+> Sinhronizovano sa upstream-om. Pogledajte [dev granu](https://github.com/Rwanbt/opencode/tree/dev) za najnovije promjene.
+
+---
+
 ### Instalacija
 
 ```bash

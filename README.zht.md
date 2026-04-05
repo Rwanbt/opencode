@@ -43,6 +43,21 @@
 
 ---
 
+> **Fork 說明** - 這是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的自訂 fork，包含以下新增功能：
+>
+> - **背景任務** - 將工作委派給使用 `mode: "background"` 非同步執行的子代理
+> - **代理團隊** - 透過基於波次的 DAG 執行並行協調多個代理
+> - **Git worktree 隔離** - 背景任務自動在隔離的 worktree 中執行
+> - **任務管理 API** - 用於任務生命週期的完整 REST API（取消、恢復、追蹤、提升）
+> - **TUI 任務儀表板** - 顯示活動任務的側邊欄 + 帶有取消/恢復操作的對話框
+> - **MCP 代理範圍** - 透過設定按代理允許/拒絕 MCP 伺服器
+> - **工作階段狀態追蹤** - 持久化到 DB 的 9 狀態生命週期（排隊、忙碌、已完成、失敗...）
+> - **協調代理** - 透過 task/team 工具委派給建置代理的唯讀代理
+>
+> 與上游保持同步。查看 [dev 分支](https://github.com/Rwanbt/opencode/tree/dev) 了解最新變更。
+
+---
+
 ### 安裝
 
 ```bash
