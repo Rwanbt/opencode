@@ -43,6 +43,21 @@
 
 ---
 
+> **Fork bildirimi** - Bu, aşağıdaki eklemelerle [anomalyco/opencode](https://github.com/anomalyco/opencode) projesinin özel bir fork'udur:
+>
+> - **Arka plan görevleri** - `mode: "background"` ile asenkron çalışan alt ajanlarla iş devretme
+> - **Ajan takımları** - Dalga tabanlı DAG yürütmesiyle birden fazla ajanı paralel olarak orkestre etme
+> - **Git worktree izolasyonu** - Arka plan görevleri otomatik olarak izole worktree'lerde çalışır
+> - **Görev yönetimi API'si** - Görev yaşam döngüsü için tam REST API (iptal, devam, takip, terfi)
+> - **TUI görev paneli** - Aktif görevleri gösteren kenar çubuğu + iptal/devam eylemleri olan iletişim kutusu
+> - **MCP ajan kapsamı** - Yapılandırma aracılığıyla ajan başına MCP sunucularını izin ver/engelle
+> - **Oturum durumu takibi** - DB'de kalıcı 9 durumlu yaşam döngüsü (sırada, meşgul, tamamlandı, başarısız...)
+> - **Orkestratör ajanı** - task/team araçları aracılığıyla yapı ajanlarına delege eden salt okunur ajan
+>
+> Upstream ile senkronize tutulmaktadır. En son değişiklikler için [dev dalına](https://github.com/Rwanbt/opencode/tree/dev) bakın.
+
+---
+
 ### Kurulum
 
 ```bash

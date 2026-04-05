@@ -43,6 +43,21 @@
 
 ---
 
+> **Aviso de fork** - Este es un fork personalizado de [anomalyco/opencode](https://github.com/anomalyco/opencode) con las siguientes adiciones:
+>
+> - **Tareas en segundo plano** - Delegue trabajo a subagentes que se ejecutan de forma asíncrona con `mode: "background"`
+> - **Equipos de agentes** - Orqueste múltiples agentes en paralelo con ejecución DAG basada en oleadas
+> - **Aislamiento Git worktree** - Las tareas en segundo plano se ejecutan automáticamente en worktrees aislados
+> - **API de gestión de tareas** - API REST completa para el ciclo de vida de tareas (cancelar, reanudar, seguimiento, promover)
+> - **Panel de tareas TUI** - Barra lateral que muestra tareas activas + diálogo con acciones de cancelar/reanudar
+> - **Alcance MCP por agente** - Permitir/denegar servidores MCP por agente mediante configuración
+> - **Seguimiento de estado de sesión** - Ciclo de vida de 9 estados persistido en DB (en cola, ocupado, completado, fallido...)
+> - **Agente orquestador** - Agente de solo lectura que delega a agentes de build mediante herramientas task/team
+>
+> Mantenido sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/opencode/tree/dev) para los últimos cambios.
+
+---
+
 ### Instalación
 
 ```bash

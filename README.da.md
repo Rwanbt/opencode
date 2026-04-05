@@ -43,6 +43,21 @@
 
 ---
 
+> **Fork-bemærkning** - Dette er en tilpasset fork af [anomalyco/opencode](https://github.com/anomalyco/opencode) med følgende tilføjelser:
+>
+> - **Baggrundsopgaver** - Deleger arbejde til underagenter, der kører asynkront med `mode: "background"`
+> - **Agent-teams** - Orkestrer flere agenter parallelt med bølgebaseret DAG-eksekvering
+> - **Git worktree-isolation** - Baggrundsopgaver kører automatisk i isolerede worktrees
+> - **API til opgavestyring** - Fuld REST API til opgavelivscyklus (annuller, genoptag, opfølgning, forfrem)
+> - **TUI-opgavepanel** - Sidepanel med aktive opgaver + dialog med annuller/genoptag-handlinger
+> - **MCP-agentbegrænsning** - Tillad/afvis MCP-servere per agent via konfiguration
+> - **Sessionsstatus-sporing** - 9-tilstands livscyklus gemt i DB (i kø, optaget, fuldført, fejlet...)
+> - **Orkestreringsagent** - Skrivebeskyttet agent, der delegerer til byggeagenter via task/team-værktøjer
+>
+> Holdes synkroniseret med upstream. Se [dev-branch](https://github.com/Rwanbt/opencode/tree/dev) for seneste ændringer.
+
+---
+
 ### Installation
 
 ```bash
