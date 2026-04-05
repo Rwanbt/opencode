@@ -205,7 +205,7 @@ SDK เต็มรูปแบบ (`@opencode/plugin`) พร้อมสถา
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
-| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

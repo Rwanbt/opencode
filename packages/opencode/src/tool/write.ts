@@ -22,6 +22,7 @@ export const WriteTool = Tool.define("write", {
   parameters: z.object({
     content: z.string().describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
+    dry_run: z.boolean().optional().describe("Preview the write operation without modifying the file"),
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
@@ -32,6 +33,23 @@ export const WriteTool = Tool.define("write", {
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+
+    // Dry-run mode: return diff without writing
+    if (params.dry_run) {
+      const action = exists ? "Overwrite existing file" : "Create new file"
+      const lines = params.content.split("\n").length
+      const output = `## Dry Run Preview (write)\n\n**File**: ${filepath}\n**Action**: ${action} (${lines} lines)\n\n\`\`\`diff\n${diff}\n\`\`\``
+      return {
+        title: `[dry-run] Write ${path.basename(filepath)}`,
+        metadata: {
+          diagnostics: {} as Record<string, any>,
+          filepath,
+          exists,
+        },
+        output,
+      }
+    }
+
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
