@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { Broadcast } from "../broadcast"
 import { Presence } from "../presence"
 import { JwtAuth } from "../auth-jwt"
+import { FileLock } from "../../file/lock"
 import { Log } from "../../util/log"
 
 const log = Log.create({ service: "ws-event" })
@@ -86,6 +87,7 @@ export const WsEventHandlers = {
     }
     if (userID) {
       Presence.disconnect(userID)
+      FileLock.releaseAllForUser(userID)
       log.info("ws client disconnected", { userID })
     }
   },
