@@ -35,6 +35,8 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { SessionLearn } from "./learn"
+import { RAG } from "../rag"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -1498,13 +1500,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                const [skills, env, instructions, modelMsgs, ragContext] = yield* Effect.all([
                   Effect.promise(() => SystemPrompt.skills(agent)),
                   Effect.promise(() => SystemPrompt.environment(model)),
                   instruction.system().pipe(Effect.orDie),
                   Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                  Effect.promise(async () => {
+                    if (!RAG.isEnabled()) return undefined
+                    // Extract query from the last user message text
+                    const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+                    const queryText = lastUserMsg?.parts
+                      .filter((p): p is MessageV2.TextPart => p.type === "text")
+                      .map((p) => p.text)
+                      .join(" ")
+                    if (!queryText?.trim()) return undefined
+                    try {
+                      const results = await RAG.search(session.projectID, queryText)
+                      return RAG.formatContext(results)
+                    } catch {
+                      return undefined
+                    }
+                  }),
                 ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
+                const system = [...env, ...(skills ? [skills] : []), ...instructions, ...(ragContext ? [ragContext] : [])]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({
@@ -1561,6 +1579,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+
+          // Auto-learn: extract lessons from completed primary sessions
+          if (!session.parentID && lastUser) {
+            yield* SessionLearn.extract({
+              sessionID,
+              providerID: lastUser.model.providerID,
+              modelID: lastUser.model.modelID,
+              projectID: session.projectID,
+            }).pipe(Effect.ignore, Effect.forkIn(scope))
+          }
+
           return yield* lastAssistant(sessionID)
         },
       )

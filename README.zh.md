@@ -133,6 +133,9 @@
 | **general** | subagent | full (no todowrite) | 复杂的多步任务 |
 | **explore** | subagent | read-only | 快速代码库搜索 |
 | **orchestrator** | subagent | read-only + task/team | 多代理协调器（50 步） |
+| **critic** | subagent | read-only + bash + LSP | 代码审查：缺陷、安全、性能 |
+| **tester** | subagent | full (no todowrite) | 编写和运行测试，验证覆盖率 |
+| **documenter** | subagent | full (no todowrite) | JSDoc、README、内联文档 |
 | compaction | hidden | none | AI 驱动的上下文摘要 |
 | title | hidden | none | 会话标题生成 |
 | summary | hidden | none | 会话摘要 |
@@ -206,8 +209,11 @@ Model Context Protocol 客户端与服务器。支持 stdio、HTTP/SSE 和 Strea
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
+| Specialized agents | Implemented | critic, tester, documenter subagents |
+| Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

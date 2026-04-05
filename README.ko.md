@@ -133,6 +133,9 @@
 | **general** | subagent | full (no todowrite) | 복잡한 다단계 작업 |
 | **explore** | subagent | read-only | 빠른 코드베이스 검색 |
 | **orchestrator** | subagent | read-only + task/team | 다중 에이전트 코디네이터 (50단계) |
+| **critic** | subagent | read-only + bash + LSP | 코드 리뷰: 버그, 보안, 성능 |
+| **tester** | subagent | full (no todowrite) | 테스트 작성 및 실행, 커버리지 확인 |
+| **documenter** | subagent | full (no todowrite) | JSDoc, README, 인라인 문서화 |
 | compaction | hidden | none | AI 기반 컨텍스트 요약 |
 | title | hidden | none | 세션 제목 생성 |
 | summary | hidden | none | 세션 요약 |
@@ -206,8 +209,11 @@ hunk 검증이 포함된 unified diff 패치. 파일 전체 덮어쓰기가 아�
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
+| Specialized agents | Implemented | critic, tester, documenter subagents |
+| Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

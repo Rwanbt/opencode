@@ -1055,6 +1055,18 @@ export namespace Config {
             })
             .optional()
             .describe("Sandboxed execution environment for bash commands"),
+          rag: z
+            .object({
+              enabled: z.boolean().default(false).describe("Enable RAG (Retrieval-Augmented Generation) for semantic code search"),
+              provider: z.enum(["openai", "google"]).default("openai").describe("Embedding model provider"),
+              model: z.string().default("text-embedding-3-small").describe("Embedding model name"),
+              dimensions: z.number().int().default(1536).describe("Embedding vector dimensions"),
+              api_key: z.string().optional().describe("API key for embedding provider (falls back to provider's default key)"),
+              top_k: z.number().int().default(5).describe("Number of results to inject into context"),
+              auto_index: z.boolean().default(true).describe("Automatically index modified files"),
+            })
+            .optional()
+            .describe("RAG system for semantic code search and cross-session memory"),
         })
         .optional(),
     })

@@ -133,6 +133,9 @@ Agente coordinatore in sola lettura (massimo 50 passaggi). Ha accesso agli strum
 | **general** | subagent | full (no todowrite) | Attività complesse multi-step |
 | **explore** | subagent | read-only | Ricerca rapida nel codebase |
 | **orchestrator** | subagent | read-only + task/team | Coordinatore multi-agente (50 passaggi) |
+| **critic** | subagent | read-only + bash + LSP | Revisione codice: bug, sicurezza, prestazioni |
+| **tester** | subagent | full (no todowrite) | Scrivere ed eseguire test, verificare copertura |
+| **documenter** | subagent | full (no todowrite) | JSDoc, README, documentazione inline |
 | compaction | hidden | none | Riassunto del contesto guidato dall'IA |
 | title | hidden | none | Generazione del titolo della sessione |
 | summary | hidden | none | Riassunto della sessione |
@@ -206,8 +209,11 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
+| Specialized agents | Implemented | critic, tester, documenter subagents |
+| Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

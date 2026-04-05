@@ -131,6 +131,9 @@ Agent điều phối chỉ đọc (tối đa 50 bước). Có quyền truy cập
 | **general** | subagent | full (no todowrite) | Complex multi-step tasks |
 | **explore** | subagent | read-only | Fast codebase search |
 | **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| **critic** | subagent | read-only + bash + LSP | Code review: lỗi, bảo mật, hiệu suất |
+| **tester** | subagent | full (no todowrite) | Viết và chạy test, kiểm tra coverage |
+| **documenter** | subagent | full (no todowrite) | JSDoc, README, tài liệu inline |
 | compaction | hidden | none | AI-driven context summarization |
 | title | hidden | none | Session title generation |
 | summary | hidden | none | Session summarization |
@@ -204,8 +207,11 @@ SDK đầy đủ (`@opencode/plugin`) với kiến trúc hook. Tải động t�
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
+| Specialized agents | Implemented | critic, tester, documenter subagents |
+| Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

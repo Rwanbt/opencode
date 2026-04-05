@@ -13,6 +13,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
+import * as SecurityScanner from "../security/scanner"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -87,6 +88,12 @@ export const WriteTool = Tool.define("write", {
       if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
       projectDiagnosticsCount++
       output += `\n\nLSP errors detected in other files:\n<diagnostics file="${file}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+    }
+
+    // Security scan on written content
+    const secFindings = SecurityScanner.scan(params.content, filepath)
+    if (secFindings.length > 0) {
+      output += SecurityScanner.formatFindings(secFindings, filepath)
     }
 
     return {
