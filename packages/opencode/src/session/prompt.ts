@@ -35,8 +35,6 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
-import { SessionLearn } from "./learn"
-import { RAG } from "../rag"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -475,7 +473,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           })
         }
 
-        for (const [key, item] of Object.entries(yield* mcp.toolsForAgent(input.agent.mcp))) {
+        for (const [key, item] of Object.entries(yield* mcp.tools())) {
           const execute = item.execute
           if (!execute) continue
 
@@ -1342,6 +1340,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
+          let lastUser: MessageV2.User | undefined
+          let lastAssistantInfo: MessageV2.Assistant | undefined
+          let lastFinished: MessageV2.Assistant | undefined
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
@@ -1349,14 +1350,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
-            let lastUser: MessageV2.User | undefined
-            let lastAssistant: MessageV2.Assistant | undefined
-            let lastFinished: MessageV2.Assistant | undefined
+            lastUser = undefined
+            lastAssistantInfo = undefined
+            lastFinished = undefined
             let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
             for (let i = msgs.length - 1; i >= 0; i--) {
               const msg = msgs[i]
               if (!lastUser && msg.info.role === "user") lastUser = msg.info
-              if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
+              if (!lastAssistantInfo && msg.info.role === "assistant") lastAssistantInfo = msg.info
               if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
               if (lastUser && lastFinished) break
               const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
@@ -1366,17 +1367,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
             const lastAssistantMsg = msgs.findLast(
-              (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
+              (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistantInfo?.id,
             )
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
             const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
 
             if (
-              lastAssistant?.finish &&
-              !["tool-calls"].includes(lastAssistant.finish) &&
+              lastAssistantInfo?.finish &&
+              !["tool-calls"].includes(lastAssistantInfo.finish) &&
               !hasToolCalls &&
-              lastUser.id < lastAssistant.id
+              lastUser.id < lastAssistantInfo.id
             ) {
               log.info("exiting loop", { sessionID })
               break
@@ -1500,29 +1501,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs, ragContext] = yield* Effect.all([
+                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
                   Effect.promise(() => SystemPrompt.skills(agent)),
                   Effect.promise(() => SystemPrompt.environment(model)),
                   instruction.system().pipe(Effect.orDie),
                   Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
-                  Effect.promise(async () => {
-                    if (!RAG.isEnabled()) return undefined
-                    // Extract query from the last user message text
-                    const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-                    const queryText = lastUserMsg?.parts
-                      .filter((p): p is MessageV2.TextPart => p.type === "text")
-                      .map((p) => p.text)
-                      .join(" ")
-                    if (!queryText?.trim()) return undefined
-                    try {
-                      const results = await RAG.search(session.projectID, queryText)
-                      return RAG.formatContext(results)
-                    } catch {
-                      return undefined
-                    }
-                  }),
                 ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions, ...(ragContext ? [ragContext] : [])]
+                const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({
@@ -1579,17 +1564,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
-
-          // Auto-learn: extract lessons from completed primary sessions
-          if (!session.parentID && lastUser) {
-            yield* SessionLearn.extract({
-              sessionID,
-              providerID: lastUser.model.providerID,
-              modelID: lastUser.model.modelID,
-              projectID: session.projectID,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
-          }
-
           return yield* lastAssistant(sessionID)
         },
       )
