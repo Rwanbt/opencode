@@ -205,7 +205,7 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 | Cost tracking | Implemented | Per-message, per-team, per-model |
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
-| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
 | Dry run / command preview | Not implemented | Permission system validates pre-exec |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
