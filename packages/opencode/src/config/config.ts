@@ -1092,6 +1092,30 @@ export namespace Config {
             })
             .optional()
             .describe("Policy engine for conditional permission rules beyond allow/deny/ask"),
+          anythingllm: z
+            .object({
+              enabled: z.boolean().default(false).describe("Enable AnythingLLM integration"),
+              url: z.string().url().describe("AnythingLLM server URL (e.g., http://localhost:3001)"),
+              api_key: z.string().describe("AnythingLLM API key"),
+              workspaces: z
+                .array(z.string())
+                .optional()
+                .describe("Workspace slugs to search. Searches all workspaces if omitted."),
+              inject_context: z
+                .boolean()
+                .default(true)
+                .describe("Auto-inject relevant documents from AnythingLLM into system prompt"),
+              expose_tools: z
+                .boolean()
+                .default(false)
+                .describe("Expose OpenCode tools as AnythingLLM Agent Skills via HTTP API"),
+              vector_bridge: z
+                .boolean()
+                .default(false)
+                .describe("Use AnythingLLM as an additional vector store for RAG search"),
+            })
+            .optional()
+            .describe("AnythingLLM integration for document RAG and cross-platform AI"),
         })
         .optional(),
     })
