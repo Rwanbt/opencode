@@ -125,7 +125,23 @@ export namespace Plugin {
             $: Bun.$,
           }
 
-          for (const plugin of INTERNAL_PLUGINS) {
+          // Conditionally add AnythingLLM plugin if configured
+          const internalPlugins = [...INTERNAL_PLUGINS]
+          yield* Effect.tryPromise({
+            try: async () => {
+              const cfg = Config.info()
+              if (cfg?.experimental?.anythingllm?.enabled) {
+                const { AnythingLLMPlugin } = await import("../anythingllm/plugin")
+                if (AnythingLLMPlugin.init && (await AnythingLLMPlugin.init())) {
+                  internalPlugins.push(((input: PluginInput) => Promise.resolve(AnythingLLMPlugin.hooks)) as any)
+                  log.info("anythingllm plugin enabled")
+                }
+              }
+            },
+            catch: (e) => { log.warn("failed to load anythingllm plugin", { error: String(e) }) },
+          }).pipe(Effect.ignore)
+
+          for (const plugin of internalPlugins) {
             log.info("loading internal plugin", { name: plugin.name })
             const init = yield* Effect.tryPromise({
               try: () => plugin(input),
