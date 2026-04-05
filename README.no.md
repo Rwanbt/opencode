@@ -43,18 +43,172 @@
 
 ---
 
-> **Fork-merknad** - Dette er en tilpasset fork av [anomalyco/opencode](https://github.com/anomalyco/opencode) med følgende tillegg:
->
-> - **Bakgrunnsoppgaver** - Deleger arbeid til underagenter som kjører asynkront med `mode: "background"`
-> - **Agent-team** - Orkestrer flere agenter parallelt med bølgebasert DAG-kjøring
-> - **Git worktree-isolasjon** - Bakgrunnsoppgaver kjører automatisk i isolerte worktrees
-> - **API for oppgavestyring** - Fullt REST API for oppgavelivssyklus (avbryt, gjenoppta, oppfølging, forfrem)
-> - **TUI-oppgavepanel** - Sidepanel som viser aktive oppgaver + dialog med avbryt/gjenoppta-handlinger
-> - **MCP-agentbegrensning** - Tillat/nekt MCP-servere per agent via konfigurasjon
-> - **Sesjonsstatus-sporing** - 9-tilstands livssyklus lagret i DB (i kø, opptatt, fullført, feilet...)
-> - **Orkestreringsagent** - Skrivebeskyttet agent som delegerer til byggeagenter via task/team-verktøy
->
+## Fork-funksjoner
+
+> Dette er en fork av [anomalyco/opencode](https://github.com/anomalyco/opencode) vedlikeholdt av [Rwanbt](https://github.com/Rwanbt).
 > Holdes synkronisert med upstream. Se [dev-branch](https://github.com/Rwanbt/opencode/tree/dev) for siste endringer.
+
+#### Bakgrunnsoppgaver
+
+Deleger arbeid til underagenter som kjører asynkront. Sett `mode: "background"` på task-verktøyet og det returnerer en `task_id` umiddelbart mens agenten jobber i bakgrunnen. Bus-hendelser (`TaskCreated`, `TaskCompleted`, `TaskFailed`) publiseres for livssyklussporing.
+
+#### Agent-team
+
+Orkestrer flere agenter parallelt ved hjelp av `team`-verktøyet. Definer deloppgaver med avhengighetskanter; `computeWaves()` bygger en DAG og kjører uavhengige oppgaver samtidig (opptil 5 parallelle agenter). Budsjettkontroll via `max_cost` (dollar) og `max_agents`. Kontekst fra fullforte oppgaver sendes automatisk videre til avhengige oppgaver.
+
+#### Git worktree-isolasjon
+
+Hver bakgrunnsoppgave far automatisk sitt eget git worktree. Arbeidsomradet er knyttet til sesjonen i databasen. Hvis en oppgave ikke produserer filendringer, ryddes worktree-et opp automatisk. Dette gir isolasjon pa git-niva uten containere.
+
+#### API for oppgavestyring
+
+Fullt REST API for livssyklusstyring av oppgaver:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/task/` | List tasks (filter by parent, status) |
+| GET | `/task/:id` | Get task details + status + worktree info |
+| GET | `/task/:id/messages` | Retrieve task session messages |
+| POST | `/task/:id/cancel` | Cancel a running or queued task |
+| POST | `/task/:id/resume` | Resume completed/failed/blocked task |
+| POST | `/task/:id/followup` | Send follow-up message to idle task |
+| POST | `/task/:id/promote` | Promote background task to foreground |
+| GET | `/task/:id/team` | Aggregated team view (costs, diffs per member) |
+
+#### TUI-oppgavepanel
+
+Sidepanel-tillegg som viser aktive bakgrunnsoppgaver med sanntids statusikoner:
+
+| Icon | Status |
+|------|--------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+Dialog med handlinger: apne oppgavesesjon, avbryt, gjenoppta, send oppfolging, sjekk status.
+
+#### MCP-agentbegrensning
+
+Tillat/nekt-lister for MCP-servere per agent. Konfigureres i `opencode.json` under hvert agents `mcp`-felt. Funksjonen `toolsForAgent()` filtrerer tilgjengelige MCP-verktoy basert pa den kallende agentens omfang.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### 9-tilstands sesjonslivssyklus
+
+Sesjoner sporer en av 9 tilstander, lagret i databasen:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+Vedvarende tilstander (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) overlever databaseomstarter. Tilstander i minnet (`idle`, `busy`, `retry`) tilbakestilles ved omstart.
+
+#### Orkestreringsagent
+
+Skrivebeskyttet koordineringsagent (maks 50 steg). Har tilgang til `task`- og `team`-verktoy, men alle redigeringsverktoy er nektet. Delegerer implementasjon til bygge-/generelle agenter og sammenstiller resultater.
+
+---
+
+## Teknisk arkitektur
+
+### Stotte for flere leverandorer
+
+21+ leverandorer inkludert: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, pluss alle OpenAI-kompatible endepunkter. Priser hentet fra [models.dev](https://models.dev).
+
+### Agentsystem
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### LSP-integrasjon
+
+Full stotte for Language Server Protocol med symbolindeksering, diagnostikk og flersprakstotte (TypeScript, Deno, Vue, og utvidbart). Agenten navigerer kode via LSP-symboler i stedet for tekstsok, noe som muliggjor presis go-to-definition, find-references og sanntids typefeildeteksjon.
+
+### MCP-stotte
+
+Model Context Protocol klient og server. Stotter stdio, HTTP/SSE og StreamableHTTP-transporter. OAuth-autentiseringsflyt for eksterne servere. Verktoy-, prompt- og ressursfunksjonalitet. Agentspesifikk begrensning via tillat/nekt-lister.
+
+### Klient/server-arkitektur
+
+Hono-basert REST API med typede ruter og OpenAPI-spesifikasjonsgenerering. WebSocket-stotte for PTY (pseudo-terminal). SSE for sanntids hendelses-streaming. Basic auth, CORS, gzip-kompresjon. TUI er en frontend; serveren kan styres fra enhver HTTP-klient, web-UI-et eller en mobilapp.
+
+### Kontekststyring
+
+Automatisk kompaktering med AI-drevet oppsummering nar tokenbruk narmer seg modellens kontekstgrense. Token-bevisst beskjaring med konfigurerbare terskler (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB). Skill-verktoyutdata er beskyttet mot beskjaring.
+
+### Redigeringsmotor
+
+Unified diff-patching med hunk-verifisering. Anvender malrettede hunker pa spesifikke filomrader i stedet for fullstendig filoverskriving. Multi-edit-verktoy for batchoperasjoner pa tvers av filer.
+
+### Tillatelsessystem
+
+3-tilstands tillatelser (`allow` / `deny` / `ask`) med wildcard-monstermatch. 100+ bash-kommando aritetdefinisjoner for finkornet kontroll. Prosjektgrensehavdheving forhindrer filtilgang utenfor arbeidsomradet.
+
+### Git-stottet tilbakerulling
+
+Oieblikksbildesystem som registrerer filtilstand for hver verktoyutforelse. Stotter `revert` og `unrevert` med diff-beregning. Endringer kan tilbakerulles per melding eller per sesjon.
+
+### Kostnadssporing
+
+Kostnad per melding med full tokenoversikt (input, output, reasoning, cache read, cache write). Budsjettgrenser per team (`max_cost`). `stats`-kommando med per-modell og per-dag aggregering. Sanntids sesjonskostnad vist i TUI. Prisdata hentet fra models.dev.
+
+### Tilleggssystem
+
+Fullt SDK (`@opencode/plugin`) med hook-arkitektur. Dynamisk lasting fra npm-pakker eller filsystem. Innebygde tillegg for Codex, GitHub Copilot, GitLab og Poe-autentisering.
+
+---
+
+## Vanlige misforstaelser
+
+For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
+
+- **TUI er TypeScript** (SolidJS + @opentui for terminalrendering), ikke Rust.
+- **Tree-sitter** brukes kun for TUI-syntaksuthevning og bash-kommandoparsing, ikke for kodanalyse pa agentniva.
+- Det finnes **ingen Docker/E2B-sandboxing** -- isolasjon gis av git worktrees.
+- Det finnes **ingen vektordatabase eller RAG-system** -- kontekst styres via LSP-symbolindeksering + auto-compact.
+- Det finnes **ingen "watch mode" som foreslar automatiske fikser** -- filvakteren eksisterer kun for infrastrukturformaal.
+- **Selvkorrigering** bruker standard agentlokke (LLM ser feil i verktoyresultater og forsoker pa nytt), ikke en spesialisert automatisk reparasjonsmekanisme.
+
+## Kapabilitetsmatrise
+
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

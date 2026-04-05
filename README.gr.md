@@ -43,18 +43,170 @@
 
 ---
 
-> **Σημείωση fork** - Αυτό είναι ένα προσαρμοσμένο fork του [anomalyco/opencode](https://github.com/anomalyco/opencode) με τις ακόλουθες προσθήκες:
->
-> - **Εργασίες παρασκηνίου** - Ανάθεση εργασιών σε υποπράκτορες που εκτελούνται ασύγχρονα με `mode: "background"`
-> - **Ομάδες πρακτόρων** - Ενορχήστρωση πολλαπλών πρακτόρων παράλληλα με εκτέλεση DAG βάσει κυμάτων
-> - **Απομόνωση Git worktree** - Οι εργασίες παρασκηνίου εκτελούνται αυτόματα σε απομονωμένα worktrees
-> - **API διαχείρισης εργασιών** - Πλήρες REST API για τον κύκλο ζωής εργασιών (ακύρωση, συνέχιση, παρακολούθηση, προαγωγή)
-> - **Πίνακας εργασιών TUI** - Πλαϊνή μπάρα που εμφανίζει ενεργές εργασίες + διάλογος με ενέργειες ακύρωσης/συνέχισης
-> - **Εύρος πράκτορα MCP** - Επίτρεψε/απόρριψε διακομιστές MCP ανά πράκτορα μέσω ρυθμίσεων
-> - **Παρακολούθηση κατάστασης συνεδρίας** - Κύκλος ζωής 9 καταστάσεων αποθηκευμένος στη DB (σε ουρά, απασχολημένο, ολοκληρωμένο, αποτυχημένο...)
-> - **Πράκτορας ενορχήστρωσης** - Πράκτορας μόνο για ανάγνωση που αναθέτει σε πράκτορες κατασκευής μέσω εργαλείων task/team
->
+## Χαρακτηριστικά Fork
+
+> Αυτό είναι ένα fork του [anomalyco/opencode](https://github.com/anomalyco/opencode) που συντηρείται από τον [Rwanbt](https://github.com/Rwanbt).
 > Διατηρείται συγχρονισμένο με το upstream. Δείτε τον [κλάδο dev](https://github.com/Rwanbt/opencode/tree/dev) για τις τελευταίες αλλαγές.
+
+#### Εργασίες Παρασκηνίου
+
+Αναθέστε εργασίες σε υποπράκτορες που εκτελούνται ασύγχρονα. Ορίστε `mode: "background"` στο εργαλείο task και επιστρέφει αμέσως ένα `task_id` ενώ ο πράκτορας εργάζεται στο παρασκήνιο. Δημοσιεύονται bus events (`TaskCreated`, `TaskCompleted`, `TaskFailed`) για παρακολούθηση κύκλου ζωής.
+
+#### Ομάδες Πρακτόρων
+
+Ενορχηστρώστε πολλαπλούς πράκτορες παράλληλα χρησιμοποιώντας το εργαλείο `team`. Ορίστε υπο-εργασίες με ακμές εξαρτήσεων· η `computeWaves()` κατασκευάζει ένα DAG και εκτελεί ανεξάρτητες εργασίες ταυτόχρονα (έως 5 παράλληλοι πράκτορες). Έλεγχος προϋπολογισμού μέσω `max_cost` (δολάρια) και `max_agents`. Το πλαίσιο από ολοκληρωμένες εργασίες μεταφέρεται αυτόματα στις εξαρτημένες.
+
+#### Απομόνωση Git Worktree
+
+Κάθε εργασία παρασκηνίου λαμβάνει αυτόματα το δικό της git worktree. Ο χώρος εργασίας συνδέεται με τη συνεδρία στη βάση δεδομένων. Αν μια εργασία δεν παράγει αλλαγές αρχείων, το worktree καθαρίζεται αυτόματα. Αυτό παρέχει απομόνωση σε επίπεδο git χωρίς containers.
+
+#### API Διαχείρισης Εργασιών
+
+Πλήρες REST API για διαχείριση κύκλου ζωής εργασιών:
+
+| Method | Path | Περιγραφή |
+|--------|------|-----------|
+| GET | `/task/` | Λίστα εργασιών (φιλτράρισμα κατά parent, status) |
+| GET | `/task/:id` | Λεπτομέρειες εργασίας + status + πληροφορίες worktree |
+| GET | `/task/:id/messages` | Ανάκτηση μηνυμάτων συνεδρίας εργασίας |
+| POST | `/task/:id/cancel` | Ακύρωση εργασίας σε εκτέλεση ή σε ουρά |
+| POST | `/task/:id/resume` | Συνέχιση ολοκληρωμένης/αποτυχημένης/μπλοκαρισμένης εργασίας |
+| POST | `/task/:id/followup` | Αποστολή μηνύματος παρακολούθησης σε αδρανή εργασία |
+| POST | `/task/:id/promote` | Προαγωγή εργασίας παρασκηνίου σε πρώτο πλάνο |
+| GET | `/task/:id/team` | Συγκεντρωτική προβολή ομάδας (κόστη, diffs ανά μέλος) |
+
+#### Πίνακας Εργασιών TUI
+
+Πρόσθετο πλαϊνής μπάρας που εμφανίζει ενεργές εργασίες παρασκηνίου με εικονίδια κατάστασης σε πραγματικό χρόνο:
+
+| Εικονίδιο | Κατάσταση |
+|-----------|-----------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+Διάλογος με ενέργειες: άνοιγμα συνεδρίας εργασίας, ακύρωση, συνέχιση, αποστολή μηνύματος παρακολούθησης, έλεγχος κατάστασης.
+
+#### Εύρος Πράκτορα MCP
+
+Λίστες επιτρεπόμενων/απορριπτόμενων ανά πράκτορα για διακομιστές MCP. Ρυθμίστε στο `opencode.json` κάτω από το πεδίο `mcp` κάθε πράκτορα. Η συνάρτηση `toolsForAgent()` φιλτράρει τα διαθέσιμα εργαλεία MCP βάσει του εύρους του καλούντος πράκτορα.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### Κύκλος Ζωής Συνεδρίας 9 Καταστάσεων
+
+Οι συνεδρίες παρακολουθούν μία από 9 καταστάσεις, αποθηκευμένες στη βάση δεδομένων:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+Οι μόνιμες καταστάσεις (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) επιβιώνουν από επανεκκινήσεις της βάσης δεδομένων. Οι καταστάσεις μνήμης (`idle`, `busy`, `retry`) επαναφέρονται κατά την επανεκκίνηση.
+
+#### Πράκτορας Ενορχήστρωσης
+
+Πράκτορας συντονισμού μόνο για ανάγνωση (μέγιστο 50 βήματα). Έχει πρόσβαση στα εργαλεία `task` και `team` αλλά όλα τα εργαλεία επεξεργασίας είναι απορριπτόμενα. Αναθέτει την υλοποίηση σε πράκτορες build/general και συνθέτει τα αποτελέσματα.
+
+## Τεχνική Αρχιτεκτονική
+
+### Υποστήριξη Πολλαπλών Παρόχων
+
+21+ πάροχοι έτοιμοι προς χρήση: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, καθώς και οποιοδήποτε OpenAI-συμβατό endpoint. Τιμολόγηση από [models.dev](https://models.dev).
+
+### Σύστημα Πρακτόρων
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### Ενσωμάτωση LSP
+
+Πλήρης υποστήριξη Language Server Protocol με ευρετηρίαση συμβόλων, διαγνωστικά και υποστήριξη πολλαπλών γλωσσών (TypeScript, Deno, Vue και επεκτάσιμο). Ο πράκτορας πλοηγείται στον κώδικα μέσω συμβόλων LSP αντί για αναζήτηση κειμένου, επιτρέποντας ακριβές go-to-definition, find-references και ανίχνευση σφαλμάτων τύπου σε πραγματικό χρόνο.
+
+### Υποστήριξη MCP
+
+Model Context Protocol πελάτης και διακομιστής. Υποστηρίζει stdio, HTTP/SSE και StreamableHTTP μεταφορές. Ροή ελέγχου ταυτότητας OAuth για απομακρυσμένους διακομιστές. Δυνατότητες tool, prompt και resource. Ανά πράκτορα εμβέλεια μέσω allow/deny λιστών.
+
+### Αρχιτεκτονική Πελάτη/Διακομιστή
+
+REST API βασισμένο σε Hono με typed routes και δημιουργία OpenAPI spec. Υποστήριξη WebSocket για PTY (pseudo-terminal). SSE για streaming συμβάντων σε πραγματικό χρόνο. Basic auth, CORS, gzip συμπίεση. Το TUI είναι ένα frontend· ο διακομιστής μπορεί να ελεγχθεί από οποιονδήποτε HTTP πελάτη, το web UI ή μια εφαρμογή κινητού.
+
+### Διαχείριση Πλαισίου
+
+Auto-compact με AI-καθοδηγούμενη σύνοψη όταν η χρήση token πλησιάζει το όριο πλαισίου του μοντέλου. Αποκοπή με επίγνωση token με ρυθμιζόμενα κατώφλια (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB). Τα αποτελέσματα του Skill tool προστατεύονται από αποκοπή.
+
+### Μηχανή Επεξεργασίας
+
+Unified diff patching με επαλήθευση hunk. Εφαρμόζει στοχευμένα hunk σε συγκεκριμένες περιοχές αρχείων αντί για πλήρη αντικατάσταση αρχείου. Multi-edit tool για μαζικές λειτουργίες σε αρχεία.
+
+### Σύστημα Δικαιωμάτων
+
+Δικαιώματα 3 καταστάσεων (`allow` / `deny` / `ask`) με αντιστοίχιση μοτίβων wildcard. 100+ ορισμοί arity εντολών bash για λεπτομερή έλεγχο. Η επιβολή ορίων έργου αποτρέπει πρόσβαση σε αρχεία εκτός workspace.
+
+### Αναίρεση μέσω Git
+
+Σύστημα snapshot που καταγράφει την κατάσταση αρχείων πριν από κάθε εκτέλεση εργαλείου. Υποστηρίζει `revert` και `unrevert` με υπολογισμό diff. Οι αλλαγές μπορούν να αναιρεθούν ανά μήνυμα ή ανά συνεδρία.
+
+### Παρακολούθηση Κόστους
+
+Κόστος ανά μήνυμα με πλήρη ανάλυση token (input, output, reasoning, cache read, cache write). Όρια προϋπολογισμού ανά ομάδα (`max_cost`). Εντολή `stats` με συγκέντρωση ανά μοντέλο και ανά ημέρα. Κόστος συνεδρίας σε πραγματικό χρόνο στο TUI. Δεδομένα τιμολόγησης από models.dev.
+
+### Σύστημα Πρόσθετων
+
+Πλήρες SDK (`@opencode/plugin`) με αρχιτεκτονική hook. Δυναμική φόρτωση από πακέτα npm ή σύστημα αρχείων. Ενσωματωμένα πρόσθετα για έλεγχο ταυτότητας Codex, GitHub Copilot, GitLab και Poe.
+
+---
+
+## Κοινές Παρανοήσεις
+
+Για την αποφυγή σύγχυσης από AI-δημιουργημένες περιλήψεις αυτού του έργου:
+
+- **Το TUI είναι TypeScript** (SolidJS + @opentui για rendering τερματικού), όχι Rust.
+- **Το Tree-sitter** χρησιμοποιείται μόνο για επισήμανση σύνταξης TUI και ανάλυση εντολών bash, όχι για ανάλυση κώδικα σε επίπεδο πράκτορα.
+- **Δεν υπάρχει Docker/E2B sandboxing** -- η απομόνωση παρέχεται μέσω git worktrees.
+- **Δεν υπάρχει βάση δεδομένων διανυσμάτων ή σύστημα RAG** -- το πλαίσιο διαχειρίζεται μέσω LSP symbol indexing + auto-compact.
+- **Δεν υπάρχει "watch mode" που προτείνει αυτόματες διορθώσεις** -- ο file watcher υπάρχει μόνο για σκοπούς υποδομής.
+- **Η αυτοδιόρθωση** χρησιμοποιεί τον τυπικό βρόχο πράκτορα (το LLM βλέπει σφάλματα στα αποτελέσματα εργαλείων και επαναλαμβάνει), όχι εξειδικευμένο μηχανισμό αυτόματης επισκευής.
+
+## Πίνακας Δυνατοτήτων
+
+| Δυνατότητα | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

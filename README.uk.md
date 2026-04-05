@@ -43,18 +43,170 @@
 
 ---
 
-> **Примітка щодо форку** - Це кастомний форк [anomalyco/opencode](https://github.com/anomalyco/opencode) з наступними доповненнями:
->
-> - **Фонові завдання** - Делегуйте роботу підагентам, що працюють асинхронно з `mode: "background"`
-> - **Команди агентів** - Оркеструйте кілька агентів паралельно з хвильовим виконанням DAG
-> - **Ізоляція Git worktree** - Фонові завдання автоматично виконуються в ізольованих worktree
-> - **API керування завданнями** - Повний REST API для життєвого циклу завдань (скасувати, відновити, продовжити, підвищити)
-> - **Панель завдань TUI** - Бічна панель з активними завданнями + діалог з діями скасування/відновлення
-> - **Обмеження агентів MCP** - Дозвіл/заборона серверів MCP для кожного агента через конфігурацію
-> - **Відстеження статусу сесії** - Життєвий цикл з 9 станів, збережений у DB (в черзі, зайнятий, завершений, помилка...)
-> - **Агент-оркестратор** - Агент лише для читання, що делегує агентам збірки через інструменти task/team
->
+## Можливості форку
+
+> Це форк [anomalyco/opencode](https://github.com/anomalyco/opencode), який підтримується [Rwanbt](https://github.com/Rwanbt).
 > Синхронізується з upstream. Дивіться [гілку dev](https://github.com/Rwanbt/opencode/tree/dev) для останніх змін.
+
+#### Фонові завдання
+
+Делегуйте роботу підагентам, що працюють асинхронно. Встановіть `mode: "background"` на інструменті task, і він одразу поверне `task_id`, поки агент працює у фоновому режимі. Bus-події (`TaskCreated`, `TaskCompleted`, `TaskFailed`) публікуються для відстеження життєвого циклу.
+
+#### Команди агентів
+
+Оркеструйте кілька агентів паралельно за допомогою інструменту `team`. Визначте підзавдання з ребрами залежностей; `computeWaves()` будує DAG і виконує незалежні завдання одночасно (до 5 паралельних агентів). Контроль бюджету через `max_cost` (долари) та `max_agents`. Контекст з виконаних завдань автоматично передається залежним.
+
+#### Ізоляція Git Worktree
+
+Кожне фонове завдання автоматично отримує власний git worktree. Робочий простір прив'язується до сесії в базі даних. Якщо завдання не створює змін у файлах, worktree автоматично очищується. Це забезпечує ізоляцію на рівні git без контейнерів.
+
+#### API керування завданнями
+
+Повний REST API для керування життєвим циклом завдань:
+
+| Method | Path | Опис |
+|--------|------|------|
+| GET | `/task/` | Список завдань (фільтр за parent, status) |
+| GET | `/task/:id` | Деталі завдання + status + інформація про worktree |
+| GET | `/task/:id/messages` | Отримати повідомлення сесії завдання |
+| POST | `/task/:id/cancel` | Скасувати запущене або завдання в черзі |
+| POST | `/task/:id/resume` | Відновити завершене/невдале/заблоковане завдання |
+| POST | `/task/:id/followup` | Надіслати подальше повідомлення неактивному завданню |
+| POST | `/task/:id/promote` | Підвищити фонове завдання до переднього плану |
+| GET | `/task/:id/team` | Зведений вигляд команди (витрати, diff по учасниках) |
+
+#### Панель завдань TUI
+
+Плагін бічної панелі, що показує активні фонові завдання з іконками статусу в реальному часі:
+
+| Іконка | Статус |
+|--------|--------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+Діалог з діями: відкрити сесію завдання, скасувати, відновити, надіслати подальше повідомлення, перевірити статус.
+
+#### Обмеження агентів MCP
+
+Списки дозволу/заборони для серверів MCP на рівні кожного агента. Налаштовується в `opencode.json` у полі `mcp` кожного агента. Функція `toolsForAgent()` фільтрує доступні інструменти MCP на основі області дії викликаючого агента.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### Життєвий цикл сесії з 9 станів
+
+Сесії відстежують один з 9 станів, що зберігаються в базі даних:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+Постійні стани (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) зберігаються після перезапуску бази даних. Стани в пам'яті (`idle`, `busy`, `retry`) скидаються при перезапуску.
+
+#### Агент-оркестратор
+
+Координуючий агент лише для читання (максимум 50 кроків). Має доступ до інструментів `task` та `team`, але всі інструменти редагування заборонені. Делегує реалізацію агентам build/general та синтезує результати.
+
+## Технічна архітектура
+
+### Підтримка кількох провайдерів
+
+21+ провайдерів одразу: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, а також будь-який OpenAI-сумісний endpoint. Ціни з [models.dev](https://models.dev).
+
+### Система агентів
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### Інтеграція LSP
+
+Повна підтримка Language Server Protocol з індексуванням символів, діагностикою та підтримкою кількох мов (TypeScript, Deno, Vue та розширювана). Агент навігує по коду через символи LSP замість текстового пошуку, забезпечуючи точний go-to-definition, find-references та виявлення помилок типів у реальному часі.
+
+### Підтримка MCP
+
+Model Context Protocol клієнт і сервер. Підтримує stdio, HTTP/SSE та StreamableHTTP транспорти. Потік автентифікації OAuth для віддалених серверів. Можливості tool, prompt та resource. Область дії для кожного агента через allow/deny списки.
+
+### Архітектура клієнт/сервер
+
+REST API на базі Hono з типізованими маршрутами та генерацією OpenAPI spec. Підтримка WebSocket для PTY (pseudo-terminal). SSE для потокової передачі подій у реальному часі. Basic auth, CORS, gzip стиснення. TUI -- це один frontend; сервером можна керувати з будь-якого HTTP-клієнта, web UI або мобільного додатку.
+
+### Керування контекстом
+
+Auto-compact з AI-керованим підсумовуванням, коли використання токенів наближається до ліміту контексту моделі. Обрізка з урахуванням токенів із налаштовуваними порогами (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB). Виходи Skill tool захищені від обрізки.
+
+### Двигун редагування
+
+Unified diff патчинг з перевіркою hunk. Застосовує цільові hunk до конкретних ділянок файлу замість повного перезапису. Multi-edit tool для пакетних операцій між файлами.
+
+### Система дозволів
+
+3-станові дозволи (`allow` / `deny` / `ask`) з відповідністю шаблонів wildcard. 100+ визначень arity команд bash для детального контролю. Примусове дотримання меж проєкту запобігає доступу до файлів за межами workspace.
+
+### Відкат через Git
+
+Система snapshot, що записує стан файлів перед кожним виконанням інструменту. Підтримує `revert` та `unrevert` з обчисленням diff. Зміни можна відкотити за повідомленням або за сесією.
+
+### Відстеження витрат
+
+Вартість за повідомлення з повною розбивкою токенів (input, output, reasoning, cache read, cache write). Бюджетні ліміти для команд (`max_cost`). Команда `stats` з агрегацією за моделлю та за день. Вартість сесії в реальному часі відображається в TUI. Дані про ціни з models.dev.
+
+### Система плагінів
+
+Повний SDK (`@opencode/plugin`) з архітектурою hook. Динамічне завантаження з npm-пакетів або файлової системи. Вбудовані плагіни для автентифікації Codex, GitHub Copilot, GitLab та Poe.
+
+---
+
+## Поширені хибні уявлення
+
+Щоб запобігти плутанині через AI-генеровані підсумки цього проєкту:
+
+- **TUI написаний на TypeScript** (SolidJS + @opentui для рендерингу в терміналі), не на Rust.
+- **Tree-sitter** використовується лише для підсвічування синтаксису TUI та парсингу команд bash, а не для аналізу коду на рівні агента.
+- **Немає Docker/E2B sandboxing** -- ізоляція забезпечується через git worktrees.
+- **Немає векторної бази даних або системи RAG** -- контекст керується через LSP symbol indexing + auto-compact.
+- **Немає "watch mode", що пропонує автоматичні виправлення** -- file watcher існує лише для інфраструктурних цілей.
+- **Самокорекція** використовує стандартний цикл агента (LLM бачить помилки в результатах інструментів і повторює спробу), а не спеціалізований механізм авторемонту.
+
+## Матриця можливостей
+
+| Можливість | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 
