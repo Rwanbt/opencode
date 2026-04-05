@@ -4,6 +4,8 @@ import { Hono } from "hono"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
+import { JwtAuth } from "./auth-jwt"
+import { AuthRoutes } from "./routes/auth"
 import z from "zod"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
@@ -40,15 +42,7 @@ export namespace Server {
     const app = new Hono()
     return app
       .onError(errorHandler(log))
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
-        if (c.req.method === "OPTIONS") return next()
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return next()
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        return basicAuth({ username, password })(c, next)
-      })
+      .use(JwtAuth.middleware())
       .use(async (c, next) => {
         const skip = c.req.path === "/log"
         if (!skip) {
@@ -97,6 +91,7 @@ export namespace Server {
         if (skipCompress(c.req.path, c.req.method)) return next()
         return zipped(c, next)
       })
+      .route("/collab", AuthRoutes())
       .route("/global", GlobalRoutes())
       .put(
         "/auth/:providerID",

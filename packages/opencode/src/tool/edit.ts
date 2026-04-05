@@ -19,6 +19,7 @@ import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 import * as SecurityScanner from "../security/scanner"
+import { FileLock } from "../file/lock"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -184,6 +185,12 @@ export const EditTool = Tool.define("edit", {
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+    }
+
+    // File lock conflict check (collaborative mode)
+    const lockConflict = FileLock.check(filePath)
+    if (lockConflict) {
+      output += `\n<file-lock-conflict>\nFile is being edited by ${lockConflict.heldBy.username} (session: ${lockConflict.heldBy.sessionID}). Changes saved but may conflict.\n</file-lock-conflict>\n`
     }
 
     // Security scan on modified content
