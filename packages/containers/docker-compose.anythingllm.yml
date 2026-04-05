@@ -1,0 +1,55 @@
+# Docker Compose for running OpenCode alongside AnythingLLM.
+#
+# Usage:
+#   docker compose -f packages/containers/docker-compose.anythingllm.yml up
+#
+# Env vars:
+#   OPENCODE_SERVER_PASSWORD - Server auth password
+#   ANYTHING_LLM_API_KEY    - AnythingLLM API key (generate in Settings)
+#
+# After startup, configure opencode.json:
+#   "experimental": {
+#     "anythingllm": {
+#       "enabled": true,
+#       "url": "http://anythingllm:3001",
+#       "api_key": "${ANYTHING_LLM_API_KEY}"
+#     }
+#   }
+
+version: "3.8"
+
+services:
+  opencode:
+    build:
+      context: ../..
+      dockerfile: packages/containers/base/Dockerfile
+    ports:
+      - "4096:4096"
+    environment:
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
+      - OPENCODE_HOSTNAME=0.0.0.0
+    volumes:
+      - opencode-data:/root/.opencode
+      - ./workspace:/workspace
+    working_dir: /workspace
+    networks:
+      - opencode-net
+
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    ports:
+      - "3001:3001"
+    environment:
+      - STORAGE_DIR=/app/server/storage
+    volumes:
+      - anythingllm-data:/app/server/storage
+    networks:
+      - opencode-net
+
+volumes:
+  opencode-data:
+  anythingllm-data:
+
+networks:
+  opencode-net:
+    driver: bridge
