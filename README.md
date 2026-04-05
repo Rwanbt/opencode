@@ -133,6 +133,9 @@ Read-only coordinator agent (50 max steps). Has access to `task` and `team` tool
 | **general** | subagent | full (no todowrite) | Complex multi-step tasks |
 | **explore** | subagent | read-only | Fast codebase search |
 | **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| **critic** | subagent | read-only + bash + LSP | Code review: bugs, security, performance |
+| **tester** | subagent | full (no todowrite) | Write and run tests, verify coverage |
+| **documenter** | subagent | full (no todowrite) | JSDoc, README, inline documentation |
 | compaction | hidden | none | AI-driven context summarization |
 | title | hidden | none | Session title generation |
 | summary | hidden | none | Session summarization |
@@ -181,8 +184,8 @@ To prevent confusion from AI-generated summaries of this project:
 
 - The **TUI is TypeScript** (SolidJS + @opentui for terminal rendering), not Rust.
 - **Tree-sitter** is used for TUI syntax highlighting and bash command parsing only, not for agent-level code analysis.
-- There is **no Docker/E2B sandboxing** -- isolation is provided by git worktrees.
-- There is **no vector database or RAG system** -- context is managed via LSP symbol indexing + auto-compact.
+- **Docker sandboxing** is optional (`experimental.sandbox.type: "docker"`); default isolation is via git worktrees.
+- **RAG** is optional (`experimental.rag.enabled: true`); default context is managed via LSP symbol indexing + auto-compact.
 - There is **no "watch mode" that proposes automatic fixes** -- the file watcher exists for infrastructure purposes only.
 - **Self-correction** uses the standard agent loop (the LLM sees errors in tool results and retries), not a specialized auto-repair mechanism.
 
@@ -206,8 +209,11 @@ To prevent confusion from AI-generated summaries of this project:
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
+| Specialized agents | Implemented | critic, tester, documenter subagents |
+| Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

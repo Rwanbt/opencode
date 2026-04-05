@@ -14,6 +14,10 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_ORCHESTRATOR from "./prompt/orchestrator.txt"
+import PROMPT_CRITIC from "./prompt/critic.txt"
+import PROMPT_TESTER from "./prompt/tester.txt"
+import PROMPT_DOCUMENTER from "./prompt/documenter.txt"
+import PROMPT_LEARNER from "./prompt/learner.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -218,6 +222,60 @@ export namespace Agent {
               native: true,
               steps: 50,
             },
+            critic: {
+              name: "critic",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  read: "allow",
+                  grep: "allow",
+                  glob: "allow",
+                  list: "allow",
+                  bash: "allow",
+                  lsp: "allow",
+                }),
+                user,
+              ),
+              description:
+                "Code review agent that critically analyzes code for bugs, security issues, and performance problems. Use after implementing changes to get a thorough review before committing.",
+              prompt: PROMPT_CRITIC,
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            tester: {
+              name: "tester",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  todowrite: "deny",
+                }),
+                user,
+              ),
+              description:
+                "Testing agent that writes and runs tests. Use to generate unit/integration tests, execute them, and verify coverage.",
+              prompt: PROMPT_TESTER,
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            documenter: {
+              name: "documenter",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  todowrite: "deny",
+                }),
+                user,
+              ),
+              description:
+                "Documentation agent that writes and maintains JSDoc, README sections, and inline comments. Use to document APIs, architecture, and complex logic.",
+              prompt: PROMPT_DOCUMENTER,
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
             compaction: {
               name: "compaction",
               mode: "primary",
@@ -232,6 +290,21 @@ export namespace Agent {
                 user,
               ),
               options: {},
+            },
+            learner: {
+              name: "learner",
+              mode: "primary",
+              options: {},
+              native: true,
+              hidden: true,
+              prompt: PROMPT_LEARNER,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
             },
             title: {
               name: "title",
