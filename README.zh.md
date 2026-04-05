@@ -207,7 +207,7 @@ Model Context Protocol 客户端与服务器。支持 stdio、HTTP/SSE 和 Strea
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
-| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---

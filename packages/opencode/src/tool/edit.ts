@@ -41,6 +41,7 @@ export const EditTool = Tool.define("edit", {
     oldString: z.string().describe("The text to replace"),
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+    dry_run: z.boolean().optional().describe("Preview the diff without modifying the file"),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
@@ -53,6 +54,36 @@ export const EditTool = Tool.define("edit", {
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filePath)
+
+    // Dry-run mode: compute and return diff without modifying the file
+    if (params.dry_run) {
+      let previewDiff: string
+      if (params.oldString === "") {
+        previewDiff = trimDiff(createTwoFilesPatch(filePath, filePath, "", params.newString))
+      } else {
+        const stats = Filesystem.stat(filePath)
+        if (!stats) throw new Error(`File ${filePath} not found`)
+        const contentOldDry = await Filesystem.readText(filePath)
+        const endingDry = detectLineEnding(contentOldDry)
+        const oldDry = convertToLineEnding(normalizeLineEndings(params.oldString), endingDry)
+        const nextDry = convertToLineEnding(normalizeLineEndings(params.newString), endingDry)
+        const contentNewDry = replace(contentOldDry, oldDry, nextDry, params.replaceAll)
+        previewDiff = trimDiff(
+          createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOldDry), normalizeLineEndings(contentNewDry)),
+        )
+      }
+      const action = params.oldString === "" ? "Create/overwrite file" : "Modify existing file"
+      const output = `## Dry Run Preview (edit)\n\n**File**: ${filePath}\n**Action**: ${action}\n\n\`\`\`diff\n${previewDiff}\n\`\`\``
+      return {
+        title: `[dry-run] Edit ${path.basename(filePath)}`,
+        metadata: {
+          diff: previewDiff,
+          filediff: { file: filePath, before: "", after: "", additions: 0, deletions: 0 } as Snapshot.FileDiff,
+          diagnostics: {} as Record<string, any>,
+        },
+        output,
+      }
+    }
 
     let diff = ""
     let contentOld = ""

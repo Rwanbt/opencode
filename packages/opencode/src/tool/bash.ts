@@ -528,6 +528,10 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
+      dry_run: z
+        .boolean()
+        .optional()
+        .describe("Preview what the command would do without executing it. Shows parsed commands, affected files, and working directory."),
     }),
     async execute(params, ctx) {
       const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
@@ -539,6 +543,52 @@ export const BashTool = Tool.define("bash", async () => {
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+
+      // Dry-run mode: analyze command without executing
+      if (params.dry_run) {
+        const commands = parts(root).map((n) => n.text)
+        const lines: string[] = [
+          "## Dry Run Preview",
+          "",
+          `**Command**: \`${params.command}\``,
+          `**Working directory**: ${cwd}`,
+          `**Shell**: ${name}`,
+          `**Timeout**: ${timeout}ms`,
+        ]
+
+        if (commands.length > 0) {
+          lines.push("", "**Parsed commands**:")
+          for (const cmd of commands) lines.push(`- \`${cmd}\``)
+        }
+
+        if (scan.patterns.size > 0) {
+          lines.push("", "**Permission patterns**:")
+          for (const p of scan.patterns) lines.push(`- \`${p}\``)
+        }
+
+        if (scan.dirs.size > 0) {
+          lines.push("", "**Directories accessed**:")
+          for (const d of scan.dirs) lines.push(`- ${d}`)
+        }
+
+        const outsideProject = !Instance.containsPath(cwd)
+        if (outsideProject) {
+          lines.push("", "**Warning**: Working directory is outside the project root.")
+        }
+
+        const config = await Config.get()
+        if (config.experimental?.sandbox?.type === "docker") {
+          lines.push("", "**Execution**: Would run inside Docker container")
+        }
+
+        const output = lines.join("\n")
+        return {
+          title: `[dry-run] ${params.description}`,
+          metadata: { output, exit: null, description: `[dry-run] ${params.description}` },
+          output,
+        }
+      }
+
       await ask(ctx, scan)
 
       // Check if Docker sandbox is configured
