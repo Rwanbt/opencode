@@ -1043,6 +1043,18 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          sandbox: z
+            .object({
+              type: z.enum(["host", "docker"]).default("host").describe("Execution environment for bash commands"),
+              image: z.string().optional().describe("Docker image to use (default: node:lts-slim)"),
+              mount_workdir: z
+                .boolean()
+                .optional()
+                .default(true)
+                .describe("Mount the project directory into the container"),
+            })
+            .optional()
+            .describe("Sandboxed execution environment for bash commands"),
         })
         .optional(),
     })

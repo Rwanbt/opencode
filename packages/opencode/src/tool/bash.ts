@@ -20,6 +20,8 @@ import { Plugin } from "@/plugin"
 import { Cause, Effect, Exit, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import * as DockerSandbox from "@/sandbox/docker"
+import { Config } from "@/config/config"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -408,6 +410,66 @@ async function run(
   }
 }
 
+/** Run a command inside a Docker sandbox container. */
+async function runDocker(
+  input: {
+    command: string
+    cwd: string
+    env: NodeJS.ProcessEnv
+    timeout: number
+    description: string
+    sandbox: NonNullable<Config.Info["experimental"]>["sandbox"]
+  },
+  ctx: Tool.Context,
+) {
+  if (!DockerSandbox.isDockerAvailable()) {
+    throw new Error(
+      "Docker is not available on this system. Install Docker or set sandbox.type to 'host' in config.",
+    )
+  }
+
+  const container = await DockerSandbox.ensureContainer(
+    Instance.directory,
+    input.sandbox?.image,
+  )
+
+  let output = ""
+  ctx.metadata({
+    metadata: {
+      output: "",
+      description: `[docker] ${input.description}`,
+    },
+  })
+
+  const result = await DockerSandbox.exec(container, input.command, {
+    cwd: input.cwd,
+    env: input.env as Record<string, string>,
+    timeout: input.timeout,
+    abort: ctx.abort,
+    onOutput(chunk) {
+      output += chunk
+      ctx.metadata({
+        metadata: {
+          output: preview(output),
+          description: `[docker] ${input.description}`,
+        },
+      })
+    },
+  })
+
+  output = result.output
+
+  return {
+    title: `[docker] ${input.description}`,
+    metadata: {
+      output: preview(output),
+      exit: result.exitCode,
+      description: `[docker] ${input.description}`,
+    },
+    output,
+  }
+}
+
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
@@ -478,6 +540,23 @@ export const BashTool = Tool.define("bash", async () => {
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
       await ask(ctx, scan)
+
+      // Check if Docker sandbox is configured
+      const config = await Config.get()
+      const sandbox = config.experimental?.sandbox
+      if (sandbox?.type === "docker") {
+        return runDocker(
+          {
+            command: params.command,
+            cwd,
+            env: await shellEnv(ctx, cwd),
+            timeout,
+            description: params.description,
+            sandbox,
+          },
+          ctx,
+        )
+      }
 
       return run(
         {
