@@ -6,6 +6,7 @@ import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
+import type { UserID } from "../user/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -21,6 +22,7 @@ export const SessionTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceID>(),
     parent_id: text().$type<SessionID>(),
+    user_id: text().$type<UserID>(),
     status: text().$type<"idle" | "busy" | "retry" | "queued" | "blocked" | "awaiting_input" | "completed" | "failed" | "cancelled">().default("idle"),
     slug: text().notNull(),
     directory: text().notNull(),
@@ -41,6 +43,7 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    index("session_user_idx").on(table.user_id),
   ],
 )
 

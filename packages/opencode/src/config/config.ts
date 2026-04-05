@@ -1092,6 +1092,16 @@ export namespace Config {
             })
             .optional()
             .describe("Policy engine for conditional permission rules beyond allow/deny/ask"),
+          collaborative: z
+            .object({
+              enabled: z.boolean().default(false).describe("Enable collaborative multi-user mode"),
+              require_auth: z.boolean().default(true).describe("Require authentication for all API requests"),
+              max_users: z.number().int().optional().describe("Maximum number of registered users"),
+              jwt_secret: z.string().optional().describe("Secret for JWT signing. Auto-generated if not set."),
+              allow_registration: z.boolean().default(false).describe("Allow self-registration (otherwise admin-only)"),
+            })
+            .optional()
+            .describe("Collaborative multi-user mode with JWT auth, presence, and session sharing"),
         })
         .optional(),
     })

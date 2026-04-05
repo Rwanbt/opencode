@@ -14,6 +14,7 @@ import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 import * as SecurityScanner from "../security/scanner"
+import { FileLock } from "../file/lock"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -88,6 +89,12 @@ export const WriteTool = Tool.define("write", {
       if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
       projectDiagnosticsCount++
       output += `\n\nLSP errors detected in other files:\n<diagnostics file="${file}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+    }
+
+    // File lock conflict check (collaborative mode)
+    const lockConflict = FileLock.check(filepath)
+    if (lockConflict) {
+      output += `\n<file-lock-conflict>\nFile is being edited by ${lockConflict.heldBy.username} (session: ${lockConflict.heldBy.sessionID}). Changes saved but may conflict.\n</file-lock-conflict>\n`
     }
 
     // Security scan on written content

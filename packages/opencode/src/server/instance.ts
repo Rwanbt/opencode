@@ -27,6 +27,8 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { TaskRoutes } from "./routes/task"
+import { WsEventRoutes } from "./routes/ws-event"
+import { Presence } from "./presence"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -51,9 +53,43 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
     .route("/task", TaskRoutes())
+    .route("/ws", WsEventRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
+    .get(
+      "/presence",
+      describeRoute({
+        summary: "Get presence",
+        description: "Get list of online users and their current activity.",
+        operationId: "collab.presence",
+        responses: {
+          200: {
+            description: "Online users",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      userID: z.string(),
+                      username: z.string(),
+                      status: z.enum(["online", "idle", "away"]),
+                      activeSessionID: z.string().optional(),
+                      directory: z.string().optional(),
+                      lastSeen: z.number(),
+                      connectedAt: z.number(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(Presence.list())
+      },
+    )
     .route("/", FileRoutes())
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
