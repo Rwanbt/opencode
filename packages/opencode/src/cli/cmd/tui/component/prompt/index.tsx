@@ -160,9 +160,32 @@ export function Prompt(props: PromptProps) {
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+
+    // Calculate token burn rate (tokens/min) from assistant messages with timestamps
+    let burnRate: string | undefined
+    const assistants = msg.filter(
+      (m): m is AssistantMessage => m.role === "assistant" && m.tokens.output > 0 && !!m.time.completed,
+    )
+    if (assistants.length >= 2) {
+      const first = assistants[0]
+      const latest = assistants[assistants.length - 1]
+      const elapsed = (latest.time.completed! - first.time.created) / 60_000 // minutes
+      if (elapsed > 0.1) {
+        const totalOut = assistants.reduce(
+          (sum, m) => sum + m.tokens.input + m.tokens.output + m.tokens.reasoning,
+          0,
+        )
+        const rate = totalOut / elapsed
+        if (rate >= 1_000_000) burnRate = `${(rate / 1_000_000).toFixed(1)}M/min`
+        else if (rate >= 1_000) burnRate = `${(rate / 1_000).toFixed(1)}k/min`
+        else burnRate = `${Math.round(rate)}/min`
+      }
+    }
+
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
+      burnRate,
     }
   })
 
@@ -1249,7 +1272,7 @@ export function Prompt(props: PromptProps) {
                     <Match when={usage()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {[item().context, item().cost, item().burnRate].filter(Boolean).join(" · ")}
                         </text>
                       )}
                     </Match>
