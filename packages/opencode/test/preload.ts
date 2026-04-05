@@ -6,9 +6,14 @@ import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll, afterEach } from "bun:test"
 
+// Suppress LSP stream errors during test cleanup globally.
+// vscode-jsonrpc can attempt writes after Instance.disposeAll() destroys
+// the underlying streams, producing unhandled rejections that fail random tests.
+globalThis.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+  if (event.reason?.code === "ERR_STREAM_DESTROYED") event.preventDefault()
+})
+
 // Allow pending LSP/jsonrpc stream writes to flush between tests.
-// Without this, Instance.disposeAll() in individual test files can destroy
-// streams while queued writes are still in-flight, causing ERR_STREAM_DESTROYED.
 afterEach(async () => {
   await sleep(10)
 })

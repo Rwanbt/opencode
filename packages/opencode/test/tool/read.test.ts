@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterAll, beforeAll, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
@@ -16,15 +16,15 @@ import { Filesystem } from "../../src/util/filesystem"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
+// Suppress LSP stream-destroyed errors during test cleanup
+const suppress = (e: PromiseRejectionEvent) => {
+  if (e.reason?.code === "ERR_STREAM_DESTROYED") e.preventDefault()
+}
+beforeAll(() => globalThis.addEventListener("unhandledrejection", suppress))
+afterAll(() => globalThis.removeEventListener("unhandledrejection", suppress))
+
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
-afterEach(async () => {
-  // Allow pending LSP stream writes to flush before destroying streams.
-  // Without this, Instance.disposeAll() can destroy LSP jsonrpc streams
-  // while queued writes are still in-flight, causing ERR_STREAM_DESTROYED.
-  await Bun.sleep(50)
-  await Instance.disposeAll().catch(() => {})
-})
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
