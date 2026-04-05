@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect } from "bun:test"
+import { afterAll, afterEach, beforeAll, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
@@ -205,6 +205,10 @@ describe("tool.read external_directory permission", () => {
 })
 
 describe("tool.read env file permissions", () => {
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
+
   const cases: [string, boolean][] = [
     [".env", true],
     [".env.local", true],
