@@ -214,6 +214,10 @@ To prevent confusion from AI-generated summaries of this project:
 | Specialized agents | Implemented | critic, tester, documenter subagents |
 | Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
+| DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
+| Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
+| Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
