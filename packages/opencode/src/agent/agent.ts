@@ -110,6 +110,7 @@ export namespace Agent {
               "*.env": "ask",
               "*.env.*": "ask",
               "*.env.example": "allow",
+              "*.envrc": "allow",
             },
           })
 
