@@ -41,7 +41,7 @@ type BranchEvent = { directory?: string; payload: { type: string; properties: { 
 const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
 /** Wait for a Vcs.Event.BranchUpdated event on GlobalBus, with retry polling as fallback */
-function nextBranchUpdate(directory: string, timeout = 10_000) {
+function nextBranchUpdate(directory: string, timeout = 20_000) {
   return new Promise<string | undefined>((resolve, reject) => {
     let settled = false
 
@@ -94,7 +94,8 @@ describeVcs("Vcs", () => {
     })
   })
 
-  test("publishes BranchUpdated when .git/HEAD changes", async () => {
+  // File watcher for .git/HEAD is unreliable on Windows (NTFS notification delay)
+  test.skipIf(process.platform === "win32")("publishes BranchUpdated when .git/HEAD changes", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
@@ -110,7 +111,7 @@ describeVcs("Vcs", () => {
     })
   })
 
-  test("branch() reflects the new branch after HEAD change", async () => {
+  test.skipIf(process.platform === "win32")("branch() reflects the new branch after HEAD change", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()

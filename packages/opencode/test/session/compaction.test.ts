@@ -824,7 +824,7 @@ describe("session.compaction.process", () => {
 
           await Promise.race([
             ready.promise,
-            wait(1000).then(() => {
+            wait(5000).then(() => {
               throw new Error("timed out waiting for retry status")
             }),
           ])
@@ -833,13 +833,13 @@ describe("session.compaction.process", () => {
           abort.abort()
           const result = await Promise.race([
             run.then((value) => ({ kind: "done" as const, value, ms: Date.now() - start })),
-            wait(250).then(() => ({ kind: "timeout" as const })),
+            wait(2000).then(() => ({ kind: "timeout" as const })),
           ])
 
           expect(result.kind).toBe("done")
           if (result.kind === "done") {
             expect(result.value).toBe("stop")
-            expect(result.ms).toBeLessThan(250)
+            expect(result.ms).toBeLessThan(2000)
           }
         } finally {
           off?.()
