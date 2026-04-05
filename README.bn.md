@@ -43,18 +43,170 @@
 
 ---
 
-> **ফর্ক বিজ্ঞপ্তি** - এটি [anomalyco/opencode](https://github.com/anomalyco/opencode)-এর একটি কাস্টম ফর্ক যাতে নিম্নলিখিত সংযোজন রয়েছে:
->
-> - **ব্যাকগ্রাউন্ড টাস্ক** - `mode: "background"` দিয়ে অ্যাসিঙ্ক্রোনাসভাবে চলা সাবএজেন্টদের কাজ অর্পণ করুন
-> - **এজেন্ট টিম** - ওয়েভ-ভিত্তিক DAG এক্সিকিউশনের মাধ্যমে একাধিক এজেন্টকে সমান্তরালে পরিচালনা করুন
-> - **Git worktree আইসোলেশন** - ব্যাকগ্রাউন্ড টাস্কগুলো স্বয়ংক্রিয়ভাবে আইসোলেটেড worktree-তে চলে
-> - **টাস্ক ম্যানেজমেন্ট API** - টাস্ক লাইফসাইকেলের জন্য সম্পূর্ণ REST API (বাতিল, পুনরায় শুরু, ফলো-আপ, প্রমোট)
-> - **TUI টাস্ক ড্যাশবোর্ড** - সক্রিয় টাস্ক দেখানো সাইডবার + বাতিল/পুনরায় শুরু অ্যাকশন সহ ডায়ালগ
-> - **MCP এজেন্ট স্কোপিং** - কনফিগারেশনের মাধ্যমে প্রতি এজেন্টে MCP সার্ভার অনুমতি/নিষেধ করুন
-> - **সেশন স্ট্যাটাস ট্র্যাকিং** - DB-তে সংরক্ষিত ৯-স্টেট লাইফসাইকেল (সারিবদ্ধ, ব্যস্ত, সম্পন্ন, ব্যর্থ...)
-> - **অর্কেস্ট্রেটর এজেন্ট** - রিড-অনলি এজেন্ট যা task/team টুলের মাধ্যমে বিল্ড এজেন্টদের কাজ অর্পণ করে
->
+## ফর্কের বৈশিষ্ট্যসমূহ
+
+> এটি [anomalyco/opencode](https://github.com/anomalyco/opencode)-এর একটি ফর্ক যা [Rwanbt](https://github.com/Rwanbt) দ্বারা রক্ষণাবেক্ষণ করা হয়।
 > আপস্ট্রিমের সাথে সিঙ্ক রাখা হয়। সর্বশেষ পরিবর্তনের জন্য [dev ব্রাঞ্চ](https://github.com/Rwanbt/opencode/tree/dev) দেখুন।
+
+#### ব্যাকগ্রাউন্ড টাস্ক
+
+অ্যাসিঙ্ক্রোনাসভাবে চলা সাবএজেন্টদের কাজ অর্পণ করুন। Task টুলে `mode: "background"` সেট করুন এবং এটি তৎক্ষণাৎ একটি `task_id` ফেরত দেবে যখন এজেন্ট ব্যাকগ্রাউন্ডে কাজ করে। লাইফসাইকেল ট্র্যাকিংয়ের জন্য bus event (`TaskCreated`, `TaskCompleted`, `TaskFailed`) প্রকাশিত হয়।
+
+#### এজেন্ট টিম
+
+`team` টুল ব্যবহার করে একাধিক এজেন্টকে সমান্তরালে পরিচালনা করুন। ডিপেন্ডেন্সি এজ সহ সাব-টাস্ক নির্ধারণ করুন; `computeWaves()` একটি DAG তৈরি করে এবং স্বতন্ত্র টাস্কগুলো একযোগে চালায় (সর্বোচ্চ ৫টি সমান্তরাল এজেন্ট)। `max_cost` (ডলার) এবং `max_agents` এর মাধ্যমে বাজেট নিয়ন্ত্রণ। সম্পন্ন টাস্কের কনটেক্সট স্বয়ংক্রিয়ভাবে নির্ভরশীল টাস্কে পাঠানো হয়।
+
+#### Git Worktree আইসোলেশন
+
+প্রতিটি ব্যাকগ্রাউন্ড টাস্ক স্বয়ংক্রিয়ভাবে নিজস্ব git worktree পায়। ওয়ার্কস্পেস ডাটাবেসে সেশনের সাথে সংযুক্ত থাকে। যদি কোনো টাস্ক ফাইল পরিবর্তন না করে, worktree স্বয়ংক্রিয়ভাবে পরিষ্কার হয়ে যায়। এটি কন্টেইনার ছাড়াই git-স্তরের আইসোলেশন প্রদান করে।
+
+#### টাস্ক ম্যানেজমেন্ট API
+
+টাস্ক লাইফসাইকেল পরিচালনার জন্য সম্পূর্ণ REST API:
+
+| Method | Path | বিবরণ |
+|--------|------|-------|
+| GET | `/task/` | টাস্কের তালিকা (parent, status অনুযায়ী ফিল্টার) |
+| GET | `/task/:id` | টাস্কের বিবরণ + status + worktree তথ্য |
+| GET | `/task/:id/messages` | টাস্ক সেশনের বার্তা পুনরুদ্ধার |
+| POST | `/task/:id/cancel` | চলমান বা সারিবদ্ধ টাস্ক বাতিল |
+| POST | `/task/:id/resume` | সম্পন্ন/ব্যর্থ/অবরুদ্ধ টাস্ক পুনরায় শুরু |
+| POST | `/task/:id/followup` | নিষ্ক্রিয় টাস্কে ফলো-আপ বার্তা পাঠান |
+| POST | `/task/:id/promote` | ব্যাকগ্রাউন্ড টাস্ককে ফোরগ্রাউন্ডে প্রমোট করুন |
+| GET | `/task/:id/team` | সমষ্টিগত টিম ভিউ (খরচ, সদস্য প্রতি diff) |
+
+#### TUI টাস্ক ড্যাশবোর্ড
+
+রিয়েল-টাইম স্ট্যাটাস আইকন সহ সক্রিয় ব্যাকগ্রাউন্ড টাস্ক দেখানো সাইডবার প্লাগইন:
+
+| আইকন | স্ট্যাটাস |
+|-------|----------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+অ্যাকশন সহ ডায়ালগ: টাস্ক সেশন খুলুন, বাতিল করুন, পুনরায় শুরু করুন, ফলো-আপ পাঠান, স্ট্যাটাস পরীক্ষা করুন।
+
+#### MCP এজেন্ট স্কোপিং
+
+MCP সার্ভারের জন্য প্রতি এজেন্টে অনুমতি/নিষেধ তালিকা। `opencode.json`-এ প্রতিটি এজেন্টের `mcp` ফিল্ডের অধীনে কনফিগার করুন। `toolsForAgent()` ফাংশন কলিং এজেন্টের স্কোপের উপর ভিত্তি করে উপলব্ধ MCP টুল ফিল্টার করে।
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### ৯-স্টেট সেশন লাইফসাইকেল
+
+সেশনগুলো ৯টি স্টেটের একটি ট্র্যাক করে, যা ডাটাবেসে সংরক্ষিত থাকে:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+স্থায়ী স্টেট (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) ডাটাবেস রিস্টার্টে টিকে থাকে। মেমরি-মধ্যস্থ স্টেট (`idle`, `busy`, `retry`) রিস্টার্টে রিসেট হয়।
+
+#### অর্কেস্ট্রেটর এজেন্ট
+
+রিড-অনলি কোঅর্ডিনেটর এজেন্ট (সর্বোচ্চ ৫০ ধাপ)। `task` এবং `team` টুলে অ্যাক্সেস আছে কিন্তু সমস্ত এডিট টুল নিষিদ্ধ। বাস্তবায়ন build/general এজেন্টদের কাছে অর্পণ করে এবং ফলাফল সংশ্লেষণ করে।
+
+## প্রযুক্তিগত স্থাপত্য
+
+### মাল্টি-প্রোভাইডার সাপোর্ট
+
+21+ প্রোভাইডার তৈরি অবস্থায় পাওয়া যায়: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, এবং যেকোনো OpenAI-সামঞ্জস্যপূর্ণ endpoint। মূল্য তথ্য [models.dev](https://models.dev) থেকে সংগৃহীত।
+
+### এজেন্ট সিস্টেম
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### LSP ইন্টিগ্রেশন
+
+সিম্বল ইনডেক্সিং, ডায়াগনস্টিকস এবং মাল্টি-ল্যাঙ্গুয়েজ সাপোর্ট (TypeScript, Deno, Vue, এবং এক্সটেনসিবল) সহ সম্পূর্ণ Language Server Protocol সাপোর্ট। এজেন্ট টেক্সট সার্চের পরিবর্তে LSP সিম্বলের মাধ্যমে কোড নেভিগেট করে, যা সুনির্দিষ্ট go-to-definition, find-references এবং রিয়েল-টাইম টাইপ এরর ডিটেকশন সক্ষম করে।
+
+### MCP সাপোর্ট
+
+Model Context Protocol ক্লায়েন্ট এবং সার্ভার। stdio, HTTP/SSE, এবং StreamableHTTP ট্রান্সপোর্ট সাপোর্ট করে। রিমোট সার্ভারের জন্য OAuth অথেন্টিকেশন ফ্লো। Tool, prompt, এবং resource ক্যাপাবিলিটি। Allow/deny লিস্টের মাধ্যমে প্রতি-এজেন্ট স্কোপিং।
+
+### ক্লায়েন্ট/সার্ভার আর্কিটেকচার
+
+Typed routes এবং OpenAPI spec জেনারেশন সহ Hono-ভিত্তিক REST API। PTY (pseudo-terminal) এর জন্য WebSocket সাপোর্ট। রিয়েল-টাইম ইভেন্ট স্ট্রিমিংয়ের জন্য SSE। Basic auth, CORS, gzip কম্প্রেশন। TUI হলো একটি frontend; সার্ভারটি যেকোনো HTTP ক্লায়েন্ট, web UI, বা মোবাইল অ্যাপ থেকে পরিচালনা করা যায়।
+
+### কনটেক্সট ম্যানেজমেন্ট
+
+টোকেন ব্যবহার মডেলের কনটেক্সট সীমার কাছে পৌঁছালে AI-চালিত সারাংশ সহ Auto-compact। কনফিগারযোগ্য থ্রেশহোল্ড সহ টোকেন-সচেতন প্রুনিং (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB)। Skill tool আউটপুট প্রুনিং থেকে সুরক্ষিত।
+
+### এডিট ইঞ্জিন
+
+Hunk ভেরিফিকেশন সহ Unified diff প্যাচিং। সম্পূর্ণ ফাইল ওভাররাইটের পরিবর্তে নির্দিষ্ট ফাইল অঞ্চলে টার্গেটেড hunk প্রয়োগ করে। ফাইল জুড়ে ব্যাচ অপারেশনের জন্য Multi-edit tool।
+
+### পারমিশন সিস্টেম
+
+Wildcard প্যাটার্ন ম্যাচিং সহ ৩-স্টেট পারমিশন (`allow` / `deny` / `ask`)। সূক্ষ্ম নিয়ন্ত্রণের জন্য 100+ bash কমান্ড arity সংজ্ঞা। প্রজেক্ট বাউন্ডারি এনফোর্সমেন্ট workspace-এর বাইরে ফাইল অ্যাক্সেস প্রতিরোধ করে।
+
+### Git-ভিত্তিক রোলব্যাক
+
+প্রতিটি টুল এক্সিকিউশনের আগে ফাইলের অবস্থা রেকর্ড করা Snapshot সিস্টেম। Diff গণনা সহ `revert` এবং `unrevert` সাপোর্ট করে। প্রতি-মেসেজ বা প্রতি-সেশন পরিবর্তন রোলব্যাক করা যায়।
+
+### খরচ ট্র্যাকিং
+
+সম্পূর্ণ টোকেন ব্রেকডাউন সহ প্রতি-মেসেজ খরচ (input, output, reasoning, cache read, cache write)। প্রতি-টিম বাজেট সীমা (`max_cost`)। প্রতি-মডেল এবং প্রতি-দিন অ্যাগ্রিগেশন সহ `stats` কমান্ড। TUI-তে রিয়েল-টাইম সেশন খরচ প্রদর্শন। মূল্য তথ্য models.dev থেকে আনা হয়।
+
+### প্লাগইন সিস্টেম
+
+Hook আর্কিটেকচার সহ সম্পূর্ণ SDK (`@opencode/plugin`)। npm প্যাকেজ বা ফাইলসিস্টেম থেকে ডাইনামিক লোডিং। Codex, GitHub Copilot, GitLab, এবং Poe অথেন্টিকেশনের জন্য বিল্ট-ইন প্লাগইন।
+
+---
+
+## সাধারণ ভুল ধারণা
+
+এই প্রজেক্টের AI-জেনারেটেড সারাংশ থেকে বিভ্রান্তি রোধ করতে:
+
+- **TUI হলো TypeScript** (টার্মিনাল রেন্ডারিংয়ের জন্য SolidJS + @opentui), Rust নয়।
+- **Tree-sitter** শুধুমাত্র TUI সিনট্যাক্স হাইলাইটিং এবং bash কমান্ড পার্সিংয়ের জন্য ব্যবহৃত হয়, এজেন্ট-লেভেল কোড বিশ্লেষণের জন্য নয়।
+- **কোনো Docker/E2B sandboxing নেই** -- আইসোলেশন git worktrees দ্বারা সরবরাহ করা হয়।
+- **কোনো ভেক্টর ডাটাবেস বা RAG সিস্টেম নেই** -- কনটেক্সট LSP symbol indexing + auto-compact দ্বারা পরিচালিত হয়।
+- **স্বয়ংক্রিয় ফিক্স প্রস্তাব করে এমন কোনো "watch mode" নেই** -- file watcher শুধুমাত্র ইনফ্রাস্ট্রাকচার উদ্দেশ্যে বিদ্যমান।
+- **সেলফ-কারেকশন** স্ট্যান্ডার্ড এজেন্ট লুপ ব্যবহার করে (LLM টুল ফলাফলে ত্রুটি দেখে এবং পুনরায় চেষ্টা করে), কোনো বিশেষায়িত অটো-রিপেয়ার মেকানিজম নয়।
+
+## সক্ষমতা ম্যাট্রিক্স
+
+| সক্ষমতা | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

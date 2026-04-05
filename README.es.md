@@ -43,18 +43,172 @@
 
 ---
 
-> **Aviso de fork** - Este es un fork personalizado de [anomalyco/opencode](https://github.com/anomalyco/opencode) con las siguientes adiciones:
->
-> - **Tareas en segundo plano** - Delegue trabajo a subagentes que se ejecutan de forma asíncrona con `mode: "background"`
-> - **Equipos de agentes** - Orqueste múltiples agentes en paralelo con ejecución DAG basada en oleadas
-> - **Aislamiento Git worktree** - Las tareas en segundo plano se ejecutan automáticamente en worktrees aislados
-> - **API de gestión de tareas** - API REST completa para el ciclo de vida de tareas (cancelar, reanudar, seguimiento, promover)
-> - **Panel de tareas TUI** - Barra lateral que muestra tareas activas + diálogo con acciones de cancelar/reanudar
-> - **Alcance MCP por agente** - Permitir/denegar servidores MCP por agente mediante configuración
-> - **Seguimiento de estado de sesión** - Ciclo de vida de 9 estados persistido en DB (en cola, ocupado, completado, fallido...)
-> - **Agente orquestador** - Agente de solo lectura que delega a agentes de build mediante herramientas task/team
->
-> Mantenido sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/opencode/tree/dev) para los últimos cambios.
+## Funcionalidades del fork
+
+> Este es un fork de [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenido por [Rwanbt](https://github.com/Rwanbt).
+> Sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/opencode/tree/dev) para los últimos cambios.
+
+#### Tareas en segundo plano
+
+Delegue trabajo a subagentes que se ejecutan de forma asíncrona. Establezca `mode: "background"` en la herramienta task y devuelve un `task_id` inmediatamente mientras el agente trabaja en segundo plano. Se publican eventos de bus (`TaskCreated`, `TaskCompleted`, `TaskFailed`) para el seguimiento del ciclo de vida.
+
+#### Equipos de agentes
+
+Orqueste múltiples agentes en paralelo usando la herramienta `team`. Defina subtareas con aristas de dependencia; `computeWaves()` construye un DAG y ejecuta tareas independientes simultáneamente (hasta 5 agentes en paralelo). Control de presupuesto mediante `max_cost` (dólares) y `max_agents`. El contexto de tareas completadas se pasa automáticamente a las dependientes.
+
+#### Aislamiento Git worktree
+
+Cada tarea en segundo plano obtiene automáticamente su propio git worktree. El espacio de trabajo se vincula a la sesión en la base de datos. Si una tarea no produce cambios en archivos, el worktree se limpia automáticamente. Esto proporciona aislamiento a nivel de git sin contenedores.
+
+#### API de gestión de tareas
+
+API REST completa para la gestión del ciclo de vida de tareas:
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/task/` | Listar tareas (filtrar por padre, estado) |
+| GET | `/task/:id` | Detalles de tarea + estado + info de worktree |
+| GET | `/task/:id/messages` | Obtener mensajes de la sesión de tarea |
+| POST | `/task/:id/cancel` | Cancelar una tarea en ejecución o en cola |
+| POST | `/task/:id/resume` | Reanudar tarea completada/fallida/bloqueada |
+| POST | `/task/:id/followup` | Enviar mensaje de seguimiento a tarea inactiva |
+| POST | `/task/:id/promote` | Promover tarea de segundo plano a primer plano |
+| GET | `/task/:id/team` | Vista agregada del equipo (costos, diffs por miembro) |
+
+#### Panel de tareas TUI
+
+Plugin de barra lateral que muestra tareas en segundo plano activas con iconos de estado en tiempo real:
+
+| Icono | Estado |
+|-------|--------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+Diálogo con acciones: abrir sesión de tarea, cancelar, reanudar, enviar seguimiento, verificar estado.
+
+#### Alcance MCP por agente
+
+Listas de permitir/denegar por agente para servidores MCP. Configure en `opencode.json` bajo el campo `mcp` de cada agente. La función `toolsForAgent()` filtra las herramientas MCP disponibles según el alcance del agente que realiza la llamada.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### Ciclo de vida de sesión de 9 estados
+
+Las sesiones rastrean uno de 9 estados, persistidos en la base de datos:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+Los estados persistentes (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) sobreviven a reinicios de la base de datos. Los estados en memoria (`idle`, `busy`, `retry`) se reinician al reiniciar.
+
+#### Agente orquestador
+
+Agente coordinador de solo lectura (máximo 50 pasos). Tiene acceso a las herramientas `task` y `team` pero todas las herramientas de edición están denegadas. Delega la implementación a los agentes build/general y sintetiza los resultados.
+
+---
+
+## Arquitectura técnica
+
+### Soporte multi-proveedor
+
+Más de 21 proveedores listos para usar: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, además de cualquier endpoint compatible con OpenAI. Precios obtenidos de [models.dev](https://models.dev).
+
+### Sistema de agentes
+
+| Agente | Modo | Acceso | Descripción |
+|--------|------|--------|-------------|
+| **build** | primary | full | Agente de desarrollo predeterminado |
+| **plan** | primary | read-only | Análisis y exploración de código |
+| **general** | subagent | full (no todowrite) | Tareas complejas de múltiples pasos |
+| **explore** | subagent | read-only | Búsqueda rápida en el codebase |
+| **orchestrator** | subagent | read-only + task/team | Coordinador multi-agente (50 pasos) |
+| compaction | hidden | none | Resumen de contexto impulsado por IA |
+| title | hidden | none | Generación de título de sesión |
+| summary | hidden | none | Resumen de sesión |
+
+### Integración LSP
+
+Soporte completo del Language Server Protocol con indexación de símbolos, diagnósticos y soporte multi-lenguaje (TypeScript, Deno, Vue, y extensible). El agente navega el código mediante símbolos LSP en lugar de búsqueda textual, permitiendo go-to-definition preciso, find-references y detección de errores de tipo en tiempo real.
+
+### Soporte MCP
+
+Cliente y servidor Model Context Protocol. Soporta transportes stdio, HTTP/SSE y StreamableHTTP. Flujo de autenticación OAuth para servidores remotos. Capacidades de tool, prompt y resource. Alcance por agente mediante listas de permitir/denegar.
+
+### Arquitectura cliente/servidor
+
+API REST basada en Hono con rutas tipadas y generación de especificación OpenAPI. Soporte WebSocket para PTY (pseudo-terminal). SSE para streaming de eventos en tiempo real. Auth básica, CORS, compresión gzip. El TUI es un frontend; el servidor puede controlarse desde cualquier cliente HTTP, la interfaz web o una aplicación móvil.
+
+### Gestión de contexto
+
+Auto-compactación con resumen impulsado por IA cuando el uso de tokens se acerca al límite de contexto del modelo. Poda consciente de tokens con umbrales configurables (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB). Las salidas de la herramienta skill están protegidas de la poda.
+
+### Motor de edición
+
+Parcheo de diffs unificados con verificación de hunks. Aplica hunks dirigidos a regiones específicas del archivo en lugar de sobrescrituras completas. Herramienta multi-edit para operaciones por lotes en múltiples archivos.
+
+### Sistema de permisos
+
+Permisos de 3 estados (`allow` / `deny` / `ask`) con coincidencia de patrones comodín. Más de 100 definiciones de aridad de comandos bash para control detallado. Aplicación de límites del proyecto que impide el acceso a archivos fuera del espacio de trabajo.
+
+### Reversión basada en git
+
+Sistema de snapshots que registra el estado de archivos antes de cada ejecución de herramienta. Soporta `revert` y `unrevert` con cálculo de diff. Los cambios se pueden revertir por mensaje o por sesión.
+
+### Seguimiento de costos
+
+Costo por mensaje con desglose completo de tokens (input, output, reasoning, cache read, cache write). Límites de presupuesto por equipo (`max_cost`). Comando `stats` con agregación por modelo y por día. Costo de sesión en tiempo real mostrado en el TUI. Datos de precios obtenidos de models.dev.
+
+### Sistema de plugins
+
+SDK completo (`@opencode/plugin`) con arquitectura de hooks. Carga dinámica desde paquetes npm o el sistema de archivos. Plugins integrados para autenticación de Codex, GitHub Copilot, GitLab y Poe.
+
+---
+
+## Conceptos erróneos comunes
+
+Para evitar confusión por resúmenes generados por IA de este proyecto:
+
+- El **TUI es TypeScript** (SolidJS + @opentui para renderizado en terminal), no Rust.
+- **Tree-sitter** se usa solo para resaltado de sintaxis del TUI y análisis de comandos bash, no para análisis de código a nivel de agente.
+- **No hay sandboxing Docker/E2B** -- el aislamiento se proporciona mediante git worktrees.
+- **No hay base de datos vectorial ni sistema RAG** -- el contexto se gestiona mediante indexación de símbolos LSP + auto-compactación.
+- **No hay un "modo watch" que proponga correcciones automáticas** -- el file watcher existe solo para fines de infraestructura.
+- La **auto-corrección** usa el bucle estándar del agente (el LLM ve errores en resultados de herramientas y reintenta), no un mecanismo especializado de reparación automática.
+
+## Matriz de capacidades
+
+| Capacidad | Estado | Notas |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

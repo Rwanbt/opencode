@@ -43,18 +43,172 @@
 
 ---
 
-> **ملاحظة حول الفورك** - هذا فورك مخصص من [anomalyco/opencode](https://github.com/anomalyco/opencode) مع الإضافات التالية:
->
-> - **المهام الخلفية** - تفويض العمل إلى وكلاء فرعيين يعملون بشكل غير متزامن مع `mode: "background"`
-> - **فرق الوكلاء** - تنسيق وكلاء متعددين بالتوازي مع تنفيذ DAG قائم على الموجات
-> - **عزل Git worktree** - المهام الخلفية تعمل تلقائياً في worktrees معزولة
-> - **API لإدارة المهام** - REST API كامل لدورة حياة المهام (إلغاء، استئناف، متابعة، ترقية)
-> - **لوحة مهام TUI** - شريط جانبي يعرض المهام النشطة + نافذة حوار مع إجراءات الإلغاء/الاستئناف
-> - **تحديد نطاق وكيل MCP** - السماح/منع خوادم MCP لكل وكيل عبر الإعدادات
-> - **تتبع حالة الجلسة** - دورة حياة من 9 حالات محفوظة في DB (في الانتظار، مشغول، مكتمل، فشل...)
-> - **وكيل التنسيق** - وكيل للقراءة فقط يفوض لوكلاء البناء عبر أدوات task/team
->
+## ميزات الفورك
+
+> هذا فورك من [anomalyco/opencode](https://github.com/anomalyco/opencode) يديره [Rwanbt](https://github.com/Rwanbt).
 > يتم الحفاظ على المزامنة مع المستودع الأصلي. راجع [فرع dev](https://github.com/Rwanbt/opencode/tree/dev) لآخر التغييرات.
+
+#### المهام الخلفية
+
+فوّض العمل إلى وكلاء فرعيين يعملون بشكل غير متزامن. اضبط `mode: "background"` على أداة task وستُرجع `task_id` فوراً بينما يعمل الوكيل في الخلفية. يتم نشر أحداث الناقل (`TaskCreated`، `TaskCompleted`، `TaskFailed`) لتتبع دورة الحياة.
+
+#### فرق الوكلاء
+
+نسّق وكلاء متعددين بالتوازي باستخدام أداة `team`. حدد المهام الفرعية مع حواف التبعية؛ تبني `computeWaves()` رسم DAG وتنفذ المهام المستقلة بشكل متزامن (حتى 5 وكلاء متوازيين). التحكم في الميزانية عبر `max_cost` (بالدولار) و`max_agents`. يتم تمرير السياق من المهام المكتملة تلقائياً إلى المهام التابعة.
+
+#### عزل Git worktree
+
+تحصل كل مهمة خلفية تلقائياً على git worktree خاص بها. يرتبط مساحة العمل بالجلسة في قاعدة البيانات. إذا لم تُنتج المهمة أي تغييرات في الملفات، يتم تنظيف worktree تلقائياً. يوفر هذا عزلاً على مستوى git دون الحاجة إلى حاويات.
+
+#### API لإدارة المهام
+
+REST API كامل لإدارة دورة حياة المهام:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/task/` | List tasks (filter by parent, status) |
+| GET | `/task/:id` | Get task details + status + worktree info |
+| GET | `/task/:id/messages` | Retrieve task session messages |
+| POST | `/task/:id/cancel` | Cancel a running or queued task |
+| POST | `/task/:id/resume` | Resume completed/failed/blocked task |
+| POST | `/task/:id/followup` | Send follow-up message to idle task |
+| POST | `/task/:id/promote` | Promote background task to foreground |
+| GET | `/task/:id/team` | Aggregated team view (costs, diffs per member) |
+
+#### لوحة مهام TUI
+
+إضافة شريط جانبي تعرض المهام الخلفية النشطة مع أيقونات الحالة في الوقت الفعلي:
+
+| Icon | Status |
+|------|--------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+نافذة حوار مع إجراءات: فتح جلسة المهمة، إلغاء، استئناف، إرسال متابعة، التحقق من الحالة.
+
+#### تحديد نطاق وكيل MCP
+
+قوائم سماح/منع لخوادم MCP لكل وكيل. يتم الإعداد في `opencode.json` تحت حقل `mcp` لكل وكيل. تقوم دالة `toolsForAgent()` بتصفية أدوات MCP المتاحة بناءً على نطاق الوكيل المستدعي.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### دورة حياة الجلسة ذات 9 حالات
+
+تتبع الجلسات إحدى 9 حالات، محفوظة في قاعدة البيانات:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+الحالات الدائمة (`queued`، `blocked`، `awaiting_input`، `completed`، `failed`، `cancelled`) تبقى بعد إعادة تشغيل قاعدة البيانات. الحالات المؤقتة في الذاكرة (`idle`، `busy`، `retry`) تُعاد تهيئتها عند إعادة التشغيل.
+
+#### وكيل التنسيق
+
+وكيل تنسيق للقراءة فقط (50 خطوة كحد أقصى). لديه صلاحية الوصول إلى أدوات `task` و`team` لكن جميع أدوات التحرير محظورة. يفوّض التنفيذ إلى وكلاء البناء/العامين ويجمّع النتائج.
+
+---
+
+## البنية التقنية
+
+### دعم مزودين متعددين
+
+أكثر من 21 مزوداً جاهزاً: Anthropic، OpenAI، Google Gemini، Azure، AWS Bedrock، Vertex AI، OpenRouter، GitHub Copilot، XAI، Mistral، Groq، DeepInfra، Cerebras، Cohere، TogetherAI، Perplexity، Vercel، Venice، GitLab، Gateway، بالإضافة إلى أي endpoint متوافق مع OpenAI. الأسعار مأخوذة من [models.dev](https://models.dev).
+
+### نظام الوكلاء
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### تكامل LSP
+
+دعم كامل لبروتوكول خادم اللغة مع فهرسة الرموز والتشخيصات ودعم لغات متعددة (TypeScript، Deno، Vue، وقابل للتوسيع). يتنقل الوكيل في الكود عبر رموز LSP بدلاً من البحث النصي، مما يتيح go-to-definition دقيق وfind-references واكتشاف أخطاء الأنواع في الوقت الفعلي.
+
+### دعم MCP
+
+عميل وخادم Model Context Protocol. يدعم نقل stdio وHTTP/SSE وStreamableHTTP. تدفق مصادقة OAuth للخوادم البعيدة. إمكانيات الأدوات والمطالبات والموارد. تحديد النطاق لكل وكيل عبر قوائم السماح/المنع.
+
+### بنية العميل/الخادم
+
+REST API مبني على Hono مع مسارات مُنَمَّطة وتوليد مواصفات OpenAPI. دعم WebSocket لـ PTY (الطرفية الزائفة). SSE لبث الأحداث في الوقت الفعلي. مصادقة أساسية، CORS، ضغط gzip. واجهة TUI هي واحدة من الواجهات الأمامية؛ يمكن التحكم بالخادم من أي عميل HTTP أو واجهة الويب أو تطبيق الجوال.
+
+### إدارة السياق
+
+ضغط تلقائي مع تلخيص مدفوع بالذكاء الاصطناعي عندما يقترب استخدام الرموز من حد سياق النموذج. تقليم واعٍ بالرموز مع عتبات قابلة للتكوين (`PRUNE_MINIMUM` 20KB، `PRUNE_PROTECT` 40KB). مخرجات أداة Skill محمية من التقليم.
+
+### محرك التحرير
+
+ترقيع unified diff مع التحقق من الأجزاء. يطبق أجزاء مستهدفة على مناطق محددة من الملف بدلاً من إعادة كتابة الملف بالكامل. أداة multi-edit للعمليات المجمعة عبر الملفات.
+
+### نظام الصلاحيات
+
+صلاحيات من 3 حالات (`allow` / `deny` / `ask`) مع مطابقة أنماط wildcard. أكثر من 100 تعريف لعدد معاملات أوامر bash للتحكم الدقيق. فرض حدود المشروع يمنع الوصول إلى الملفات خارج مساحة العمل.
+
+### التراجع المدعوم بـ Git
+
+نظام لقطات يسجل حالة الملف قبل كل تنفيذ أداة. يدعم `revert` و`unrevert` مع حساب الفروقات. يمكن التراجع عن التغييرات لكل رسالة أو لكل جلسة.
+
+### تتبع التكاليف
+
+تكلفة لكل رسالة مع تفصيل كامل للرموز (input، output، reasoning، cache read، cache write). حدود ميزانية لكل فريق (`max_cost`). أمر `stats` مع تجميع لكل نموذج ولكل يوم. تكلفة الجلسة في الوقت الفعلي معروضة في TUI. بيانات الأسعار مأخوذة من models.dev.
+
+### نظام الإضافات
+
+SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميكي من حزم npm أو نظام الملفات. إضافات مدمجة لمصادقة Codex وGitHub Copilot وGitLab وPoe.
+
+---
+
+## المفاهيم الخاطئة الشائعة
+
+لمنع الالتباس من الملخصات المولّدة بالذكاء الاصطناعي لهذا المشروع:
+
+- **واجهة TUI مكتوبة بـ TypeScript** (SolidJS + @opentui لعرض الطرفية)، وليس Rust.
+- **Tree-sitter** يُستخدم فقط لتلوين بناء الجملة في TUI وتحليل أوامر bash، وليس لتحليل الكود على مستوى الوكيل.
+- **لا يوجد Docker/E2B sandboxing** -- العزل يتم عبر git worktrees.
+- **لا توجد قاعدة بيانات متجهية أو نظام RAG** -- يُدار السياق عبر فهرسة رموز LSP + الضغط التلقائي.
+- **لا يوجد "وضع مراقبة" يقترح إصلاحات تلقائية** -- مراقب الملفات موجود لأغراض البنية التحتية فقط.
+- **التصحيح الذاتي** يستخدم حلقة الوكيل القياسية (يرى LLM الأخطاء في نتائج الأدوات ويعيد المحاولة)، وليس آلية إصلاح تلقائي متخصصة.
+
+## مصفوفة القدرات
+
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

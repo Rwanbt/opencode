@@ -43,18 +43,170 @@
 
 ---
 
-> **Fork bildirimi** - Bu, aşağıdaki eklemelerle [anomalyco/opencode](https://github.com/anomalyco/opencode) projesinin özel bir fork'udur:
->
-> - **Arka plan görevleri** - `mode: "background"` ile asenkron çalışan alt ajanlarla iş devretme
-> - **Ajan takımları** - Dalga tabanlı DAG yürütmesiyle birden fazla ajanı paralel olarak orkestre etme
-> - **Git worktree izolasyonu** - Arka plan görevleri otomatik olarak izole worktree'lerde çalışır
-> - **Görev yönetimi API'si** - Görev yaşam döngüsü için tam REST API (iptal, devam, takip, terfi)
-> - **TUI görev paneli** - Aktif görevleri gösteren kenar çubuğu + iptal/devam eylemleri olan iletişim kutusu
-> - **MCP ajan kapsamı** - Yapılandırma aracılığıyla ajan başına MCP sunucularını izin ver/engelle
-> - **Oturum durumu takibi** - DB'de kalıcı 9 durumlu yaşam döngüsü (sırada, meşgul, tamamlandı, başarısız...)
-> - **Orkestratör ajanı** - task/team araçları aracılığıyla yapı ajanlarına delege eden salt okunur ajan
->
+## Fork Özellikleri
+
+> Bu, [anomalyco/opencode](https://github.com/anomalyco/opencode) projesinin [Rwanbt](https://github.com/Rwanbt) tarafından sürdürülen bir fork'udur.
 > Upstream ile senkronize tutulmaktadır. En son değişiklikler için [dev dalına](https://github.com/Rwanbt/opencode/tree/dev) bakın.
+
+#### Arka Plan Görevleri
+
+İşleri asenkron çalışan alt ajanlara devredin. Task aracında `mode: "background"` ayarlayın; ajan arka planda çalışırken hemen bir `task_id` döner. Yaşam döngüsü takibi için bus olayları (`TaskCreated`, `TaskCompleted`, `TaskFailed`) yayınlanır.
+
+#### Ajan Takımları
+
+`team` aracını kullanarak birden fazla ajanı paralel olarak orkestre edin. Bağımlılık kenarlarıyla alt görevler tanımlayın; `computeWaves()` bir DAG oluşturur ve bağımsız görevleri eşzamanlı olarak yürütür (en fazla 5 paralel ajan). `max_cost` (dolar) ve `max_agents` ile bütçe kontrolü. Tamamlanan görevlerden bağlam otomatik olarak bağımlı görevlere aktarılır.
+
+#### Git Worktree İzolasyonu
+
+Her arka plan görevi otomatik olarak kendi git worktree'sini alır. Çalışma alanı veritabanında oturuma bağlanır. Bir görev dosya değişikliği üretmezse worktree otomatik olarak temizlenir. Bu, konteyner olmadan git düzeyinde izolasyon sağlar.
+
+#### Görev Yönetimi API'si
+
+Görev yaşam döngüsü yönetimi için tam REST API:
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| GET | `/task/` | Görevleri listele (parent, status'a göre filtrele) |
+| GET | `/task/:id` | Görev detayları + status + worktree bilgisi |
+| GET | `/task/:id/messages` | Görev oturum mesajlarını getir |
+| POST | `/task/:id/cancel` | Çalışan veya sıradaki görevi iptal et |
+| POST | `/task/:id/resume` | Tamamlanan/başarısız/engellenen görevi devam ettir |
+| POST | `/task/:id/followup` | Boşta olan göreve takip mesajı gönder |
+| POST | `/task/:id/promote` | Arka plan görevini ön plana terfi ettir |
+| GET | `/task/:id/team` | Toplu takım görünümü (maliyetler, üye başına diff'ler) |
+
+#### TUI Görev Paneli
+
+Gerçek zamanlı durum simgeleriyle aktif arka plan görevlerini gösteren kenar çubuğu eklentisi:
+
+| Simge | Durum |
+|-------|-------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+Eylemler içeren iletişim kutusu: görev oturumunu aç, iptal et, devam ettir, takip mesajı gönder, durumu kontrol et.
+
+#### MCP Ajan Kapsamı
+
+MCP sunucuları için ajan başına izin ver/engelle listeleri. `opencode.json` dosyasında her ajanın `mcp` alanı altında yapılandırılır. `toolsForAgent()` fonksiyonu, çağıran ajanın kapsamına göre kullanılabilir MCP araçlarını filtreler.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### 9 Durumlu Oturum Yaşam Döngüsü
+
+Oturumlar veritabanında kalıcı olarak saklanan 9 durumdan birini takip eder:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+Kalıcı durumlar (`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`) veritabanı yeniden başlatmalarında korunur. Bellek içi durumlar (`idle`, `busy`, `retry`) yeniden başlatmada sıfırlanır.
+
+#### Orkestratör Ajanı
+
+Salt okunur koordinatör ajan (en fazla 50 adım). `task` ve `team` araçlarına erişimi vardır ancak tüm düzenleme araçları reddedilmiştir. Uygulamayı build/general ajanlara devreder ve sonuçları sentezler.
+
+## Teknik Mimari
+
+### Çoklu Sağlayıcı Desteği
+
+21+ sağlayıcı kullanıma hazır: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway ve herhangi bir OpenAI uyumlu endpoint. Fiyatlandırma [models.dev](https://models.dev) kaynağından alınmıştır.
+
+### Ajan Sistemi
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | Default development agent |
+| **plan** | primary | read-only | Analysis and code exploration |
+| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
+| **explore** | subagent | read-only | Fast codebase search |
+| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
+| compaction | hidden | none | AI-driven context summarization |
+| title | hidden | none | Session title generation |
+| summary | hidden | none | Session summarization |
+
+### LSP Entegrasyonu
+
+Sembol indeksleme, tanılama ve çoklu dil desteği (TypeScript, Deno, Vue ve genişletilebilir) ile tam Language Server Protocol desteği. Ajan, metin araması yerine LSP sembolleri aracılığıyla kodda gezinir; bu sayede hassas go-to-definition, find-references ve gerçek zamanlı tür hatası algılama sağlanır.
+
+### MCP Desteği
+
+Model Context Protocol istemci ve sunucu. stdio, HTTP/SSE ve StreamableHTTP aktarımlarını destekler. Uzak sunucular için OAuth kimlik doğrulama akışı. Tool, prompt ve resource yetenekleri. Allow/deny listeleri aracılığıyla ajan bazında kapsam belirleme.
+
+### İstemci/Sunucu Mimarisi
+
+Typed routes ve OpenAPI spec oluşturma özellikli Hono tabanlı REST API. PTY (pseudo-terminal) için WebSocket desteği. Gerçek zamanlı olay akışı için SSE. Basic auth, CORS, gzip sıkıştırma. TUI bir frontend'dir; sunucu herhangi bir HTTP istemcisi, web UI veya mobil uygulamadan yönetilebilir.
+
+### Bağlam Yönetimi
+
+Token kullanımı modelin bağlam sınırına yaklaştığında AI güdümlü özetleme ile auto-compact. Yapılandırılabilir eşiklerle token farkındalıklı budama (`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB). Skill tool çıktıları budamadan korunur.
+
+### Düzenleme Motoru
+
+Hunk doğrulamalı unified diff yamalama. Tam dosya üzerine yazma yerine belirli dosya bölgelerine hedefli hunk'lar uygular. Dosyalar arası toplu işlemler için multi-edit tool.
+
+### İzin Sistemi
+
+Wildcard desen eşleştirmeli 3 durumlu izinler (`allow` / `deny` / `ask`). Ayrıntılı kontrol için 100+ bash komutu arity tanımı. Proje sınır uygulaması, workspace dışındaki dosya erişimini engeller.
+
+### Git Destekli Geri Alma
+
+Her araç çalıştırması öncesinde dosya durumunu kaydeden snapshot sistemi. Diff hesaplamalı `revert` ve `unrevert` desteği. Değişiklikler mesaj veya oturum bazında geri alınabilir.
+
+### Maliyet Takibi
+
+Tam token dökümüyle mesaj başına maliyet (input, output, reasoning, cache read, cache write). Takım başına bütçe limitleri (`max_cost`). Model ve gün bazında toplama yapan `stats` komutu. TUI'da gerçek zamanlı oturum maliyeti gösterimi. Fiyatlandırma verileri models.dev'den alınır.
+
+### Eklenti Sistemi
+
+Hook mimarili tam SDK (`@opencode/plugin`). npm paketlerinden veya dosya sisteminden dinamik yükleme. Codex, GitHub Copilot, GitLab ve Poe kimlik doğrulaması için yerleşik eklentiler.
+
+---
+
+## Yaygın Yanlış Anlamalar
+
+Bu projenin AI tarafından oluşturulan özetlerinden kaynaklanan karışıklığı önlemek için:
+
+- **TUI TypeScript'tir** (terminal render için SolidJS + @opentui), Rust değil.
+- **Tree-sitter** yalnızca TUI sözdizimi vurgulama ve bash komut ayrıştırma için kullanılır, ajan düzeyinde kod analizi için değil.
+- **Docker/E2B sandboxing yoktur** -- izolasyon git worktree'ler tarafından sağlanır.
+- **Vektör veritabanı veya RAG sistemi yoktur** -- bağlam LSP symbol indexing + auto-compact ile yönetilir.
+- **Otomatik düzeltmeler öneren bir "watch mode" yoktur** -- file watcher yalnızca altyapı amaçlıdır.
+- **Kendini düzeltme** standart ajan döngüsünü kullanır (LLM araç sonuçlarındaki hataları görür ve yeniden dener), özel bir otomatik onarım mekanizması değil.
+
+## Yetenek Matrisi
+
+| Yetenek | Status | Notes |
+|-----------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 

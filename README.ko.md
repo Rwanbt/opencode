@@ -43,18 +43,172 @@
 
 ---
 
-> **포크 안내** - 이것은 [anomalyco/opencode](https://github.com/anomalyco/opencode)의 커스텀 포크로, 다음 기능이 추가되었습니다:
->
-> - **백그라운드 작업** - `mode: "background"`로 비동기적으로 실행되는 서브에이전트에 작업 위임
-> - **에이전트 팀** - 웨이브 기반 DAG 실행으로 여러 에이전트를 병렬 오케스트레이션
-> - **Git worktree 격리** - 백그라운드 작업이 격리된 worktree에서 자동 실행
-> - **작업 관리 API** - 작업 수명 주기를 위한 완전한 REST API (취소, 재개, 후속 조치, 승격)
-> - **TUI 작업 대시보드** - 활성 작업을 보여주는 사이드바 + 취소/재개 액션이 있는 다이얼로그
-> - **MCP 에이전트 스코핑** - 설정을 통해 에이전트별 MCP 서버 허용/거부
-> - **세션 상태 추적** - DB에 지속되는 9단계 수명 주기 (대기, 처리 중, 완료, 실패...)
-> - **오케스트레이터 에이전트** - task/team 도구를 통해 빌드 에이전트에 위임하는 읽기 전용 에이전트
->
+## 포크 기능
+
+> 이것은 [anomalyco/opencode](https://github.com/anomalyco/opencode)의 포크로, [Rwanbt](https://github.com/Rwanbt)가 관리합니다.
 > 업스트림과 동기화 유지. 최신 변경 사항은 [dev 브랜치](https://github.com/Rwanbt/opencode/tree/dev)를 참조하세요.
+
+#### 백그라운드 작업
+
+서브에이전트에 비동기 작업을 위임합니다. task 도구에서 `mode: "background"`를 설정하면 에이전트가 백그라운드에서 작업하는 동안 `task_id`가 즉시 반환됩니다. 수명 주기 추적을 위해 버스 이벤트(`TaskCreated`, `TaskCompleted`, `TaskFailed`)가 발행됩니다.
+
+#### 에이전트 팀
+
+`team` 도구를 사용하여 여러 에이전트를 병렬로 오케스트레이션합니다. 의존성 엣지를 가진 하위 작업을 정의하면 `computeWaves()`가 DAG를 구축하고 독립적인 작업을 동시에 실행합니다(최대 5개 병렬 에이전트). `max_cost`(달러)와 `max_agents`를 통한 예산 제어. 완료된 작업의 컨텍스트가 의존 작업에 자동으로 전달됩니다.
+
+#### Git Worktree 격리
+
+각 백그라운드 작업은 자동으로 자체 git worktree를 할당받습니다. 워크스페이스는 데이터베이스의 세션에 연결됩니다. 작업이 파일 변경을 생성하지 않으면 worktree가 자동으로 정리됩니다. 컨테이너 없이 git 수준의 격리를 제공합니다.
+
+#### 작업 관리 API
+
+작업 수명 주기 관리를 위한 완전한 REST API:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/task/` | List tasks (filter by parent, status) |
+| GET | `/task/:id` | Get task details + status + worktree info |
+| GET | `/task/:id/messages` | Retrieve task session messages |
+| POST | `/task/:id/cancel` | Cancel a running or queued task |
+| POST | `/task/:id/resume` | Resume completed/failed/blocked task |
+| POST | `/task/:id/followup` | Send follow-up message to idle task |
+| POST | `/task/:id/promote` | Promote background task to foreground |
+| GET | `/task/:id/team` | Aggregated team view (costs, diffs per member) |
+
+#### TUI 작업 대시보드
+
+실시간 상태 아이콘으로 활성 백그라운드 작업을 표시하는 사이드바 플러그인:
+
+| Icon | Status |
+|------|--------|
+| `~` | Running / Retrying |
+| `?` | Queued / Awaiting input |
+| `!` | Blocked |
+| `x` | Failed |
+| `*` | Completed |
+| `-` | Cancelled |
+
+액션이 포함된 다이얼로그: 작업 세션 열기, 취소, 재개, 후속 메시지 전송, 상태 확인.
+
+#### MCP 에이전트 스코핑
+
+에이전트별 MCP 서버 허용/거부 목록. `opencode.json`의 각 에이전트 `mcp` 필드에서 설정합니다. `toolsForAgent()` 함수가 호출 에이전트의 스코프에 따라 사용 가능한 MCP 도구를 필터링합니다.
+
+```json
+{
+  "agents": {
+    "explore": {
+      "mcp": { "deny": ["dangerous-server"] }
+    }
+  }
+}
+```
+
+#### 9단계 세션 수명 주기
+
+세션은 9가지 상태 중 하나를 추적하며 데이터베이스에 영속화됩니다:
+
+`idle` · `busy` · `retry` · `queued` · `blocked` · `awaiting_input` · `completed` · `failed` · `cancelled`
+
+영속 상태(`queued`, `blocked`, `awaiting_input`, `completed`, `failed`, `cancelled`)는 데이터베이스 재시작 후에도 유지됩니다. 인메모리 상태(`idle`, `busy`, `retry`)는 재시작 시 초기화됩니다.
+
+#### 오케스트레이터 에이전트
+
+읽기 전용 코디네이터 에이전트(최대 50단계). `task`와 `team` 도구에 접근할 수 있지만 모든 편집 도구는 거부됩니다. 구현을 빌드/범용 에이전트에 위임하고 결과를 종합합니다.
+
+---
+
+## 기술 아키텍처
+
+### 다중 프로바이더 지원
+
+21개 이상의 프로바이더를 기본 지원: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, 그리고 모든 OpenAI 호환 엔드포인트. 가격 정보는 [models.dev](https://models.dev)에서 제공.
+
+### 에이전트 시스템
+
+| Agent | Mode | Access | Description |
+|-------|------|--------|-------------|
+| **build** | primary | full | 기본 개발 에이전트 |
+| **plan** | primary | read-only | 분석 및 코드 탐색 |
+| **general** | subagent | full (no todowrite) | 복잡한 다단계 작업 |
+| **explore** | subagent | read-only | 빠른 코드베이스 검색 |
+| **orchestrator** | subagent | read-only + task/team | 다중 에이전트 코디네이터 (50단계) |
+| compaction | hidden | none | AI 기반 컨텍스트 요약 |
+| title | hidden | none | 세션 제목 생성 |
+| summary | hidden | none | 세션 요약 |
+
+### LSP 통합
+
+완전한 Language Server Protocol 지원(심볼 인덱싱, 진단, 다중 언어 지원: TypeScript, Deno, Vue 등 확장 가능). 에이전트는 텍스트 검색 대신 LSP 심볼을 통해 코드를 탐색하여 정확한 go-to-definition, find-references, 실시간 타입 오류 감지를 수행합니다.
+
+### MCP 지원
+
+Model Context Protocol 클라이언트 및 서버. stdio, HTTP/SSE, StreamableHTTP 전송 지원. 원격 서버용 OAuth 인증 흐름. 도구, 프롬프트, 리소스 기능. 에이전트별 허용/거부 목록을 통한 스코핑.
+
+### 클라이언트/서버 아키텍처
+
+Hono 기반 REST API(타입 라우트 및 OpenAPI 사양 생성). PTY(의사 터미널)용 WebSocket 지원. 실시간 이벤트 스트리밍용 SSE. Basic 인증, CORS, gzip 압축. TUI는 하나의 프런트엔드이며, 서버는 모든 HTTP 클라이언트, 웹 UI, 모바일 앱에서 구동 가능합니다.
+
+### 컨텍스트 관리
+
+토큰 사용량이 모델의 컨텍스트 한도에 도달하면 AI 기반 요약을 통한 자동 압축. 설정 가능한 임계값(`PRUNE_MINIMUM` 20KB, `PRUNE_PROTECT` 40KB)으로 토큰 인식 프루닝. skill 도구 출력은 프루닝에서 보호됩니다.
+
+### 편집 엔진
+
+hunk 검증이 포함된 unified diff 패치. 파일 전체 덮어쓰기가 아닌 특정 파일 영역에 타겟 hunk 적용. 여러 파일에 걸친 일괄 작업을 위한 multi-edit 도구.
+
+### 권한 시스템
+
+와일드카드 패턴 매칭을 지원하는 3단계 권한(`allow` / `deny` / `ask`). 세밀한 제어를 위한 100개 이상의 bash 명령어 arity 정의. 워크스페이스 외부의 파일 접근을 차단하는 프로젝트 경계 적용.
+
+### Git 기반 롤백
+
+각 도구 실행 전 파일 상태를 기록하는 스냅샷 시스템. diff 계산과 함께 `revert` 및 `unrevert` 지원. 메시지 단위 또는 세션 단위로 변경 사항을 롤백할 수 있습니다.
+
+### 비용 추적
+
+메시지별 비용과 전체 토큰 분석(input, output, reasoning, cache read, cache write). 팀별 예산 한도(`max_cost`). 모델별, 일별 집계가 가능한 `stats` 명령어. TUI에서 세션 비용 실시간 표시. 가격 데이터는 models.dev에서 제공.
+
+### 플러그인 시스템
+
+훅 아키텍처를 갖춘 완전한 SDK(`@opencode/plugin`). npm 패키지 또는 파일 시스템에서 동적 로딩. Codex, GitHub Copilot, GitLab, Poe 인증을 위한 내장 플러그인.
+
+---
+
+## 흔한 오해
+
+본 프로젝트에 대한 AI 생성 요약으로 인한 혼란을 방지하기 위해:
+
+- **TUI는 TypeScript**로 작성되었습니다(SolidJS + @opentui 터미널 렌더링). Rust가 아닙니다.
+- **Tree-sitter**는 TUI 구문 강조 및 bash 명령어 파싱에만 사용되며, 에이전트 수준의 코드 분석에는 사용되지 않습니다.
+- **Docker/E2B 샌드박싱은 없습니다** -- 격리는 git worktree로 제공됩니다.
+- **벡터 데이터베이스나 RAG 시스템은 없습니다** -- 컨텍스트는 LSP 심볼 인덱싱 + 자동 압축으로 관리됩니다.
+- **자동 수정을 제안하는 "워치 모드"는 없습니다** -- 파일 워처는 인프라 목적으로만 존재합니다.
+- **자기 수정**은 표준 에이전트 루프(LLM이 도구 결과의 오류를 확인하고 재시도)를 사용하며, 전문화된 자동 복구 메커니즘이 아닙니다.
+
+## 기능 매트릭스
+
+| 기능 | Status | Notes |
+|------|--------|-------|
+| Background tasks | Implemented | `mode: "background"` on task tool |
+| Agent teams (DAG) | Implemented | Wave-based parallel execution, budget control |
+| Git worktree isolation | Implemented | Auto-created per background task |
+| Task REST API | Implemented | 8 endpoints for full lifecycle |
+| TUI task dashboard | Implemented | Sidebar + dialog actions |
+| MCP agent scoping | Implemented | Per-agent allow/deny config |
+| 9-state lifecycle | Implemented | Persistent to SQLite |
+| Orchestrator agent | Implemented | Read-only coordinator |
+| Multi-provider (21+) | Implemented | Including local models |
+| LSP integration | Implemented | Symbols, diagnostics, multi-language |
+| MCP protocol | Implemented | Client + server, 3 transports |
+| Plugin system | Implemented | SDK + hook architecture |
+| Cost tracking | Implemented | Per-message, per-team, per-model |
+| Context auto-compact | Implemented | AI summarization + pruning |
+| Git rollback/snapshots | Implemented | Revert/unrevert per message |
+| Docker/E2B sandboxing | Not implemented | Git worktrees used instead |
+| Vector DB / RAG | Not implemented | LSP + auto-compact covers needs |
+| Dry run / command preview | Not implemented | Permission system validates pre-exec |
+| Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 
