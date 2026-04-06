@@ -29,3 +29,6 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Android NDK toolchain config (machine-specific paths)
+packages/mobile/src-tauri/.cargo/config.toml

@@ -144,10 +144,31 @@ jobs:
         working-directory: packages/mobile
         run: bun run build
 
+      - name: Setup Android NDK env
+        run: |
+          NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          echo "NDK_HOME=$NDK_HOME" >> $GITHUB_ENV
+
+          # Remove any cached .cargo/config.toml with Windows paths
+          rm -f packages/mobile/src-tauri/.cargo/config.toml
+
+          # Create correct config for Linux CI
+          mkdir -p packages/mobile/src-tauri/.cargo
+          cat > packages/mobile/src-tauri/.cargo/config.toml <<TOML
+          [target.aarch64-linux-android]
+          linker = "$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          ar = "$TOOLCHAIN/bin/llvm-ar"
+
+          [env]
+          CC_aarch64-linux-android = "$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          AR_aarch64-linux-android = "$TOOLCHAIN/bin/llvm-ar"
+          TOML
+
       - name: Build Android APK
         working-directory: packages/mobile
         env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          NDK_HOME: ${{ env.NDK_HOME }}
         run: bunx tauri android build --target aarch64
 
       # ─── Sign APK ─────────────────────────────────────────────────
