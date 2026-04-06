@@ -1,5 +1,6 @@
 import { createSignal, Show } from "solid-js"
 import { usePlatform } from "../../context/platform"
+import { ServerConnection } from "../../context/server"
 
 export interface RemoteConnectProps {
   onConnect: (url: string) => void
@@ -48,7 +49,7 @@ export function RemoteConnect(props: RemoteConnectProps) {
         setStatus("connected")
         // Save server URL for next time
         if (platform.setDefaultServer) {
-          await platform.setDefaultServer(url)
+          await platform.setDefaultServer(url as ServerConnection.Key)
         }
         props.onConnect(url)
       } else if (response.status === 401) {
