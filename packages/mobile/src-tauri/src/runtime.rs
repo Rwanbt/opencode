@@ -187,7 +187,7 @@ pub async fn start_embedded_server(
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
     // linker shipped alongside: ld-musl-aarch64.so.1 ./bun opencode-cli.js serve
     let ld_musl = dir.join("lib").join("ld-musl-aarch64.so.1");
-    let (cmd_path, mut cmd_args) = if ld_musl.exists() {
+    let (cmd_path, cmd_args) = if ld_musl.exists() {
         // Use musl linker to run bun (Android doesn't have /lib/ld-musl-aarch64.so.1)
         (
             ld_musl,
