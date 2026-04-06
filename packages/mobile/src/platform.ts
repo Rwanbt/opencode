@@ -1,59 +1,42 @@
 import type { Platform } from "@opencode-ai/app"
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
-import { type as osType } from "@tauri-apps/plugin-os"
-import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
-import { relaunch } from "@tauri-apps/plugin-process"
-import { LazyStore } from "@tauri-apps/plugin-store"
 import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal } from "./runtime"
 
 const pkg = { version: "0.1.0" }
 
+// Lazy-load Tauri plugins to prevent crash if not available
+async function loadPlugins() {
+  try {
+    const [http, os, notification, process, store] = await Promise.all([
+      import("@tauri-apps/plugin-http").catch(() => null),
+      import("@tauri-apps/plugin-os").catch(() => null),
+      import("@tauri-apps/plugin-notification").catch(() => null),
+      import("@tauri-apps/plugin-process").catch(() => null),
+      import("@tauri-apps/plugin-store").catch(() => null),
+    ])
+    return { http, os, notification, process, store }
+  } catch {
+    return null
+  }
+}
+
 export async function createPlatform(): Promise<Platform> {
-  const os = osType()
+  const plugins = await loadPlugins()
+  const os = plugins?.os?.type?.() ?? "android"
 
-  // Initialize store for persistent settings
-  const settingsStore = new LazyStore("settings.json")
+  // Create store with fallback to localStorage
+  function createStore(name: string) {
+    if (plugins?.store) {
+      const { LazyStore } = plugins.store
+      return new LazyStore(`${name}.json`)
+    }
+    return null
+  }
 
-  return {
-    platform: "mobile" as any, // Extend Platform type to include "mobile"
-    os: os as any,
-    version: pkg.version,
+  const settingsStore = createStore("settings")
 
-    openLink(url: string) {
-      // On mobile, open in system browser
-      window.open(url, "_blank")
-    },
-
-    async restart() {
-      await relaunch()
-    },
-
-    back() {
-      window.history.back()
-    },
-
-    forward() {
-      window.history.forward()
-    },
-
-    async notify(title: string, description?: string) {
-      let permissionGranted = await isPermissionGranted()
-      if (!permissionGranted) {
-        const permission = await requestPermission()
-        permissionGranted = permission === "granted"
-      }
-      if (permissionGranted) {
-        sendNotification({ title, body: description })
-      }
-    },
-
-    // No file dialogs on mobile — these are undefined
-    openDirectoryPickerDialog: undefined,
-    openFilePickerDialog: undefined,
-    saveFilePickerDialog: undefined,
-
-    storage(name?: string) {
-      const store = name ? new LazyStore(`${name}.json`) : settingsStore
+  // Storage adapter — uses Tauri Store or falls back to localStorage
+  function makeStorage(store: ReturnType<typeof createStore>) {
+    if (store) {
       return {
         async getItem(key: string) {
           return (await store.get<string>(key)) ?? null
@@ -67,26 +50,72 @@ export async function createPlatform(): Promise<Platform> {
           await store.save()
         },
       }
+    }
+    // Fallback to localStorage
+    return {
+      async getItem(key: string) { return localStorage.getItem(key) },
+      async setItem(key: string, value: string) { localStorage.setItem(key, value) },
+      async removeItem(key: string) { localStorage.removeItem(key) },
+    }
+  }
+
+  const settings = makeStorage(settingsStore)
+
+  return {
+    platform: "mobile" as any,
+    os: os as any,
+    version: pkg.version,
+
+    openLink(url: string) {
+      window.open(url, "_blank")
     },
 
-    // Use Tauri HTTP plugin for CORS-free fetching
-    fetch: tauriFetch as unknown as typeof fetch,
+    async restart() {
+      if (plugins?.process?.relaunch) {
+        await plugins.process.relaunch()
+      } else {
+        window.location.reload()
+      }
+    },
+
+    back() { window.history.back() },
+    forward() { window.history.forward() },
+
+    async notify(title: string, description?: string) {
+      if (!plugins?.notification) return
+      let granted = await plugins.notification.isPermissionGranted()
+      if (!granted) {
+        const perm = await plugins.notification.requestPermission()
+        granted = perm === "granted"
+      }
+      if (granted) {
+        plugins.notification.sendNotification({ title, body: description })
+      }
+    },
+
+    openDirectoryPickerDialog: undefined,
+    openFilePickerDialog: undefined,
+    saveFilePickerDialog: undefined,
+
+    storage(name?: string) {
+      return makeStorage(name ? createStore(name) : settingsStore)
+    },
+
+    fetch: (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window),
 
     async getDefaultServer() {
-      const url = await settingsStore.get<string>("defaultServerUrl")
-      return url ?? null
+      return (await settings.getItem("defaultServerUrl")) ?? null
     },
 
     async setDefaultServer(url: string | null) {
       if (url) {
-        await settingsStore.set("defaultServerUrl", url)
+        await settings.setItem("defaultServerUrl", url)
       } else {
-        await settingsStore.delete("defaultServerUrl")
+        await settings.removeItem("defaultServerUrl")
       }
-      await settingsStore.save()
     },
 
-    // ─── Termux local server (Android only) ────────────────────────
+    // ─── Embedded runtime (Android only) ────────────────────────────
 
     async checkLocalAvailable() {
       if (os !== "android") return false
@@ -96,63 +125,40 @@ export async function createPlatform(): Promise<Platform> {
 
     async startLocalServer() {
       if (os !== "android") return null
-
       const info = await checkRuntime()
 
-      // Extract runtime if not ready
       if (!info.ready) {
-        try {
-          await extractRuntime()
-        } catch {
-          return null
-        }
+        try { await extractRuntime() } catch { return null }
       }
 
       const port = info.port
       const password = crypto.randomUUID()
 
-      // If server already running, just connect
       if (info.server_running) {
-        const savedPw = await settingsStore.get<string>("localServerPassword")
-        return {
-          url: `http://127.0.0.1:${port}`,
-          username: "opencode",
-          password: savedPw ?? "",
-        }
+        const savedPw = await settings.getItem("localServerPassword")
+        return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw ?? "" }
       }
 
-      // Start embedded server
-      try {
-        await startEmbeddedServer(port, password)
-      } catch {
-        return null
-      }
+      try { await startEmbeddedServer(port, password) } catch { return null }
 
-      // Save credentials for reconnection
-      await settingsStore.set("localServerPassword", password)
-      await settingsStore.set("localServerPort", port)
-      await settingsStore.save()
+      await settings.setItem("localServerPassword", password)
+      await settings.setItem("localServerPort", String(port))
 
-      // Poll health check (30s timeout)
       for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 1000))
         if (await checkLocalHealth(port, password)) {
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
         }
       }
-
       return null
     },
 
     async stopLocalServer() {
       if (os !== "android") return
-      const port = (await settingsStore.get<number>("localServerPort")) ?? 14096
-      const password = (await settingsStore.get<string>("localServerPassword")) ?? undefined
-      try {
-        await stopLocal(port, password)
-      } catch {
-        // Server may already be stopped
-      }
+      const portStr = await settings.getItem("localServerPort")
+      const port = portStr ? Number(portStr) : 14096
+      const password = (await settings.getItem("localServerPassword")) ?? undefined
+      try { await stopLocal(port, password) } catch {}
     },
   }
 }
