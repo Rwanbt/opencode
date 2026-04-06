@@ -1,13 +1,21 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2021",
+    "target": "ESNext",
     "module": "ESNext",
+    "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "outDir": "dist",
-    "rootDir": "src"
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "outDir": "node_modules/.ts-dist",
+    "types": ["vite/client"]
   },
-  "include": ["src"]
+  "references": [{ "path": "../app" }],
+  "include": ["src", "package.json"]
 }
