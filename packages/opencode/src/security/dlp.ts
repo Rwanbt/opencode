@@ -131,9 +131,9 @@ export function redact(text: string): DLPResult {
 }
 
 /** Check if DLP is enabled in config. */
-export function isEnabled(): boolean {
+export async function isEnabled(): Promise<boolean> {
   try {
-    const cfg = Config.info()
+    const cfg = await Config.get()
     return cfg?.experimental?.dlp?.enabled === true
   } catch {
     return false

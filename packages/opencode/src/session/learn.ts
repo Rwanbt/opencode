@@ -28,8 +28,8 @@ export namespace SessionLearn {
     modelID: ModelID
     projectID?: ProjectID
   }) {
-    const agents = yield* Agent.use()
-    const provider = yield* Provider.use()
+    const agents = yield* Agent.Service
+    const provider = yield* Provider.Service
 
     // Get messages for this session
     const msgs = yield* MessageV2.filterCompactedEffect(input.sessionID)
@@ -109,7 +109,8 @@ export namespace SessionLearn {
     log.info("lessons saved", { sessionID: input.sessionID, count: lessons.length, file: filepath })
 
     // Auto-index learnings into RAG if enabled
-    if (RAG.isEnabled() && input.projectID) {
+    const ragEnabled = yield* Effect.promise(() => RAG.isEnabled())
+    if (ragEnabled && input.projectID) {
       yield* Effect.promise(async () => {
         try {
           await RAG.indexLearning(input.projectID!, filepath, fileContent)

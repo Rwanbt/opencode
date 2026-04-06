@@ -14,8 +14,8 @@ export namespace JwtAuth {
   function getSecret(): string {
     if (_secret) return _secret
     try {
-      const cfg = Config.info()
-      _secret = cfg?.experimental?.collaborative?.jwt_secret
+      // Kick off async config load for next call
+      Config.get().then((cfg) => { _secret = cfg?.experimental?.collaborative?.jwt_secret }).catch(() => {})
     } catch {}
     if (!_secret) {
       // Auto-generate a secret for this server instance
@@ -150,7 +150,7 @@ export namespace JwtAuth {
         // Check collaborative config
         let requireAuth = false
         try {
-          const cfg = Config.info()
+          const cfg = await Config.get()
           requireAuth = cfg?.experimental?.collaborative?.require_auth ?? false
         } catch {}
         if (!requireAuth) return next()

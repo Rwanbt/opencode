@@ -129,7 +129,7 @@ export namespace Plugin {
           const internalPlugins = [...INTERNAL_PLUGINS]
           yield* Effect.tryPromise({
             try: async () => {
-              const cfg = Config.info()
+              const cfg = await Config.get()
               if (cfg?.experimental?.anythingllm?.enabled) {
                 const { AnythingLLMPlugin } = await import("../anythingllm/plugin")
                 if (AnythingLLMPlugin.init && (await AnythingLLMPlugin.init())) {

@@ -29,7 +29,7 @@ export const AgentSkillRoutes = () =>
                       id: z.string(),
                       name: z.string(),
                       description: z.string(),
-                      parameters: z.record(z.any()),
+                      parameters: z.record(z.string(), z.any()),
                     }),
                   ),
                 ),
@@ -40,15 +40,14 @@ export const AgentSkillRoutes = () =>
       }),
       async (c) => {
         // Lazy import to avoid circular dependency
-        const { Tool } = await import("../../tool/tool")
-        const registry = await import("../../tool/registry")
+        const { ToolRegistry } = await import("../../tool/registry")
 
-        const tools = await registry.list()
-        const skills = tools.map((t) => ({
-          id: t.id,
-          name: t.id,
-          description: t.description || `OpenCode tool: ${t.id}`,
-          parameters: t.parameters || {},
+        const toolIds = await ToolRegistry.ids()
+        const skills = toolIds.map((id: string) => ({
+          id,
+          name: id,
+          description: `OpenCode tool: ${id}`,
+          parameters: {},
         }))
 
         return c.json(skills)
@@ -70,7 +69,7 @@ export const AgentSkillRoutes = () =>
                     success: z.boolean(),
                     output: z.string(),
                     title: z.string().optional(),
-                    metadata: z.record(z.any()).optional(),
+                    metadata: z.record(z.string(), z.any()).optional(),
                     error: z.string().optional(),
                   }),
                 ),
@@ -89,7 +88,7 @@ export const AgentSkillRoutes = () =>
       validator(
         "json",
         z.object({
-          args: z.record(z.any()),
+          args: z.record(z.string(), z.any()),
           sessionID: z.string().optional(),
         }),
       ),
@@ -100,16 +99,18 @@ export const AgentSkillRoutes = () =>
         log.info("executing agent skill", { toolId, args: Object.keys(args) })
 
         try {
-          const registry = await import("../../tool/registry")
-          const tools = await registry.list()
-          const tool = tools.find((t) => t.id === toolId)
+          const { ToolRegistry } = await import("../../tool/registry")
+          const { ProviderID } = await import("../../provider/schema")
+          const { ModelID } = await import("../../provider/schema")
+
+          const tools = await ToolRegistry.tools({ providerID: ProviderID.make("anthropic"), modelID: ModelID.make("default") })
+          const tool = tools.find((t: { id: string }) => t.id === toolId)
 
           if (!tool) {
             return c.json({ success: false, output: "", error: `Tool not found: ${toolId}` }, 404)
           }
 
-          // Initialize the tool and execute
-          const def = await tool.init()
+          const def = tool
           const result = await def.execute(args, {
             sessionID: "agent-skill" as any,
             messageID: "agent-skill" as any,

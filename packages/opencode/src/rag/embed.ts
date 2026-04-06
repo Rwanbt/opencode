@@ -23,9 +23,9 @@ const DEFAULT_CONFIG: EmbeddingModelConfig = {
   dimensions: 1536,
 }
 
-function getEmbeddingModel(config?: EmbeddingModelConfig) {
+async function getEmbeddingModel(config?: EmbeddingModelConfig) {
   const cfg = config ?? DEFAULT_CONFIG
-  const ragConfig = Config.info()?.experimental?.rag
+  const ragConfig = (await Config.get())?.experimental?.rag
   const apiKey = ragConfig?.api_key
 
   switch (cfg.provider) {
@@ -33,7 +33,7 @@ function getEmbeddingModel(config?: EmbeddingModelConfig) {
       const openai = createOpenAI({
         ...(apiKey ? { apiKey } : {}),
       })
-      return openai.embeddingModel(cfg.model, { dimensions: cfg.dimensions })
+      return openai.embeddingModel(cfg.model)
     }
     case "google": {
       const google = createGoogleGenerativeAI({
@@ -51,7 +51,7 @@ export async function generateEmbedding(
   text: string,
   config?: EmbeddingModelConfig,
 ): Promise<{ embedding: Float32Array; tokens: number }> {
-  const model = getEmbeddingModel(config)
+  const model = await getEmbeddingModel(config)
   const result = await embed({ model, value: text })
   log.info("generated embedding", { tokens: result.usage?.tokens ?? 0, dimensions: result.embedding.length })
   return {
@@ -66,7 +66,7 @@ export async function generateEmbeddings(
   config?: EmbeddingModelConfig,
 ): Promise<{ embeddings: Float32Array[]; tokens: number }> {
   if (texts.length === 0) return { embeddings: [], tokens: 0 }
-  const model = getEmbeddingModel(config)
+  const model = await getEmbeddingModel(config)
   const result = await embedMany({ model, values: texts })
   log.info("generated embeddings", {
     count: texts.length,
@@ -79,8 +79,8 @@ export async function generateEmbeddings(
 }
 
 /** Get the configured embedding model settings, falling back to defaults. */
-export function getEmbeddingConfig(): EmbeddingModelConfig {
-  const ragConfig = Config.info()?.experimental?.rag
+export async function getEmbeddingConfig(): Promise<EmbeddingModelConfig> {
+  const ragConfig = (await Config.get())?.experimental?.rag
   if (!ragConfig) return DEFAULT_CONFIG
   return {
     provider: (ragConfig.provider as EmbeddingProvider) ?? DEFAULT_CONFIG.provider,

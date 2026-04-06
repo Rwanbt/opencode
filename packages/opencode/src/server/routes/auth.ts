@@ -49,7 +49,7 @@ export const AuthRoutes = () =>
 
         // First user auto-becomes admin; subsequent users require admin caller
         if (!isFirstUser) {
-          const caller = c.get("user") as { role: string } | undefined
+          const caller = c.get("user" as never) as { role: string } | undefined
           if (!caller || caller.role !== "admin") {
             return c.json({ error: "Only admins can register new users" }, 403)
           }
@@ -196,7 +196,7 @@ export const AuthRoutes = () =>
         },
       }),
       async (c) => {
-        const caller = c.get("user") as { id: string; username: string; role: string } | undefined
+        const caller = c.get("user" as never) as { id: string; username: string; role: string } | undefined
         if (!caller || caller.id === "basic-auth") {
           return c.json({
             id: "basic-auth",
@@ -248,7 +248,7 @@ export const AuthRoutes = () =>
         },
       }),
       async (c) => {
-        const caller = c.get("user") as { role: string } | undefined
+        const caller = c.get("user" as never) as { role: string } | undefined
         if (!caller || caller.role !== "admin") {
           return c.json({ error: "Admin access required" }, 403)
         }

@@ -34,15 +34,15 @@ export namespace RAG {
   }
 
   /** Check if RAG is enabled via config. */
-  export function isEnabled(): boolean {
-    const cfg = Config.info()
+  export async function isEnabled(): Promise<boolean> {
+    const cfg = await Config.get()
     return cfg?.experimental?.rag?.enabled === true
   }
 
   /** Index a single file into the RAG store. */
   export async function indexFile(projectID: ProjectID, filePath: string): Promise<number> {
     if (!isEnabled()) return 0
-    const config = getEmbeddingConfig()
+    const config = await getEmbeddingConfig()
     const content = await Filesystem.readText(filePath)
     if (!content.trim()) return 0
 
@@ -56,7 +56,7 @@ export namespace RAG {
   /** Index a compaction summary. */
   export async function indexSummary(projectID: ProjectID, sessionID: string, summary: string): Promise<number> {
     if (!isEnabled()) return 0
-    const config = getEmbeddingConfig()
+    const config = await getEmbeddingConfig()
     const chunks = chunkText(`Session summary:\n\n${summary}`, { sessionID })
     return indexChunks(projectID, "summary", sessionID, chunks, config)
   }
@@ -64,7 +64,7 @@ export namespace RAG {
   /** Index a learning entry. */
   export async function indexLearning(projectID: ProjectID, filePath: string, content: string): Promise<number> {
     if (!isEnabled()) return 0
-    const config = getEmbeddingConfig()
+    const config = await getEmbeddingConfig()
     const chunks = chunkText(`Learning:\n\n${content}`, { file: filePath })
     return indexChunks(projectID, "learning", filePath, chunks, config)
   }
@@ -90,7 +90,7 @@ export namespace RAG {
     options?: { topK?: number; sourceTypes?: string[]; minSimilarity?: number },
   ): Promise<SearchResult[]> {
     if (!isEnabled()) return []
-    const config = getEmbeddingConfig()
+    const config = await getEmbeddingConfig()
     const k = options?.topK ?? DEFAULT_TOP_K
     const minSim = options?.minSimilarity ?? MIN_SIMILARITY
 
@@ -144,7 +144,7 @@ export namespace RAG {
 
     // Optionally merge with AnythingLLM vector store results
     try {
-      const cfg = Config.info()
+      const cfg = await Config.get()
       if (cfg?.experimental?.anythingllm?.vector_bridge) {
         const { AnythingLLMVectorStore } = await import("./vector-store")
         const store = new AnythingLLMVectorStore(cfg.experimental.anythingllm.workspaces)
