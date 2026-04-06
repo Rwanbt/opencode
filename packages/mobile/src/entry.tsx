@@ -11,6 +11,7 @@ import "@opencode-ai/app/index.css"
 import "./mobile.css"
 import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
+import { ModelManager } from "./components/model-manager"
 import { createPlatform } from "./platform"
 
 const root = document.getElementById("root")
@@ -35,6 +36,7 @@ function App() {
   const [platform, setPlatform] = createSignal<Awaited<ReturnType<typeof createPlatform>> | null>(null)
   const [remoteUrl, setRemoteUrl] = createSignal("")
   const [connectStatus, setConnectStatus] = createSignal("Starting local server...")
+  const [showModelManager, setShowModelManager] = createSignal(false)
 
   // Lazy-init platform
   async function ensurePlatform() {
@@ -87,12 +89,17 @@ function App() {
   }
 
   return (
+    <>
+    <Show when={showModelManager()}>
+      <ModelManager onClose={() => setShowModelManager(false)} />
+    </Show>
     <Switch>
       <Match when={mode() === "selecting"}>
         <ModeSelector
           onLocal={() => setMode("extracting")}
           onRemote={handleRemotePrompt}
           onExtract={() => setMode("extracting")}
+          onModelManager={() => setShowModelManager(true)}
         />
         <Show when={error()}>
           <div style={{
@@ -191,6 +198,7 @@ function App() {
         />
       </Match>
     </Switch>
+    </>
   )
 }
 
