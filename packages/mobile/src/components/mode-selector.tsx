@@ -1,23 +1,23 @@
-import { createSignal, createResource, Show, onMount } from "solid-js"
+import { createSignal, Show, onMount } from "solid-js"
 import { type as osType } from "@tauri-apps/plugin-os"
-import { checkTermux, type TermuxInfo } from "../termux"
+import { checkRuntime, type RuntimeInfo } from "../runtime"
 
 interface Props {
   onLocal: () => void
   onRemote: () => void
-  onSetup: () => void
+  onExtract: () => void
 }
 
 export function ModeSelector(props: Props) {
   const os = osType()
   const isAndroid = os === "android"
-  const [termuxInfo, setTermuxInfo] = createSignal<TermuxInfo | null>(null)
+  const [runtimeInfo, setRuntimeInfo] = createSignal<RuntimeInfo | null>(null)
   const [checking, setChecking] = createSignal(true)
 
   onMount(async () => {
     if (isAndroid) {
-      const info = await checkTermux()
-      setTermuxInfo(info)
+      const info = await checkRuntime()
+      setRuntimeInfo(info)
     }
     setChecking(false)
   })
@@ -44,33 +44,12 @@ export function ModeSelector(props: Props) {
 
       <div style={{ display: "flex", "flex-direction": "column", gap: "16px", width: "100%", "max-width": "320px" }}>
         {/* Local mode — Android only */}
-        <Show when={isAndroid}>
-          <Show when={!checking()}>
-            <Show
-              when={termuxInfo()?.installed}
-              fallback={
-                <button
-                  onClick={props.onSetup}
-                  style={{
-                    padding: "16px 24px",
-                    "border-radius": "12px",
-                    border: "1px dashed #444",
-                    background: "#1a1a1a",
-                    color: "#888",
-                    "font-size": "16px",
-                    cursor: "pointer",
-                    "text-align": "left",
-                  }}
-                >
-                  <div style={{ "font-weight": "600", color: "#e5e5e5" }}>Local Mode</div>
-                  <div style={{ "font-size": "13px", "margin-top": "4px" }}>
-                    Requires Termux setup — tap to configure
-                  </div>
-                </button>
-              }
-            >
+        <Show when={isAndroid && !checking()}>
+          <Show
+            when={runtimeInfo()?.ready}
+            fallback={
               <button
-                onClick={props.onLocal}
+                onClick={props.onExtract}
                 style={{
                   padding: "16px 24px",
                   "border-radius": "12px",
@@ -82,17 +61,36 @@ export function ModeSelector(props: Props) {
                   "text-align": "left",
                 }}
               >
-                <div style={{ "font-weight": "600" }}>
-                  Local Mode
-                  <Show when={termuxInfo()?.server_running}>
-                    <span style={{ color: "#22c55e", "margin-left": "8px", "font-size": "13px" }}>running</span>
-                  </Show>
-                </div>
+                <div style={{ "font-weight": "600" }}>Local Mode</div>
                 <div style={{ "font-size": "13px", color: "#94a3b8", "margin-top": "4px" }}>
-                  Run AI agent directly on your phone via Termux
+                  Set up embedded runtime (~15 seconds, one-time)
                 </div>
               </button>
-            </Show>
+            }
+          >
+            <button
+              onClick={props.onLocal}
+              style={{
+                padding: "16px 24px",
+                "border-radius": "12px",
+                border: "1px solid #3b82f6",
+                background: "#1e3a5f",
+                color: "#e5e5e5",
+                "font-size": "16px",
+                cursor: "pointer",
+                "text-align": "left",
+              }}
+            >
+              <div style={{ "font-weight": "600" }}>
+                Local Mode
+                <Show when={runtimeInfo()?.server_running}>
+                  <span style={{ color: "#22c55e", "margin-left": "8px", "font-size": "13px" }}>running</span>
+                </Show>
+              </div>
+              <div style={{ "font-size": "13px", color: "#94a3b8", "margin-top": "4px" }}>
+                Run AI agent directly on your phone
+              </div>
+            </button>
           </Show>
         </Show>
 

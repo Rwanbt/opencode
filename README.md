@@ -219,7 +219,7 @@ To prevent confusion from AI-generated summaries of this project:
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Collaborative mode | Implemented | JWT auth, presence, file locking, WebSocket broadcast |
-| Mobile app (Tauri) | Implemented | iOS/Android via Tauri 2.0, remote connection |
+| Mobile app (Tauri) | Implemented | Android: embedded runtime (bun+git native), iOS: remote. Single APK, zero setup |
 | AnythingLLM bridge | Implemented | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
@@ -313,12 +313,25 @@ Config: `experimental.collaborative.enabled: true`
 
 ### Mobile Version (`dev_mobile`)
 
-Native Android/iOS app via Tauri 2.0. Implemented:
-- **Tauri mobile package** — Full `packages/mobile/` with iOS and Android targets
+Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. Implemented:
+
+**Layer 1 — Embedded Runtime (Android, 100% native performance):**
+- **Static binaries in APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) extracted at first launch (~15s)
+- **Bundled CLI** — OpenCode CLI as a JS bundle run by the embedded Bun, no network required for core
+- **Direct process spawning** — No Termux, no intents — `std::process::Command` from Rust directly
+- **Auto-start server** — `bun opencode-cli.js serve` on localhost with UUID auth, same as desktop sidecar
+
+**Layer 2 — Extended Environment (optional download, ~150MB):**
+- **proot + Alpine rootfs** — Full Linux with `apt install` for additional packages
+- **Bind-mounted Layer 1** — Bun/Git/rg still run at native speed inside proot
+- **On-demand** — Downloaded only when user enables "Extended Environment" in settings
+
+**Shared (Android + iOS):**
 - **Platform abstraction** — Extended `Platform` type with `"mobile"` + `"ios"/"android"` OS detection
-- **Remote connection** — Connect to desktop OpenCode server over network with JWT auth
-- **Mobile UI** — Swipe navigation drawer, touch-optimized message input, unified diff viewer with swipe
+- **Remote connection** — Connect to desktop OpenCode server over network (iOS-only or Android fallback)
+- **Mobile UI** — Swipe navigation drawer, touch-optimized message input, unified diff viewer
 - **Push notifications** — SSE-to-native notification bridge for background task completion
+- **Mode selector** — Choose Local (Android) or Remote (iOS + Android) on first launch
 
 ### AnythingLLM Fusion (`dev_anything`)
 

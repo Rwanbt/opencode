@@ -6,21 +6,20 @@ import { AppInterface } from "@opencode-ai/app"
 import { PlatformProvider } from "@opencode-ai/app/context/platform"
 import { type ServerConnection } from "@opencode-ai/app/context/server"
 import { ModeSelector } from "./components/mode-selector"
-import { TermuxSetup } from "./components/termux-setup"
+import { ExtractionProgress } from "./components/extraction-progress"
 import { LazyStore } from "@tauri-apps/plugin-store"
 
 const root = document.getElementById("root")
 const platform = await createPlatform()
 const store = new LazyStore("settings.json")
 
-type Mode = "selecting" | "setup" | "connecting" | "local" | "remote" | "ready"
+type Mode = "selecting" | "extracting" | "connecting" | "ready"
 
 function App() {
   const [mode, setMode] = createSignal<Mode>("selecting")
   const [server, setServer] = createSignal<ServerConnection.Any | null>(null)
   const [error, setError] = createSignal("")
 
-  // Check for saved mode on mount
   onMount(async () => {
     const saved = await store.get<string>("connectionMode")
     if (saved === "local") {
@@ -28,11 +27,7 @@ function App() {
     } else if (saved === "remote") {
       const url = await store.get<string>("defaultServerUrl")
       if (url) {
-        setServer({
-          type: "http",
-          http: { url },
-          displayName: "Remote Server",
-        })
+        setServer({ type: "http", http: { url }, displayName: "Remote Server" })
         setMode("ready")
       }
     }
@@ -46,7 +41,7 @@ function App() {
     if (result) {
       const conn: ServerConnection.Sidecar = {
         type: "sidecar",
-        variant: "termux",
+        variant: "embedded",
         http: { url: result.url, username: result.username, password: result.password },
         displayName: "OpenCode (Local)",
       }
@@ -55,38 +50,30 @@ function App() {
       await store.save()
       setMode("ready")
     } else {
-      setError("Could not start local server. Check Termux setup.")
+      setError("Could not start local server.")
       setMode("selecting")
     }
   }
 
   function handleRemote() {
-    // For remote, we rely on the existing RemoteConnect component inside AppInterface
-    // Set a placeholder server that AppInterface will replace via its connection flow
-    setMode("remote")
+    setMode("ready")
   }
 
-  // Handle visibility change — reconnect local server if needed
+  // Reconnect local server on visibility change
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", async () => {
-      if (document.visibilityState === "visible" && mode() === "ready" && server()?.type === "sidecar") {
-        const s = server() as ServerConnection.Sidecar
-        if (s.variant === "termux") {
-          try {
-            const res = await fetch(`${s.http.url}/global/health`, {
-              headers: s.http.password
-                ? { Authorization: `Basic ${btoa(`${s.http.username}:${s.http.password}`)}` }
-                : {},
-            })
-            if (!res.ok) {
-              setError("Local server disconnected. Reconnecting...")
-              await connectLocal()
-            }
-          } catch {
-            setError("Local server unreachable. Reconnecting...")
-            await connectLocal()
-          }
-        }
+      if (document.visibilityState !== "visible" || mode() !== "ready") return
+      const s = server()
+      if (s?.type !== "sidecar" || (s as ServerConnection.Sidecar).variant !== "embedded") return
+      try {
+        const res = await fetch(`${s.http.url}/global/health`, {
+          headers: s.http.password
+            ? { Authorization: `Basic ${btoa(`${s.http.username}:${s.http.password}`)}` }
+            : {},
+        })
+        if (!res.ok) await connectLocal()
+      } catch {
+        await connectLocal()
       }
     })
   }
@@ -98,7 +85,7 @@ function App() {
           <ModeSelector
             onLocal={connectLocal}
             onRemote={handleRemote}
-            onSetup={() => setMode("setup")}
+            onExtract={() => setMode("extracting")}
           />
           <Show when={error()}>
             <div style={{
@@ -112,10 +99,10 @@ function App() {
           </Show>
         </Match>
 
-        <Match when={mode() === "setup"}>
-          <TermuxSetup
-            onComplete={() => { setMode("selecting") }}
-            onBack={() => setMode("selecting")}
+        <Match when={mode() === "extracting"}>
+          <ExtractionProgress
+            onComplete={() => connectLocal()}
+            onError={(msg) => { setError(msg); setMode("selecting") }}
           />
         </Match>
 
@@ -127,11 +114,11 @@ function App() {
             "font-family": "system-ui, -apple-system, sans-serif",
           }}>
             <div style={{ "font-size": "18px", "font-weight": "600" }}>Starting local server...</div>
-            <div style={{ color: "#888", "font-size": "14px" }}>Waiting for Termux to respond</div>
+            <div style={{ color: "#888", "font-size": "14px" }}>Embedded runtime booting up</div>
           </div>
         </Match>
 
-        <Match when={mode() === "ready" || mode() === "remote"}>
+        <Match when={mode() === "ready"}>
           <AppInterface
             defaultServer={server() ? ServerConnection.key(server()!) : undefined}
             servers={server() ? [server()!] : []}
