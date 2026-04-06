@@ -59,6 +59,8 @@ export namespace ServerConnection {
         variant: "wsl"
         distro: string
       }
+    // Termux local server (android only)
+    | { variant: "termux" }
   ) &
     Base
 
@@ -81,6 +83,7 @@ export namespace ServerConnection {
         return Key.make(conn.http.url)
       case "sidecar": {
         if (conn.variant === "wsl") return Key.make(`wsl:${conn.distro}`)
+        if (conn.variant === "termux") return Key.make("termux")
         return Key.make("sidecar")
       }
       case "ssh":
