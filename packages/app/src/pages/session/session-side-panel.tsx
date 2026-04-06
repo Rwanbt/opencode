@@ -46,11 +46,12 @@ export function SessionSidePanel(props: {
   const { sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isMobile = createMemo(() => !isDesktop())
 
-  const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const reviewOpen = createMemo(() => view().reviewPanel.opened())
+  const fileOpen = createMemo(() => layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
-  const reviewTab = createMemo(() => isDesktop())
+  const reviewTab = createMemo(() => true)
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
@@ -188,19 +189,26 @@ export function SessionSidePanel(props: {
   })
 
   return (
-    <Show when={isDesktop()}>
+    <>
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
+        class="relative min-w-0 flex shrink-0 overflow-hidden bg-background-base"
         classList={{
-          "pointer-events-none": !open(),
+          // Desktop: side panel with horizontal width transition
+          "h-full": !isMobile(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active() && !props.reviewSnap,
+            !isMobile() && !props.size.active() && !props.reviewSnap,
+          // Mobile: vertical panel that slides down from the top
+          "mobile-side-panel w-full": isMobile(),
+          "pointer-events-none": !open(),
         }}
-        style={{ width: panelWidth() }}
+        style={isMobile()
+          ? { height: open() ? "50vh" : "0px", transition: "height 240ms cubic-bezier(0.22,1,0.36,1)" }
+          : { width: panelWidth() }
+        }
       >
         <div class="size-full flex border-l border-border-weaker-base">
           <div
@@ -435,6 +443,6 @@ export function SessionSidePanel(props: {
           </div>
         </div>
       </aside>
-    </Show>
+    </>
   )
 }

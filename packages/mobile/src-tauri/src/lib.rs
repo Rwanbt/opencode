@@ -2,6 +2,8 @@ use tauri::Manager;
 
 #[cfg(target_os = "android")]
 mod runtime;
+#[cfg(target_os = "android")]
+mod llm;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,6 +27,12 @@ pub fn run() {
             runtime::check_local_health,
             runtime::stop_local_server,
             runtime::install_extended_env,
+            llm::list_models,
+            llm::download_model,
+            llm::delete_model,
+            llm::start_llm_server,
+            llm::stop_llm_server,
+            llm::check_llm_health,
         ]);
     }
 

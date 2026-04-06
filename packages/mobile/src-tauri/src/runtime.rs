@@ -459,7 +459,7 @@ fn check_extraction_progress(dir: &Path) -> f32 {
     done as f32 / checks.len() as f32
 }
 
-fn runtime_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn runtime_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .data_dir()
         .unwrap_or_else(|_| PathBuf::from("/data/data/ai.opencode.mobile/files"))
@@ -467,7 +467,7 @@ fn runtime_dir(app: &AppHandle) -> PathBuf {
 }
 
 /// Read the nativeLibraryDir path written by Kotlin at startup.
-fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
     let path_file = runtime_dir.join(".native_lib_dir");
     fs::read_to_string(&path_file).ok().map(|s| PathBuf::from(s.trim()))
 }

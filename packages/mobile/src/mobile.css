@@ -1,57 +1,521 @@
-/* Mobile-specific CSS overrides for OpenCode */
+/* ═══════════════════════════════════════════════════════════════════════════
+   OpenCode Mobile — Comprehensive Responsive Overrides
+   ═══════════════════════════════════════════════════════════════════════════
+   This is the sole CSS file controlling mobile appearance inside the Tauri
+   Android WebView.  It is imported by packages/mobile/src/entry.tsx.
 
-/* ─── Show all toolbar buttons on small screens ─────────────────────── */
-/* The desktop app hides buttons below md (768px) and xl (1280px).
-   On mobile, we show them all since there's no sidebar taking space. */
+   Design principles:
+     1. Every interactive element >= 44x44 CSS-px touch target
+     2. Nothing hidden arbitrarily — all toolbar buttons visible
+     3. Safe-area awareness in both portrait and landscape
+     4. Minimum 12px labels, 14px body text
+     5. Native-mobile feel (spacing, scrolling, feedback)
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Search bar — show on mobile but make it smaller */
-@media (max-width: 767px) {
-  /* Force show buttons that are hidden below md */
-  #opencode-titlebar-right .hidden.md\:flex {
-    display: flex !important;
-  }
+/* ─── 1. ROOT & SAFE AREA ────────────────────────────────────────────────── */
 
-  /* Hide the "Open Directory" button on very small screens — not useful on mobile */
-  #opencode-titlebar-right .hidden.xl\:flex {
-    display: none !important;
-  }
-
-  /* Make search bar narrower on small screens */
-  #opencode-titlebar-center .w-\[240px\] {
-    width: 160px;
-  }
-}
-
-/* ─── Landscape safe area fix ───────────────────────────────────────── */
-/* In landscape, the notch safe area should not create dead space.
-   The content should extend behind it with proper padding. */
+/* Portrait: top/bottom safe areas already handled in index.html.
+   Landscape: also need left/right for notch / camera cutout.             */
 @media (orientation: landscape) {
   #root {
-    /* Use safe area as padding so content doesn't go under notch */
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
 }
 
-/* ─── Touch-friendly adjustments ────────────────────────────────────── */
-/* Ensure tap targets are at least 44px for accessibility */
-.titlebar-icon {
-  min-width: 32px;
-  min-height: 32px;
+/* Allow text selection inside the editor and message bubbles */
+[contenteditable="true"],
+[contenteditable=""],
+[data-slot="message-content"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
-/* ─── Bottom bar overflow fix ───────────────────────────────────────── */
-/* Prevent the project/model selector bar from being clipped */
-@media (max-width: 500px) {
-  /* Allow horizontal scroll on the bottom toolbar */
-  [class*="prompt-footer"],
-  [class*="prompt-bar"] {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+/* ─── 2. TYPOGRAPHY — enforce readable sizes ─────────────────────────────── */
+
+/* Bump the smallest text classes so nothing falls below 12px.
+   Classes come from the design-system (text-11-*, text-12-*, text-13-*).  */
+.text-11-regular,
+.text-11-medium {
+  font-size: 12px !important;
+}
+
+.text-12-regular,
+.text-12-medium {
+  font-size: 13px !important;
+}
+
+.text-13-regular,
+.text-13-medium {
+  font-size: 14px !important;
+}
+
+/* Body text inside the message stream */
+[data-slot="message-content"],
+[data-slot="message-content"] p,
+[data-slot="message-content"] li {
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+}
+
+/* Code blocks keep 13px but get comfortable padding */
+[data-slot="message-content"] pre,
+[data-slot="message-content"] code {
+  font-size: 13px !important;
+}
+
+/* ─── 3. TITLEBAR — taller, touch-friendly ───────────────────────────────── */
+
+/* Make the titlebar 48px so buttons inside get room for 44px targets */
+header[data-tauri-drag-region] {
+  height: 48px !important;
+  min-height: 48px !important;
+}
+
+/* ─── 4. TOOLBAR BUTTONS — 44x44 touch targets ──────────────────────────── */
+
+/* All icon-sized buttons in the titlebar */
+.titlebar-icon {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Icons inside toolbar buttons — keep them visually 18px */
+.titlebar-icon svg,
+.titlebar-icon [data-slot="icon"] {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* The w-8 h-6 pattern used extensively for toolbar buttons */
+.w-8.h-6 {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+/* Submit/attach buttons in the prompt (size-8 = 32px -> 44px) */
+[data-action="prompt-submit"],
+[data-action="prompt-attach"] {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+/* Generic small icon-buttons anywhere in the UI */
+button.size-8,
+button[class*="size-8"],
+[role="button"][class*="size-8"] {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+/* ─── 5. SHOW ALL TOOLBAR BUTTONS ON NARROW SCREENS ──────────────────────── */
+
+/* Desktop hides buttons with `hidden md:flex` and `hidden xl:flex`.
+   On mobile we show the important ones (review, file-tree toggles)
+   but keep "Open Directory" hidden since it is desktop-only.             */
+
+/* Show review + file-tree toggles that are hidden < 768px */
+#opencode-titlebar-right .hidden.md\:flex {
+  display: flex !important;
+}
+
+/* The search bar (hidden md:flex in session-header) — show it */
+#opencode-titlebar-center .hidden.md\:flex {
+  display: flex !important;
+}
+
+/* Hide "Open In..." pill — irrelevant on Android */
+#opencode-titlebar-right .hidden.xl\:flex {
+  display: none !important;
+}
+
+/* The sidebar toggle with `hidden xl:flex` — keep hidden on mobile because
+   the hamburger menu already serves that purpose.                         */
+header .hidden.xl\:flex.shrink-0.ml-2,
+header .hidden.xl\:flex.shrink-0.ml-14 {
+  display: none !important;
+}
+
+/* ─── 6. TOOLBAR SPACING ─────────────────────────────────────────────────── */
+
+/* Widen gaps so touch targets don't overlap */
+#opencode-titlebar-right .gap-1 {
+  gap: 4px !important;
+}
+
+#opencode-titlebar-right .gap-2 {
+  gap: 6px !important;
+}
+
+/* ─── 7. SEARCH BAR — responsive width ───────────────────────────────────── */
+
+@media (max-width: 479px) {
+  /* Narrow phones: compact search */
+  #opencode-titlebar-center .w-\[240px\] {
+    width: 140px !important;
+    min-width: 100px;
   }
-  [class*="prompt-footer"]::-webkit-scrollbar,
-  [class*="prompt-bar"]::-webkit-scrollbar {
-    display: none;
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  #opencode-titlebar-center .w-\[240px\] {
+    width: 180px !important;
+  }
+}
+
+/* ─── 8. MOBILE SIDEBAR — clamp to 85vw ─────────────────────────────────── */
+
+/* The desktop app sets max-w-[400px] on the slide-out sidebar.
+   On phones narrower than ~470px that overflows.                          */
+.max-w-\[400px\] {
+  max-width: min(400px, 85vw) !important;
+}
+
+/* Also fix the fixed-positioned mobile sidebar panel */
+.fixed.w-full.max-w-\[400px\] {
+  max-width: 85vw !important;
+}
+
+/* ─── 9. PROMPT INPUT — comfortable typing area ──────────────────────────── */
+
+/* The contenteditable prompt */
+[data-dock-surface="shell"] [contenteditable="true"] {
+  font-size: 16px !important;     /* prevents iOS zoom-on-focus */
+  line-height: 1.5 !important;
+  min-height: 44px !important;
+  padding: 12px !important;
+}
+
+/* Placeholder text inside the prompt */
+[data-dock-surface="shell"] .text-14-regular.text-text-weak {
+  font-size: 16px !important;
+}
+
+/* Prompt shell surface — add comfortable bottom padding */
+[data-dock-surface="shell"] {
+  border-radius: 16px !important;
+}
+
+/* ─── 10. PROMPT TRAY / BOTTOM BAR — scrollable & touch-sized ───────────── */
+
+/* The DockTray bar that holds agent/model/variant selectors */
+[data-dock-surface="tray"] {
+  border-radius: 16px !important;
+}
+
+[data-dock-surface="tray"][data-dock-attach="top"] {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+/* The inner flex container of the tray */
+[data-dock-surface="tray"] > div {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+[data-dock-surface="tray"] > div::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tray buttons — ensure 44px height and readable text */
+[data-component="prompt-agent-control"] button,
+[data-component="prompt-model-control"] button,
+[data-component="prompt-variant-control"] button,
+[data-action="prompt-agent"],
+[data-action="prompt-model"],
+[data-action="prompt-model-variant"],
+[data-action="prompt-permissions"] {
+  min-height: 40px !important;
+  font-size: 14px !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+/* Model selector max-width — relax on mobile to use available space */
+[data-component="prompt-model-control"] .max-w-\[320px\] {
+  max-width: min(320px, 60vw) !important;
+}
+
+/* Agent/variant selector max-width */
+[data-component="prompt-agent-control"] .max-w-\[160px\],
+[data-component="prompt-variant-control"] .max-w-\[160px\] {
+  max-width: min(160px, 40vw) !important;
+}
+
+/* ─── 11. KEYBOARD AVOIDANCE ─────────────────────────────────────────────── */
+
+/* When the Android soft keyboard is up the visual viewport shrinks.
+   We rely on `height: 100dvh` in index.html plus these tweaks.           */
+
+/* The root flex column must not exceed visual viewport */
+#root {
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* The main scrollable area should fill remaining space */
+#root > .flex-1,
+#root > [class*="flex-1"] {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+
+/* ─── 12. DIALOGS & POPOVERS — mobile-friendly sizing ────────────────────── */
+
+/* Ensure popovers don't overflow screen width */
+[data-slot="popover-body"],
+[data-slot="popover-content"] {
+  max-width: calc(100vw - 24px) !important;
+}
+
+/* Dialog panels */
+[data-slot="dialog-content"],
+[role="dialog"] > div {
+  max-width: calc(100vw - 32px) !important;
+  max-height: calc(100dvh - 48px) !important;
+}
+
+/* Status popover */
+.w-\[360px\] {
+  width: min(360px, calc(100vw - 24px)) !important;
+}
+
+/* ─── 13. FILE TREE PANEL — full height, scrollable ──────────────────────── */
+
+#file-tree-panel {
+  max-height: 50dvh !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* File tree rows — ensure tap target */
+#file-tree-panel [role="treeitem"],
+#file-tree-panel button {
+  min-height: 40px !important;
+}
+
+/* ─── 14. REVIEW PANEL ───────────────────────────────────────────────────── */
+
+#review-panel {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── 15. SESSION LIST / PROJECT LIST — touch rows ───────────────────────── */
+
+/* Generic list items in the sidebar */
+nav a,
+nav button,
+[data-slot="sidebar-item"],
+[data-slot="session-item"] {
+  min-height: 44px !important;
+}
+
+/* ─── 16. DROPDOWN MENUS — bigger tap targets ────────────────────────────── */
+
+[data-slot="dropdown-menu-item"],
+[data-slot="dropdown-menu-radio-item"],
+[role="menuitem"],
+[role="menuitemradio"] {
+  min-height: 44px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+/* ─── 17. SELECT COMPONENTS — touch-sized ────────────────────────────────── */
+
+[data-slot="select-trigger"],
+[data-slot="select-item"] {
+  min-height: 44px !important;
+}
+
+/* ─── 18. GAP OVERRIDES — prevent cramped layouts ────────────────────────── */
+
+/* Very tight gaps that make tapping hard */
+@media (max-width: 767px) {
+  .gap-1 {
+    gap: 6px !important;
+  }
+  .gap-1\.5 {
+    gap: 8px !important;
+  }
+}
+
+/* ─── 19. SCROLL BEHAVIOR ────────────────────────────────────────────────── */
+
+/* Smooth momentum scrolling everywhere */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbars on mobile for cleaner look */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  display: none;
+}
+
+/* But show them during active scroll via thin indicators */
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+  display: block;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+}
+
+/* ─── 20. TAP HIGHLIGHT & ACTIVE STATES ──────────────────────────────────── */
+
+/* Use subtle highlight instead of the blue rectangle */
+* {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Provide visual press feedback on interactive elements */
+button:active,
+a:active,
+[role="button"]:active {
+  opacity: 0.75;
+  transition: opacity 0.05s ease-out;
+}
+
+/* ─── 21. LANDSCAPE-SPECIFIC ADJUSTMENTS ─────────────────────────────────── */
+
+@media (orientation: landscape) {
+  /* Reduce titlebar height in landscape to save vertical space */
+  header[data-tauri-drag-region] {
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+
+  /* Toolbar buttons can be slightly smaller in landscape */
+  .titlebar-icon {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  /* Prompt area — less padding in landscape */
+  [data-dock-surface="shell"] [contenteditable="true"] {
+    min-height: 40px !important;
+    padding: 10px 12px !important;
+  }
+}
+
+/* ─── 22. NARROW PHONE OVERRIDES (< 400px) ───────────────────────────────── */
+
+@media (max-width: 399px) {
+  /* Hide search bar on very narrow screens — use command palette instead */
+  #opencode-titlebar-center {
+    display: none !important;
+  }
+
+  /* Stack the tray controls so they don't need horizontal scroll */
+  [data-dock-surface="tray"] .flex.items-center.gap-1\.5.min-w-0.flex-1 {
+    flex-wrap: wrap !important;
+    gap: 4px 8px !important;
+  }
+
+  /* Agent/model selectors take full width when wrapped */
+  [data-component="prompt-model-control"],
+  [data-component="prompt-agent-control"],
+  [data-component="prompt-variant-control"] {
+    min-width: 0 !important;
+  }
+
+  [data-component="prompt-model-control"] .max-w-\[320px\] {
+    max-width: 70vw !important;
+  }
+}
+
+/* ─── 23. TOAST NOTIFICATIONS — mobile positioning ───────────────────────── */
+
+[data-slot="toast-viewport"],
+[data-sonner-toaster] {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 80px) !important;
+  left: 12px !important;
+  right: 12px !important;
+  width: auto !important;
+}
+
+/* ─── 24. TERMINAL PANEL ─────────────────────────────────────────────────── */
+
+#terminal-panel {
+  min-height: 120px;
+  max-height: 40dvh !important;
+}
+
+/* Terminal text — keep readable */
+#terminal-panel .xterm-screen {
+  font-size: 13px !important;
+}
+
+/* ─── 25. DIFF VIEW — scrollable code blocks ─────────────────────────────── */
+
+[data-slot="diff-view"],
+[data-slot="diff-view"] pre {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  font-size: 12px !important;
+}
+
+/* ─── 26. CONTEXT MENU / LONG-PRESS ──────────────────────────────────────── */
+
+/* Prevent context menu on long-press for non-text elements */
+img,
+button,
+a,
+[role="button"] {
+  -webkit-touch-callout: none;
+}
+
+/* ─── MOBILE SIDE PANEL — vertical overlay in portrait ─────────────────── */
+
+/* On mobile (<768px), the review/file-tree panel becomes a vertical sheet
+   that slides down between the header and the session content, instead of
+   appearing as a side column that would be too narrow. */
+@media (max-width: 767px) {
+  #review-panel.mobile-side-panel {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 30 !important;
+    border-bottom: 1px solid var(--border-weaker-base, #333) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Remove left border (it's vertical now, not side-by-side) */
+  #review-panel.mobile-side-panel .border-l {
+    border-left: none !important;
+  }
+
+  /* Ensure the inner content fills properly */
+  #review-panel.mobile-side-panel > div {
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* File tree inside the panel — full width */
+  #file-tree-panel {
+    width: 100% !important;
+    min-width: 0 !important;
   }
 }
