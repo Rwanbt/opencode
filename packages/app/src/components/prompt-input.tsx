@@ -560,7 +560,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
-  const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
+  const agentNames = createMemo(() => [...local.agent.list().map((agent) => agent.name), "Chat Only"])
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -1572,6 +1572,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipKeybind>
                     </Show>
                   </div>
+                  <div data-component="prompt-mode-control">
+                    <Select
+                      size="normal"
+                      options={["Ask", "Auto Edit", "Full Auto"]}
+                      current={accepting() ? "Full Auto" : "Ask"}
+                      onSelect={(value) => {
+                        if (value === "Full Auto") {
+                          if (!accepting()) toggleAccept()
+                        } else {
+                          if (accepting()) toggleAccept()
+                        }
+                        restoreFocus()
+                      }}
+                      class="max-w-[120px] text-text-base"
+                      valueClass="truncate text-13-regular text-text-base"
+                      triggerStyle={control()}
+                      triggerProps={{ "data-action": "prompt-permissions" }}
+                      variant="ghost"
+                    />
+                  </div>
                   <div data-component="prompt-variant-control">
                     <TooltipKeybind
                       placement="top"
@@ -1597,26 +1617,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   </div>
                 </Show>
-                <div data-component="prompt-mode-control">
-                  <Select
-                    size="normal"
-                    options={["Ask", "Auto Edit", "Full Auto"]}
-                    current={accepting() ? "Full Auto" : "Ask"}
-                    onSelect={(value) => {
-                      if (value === "Full Auto") {
-                        if (!accepting()) toggleAccept()
-                      } else {
-                        if (accepting()) toggleAccept()
-                      }
-                      restoreFocus()
-                    }}
-                    class="max-w-[120px] text-text-base"
-                    valueClass="truncate text-13-regular text-text-base"
-                    triggerStyle={control()}
-                    triggerProps={{ "data-action": "prompt-permissions" }}
-                    variant="ghost"
-                  />
-                </div>
               </div>
             </div>
           </div>
