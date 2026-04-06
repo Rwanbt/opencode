@@ -14,7 +14,7 @@ export const AnythingLLMPlugin = {
 
   async init() {
     try {
-      const cfg = Config.info()
+      const cfg = await Config.get()
       const allm = cfg?.experimental?.anythingllm
       if (!allm?.enabled) return false
 
@@ -49,7 +49,7 @@ export const AnythingLLMPlugin = {
       if (!AnythingLLMClient.isConfigured()) return
 
       try {
-        const cfg = Config.info()
+        const cfg = await Config.get()
         const allm = cfg?.experimental?.anythingllm
         if (!allm?.inject_context) return
 

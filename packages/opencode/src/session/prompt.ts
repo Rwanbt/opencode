@@ -1365,6 +1365,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+            const currentUser = lastUser
 
             const lastAssistantMsg = msgs.findLast(
               (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistantInfo?.id,
@@ -1464,22 +1465,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   agent,
                   session,
                   model,
-                  tools: lastUser.tools,
+                  tools: currentUser.tools,
                   processor: handle,
                   bypassAgentCheck,
                   messages: msgs,
                 })
 
-                if (lastUser.format?.type === "json_schema") {
+                if (currentUser.format?.type === "json_schema") {
                   tools["StructuredOutput"] = createStructuredOutputTool({
-                    schema: lastUser.format.schema,
+                    schema: currentUser.format.schema,
                     onSuccess(output) {
                       structured = output
                     },
                   })
                 }
 
-                if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
+                if (step === 1) SessionSummary.summarize({ sessionID, messageID: currentUser.id })
 
                 if (step > 1 && lastFinished) {
                   for (const m of msgs) {
@@ -1508,10 +1509,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
                 ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
-                const format = lastUser.format ?? { type: "text" as const }
+                const format = currentUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({
-                  user: lastUser,
+                  user: currentUser,
                   agent,
                   permission: session.permission,
                   sessionID,
@@ -1546,8 +1547,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 if (result === "compact") {
                   yield* compaction.create({
                     sessionID,
-                    agent: lastUser.agent,
-                    model: lastUser.model,
+                    agent: currentUser.agent,
+                    model: currentUser.model,
                     auto: true,
                     overflow: !handle.message.finish,
                   })

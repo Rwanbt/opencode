@@ -80,10 +80,10 @@ export namespace RBAC {
         }
       }
       if (resource.type === "config") {
-        return subject.role === "admin"
+        return false
       }
       if (resource.type === "user") {
-        return subject.role === "admin"
+        return false
       }
     }
 

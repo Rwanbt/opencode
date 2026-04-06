@@ -200,12 +200,14 @@ export function hasBlockingViolation(violations: PolicyViolation[]): boolean {
 
 // ─── Config helpers ──────────────────────────────────────────────────
 
+// Cache config synchronously for use in sync policy checks
+let _cachedConfig: Config.Info | undefined
+Config.get().then((c) => { _cachedConfig = c }).catch(() => {})
+
 function getConfig() {
-  try {
-    return Config.info()
-  } catch {
-    return undefined
-  }
+  // Refresh cache in background
+  Config.get().then((c) => { _cachedConfig = c }).catch(() => {})
+  return _cachedConfig
 }
 
 function isEnabled(): boolean {
