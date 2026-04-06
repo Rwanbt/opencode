@@ -1,4 +1,4 @@
-import type { Platform } from "@opencode-ai/app/context/platform"
+import type { Platform } from "@opencode-ai/app"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { type as osType } from "@tauri-apps/plugin-os"
 import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
