@@ -35,10 +35,9 @@ test("status popover can switch to mcp tab", async ({ page, gotoSession }) => {
   const mcpTab = popoverBody.getByRole("tab", { name: /mcp/i })
   await mcpTab.click()
 
-  const ariaSelected = await mcpTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await expect(mcpTab).toHaveAttribute("aria-selected", "true")
 
-  const mcpContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+  const mcpContent = popoverBody.locator('[role="tabpanel"]').first()
   await expect(mcpContent).toBeVisible()
 })
 
@@ -50,10 +49,9 @@ test("status popover can switch to lsp tab", async ({ page, gotoSession }) => {
   const lspTab = popoverBody.getByRole("tab", { name: /lsp/i })
   await lspTab.click()
 
-  const ariaSelected = await lspTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await expect(lspTab).toHaveAttribute("aria-selected", "true")
 
-  const lspContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+  const lspContent = popoverBody.locator('[role="tabpanel"]').first()
   await expect(lspContent).toBeVisible()
 })
 
@@ -65,10 +63,9 @@ test("status popover can switch to plugins tab", async ({ page, gotoSession }) =
   const pluginsTab = popoverBody.getByRole("tab", { name: /plugins/i })
   await pluginsTab.click()
 
-  const ariaSelected = await pluginsTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await expect(pluginsTab).toHaveAttribute("aria-selected", "true")
 
-  const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+  const pluginsContent = popoverBody.locator('[role="tabpanel"]').first()
   await expect(pluginsContent).toBeVisible()
 })
 
