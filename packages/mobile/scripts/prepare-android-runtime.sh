@@ -66,24 +66,38 @@ fi
 # ─── OpenCode CLI Bundle ─────────────────────────────────────────────
 echo "[5/5] Bundling OpenCode CLI..."
 OPENCODE_DIR="$(cd "$MOBILE_DIR/../opencode" && pwd)"
-if [ -f "$OPENCODE_DIR/src/index.ts" ]; then
-  cd "$OPENCODE_DIR"
-  # Bundle as a single JS file that Bun can execute
-  bun build src/index.ts \
+REPO_ROOT="$(cd "$MOBILE_DIR/../.." && pwd)"
+
+if [ -f "$OPENCODE_DIR/src/mobile-entry.ts" ]; then
+  cd "$REPO_ROOT"
+
+  # Bundle the mobile-specific entry point (no TUI dependencies)
+  bun build packages/opencode/src/mobile-entry.ts \
     --target=bun \
-    --outfile="$RUNTIME_DIR/opencode-cli.js" \
-    --define "OPENCODE_VERSION='\"mobile-embedded\"'" \
+    --outdir="$RUNTIME_DIR" \
     --external "@parcel/watcher" \
+    --external "@parcel/watcher/wrapper" \
     --external "@opentui/core" \
-    2>/dev/null || {
-      echo "  WARNING: Bun build failed, trying alternative approach..."
-      # Fallback: copy the source and let bun run it directly
-      echo '#!/usr/bin/env bun' > "$RUNTIME_DIR/opencode-cli.js"
-      echo 'import "./packages/opencode/src/index.ts"' >> "$RUNTIME_DIR/opencode-cli.js"
+    --external "@opentui/solid" \
+    2>&1 || {
+      echo "  ERROR: Bun build failed."
+      exit 1
     }
-  echo "  CLI: $(du -sh "$RUNTIME_DIR/opencode-cli.js" 2>/dev/null | cut -f1 || echo "fallback mode")"
+
+  # Rename entry to opencode-cli.js
+  if [ -f "$RUNTIME_DIR/mobile-entry.js" ]; then
+    mv "$RUNTIME_DIR/mobile-entry.js" "$RUNTIME_DIR/opencode-cli.js"
+  fi
+
+  # Create shim for @parcel/watcher (native module not available on Android)
+  mkdir -p "$RUNTIME_DIR/node_modules/@parcel/watcher"
+  echo 'export function createWrapper() { return undefined }' > "$RUNTIME_DIR/node_modules/@parcel/watcher/wrapper.js"
+  echo '{"name":"@parcel/watcher","version":"0.0.0","main":"wrapper.js"}' > "$RUNTIME_DIR/node_modules/@parcel/watcher/package.json"
+
+  echo "  CLI: $(du -sh "$RUNTIME_DIR/opencode-cli.js" 2>/dev/null | cut -f1 || echo "error")"
 else
-  echo "  WARNING: OpenCode source not found at $OPENCODE_DIR"
+  echo "  WARNING: mobile-entry.ts not found at $OPENCODE_DIR/src/mobile-entry.ts"
+  echo "  Make sure packages/opencode/src/mobile-entry.ts exists."
 fi
 
 echo ""
