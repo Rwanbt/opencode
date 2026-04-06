@@ -128,7 +128,7 @@ export namespace RAG {
 
     const hydMap = new Map(hydrated.map((h) => [h.id, h]))
 
-    return results
+    let localResults = results
       .filter((r) => r.score >= minSim)
       .map((r) => {
         const row = hydMap.get(r.id)!
@@ -141,6 +141,28 @@ export namespace RAG {
           metadata: (row.metadata as Record<string, unknown>) ?? {},
         }
       })
+
+    // Optionally merge with AnythingLLM vector store results
+    try {
+      const cfg = Config.info()
+      if (cfg?.experimental?.anythingllm?.vector_bridge) {
+        const { AnythingLLMVectorStore } = await import("./vector-store")
+        const store = new AnythingLLMVectorStore(cfg.experimental.anythingllm.workspaces)
+        const remoteResults = await store.search(query, { topK: k })
+        const merged = [...localResults, ...remoteResults.map((r) => ({
+          id: r.id,
+          content: r.content,
+          score: r.score,
+          sourceType: r.source,
+          sourceId: r.id,
+          metadata: r.metadata ?? {},
+        }))]
+        merged.sort((a, b) => b.score - a.score)
+        return merged.slice(0, k)
+      }
+    } catch {}
+
+    return localResults
   }
 
   /** Format search results as context for the system prompt. */
