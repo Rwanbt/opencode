@@ -29,6 +29,7 @@ import { EventRoutes } from "./routes/event"
 import { TaskRoutes } from "./routes/task"
 import { WsEventRoutes } from "./routes/ws-event"
 import { Presence } from "./presence"
+import { AgentSkillRoutes } from "./routes/agent-skills"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -54,6 +55,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/session", SessionRoutes())
     .route("/task", TaskRoutes())
     .route("/ws", WsEventRoutes())
+    .route("/agent-skills", AgentSkillRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
