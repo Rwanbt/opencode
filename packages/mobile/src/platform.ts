@@ -4,6 +4,7 @@ import { type as osType } from "@tauri-apps/plugin-os"
 import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { LazyStore } from "@tauri-apps/plugin-store"
+import { checkTermux, launchTermuxServer, checkLocalHealth, stopLocalServer as stopLocal } from "./termux"
 
 const pkg = { version: "0.1.0" }
 
@@ -83,6 +84,67 @@ export async function createPlatform(): Promise<Platform> {
         await settingsStore.delete("defaultServerUrl")
       }
       await settingsStore.save()
+    },
+
+    // ─── Termux local server (Android only) ────────────────────────
+
+    async checkLocalAvailable() {
+      if (os !== "android") return false
+      const info = await checkTermux()
+      return info.installed && info.bun_available
+    },
+
+    async startLocalServer() {
+      if (os !== "android") return null
+
+      const info = await checkTermux()
+      if (!info.installed) return null
+
+      const port = info.port
+      const password = crypto.randomUUID()
+
+      // If server already running, just connect
+      if (info.server_running) {
+        const savedPw = await settingsStore.get<string>("localServerPassword")
+        return {
+          url: `http://127.0.0.1:${port}`,
+          username: "opencode",
+          password: savedPw ?? "",
+        }
+      }
+
+      // Launch server in Termux
+      try {
+        await launchTermuxServer(port, password)
+      } catch {
+        return null
+      }
+
+      // Save credentials for reconnection
+      await settingsStore.set("localServerPassword", password)
+      await settingsStore.set("localServerPort", port)
+      await settingsStore.save()
+
+      // Poll health check (30s timeout)
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        if (await checkLocalHealth(port, password)) {
+          return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
+        }
+      }
+
+      return null
+    },
+
+    async stopLocalServer() {
+      if (os !== "android") return
+      const port = (await settingsStore.get<number>("localServerPort")) ?? 14096
+      const password = (await settingsStore.get<string>("localServerPassword")) ?? undefined
+      try {
+        await stopLocal(port, password)
+      } catch {
+        // Server may already be stopped
+      }
     },
   }
 }

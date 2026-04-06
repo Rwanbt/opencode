@@ -87,6 +87,15 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Check if local CLI execution is available (Android Termux) */
+  checkLocalAvailable?(): Promise<boolean>
+
+  /** Start a local CLI server (Android Termux via Termux) */
+  startLocalServer?(): Promise<{ url: string; username: string; password: string } | null>
+
+  /** Stop the local CLI server */
+  stopLocalServer?(): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"
