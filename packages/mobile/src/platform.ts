@@ -104,10 +104,10 @@ export async function createPlatform(): Promise<Platform> {
     fetch: (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window),
 
     async getDefaultServer() {
-      return (await settings.getItem("defaultServerUrl")) ?? null
+      return ((await settings.getItem("defaultServerUrl")) ?? null) as any
     },
 
-    async setDefaultServer(url: string | null) {
+    async setDefaultServer(url: any) {
       if (url) {
         await settings.setItem("defaultServerUrl", url)
       } else {
