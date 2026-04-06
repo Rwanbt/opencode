@@ -19,17 +19,28 @@ echo "=== Preparing Android Runtime Binaries ==="
 echo "Output: $RUNTIME_DIR"
 echo ""
 
-# ─── Bun (aarch64-linux) ────────────────────────────────────────────
-echo "[1/5] Downloading Bun (aarch64-linux)..."
-BUN_URL="https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64.zip"
+# ─── Bun (aarch64-linux-musl, for Android Bionic compatibility) ──────
+echo "[1/6] Downloading Bun (aarch64-linux-musl)..."
+BUN_URL="https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64-musl.zip"
 curl -fsSL "$BUN_URL" -o "$TEMP_DIR/bun.zip"
 unzip -o -q "$TEMP_DIR/bun.zip" -d "$TEMP_DIR/bun-extract"
-cp "$TEMP_DIR/bun-extract/bun-linux-aarch64/bun" "$BIN_DIR/bun"
+cp "$TEMP_DIR/bun-extract/bun-linux-aarch64-musl/bun" "$BIN_DIR/bun"
 chmod 755 "$BIN_DIR/bun"
 echo "  Bun: $(du -sh "$BIN_DIR/bun" | cut -f1)"
 
+# ─── musl dynamic linker (required to run musl binaries on Android) ──
+echo "[1b/6] Downloading musl libc (ld-musl-aarch64.so.1)..."
+LIB_DIR="$RUNTIME_DIR/lib"
+mkdir -p "$LIB_DIR"
+MUSL_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r9.apk"
+curl -fsSL "$MUSL_URL" -o "$TEMP_DIR/musl.apk"
+cd "$TEMP_DIR" && tar -xzf musl.apk lib/ld-musl-aarch64.so.1 2>/dev/null
+cp "$TEMP_DIR/lib/ld-musl-aarch64.so.1" "$LIB_DIR/ld-musl-aarch64.so.1"
+chmod 755 "$LIB_DIR/ld-musl-aarch64.so.1"
+echo "  musl: $(du -sh "$LIB_DIR/ld-musl-aarch64.so.1" | cut -f1)"
+
 # ─── Git (static musl) ──────────────────────────────────────────────
-echo "[2/5] Downloading Git (aarch64-linux-musl static)..."
+echo "[2/6] Downloading Git (aarch64-linux-musl static)..."
 GIT_URL="https://github.com/nicedoc/git-static/releases/latest/download/git-aarch64-linux-musl.tar.gz"
 if curl -fsSL "$GIT_URL" -o "$TEMP_DIR/git.tar.gz" 2>/dev/null; then
   tar -xzf "$TEMP_DIR/git.tar.gz" -C "$TEMP_DIR"
@@ -43,7 +54,7 @@ else
 fi
 
 # ─── Ripgrep (aarch64-linux-musl) ───────────────────────────────────
-echo "[3/5] Downloading Ripgrep (aarch64-linux-musl)..."
+echo "[3/6] Downloading Ripgrep (aarch64-linux-musl)..."
 RG_VERSION=$(curl -fsSL "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
 RG_URL="https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-aarch64-unknown-linux-musl.tar.gz"
 curl -fsSL "$RG_URL" -o "$TEMP_DIR/rg.tar.gz"
@@ -53,7 +64,7 @@ chmod 755 "$BIN_DIR/rg"
 echo "  Ripgrep: $(du -sh "$BIN_DIR/rg" | cut -f1)"
 
 # ─── Bash (static musl from Alpine) ─────────────────────────────────
-echo "[4/5] Downloading Bash (static musl)..."
+echo "[4/6] Downloading Bash (static musl)..."
 # Use a pre-built static bash or build from Alpine package
 BASH_URL="https://github.com/robxu9/bash-static/releases/latest/download/bash-linux-aarch64"
 if curl -fsSL "$BASH_URL" -o "$BIN_DIR/bash" 2>/dev/null; then
@@ -64,7 +75,7 @@ else
 fi
 
 # ─── OpenCode CLI Bundle ─────────────────────────────────────────────
-echo "[5/5] Bundling OpenCode CLI..."
+echo "[5/6] Bundling OpenCode CLI..."
 OPENCODE_DIR="$(cd "$MOBILE_DIR/../opencode" && pwd)"
 REPO_ROOT="$(cd "$MOBILE_DIR/../.." && pwd)"
 
