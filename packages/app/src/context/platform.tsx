@@ -11,10 +11,10 @@ type UpdateInfo = { updateAvailable: boolean; version?: string }
 
 export type Platform = {
   /** Platform discriminator */
-  platform: "web" | "desktop"
+  platform: "web" | "desktop" | "mobile"
 
-  /** Desktop OS (Tauri only) */
-  os?: "macos" | "windows" | "linux"
+  /** OS (Tauri desktop/mobile) */
+  os?: "macos" | "windows" | "linux" | "ios" | "android"
 
   /** App version */
   version?: string
