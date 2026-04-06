@@ -32,25 +32,5 @@
       "minSdkVersion": 24
     }
   },
-  "plugins": {
-    "http": {
-      "scope": {
-        "allow": [
-          { "url": "http://**" },
-          { "url": "https://**" }
-        ]
-      }
-    },
-    "deep-link": {
-      "mobile": [
-        { "host": "opencode.ai", "pathPrefix": ["/mobile"] }
-      ],
-      "desktop": {
-        "schemes": ["opencode"]
-      }
-    },
-    "notification": {
-      "permissionText": "OpenCode needs notifications to alert you when tasks complete."
-    }
-  }
+  "plugins": {}
 }
