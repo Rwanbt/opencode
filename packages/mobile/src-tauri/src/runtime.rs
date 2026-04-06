@@ -174,7 +174,13 @@ pub async fn start_embedded_server(
     for (src_name, link_name) in &links {
         let src = nlib_dir.join(src_name);
         let link = lib_link_dir.join(link_name);
-        if src.exists() && !link.exists() {
+        // Recreate if dangling (target moved after APK reinstall) or missing
+        let needs_update = match fs::read_link(&link) {
+            Ok(target) => target != src,
+            Err(_) => true,
+        };
+        if needs_update && src.exists() {
+            let _ = fs::remove_file(&link);
             let _ = std::os::unix::fs::symlink(&src, &link);
         }
     }

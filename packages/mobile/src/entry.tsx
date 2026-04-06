@@ -8,6 +8,7 @@ import {
   ServerConnection,
 } from "@opencode-ai/app"
 import "@opencode-ai/app/index.css"
+import "./mobile.css"
 import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
 import { createPlatform } from "./platform"
