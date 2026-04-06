@@ -1,0 +1,180 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/opencode/**'
+      - 'packages/app/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.0.12077973"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/mobile/src-tauri
+          cache-targets: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      # ─── Prepare runtime binaries ──────────────────────────────────
+      - name: Download runtime binaries
+        run: |
+          JNIDIR="packages/mobile/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          ASSETS="packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime"
+          RUNTIME="packages/mobile/src-tauri/assets/runtime"
+          mkdir -p "$JNIDIR" "$ASSETS" "$RUNTIME/node_modules/@parcel/watcher"
+
+          # Bun (aarch64-linux-musl)
+          echo "Downloading Bun..."
+          curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64-musl.zip -o /tmp/bun.zip
+          unzip -o -q /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-linux-aarch64-musl/bun "$JNIDIR/libbun_exec.so"
+
+          # musl dynamic linker
+          echo "Downloading musl libc..."
+          curl -fsSL https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r9.apk -o /tmp/musl.apk
+          cd /tmp && tar -xzf musl.apk lib/ld-musl-aarch64.so.1
+          cp /tmp/lib/ld-musl-aarch64.so.1 "$GITHUB_WORKSPACE/$JNIDIR/libmusl_linker.so"
+          cd "$GITHUB_WORKSPACE"
+
+          # libstdc++ and libgcc_s
+          echo "Downloading C++ runtime libs..."
+          curl -fsSL https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/libstdc++-14.2.0-r4.apk -o /tmp/libstdcpp.apk
+          curl -fsSL https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/libgcc-14.2.0-r4.apk -o /tmp/libgcc.apk
+          cd /tmp && tar -xzf libstdcpp.apk usr/lib/libstdc++.so.6.0.33
+          cd /tmp && tar -xzf libgcc.apk usr/lib/libgcc_s.so.1
+          cp /tmp/usr/lib/libstdc++.so.6.0.33 "$GITHUB_WORKSPACE/$JNIDIR/libstdcpp_compat.so"
+          cp /tmp/usr/lib/libgcc_s.so.1 "$GITHUB_WORKSPACE/$JNIDIR/libgcc_compat.so"
+          cd "$GITHUB_WORKSPACE"
+
+          # Bash (static)
+          echo "Downloading Bash..."
+          curl -fsSL https://github.com/robxu9/bash-static/releases/latest/download/bash-linux-aarch64 -o "$JNIDIR/libbash_exec.so"
+
+          # Ripgrep
+          echo "Downloading Ripgrep..."
+          RG_VERSION=$(curl -fsSL "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" | jq -r '.tag_name')
+          curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/rg.tar.gz
+          tar -xzf /tmp/rg.tar.gz -C /tmp
+          find /tmp -name "rg" -type f | head -1 | xargs -I{} cp {} "$JNIDIR/librg_exec.so"
+
+          chmod 755 "$JNIDIR"/*
+
+          echo "JNI libs:"
+          ls -lh "$JNIDIR/"
+
+      - name: Bundle OpenCode CLI
+        run: |
+          RUNTIME="packages/mobile/src-tauri/assets/runtime"
+          ASSETS="packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime"
+          mkdir -p "$RUNTIME/node_modules/@parcel/watcher" "$ASSETS/node_modules/@parcel/watcher"
+
+          # Bundle CLI JS
+          if [ -f "packages/opencode/src/mobile-entry.ts" ]; then
+            bun build packages/opencode/src/mobile-entry.ts \
+              --target=bun \
+              --outdir="$RUNTIME" \
+              --external "@parcel/watcher" \
+              --external "@parcel/watcher/wrapper" \
+              --external "@opentui/core" \
+              --external "@opentui/solid"
+            [ -f "$RUNTIME/mobile-entry.js" ] && mv "$RUNTIME/mobile-entry.js" "$RUNTIME/opencode-cli.js"
+          else
+            echo "mobile-entry.ts not found, trying index.ts..."
+            OPENCODE_MIGRATIONS=$(cat packages/opencode/drizzle/migrations.json) \
+            bun build packages/opencode/src/index.ts \
+              --target=bun \
+              --outdir="$RUNTIME" \
+              --define "OPENCODE_MIGRATIONS='$(cat packages/opencode/drizzle/migrations.json)'" \
+              --external "@parcel/watcher" \
+              --external "@parcel/watcher/wrapper" \
+              --external "@opentui/core" \
+              --external "@opentui/solid"
+            [ -f "$RUNTIME/index.js" ] && mv "$RUNTIME/index.js" "$RUNTIME/opencode-cli.js"
+          fi
+
+          # Parcel watcher shim
+          echo 'export function createWrapper() { return undefined }' > "$RUNTIME/node_modules/@parcel/watcher/wrapper.js"
+          echo '{"name":"@parcel/watcher","version":"0.0.0","main":"wrapper.js"}' > "$RUNTIME/node_modules/@parcel/watcher/package.json"
+
+          # Copy to gen/android assets
+          cp "$RUNTIME/opencode-cli.js" "$ASSETS/opencode-cli.js"
+          cp -r "$RUNTIME/node_modules" "$ASSETS/"
+          # Copy wasm files if present
+          cp "$RUNTIME"/*.wasm "$ASSETS/" 2>/dev/null || true
+
+          echo "CLI bundle: $(du -sh "$RUNTIME/opencode-cli.js" | cut -f1)"
+
+      # ─── Build APK ────────────────────────────────────────────────
+      - name: Install Tauri CLI
+        run: bun add -g @tauri-apps/cli
+
+      - name: Build frontend
+        working-directory: packages/mobile
+        run: bun run build
+
+      - name: Build Android APK
+        working-directory: packages/mobile
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: bunx tauri android build --target aarch64
+
+      # ─── Sign APK ─────────────────────────────────────────────────
+      - name: Sign APK
+        run: |
+          APK="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          SIGNED="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk"
+
+          # Create a debug keystore for CI
+          keytool -genkey -v \
+            -keystore /tmp/ci.keystore \
+            -alias opencode -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=OpenCode CI, OU=Dev, O=OpenCode, L=Paris, ST=IDF, C=FR"
+
+          cp "$APK" "$SIGNED"
+          java -jar "$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | tail -1)/lib/apksigner.jar" sign \
+            --ks /tmp/ci.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            "$SIGNED"
+
+          echo "Signed APK: $(du -sh "$SIGNED" | cut -f1)"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-mobile-apk
+          path: packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk
+          retention-days: 30
