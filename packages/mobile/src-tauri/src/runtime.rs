@@ -57,9 +57,11 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
 pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
     let dir = runtime_dir(&app);
     let bin_dir = dir.join("bin");
+    let lib_dir = dir.join("lib");
     let home_dir = dir.join("home");
 
     fs::create_dir_all(&bin_dir).map_err(|e| format!("mkdir bin: {}", e))?;
+    fs::create_dir_all(&lib_dir).map_err(|e| format!("mkdir lib: {}", e))?;
     fs::create_dir_all(&home_dir).map_err(|e| format!("mkdir home: {}", e))?;
     fs::create_dir_all(home_dir.join(".opencode")).map_err(|e| format!("mkdir .opencode: {}", e))?;
 
@@ -108,6 +110,19 @@ pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
             fs::set_permissions(&dst, perms)
                 .map_err(|e| format!("chmod {}: {}", name, e))?;
         }
+    }
+
+    // Copy musl dynamic linker (required to run bun on Android)
+    let musl_src = src_dir.join("lib").join("ld-musl-aarch64.so.1");
+    let musl_dst = lib_dir.join("ld-musl-aarch64.so.1");
+    if musl_src.exists() {
+        fs::copy(&musl_src, &musl_dst).map_err(|e| format!("copy musl: {}", e))?;
+        let mut perms = fs::metadata(&musl_dst)
+            .map_err(|e| format!("metadata musl: {}", e))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&musl_dst, perms)
+            .map_err(|e| format!("chmod musl: {}", e))?;
     }
 
     // Copy opencode-cli.js
@@ -169,13 +184,40 @@ pub async fn start_embedded_server(
     let sys_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{}", bin_dir.display(), sys_path);
 
-    let child = Command::new(&bun_path)
-        .arg(cli_path.to_str().unwrap_or("opencode-cli.js"))
-        .arg("serve")
-        .arg("--hostname")
-        .arg("127.0.0.1")
-        .arg("--port")
-        .arg(port.to_string())
+    // On Android, bun is linked against musl. We invoke it via the musl dynamic
+    // linker shipped alongside: ld-musl-aarch64.so.1 ./bun opencode-cli.js serve
+    let ld_musl = dir.join("lib").join("ld-musl-aarch64.so.1");
+    let (cmd_path, mut cmd_args) = if ld_musl.exists() {
+        // Use musl linker to run bun (Android doesn't have /lib/ld-musl-aarch64.so.1)
+        (
+            ld_musl,
+            vec![
+                bun_path.to_string_lossy().to_string(),
+                cli_path.to_string_lossy().to_string(),
+                "serve".to_string(),
+                "--hostname".to_string(),
+                "127.0.0.1".to_string(),
+                "--port".to_string(),
+                port.to_string(),
+            ],
+        )
+    } else {
+        // Fallback: direct execution (works if bun is statically linked or on desktop)
+        (
+            bun_path.clone(),
+            vec![
+                cli_path.to_string_lossy().to_string(),
+                "serve".to_string(),
+                "--hostname".to_string(),
+                "127.0.0.1".to_string(),
+                "--port".to_string(),
+                port.to_string(),
+            ],
+        )
+    };
+
+    let child = Command::new(&cmd_path)
+        .args(&cmd_args)
         .env("PATH", &path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")
@@ -376,7 +418,9 @@ fn runtime_dir(app: &AppHandle) -> PathBuf {
 }
 
 fn is_runtime_ready(dir: &Path) -> bool {
-    dir.join("bin").join("bun").exists() && dir.join("opencode-cli.js").exists()
+    dir.join("bin").join("bun").exists()
+        && dir.join("opencode-cli.js").exists()
+        && dir.join("lib").join("ld-musl-aarch64.so.1").exists()
 }
 
 async fn check_health(port: u32, password: Option<&str>) -> bool {
