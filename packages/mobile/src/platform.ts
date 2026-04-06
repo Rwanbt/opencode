@@ -6,14 +6,15 @@ const pkg = { version: "0.1.0" }
 // Lazy-load Tauri plugins to prevent crash if not available
 async function loadPlugins() {
   try {
-    const [http, os, notification, process, store] = await Promise.all([
+    const [http, os, notification, process, store, clipboard] = await Promise.all([
       import("@tauri-apps/plugin-http").catch(() => null),
       import("@tauri-apps/plugin-os").catch(() => null),
       import("@tauri-apps/plugin-notification").catch(() => null),
       import("@tauri-apps/plugin-process").catch(() => null),
       import("@tauri-apps/plugin-store").catch(() => null),
+      import("@tauri-apps/plugin-clipboard-manager").catch(() => null),
     ])
-    return { http, os, notification, process, store }
+    return { http, os, notification, process, store, clipboard }
   } catch {
     return null
   }
@@ -81,8 +82,11 @@ export async function createPlatform(): Promise<Platform> {
     back() { window.history.back() },
     forward() { window.history.forward() },
 
+    // Smart notifications — only show when app is not focused
     async notify(title: string, description?: string) {
       if (!plugins?.notification) return
+      // Don't notify if user is actively looking at the app
+      if (document.hasFocus()) return
       let granted = await plugins.notification.isPermissionGranted()
       if (!granted) {
         const perm = await plugins.notification.requestPermission()
@@ -93,6 +97,33 @@ export async function createPlatform(): Promise<Platform> {
       }
     },
 
+    // Clipboard image reading — same approach as desktop
+    async readClipboardImage() {
+      if (!plugins?.clipboard?.readImage) return null
+      try {
+        const image = await plugins.clipboard.readImage()
+        if (!image) return null
+        const bytes = await image.rgba()
+        const size = await image.size()
+        // Convert RGBA bytes to PNG via canvas
+        const canvas = document.createElement("canvas")
+        canvas.width = size.width
+        canvas.height = size.height
+        const ctx = canvas.getContext("2d")
+        if (!ctx) return null
+        const imageData = ctx.createImageData(size.width, size.height)
+        imageData.data.set(new Uint8ClampedArray(bytes))
+        ctx.putImageData(imageData, 0, 0)
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"))
+        if (!blob) return null
+        return new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" })
+      } catch {
+        return null
+      }
+    },
+
+    // File pickers — not needed on mobile, the app falls back to
+    // server-backed DialogSelectDirectory which works without native pickers
     openDirectoryPickerDialog: undefined,
     openFilePickerDialog: undefined,
     saveFilePickerDialog: undefined,
