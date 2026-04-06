@@ -255,21 +255,32 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   white-space: nowrap !important;
 }
 
-/* Model selector — don't let it eat all the space */
-[data-component="prompt-model-control"] .max-w-\[320px\] {
-  max-width: min(200px, 45vw) !important;
+/* All tray selectors — equal flex sizing, no truncation */
+[data-component="prompt-agent-control"],
+[data-component="prompt-model-control"],
+[data-component="prompt-mode-control"],
+[data-component="prompt-variant-control"] {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
 }
 
-/* Agent/variant selector */
+/* Remove max-width constraints that cause unequal sizing */
+[data-component="prompt-model-control"] .max-w-\[320px\],
 [data-component="prompt-agent-control"] .max-w-\[160px\],
-[data-component="prompt-variant-control"] .max-w-\[160px\] {
-  max-width: min(120px, 30vw) !important;
+[data-component="prompt-variant-control"] .max-w-\[160px\],
+[data-component="prompt-mode-control"] .max-w-\[120px\] {
+  max-width: none !important;
+  width: 100% !important;
 }
 
-/* Shield/permissions button — keep compact */
-[data-action="prompt-permissions"] {
-  width: 32px !important;
-  padding: 0 !important;
+/* Ensure text doesn't get truncated too aggressively */
+[data-component="prompt-agent-control"] .truncate,
+[data-component="prompt-model-control"] .truncate,
+[data-component="prompt-mode-control"] .truncate,
+[data-component="prompt-variant-control"] .truncate {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: nowrap !important;
 }
 
 /* ─── 10b. TERMINAL — reclaim space when closed ─────────────────────────── */
