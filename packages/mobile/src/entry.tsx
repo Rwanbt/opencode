@@ -80,7 +80,7 @@ function App() {
     if (!url) return
     const normalized = /^https?:\/\//.test(url) ? url : `http://${url}`
     const p = await ensurePlatform()
-    await p.setDefaultServer?.(normalized)
+    await p.setDefaultServer?.(normalized as any)
     setServerInfo({ url: normalized, variant: "http" })
     setMode("ready")
   }
