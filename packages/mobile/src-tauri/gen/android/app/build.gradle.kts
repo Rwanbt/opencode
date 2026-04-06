@@ -17,7 +17,8 @@ android {
     compileSdk = 36
     namespace = "ai.opencode.mobile"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        // Allow cleartext for localhost (embedded server runs on 127.0.0.1)
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "ai.opencode.mobile"
         minSdk = 24
         targetSdk = 36
@@ -50,6 +51,17 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        // Force extraction of JNI libs to nativeLibraryDir so we can exec them.
+        // By default Android loads .so from the APK in-place (no exec permission).
+        jniLibs.useLegacyPackaging = true
+    }
+    aaptOptions {
+        // Don't compress runtime binaries — they're large ELF executables.
+        // AAPT2 compresses assets by default; binaries don't compress well and
+        // decompressing them at extract time wastes CPU.
+        noCompress += listOf("so.1", "so.6", "js")
     }
 }
 

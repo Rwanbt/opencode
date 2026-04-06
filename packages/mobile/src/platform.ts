@@ -125,10 +125,16 @@ export async function createPlatform(): Promise<Platform> {
 
     async startLocalServer() {
       if (os !== "android") return null
+      console.log("[OpenCode] startLocalServer: checking runtime...")
       const info = await checkRuntime()
+      console.log("[OpenCode] runtime info:", JSON.stringify(info))
 
       if (!info.ready) {
-        try { await extractRuntime() } catch { return null }
+        console.log("[OpenCode] runtime not ready, extracting...")
+        try { await extractRuntime() } catch (e) {
+          console.error("[OpenCode] extract failed:", e)
+          throw new Error(`Extract failed: ${e}`)
+        }
       }
 
       const port = info.port
@@ -139,17 +145,26 @@ export async function createPlatform(): Promise<Platform> {
         return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw ?? "" }
       }
 
-      try { await startEmbeddedServer(port, password) } catch { return null }
+      console.log("[OpenCode] starting embedded server on port", port)
+      try {
+        await startEmbeddedServer(port, password)
+      } catch (e) {
+        console.error("[OpenCode] startEmbeddedServer failed:", e)
+        throw new Error(`Server start failed: ${e}`)
+      }
 
       await settings.setItem("localServerPassword", password)
       await settings.setItem("localServerPort", String(port))
 
+      console.log("[OpenCode] waiting for health check...")
       for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 1000))
         if (await checkLocalHealth(port, password)) {
+          console.log("[OpenCode] server healthy!")
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
         }
       }
+      console.error("[OpenCode] health check timed out after 30s")
       return null
     },
 

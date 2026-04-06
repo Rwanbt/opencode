@@ -43,6 +43,14 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
     };
     let extended_env = dir.join("rootfs").exists();
 
+    // Log debug info
+    if let Some(nlib) = native_lib_dir(&dir) {
+        eprintln!("[OpenCode] nativeLibDir={}, bun_exists={}, cli_exists={}",
+            nlib.display(), nlib.join("libbun_exec.so").exists(), dir.join("opencode-cli.js").exists());
+    } else {
+        eprintln!("[OpenCode] nativeLibDir not found, cli_exists={}", dir.join("opencode-cli.js").exists());
+    }
+
     RuntimeInfo {
         ready,
         server_running,
@@ -52,107 +60,73 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
 }
 
 /// Extract runtime binaries from APK assets to the app's private directory.
+/// On Android, the extraction is initiated by the Kotlin RuntimeExtractor (called from
+/// MainActivity.onCreate). This command polls until extraction is complete or times out.
 /// Emits "extraction-progress" events so the frontend can show a progress bar.
 #[tauri::command]
 pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
     let dir = runtime_dir(&app);
-    let bin_dir = dir.join("bin");
-    let lib_dir = dir.join("lib");
-    let home_dir = dir.join("home");
 
-    fs::create_dir_all(&bin_dir).map_err(|e| format!("mkdir bin: {}", e))?;
-    fs::create_dir_all(&lib_dir).map_err(|e| format!("mkdir lib: {}", e))?;
-    fs::create_dir_all(&home_dir).map_err(|e| format!("mkdir home: {}", e))?;
-    fs::create_dir_all(home_dir.join(".opencode")).map_err(|e| format!("mkdir .opencode: {}", e))?;
-
-    // The runtime assets are embedded in the APK under assets/runtime/
-    // Tauri resolves them via the resource directory on Android.
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("resource_dir: {}", e))?;
-
-    let assets_runtime = resource_dir.join("assets").join("runtime");
-
-    // If assets dir doesn't exist, try the app data directory (dev mode)
-    let src_dir = if assets_runtime.exists() {
-        assets_runtime
-    } else {
-        // Fallback: check if binaries are already at the target
-        if is_runtime_ready(&dir) {
-            return Ok(());
-        }
-        return Err("Runtime assets not found in APK. Run prepare-android-runtime.sh first.".to_string());
-    };
-
-    let binaries = ["bun", "git", "bash", "rg"];
-    let total_steps = binaries.len() + 1; // +1 for opencode-cli.js
-
-    for (i, name) in binaries.iter().enumerate() {
-        let src = src_dir.join("bin").join(name);
-        let dst = bin_dir.join(name);
-
+    // If already extracted, return immediately
+    if is_runtime_ready(&dir) {
         let _ = app.emit(
             "extraction-progress",
             ExtractionProgress {
-                phase: format!("Extracting {}...", name),
-                progress: i as f32 / total_steps as f32,
+                phase: "Ready!".to_string(),
+                progress: 1.0,
+            },
+        );
+        return Ok(());
+    }
+
+    let _ = app.emit(
+        "extraction-progress",
+        ExtractionProgress {
+            phase: "Extracting runtime binaries...".to_string(),
+            progress: 0.1,
+        },
+    );
+
+    // On Android, MainActivity.onCreate starts the extraction in a background thread
+    // via RuntimeExtractor.extractAll(). We poll until it's done.
+    let max_wait = Duration::from_secs(120); // 2 minutes max
+    let poll_interval = Duration::from_millis(500);
+    let start = std::time::Instant::now();
+
+    loop {
+        if is_runtime_ready(&dir) {
+            let _ = app.emit(
+                "extraction-progress",
+                ExtractionProgress {
+                    phase: "Ready!".to_string(),
+                    progress: 1.0,
+                },
+            );
+            return Ok(());
+        }
+
+        if start.elapsed() > max_wait {
+            return Err("Extraction timed out after 120s. Restart the app to retry.".to_string());
+        }
+
+        // Emit progress based on which files exist
+        let progress = check_extraction_progress(&dir);
+        let _ = app.emit(
+            "extraction-progress",
+            ExtractionProgress {
+                phase: format!("Extracting... ({:.0}%)", progress * 100.0),
+                progress,
             },
         );
 
-        if src.exists() {
-            fs::copy(&src, &dst).map_err(|e| format!("copy {}: {}", name, e))?;
-            // Set executable permission
-            let mut perms = fs::metadata(&dst)
-                .map_err(|e| format!("metadata {}: {}", name, e))?
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&dst, perms)
-                .map_err(|e| format!("chmod {}: {}", name, e))?;
-        }
+        tokio::time::sleep(poll_interval).await;
     }
-
-    // Copy musl dynamic linker (required to run bun on Android)
-    let musl_src = src_dir.join("lib").join("ld-musl-aarch64.so.1");
-    let musl_dst = lib_dir.join("ld-musl-aarch64.so.1");
-    if musl_src.exists() {
-        fs::copy(&musl_src, &musl_dst).map_err(|e| format!("copy musl: {}", e))?;
-        let mut perms = fs::metadata(&musl_dst)
-            .map_err(|e| format!("metadata musl: {}", e))?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&musl_dst, perms)
-            .map_err(|e| format!("chmod musl: {}", e))?;
-    }
-
-    // Copy opencode-cli.js
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Preparing CLI...".to_string(),
-            progress: binaries.len() as f32 / total_steps as f32,
-        },
-    );
-
-    let cli_src = src_dir.join("opencode-cli.js");
-    let cli_dst = dir.join("opencode-cli.js");
-    if cli_src.exists() {
-        fs::copy(&cli_src, &cli_dst).map_err(|e| format!("copy cli: {}", e))?;
-    }
-
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Ready!".to_string(),
-            progress: 1.0,
-        },
-    );
-
-    Ok(())
 }
 
 /// Start the embedded OpenCode server.
 /// Spawns bun with the bundled CLI and stores the child process handle.
+/// On Android, executables are in nativeLibraryDir (packaged as JNI libs)
+/// to satisfy SELinux execute permissions.
 #[tauri::command]
 pub async fn start_embedded_server(
     app: AppHandle,
@@ -160,18 +134,27 @@ pub async fn start_embedded_server(
     password: String,
 ) -> Result<(), String> {
     let dir = runtime_dir(&app);
-    let bin_dir = dir.join("bin");
     let home_dir = dir.join("home");
-    let bun_path = bin_dir.join("bun");
     let cli_path = dir.join("opencode-cli.js");
 
+    // Get nativeLibraryDir where Android installs JNI libs (with exec permission)
+    let nlib_dir = native_lib_dir(&dir)
+        .ok_or_else(|| "nativeLibraryDir not found. Restart the app.".to_string())?;
+
+    let bun_path = nlib_dir.join("libbun_exec.so");
+    let ld_musl = nlib_dir.join("libmusl_linker.so");
+
     if !bun_path.exists() {
-        return Err("Runtime not extracted. Call extract_runtime first.".to_string());
+        return Err(format!("bun not found at {}", bun_path.display()));
     }
 
     if !cli_path.exists() {
         return Err("opencode-cli.js not found.".to_string());
     }
+
+    // Ensure home directory exists
+    let _ = fs::create_dir_all(&home_dir);
+    let _ = fs::create_dir_all(home_dir.join(".opencode"));
 
     // Kill any existing server
     if let Ok(mut guard) = SERVER_PROCESS.lock() {
@@ -180,18 +163,36 @@ pub async fn start_embedded_server(
         }
     }
 
-    // Build PATH with our bin directory first, then system PATH
+    // Create symlinks for shared libs that bun expects with their original names.
+    // Android JNI requires lib*.so naming, but bun looks for libstdc++.so.6 etc.
+    let lib_link_dir = dir.join("lib_links");
+    let _ = fs::create_dir_all(&lib_link_dir);
+    let links = [
+        ("libstdcpp_compat.so", "libstdc++.so.6"),
+        ("libgcc_compat.so", "libgcc_s.so.1"),
+    ];
+    for (src_name, link_name) in &links {
+        let src = nlib_dir.join(src_name);
+        let link = lib_link_dir.join(link_name);
+        if src.exists() && !link.exists() {
+            let _ = std::os::unix::fs::symlink(&src, &link);
+        }
+    }
+    // Library search path: lib_links (for symlinked names) + nlib_dir
+    let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
+
+    // Build PATH with nativeLibraryDir first
     let sys_path = std::env::var("PATH").unwrap_or_default();
-    let path = format!("{}:{}", bin_dir.display(), sys_path);
+    let path = format!("{}:{}", nlib_dir.display(), sys_path);
 
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
-    // linker shipped alongside: ld-musl-aarch64.so.1 ./bun opencode-cli.js serve
-    let ld_musl = dir.join("lib").join("ld-musl-aarch64.so.1");
+    // linker shipped alongside (also in nativeLibraryDir for exec permission).
     let (cmd_path, cmd_args) = if ld_musl.exists() {
-        // Use musl linker to run bun (Android doesn't have /lib/ld-musl-aarch64.so.1)
         (
             ld_musl,
             vec![
+                "--library-path".to_string(),
+                lib_path.clone(),
                 bun_path.to_string_lossy().to_string(),
                 cli_path.to_string_lossy().to_string(),
                 "serve".to_string(),
@@ -202,7 +203,6 @@ pub async fn start_embedded_server(
             ],
         )
     } else {
-        // Fallback: direct execution (works if bun is statically linked or on desktop)
         (
             bun_path.clone(),
             vec![
@@ -216,10 +216,21 @@ pub async fn start_embedded_server(
         )
     };
 
-    let child = Command::new(&cmd_path)
+    eprintln!("[OpenCode] Spawning: {} {:?}", cmd_path.display(), cmd_args);
+    eprintln!("[OpenCode] LD_LIBRARY_PATH={}", lib_path);
+
+    // Use log files instead of piped stdout/stderr to avoid blocking on full pipe buffer
+    let log_dir = dir.join("logs");
+    let _ = fs::create_dir_all(&log_dir);
+    let stdout_file = fs::File::create(log_dir.join("server_stdout.log"))
+        .map_err(|e| format!("Create stdout log: {}", e))?;
+    let stderr_file = fs::File::create(log_dir.join("server_stderr.log"))
+        .map_err(|e| format!("Create stderr log: {}", e))?;
+
+    let mut child = Command::new(&cmd_path)
         .args(&cmd_args)
         .env("PATH", &path)
-        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap_or(""))
+        .env("LD_LIBRARY_PATH", &lib_path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
@@ -229,10 +240,31 @@ pub async fn start_embedded_server(
         .env("XDG_STATE_HOME", home_dir.join(".local/state").to_str().unwrap_or(""))
         .env("XDG_CACHE_HOME", home_dir.join(".cache").to_str().unwrap_or(""))
         .env("XDG_CONFIG_HOME", home_dir.join(".config").to_str().unwrap_or(""))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(stdout_file)
+        .stderr(stderr_file)
         .spawn()
         .map_err(|e| format!("Failed to spawn server: {}", e))?;
+
+    eprintln!("[OpenCode] Server spawned with pid {:?}", child.id());
+
+    // Check if process exited immediately (crash)
+    std::thread::sleep(Duration::from_millis(500));
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            let stderr = fs::read_to_string(log_dir.join("server_stderr.log")).unwrap_or_default();
+            let stdout = fs::read_to_string(log_dir.join("server_stdout.log")).unwrap_or_default();
+            eprintln!("[OpenCode] Server exited immediately with status: {}", status);
+            eprintln!("[OpenCode] stderr: {}", &stderr[..stderr.len().min(2000)]);
+            eprintln!("[OpenCode] stdout: {}", &stdout[..stdout.len().min(500)]);
+            return Err(format!("Server crashed ({}): {}", status, &stderr[..stderr.len().min(500)]));
+        }
+        Ok(None) => {
+            eprintln!("[OpenCode] Server still running after 500ms — good");
+        }
+        Err(e) => {
+            eprintln!("[OpenCode] Error checking server status: {}", e);
+        }
+    }
 
     if let Ok(mut guard) = SERVER_PROCESS.lock() {
         *guard = Some(child);
@@ -411,6 +443,16 @@ exec {proot} \
 
 // ─── Internal ───────────────────────────────────────────────────────
 
+fn check_extraction_progress(dir: &Path) -> f32 {
+    // Only non-executable assets need extraction now
+    let checks = [
+        dir.join("opencode-cli.js"),
+        dir.join(".native_lib_dir"),
+    ];
+    let done = checks.iter().filter(|p| p.exists()).count();
+    done as f32 / checks.len() as f32
+}
+
 fn runtime_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .data_dir()
@@ -418,10 +460,19 @@ fn runtime_dir(app: &AppHandle) -> PathBuf {
         .join(RUNTIME_SUBDIR)
 }
 
+/// Read the nativeLibraryDir path written by Kotlin at startup.
+fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
+    let path_file = runtime_dir.join(".native_lib_dir");
+    fs::read_to_string(&path_file).ok().map(|s| PathBuf::from(s.trim()))
+}
+
 fn is_runtime_ready(dir: &Path) -> bool {
-    dir.join("bin").join("bun").exists()
-        && dir.join("opencode-cli.js").exists()
-        && dir.join("lib").join("ld-musl-aarch64.so.1").exists()
+    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
+    dir.join("opencode-cli.js").exists()
+        && dir.join(".native_lib_dir").exists()
+        && native_lib_dir(dir)
+            .map(|d| d.join("libbun_exec.so").exists())
+            .unwrap_or(false)
 }
 
 async fn check_health(port: u32, password: Option<&str>) -> bool {
