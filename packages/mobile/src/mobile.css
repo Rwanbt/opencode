@@ -184,49 +184,62 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   max-width: 85vw !important;
 }
 
-/* ─── 9. PROMPT INPUT — comfortable typing area ──────────────────────────── */
+/* ─── 9. PROMPT INPUT — compact, aligned ─────────────────────────────────── */
 
-/* The contenteditable prompt */
+/* The contenteditable prompt — compact height, 16px to prevent iOS zoom */
 [data-dock-surface="shell"] [contenteditable="true"] {
-  font-size: 16px !important;     /* prevents iOS zoom-on-focus */
-  line-height: 1.5 !important;
-  min-height: 44px !important;
-  padding: 12px !important;
+  font-size: 16px !important;
+  line-height: 1.4 !important;
+  min-height: 36px !important;
+  padding: 8px 44px 8px 44px !important; /* leave room for +/↑ buttons */
 }
 
-/* Placeholder text inside the prompt */
+/* Placeholder text */
 [data-dock-surface="shell"] .text-14-regular.text-text-weak {
   font-size: 16px !important;
 }
 
-/* Prompt shell surface — add comfortable bottom padding */
-[data-dock-surface="shell"] {
-  border-radius: 16px !important;
+/* Fix +/↑ button size */
+[data-dock-surface="shell"] [data-action="prompt-submit"],
+[data-dock-surface="shell"] [data-action="prompt-attach"],
+[data-dock-surface="shell"] .size-8 {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
 }
 
-/* ─── 10. PROMPT TRAY / BOTTOM BAR — scrollable & touch-sized ───────────── */
-
-/* The DockTray bar that holds agent/model/variant selectors */
-[data-dock-surface="tray"] {
-  border-radius: 16px !important;
+/* Fix +/↑ vertical centering — override absolute bottom-2 to center */
+[data-dock-surface="shell"] .absolute.bottom-2.right-2,
+[data-dock-surface="shell"] .absolute.bottom-2.left-2 {
+  bottom: auto !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
 }
 
-[data-dock-surface="tray"][data-dock-attach="top"] {
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-}
+/* ─── 10. PROMPT TRAY / BOTTOM BAR — single line, compact ───────────────── */
 
-/* The inner flex container of the tray */
+/* The DockTray: keep original top overlap, center items, single line */
 [data-dock-surface="tray"] > div {
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
   overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  padding-bottom: 6px !important;
 }
 [data-dock-surface="tray"] > div::-webkit-scrollbar {
   display: none;
 }
 
-/* Tray buttons — ensure 44px height and readable text */
+/* Force all inner flex containers to center + nowrap */
+[data-dock-surface="tray"] > div > div {
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+/* Tray buttons — compact, single line */
 [data-component="prompt-agent-control"] button,
 [data-component="prompt-model-control"] button,
 [data-component="prompt-variant-control"] button,
@@ -234,21 +247,40 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 [data-action="prompt-model"],
 [data-action="prompt-model-variant"],
 [data-action="prompt-permissions"] {
-  min-height: 40px !important;
-  font-size: 14px !important;
-  padding-left: 10px !important;
-  padding-right: 10px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  font-size: 13px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  white-space: nowrap !important;
 }
 
-/* Model selector max-width — relax on mobile to use available space */
+/* Model selector — don't let it eat all the space */
 [data-component="prompt-model-control"] .max-w-\[320px\] {
-  max-width: min(320px, 60vw) !important;
+  max-width: min(200px, 45vw) !important;
 }
 
-/* Agent/variant selector max-width */
+/* Agent/variant selector */
 [data-component="prompt-agent-control"] .max-w-\[160px\],
 [data-component="prompt-variant-control"] .max-w-\[160px\] {
-  max-width: min(160px, 40vw) !important;
+  max-width: min(120px, 30vw) !important;
+}
+
+/* Shield/permissions button — keep compact */
+[data-action="prompt-permissions"] {
+  width: 32px !important;
+  padding: 0 !important;
+}
+
+/* ─── 10b. TERMINAL — reclaim space when closed ─────────────────────────── */
+
+/* When terminal panel is hidden (aria-hidden or inert), collapse it fully */
+#terminal-panel[aria-hidden="true"],
+#terminal-panel[inert] {
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  border: none !important;
 }
 
 /* ─── 11. KEYBOARD AVOIDANCE ─────────────────────────────────────────────── */

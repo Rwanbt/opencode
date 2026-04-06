@@ -1597,28 +1597,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   </div>
                 </Show>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={acceptLabel()}
-                  keybind={command.keybind("permissions.autoaccept")}
-                >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={toggleAccept}
-                    classList={{
-                      "h-7 w-7 p-0 shrink-0 flex items-center justify-center": true,
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
+                <div data-component="prompt-mode-control">
+                  <Select
+                    size="normal"
+                    options={["Ask", "Auto Edit", "Full Auto"]}
+                    current={accepting() ? "Full Auto" : "Ask"}
+                    onSelect={(value) => {
+                      if (value === "Full Auto") {
+                        if (!accepting()) toggleAccept()
+                      } else {
+                        if (accepting()) toggleAccept()
+                      }
+                      restoreFocus()
                     }}
-                    style={control()}
-                    aria-label={acceptLabel()}
-                    aria-pressed={accepting()}
-                  >
-                    <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
-                  </Button>
-                </TooltipKeybind>
+                    class="max-w-[120px] text-text-base"
+                    valueClass="truncate text-13-regular text-text-base"
+                    triggerStyle={control()}
+                    triggerProps={{ "data-action": "prompt-permissions" }}
+                    variant="ghost"
+                  />
+                </div>
               </div>
             </div>
           </div>
