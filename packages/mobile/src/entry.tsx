@@ -1,8 +1,16 @@
 /* @refresh reload */
 import { createSignal, Show, Switch, Match, onMount } from "solid-js"
 import { render } from "solid-js/web"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  ServerConnection,
+} from "@opencode-ai/app"
+import "@opencode-ai/app/index.css"
 import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
+import { createPlatform } from "./platform"
 
 const root = document.getElementById("root")
 
@@ -10,14 +18,70 @@ const root = document.getElementById("root")
 const loadingEl = document.getElementById("loading")
 if (loadingEl) loadingEl.style.display = "none"
 
-type Mode = "selecting" | "extracting" | "connecting" | "ready"
+type Mode = "selecting" | "extracting" | "connecting" | "remote-prompt" | "ready"
+
+interface ServerInfo {
+  url: string
+  username?: string
+  password?: string
+  variant: "embedded" | "http"
+}
 
 function App() {
   const [mode, setMode] = createSignal<Mode>("selecting")
   const [error, setError] = createSignal("")
+  const [serverInfo, setServerInfo] = createSignal<ServerInfo | null>(null)
+  const [platform, setPlatform] = createSignal<Awaited<ReturnType<typeof createPlatform>> | null>(null)
+  const [remoteUrl, setRemoteUrl] = createSignal("")
+  const [connectStatus, setConnectStatus] = createSignal("Starting local server...")
 
-  function handleRemote() {
-    // Will lazy-load platform + AppInterface when user chooses remote
+  // Lazy-init platform
+  async function ensurePlatform() {
+    let p = platform()
+    if (!p) {
+      p = await createPlatform()
+      setPlatform(p)
+    }
+    return p
+  }
+
+  // Handle local mode: extract → connect
+  async function handleLocalConnect() {
+    setMode("connecting")
+    setConnectStatus("Starting local server...")
+    try {
+      const p = await ensurePlatform()
+      const result = await p.startLocalServer?.()
+      if (result) {
+        setServerInfo({
+          url: result.url,
+          username: result.username,
+          password: result.password,
+          variant: "embedded",
+        })
+        setMode("ready")
+      } else {
+        setError("Server started but health check timed out after 30s.")
+        setMode("selecting")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setMode("selecting")
+    }
+  }
+
+  // Handle remote mode: prompt for URL
+  function handleRemotePrompt() {
+    setMode("remote-prompt")
+  }
+
+  async function handleRemoteConnect() {
+    const url = remoteUrl().trim()
+    if (!url) return
+    const normalized = /^https?:\/\//.test(url) ? url : `http://${url}`
+    const p = await ensurePlatform()
+    await p.setDefaultServer?.(normalized)
+    setServerInfo({ url: normalized, variant: "http" })
     setMode("ready")
   }
 
@@ -25,8 +89,8 @@ function App() {
     <Switch>
       <Match when={mode() === "selecting"}>
         <ModeSelector
-          onLocal={() => setMode("connecting")}
-          onRemote={handleRemote}
+          onLocal={() => setMode("extracting")}
+          onRemote={handleRemotePrompt}
           onExtract={() => setMode("extracting")}
         />
         <Show when={error()}>
@@ -43,7 +107,7 @@ function App() {
 
       <Match when={mode() === "extracting"}>
         <ExtractionProgress
-          onComplete={() => setMode("connecting")}
+          onComplete={() => handleLocalConnect()}
           onError={(msg) => { setError(msg); setMode("selecting") }}
         />
       </Match>
@@ -55,24 +119,111 @@ function App() {
           background: "#0a0a0a", color: "#e5e5e5",
           "font-family": "system-ui, -apple-system, sans-serif",
         }}>
-          <div style={{ "font-size": "18px", "font-weight": "600" }}>Starting local server...</div>
-          <div style={{ color: "#888", "font-size": "14px" }}>Embedded runtime booting up</div>
+          <div style={{ "font-size": "18px", "font-weight": "600" }}>{connectStatus()}</div>
+          <div style={{ color: "#888", "font-size": "14px" }}>Waiting for health check...</div>
+          {/* Simple spinner */}
+          <div style={{
+            width: "32px", height: "32px", border: "3px solid #333",
+            "border-top-color": "#3b82f6", "border-radius": "50%",
+            animation: "spin 1s linear infinite",
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         </div>
       </Match>
 
-      <Match when={mode() === "ready"}>
+      <Match when={mode() === "remote-prompt"}>
         <div style={{
-          display: "flex", "align-items": "center", "justify-content": "center",
-          height: "100vh", background: "#0a0a0a", color: "#e5e5e5",
+          display: "flex", "flex-direction": "column", "align-items": "center",
+          "justify-content": "center", height: "100vh", padding: "24px", gap: "24px",
+          background: "#0a0a0a", color: "#e5e5e5",
           "font-family": "system-ui, -apple-system, sans-serif",
         }}>
-          <div style={{ "text-align": "center" }}>
-            <div style={{ "font-size": "18px", "font-weight": "600" }}>OpenCode Connected</div>
-            <div style={{ color: "#888", "font-size": "14px", "margin-top": "8px" }}>Loading interface...</div>
+          <h1 style={{ "font-size": "24px", "font-weight": "700", margin: "0" }}>
+            Connect to Server
+          </h1>
+          <p style={{ color: "#888", "font-size": "14px", margin: "0", "text-align": "center", "max-width": "320px" }}>
+            Enter the URL of your OpenCode server running on your PC
+          </p>
+          <input
+            type="url"
+            placeholder="192.168.1.100:3000"
+            value={remoteUrl()}
+            onInput={(e) => setRemoteUrl(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleRemoteConnect()}
+            style={{
+              width: "100%", "max-width": "320px", padding: "14px 16px",
+              "border-radius": "10px", border: "1px solid #333",
+              background: "#1a1a1a", color: "#e5e5e5", "font-size": "16px",
+              outline: "none",
+            }}
+          />
+          <div style={{ display: "flex", gap: "12px", width: "100%", "max-width": "320px" }}>
+            <button
+              onClick={() => setMode("selecting")}
+              style={{
+                flex: "1", padding: "14px", "border-radius": "10px",
+                border: "1px solid #333", background: "#1a1a1a",
+                color: "#888", "font-size": "15px", cursor: "pointer",
+              }}
+            >
+              Back
+            </button>
+            <button
+              onClick={handleRemoteConnect}
+              style={{
+                flex: "1", padding: "14px", "border-radius": "10px",
+                border: "1px solid #3b82f6", background: "#1e3a5f",
+                color: "#e5e5e5", "font-size": "15px", cursor: "pointer",
+                "font-weight": "600",
+              }}
+            >
+              Connect
+            </button>
           </div>
         </div>
       </Match>
+
+      <Match when={mode() === "ready" && serverInfo() && platform()}>
+        <FullApp
+          platform={platform()!}
+          serverInfo={serverInfo()!}
+        />
+      </Match>
     </Switch>
+  )
+}
+
+function FullApp(props: { platform: Awaited<ReturnType<typeof createPlatform>>; serverInfo: ServerInfo }) {
+  const connection = (): ServerConnection.Any => {
+    if (props.serverInfo.variant === "embedded") {
+      return {
+        type: "sidecar",
+        variant: "embedded",
+        http: {
+          url: props.serverInfo.url,
+          username: props.serverInfo.username,
+          password: props.serverInfo.password,
+        },
+      }
+    }
+    return {
+      type: "http",
+      http: { url: props.serverInfo.url },
+    }
+  }
+
+  const defaultKey = () => ServerConnection.key(connection())
+  const servers = () => [connection()]
+
+  return (
+    <PlatformProvider value={props.platform}>
+      <AppBaseProviders>
+        <AppInterface
+          defaultServer={defaultKey()}
+          servers={servers()}
+        />
+      </AppBaseProviders>
+    </PlatformProvider>
   )
 }
 

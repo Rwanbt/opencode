@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "deep-link:default",
+    "process:default",
+    "store:default",
+    "os:default",
+    "notification:default",
+    "haptics:default",
+    "clipboard-manager:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://*" },
+        { "url": "https://*" },
+        { "url": "http://*:*/*" }
+      ]
+    }
+  ]
+}
