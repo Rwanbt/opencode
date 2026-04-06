@@ -4,6 +4,7 @@ interface Props {
   onLocal: () => void
   onRemote: () => void
   onExtract: () => void
+  onModelManager?: () => void
 }
 
 export function ModeSelector(props: Props) {
@@ -72,6 +73,28 @@ export function ModeSelector(props: Props) {
             Connect to OpenCode running on your PC
           </div>
         </button>
+
+        {/* AI Models manager */}
+        <Show when={props.onModelManager}>
+          <button
+            onClick={() => props.onModelManager?.()}
+            style={{
+              padding: "16px 24px",
+              "border-radius": "12px",
+              border: "1px solid #333",
+              background: "#1a1a1a",
+              color: "#e5e5e5",
+              "font-size": "16px",
+              cursor: "pointer",
+              "text-align": "left",
+            }}
+          >
+            <div style={{ "font-weight": "600" }}>AI Models</div>
+            <div style={{ "font-size": "13px", color: "#888", "margin-top": "4px" }}>
+              Download and manage local LLM models
+            </div>
+          </button>
+        </Show>
       </div>
     </div>
   )
