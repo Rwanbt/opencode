@@ -494,17 +494,15 @@ test("toggling notification agent switch updates localStorage", async ({ page, g
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
 
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
+  await expect.poll(async () => {
+    return await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
+  }).toBe(false)
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
     return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.agent).toBe(false)
+  }).toMatchObject({ notifications: { agent: false } })
 })
 
 test("toggling notification permissions switch updates localStorage", async ({ page, gotoSession }) => {
@@ -519,17 +517,15 @@ test("toggling notification permissions switch updates localStorage", async ({ p
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
 
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
+  await expect.poll(async () => {
+    return await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
+  }).toBe(false)
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
     return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.permissions).toBe(false)
+  }).toMatchObject({ notifications: { permissions: false } })
 })
 
 test("toggling notification errors switch updates localStorage", async ({ page, gotoSession }) => {
@@ -544,17 +540,15 @@ test("toggling notification errors switch updates localStorage", async ({ page, 
   expect(initialState).toBe(false)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
 
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(true)
+  await expect.poll(async () => {
+    return await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
+  }).toBe(true)
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
     return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.errors).toBe(true)
+  }).toMatchObject({ notifications: { errors: true } })
 })
 
 test("changing sound agent selection persists in localStorage", async ({ page, gotoSession }) => {
@@ -569,12 +563,11 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   const items = page.locator('[data-slot="select-select-item"]')
   await items.nth(2).click()
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.sounds?.agent).not.toBe("staplebops-01")
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
+    const stored = raw ? JSON.parse(raw) : null
+    return stored?.sounds?.agent
+  }).not.toBe("staplebops-01")
 })
 
 test("selecting none disables agent sound", async ({ page, gotoSession }) => {
@@ -591,12 +584,11 @@ test("selecting none disables agent sound", async ({ page, gotoSession }) => {
   await expect(items.first()).toBeVisible()
   await items.first().click()
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.sounds?.agentEnabled).toBe(false)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
+    const stored = raw ? JSON.parse(raw) : null
+    return stored?.sounds?.agentEnabled
+  }).toBe(false)
 })
 
 test("changing permissions and errors sounds updates localStorage", async ({ page, gotoSession }) => {
@@ -679,17 +671,15 @@ test("toggling updates startup switch updates localStorage", async ({ page, goto
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
 
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
+  await expect.poll(async () => {
+    return await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
+  }).toBe(false)
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
     return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.updates?.startup).toBe(false)
+  }).toMatchObject({ updates: { startup: false } })
 })
 
 test("toggling release notes switch updates localStorage", async ({ page, gotoSession }) => {
@@ -704,15 +694,13 @@ test("toggling release notes switch updates localStorage", async ({ page, gotoSe
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
 
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
+  await expect.poll(async () => {
+    return await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
+  }).toBe(false)
 
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), settingsKey)
     return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.general?.releaseNotes).toBe(false)
+  }).toMatchObject({ general: { releaseNotes: false } })
 })

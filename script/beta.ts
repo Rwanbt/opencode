@@ -291,7 +291,12 @@ async function main() {
   if (failed.length > 0) {
     console.log(`Failed: ${failed.length} PRs`)
     failed.forEach((f) => console.log(`  - PR #${f.number}: ${f.reason}`))
-    throw new Error(`${failed.length} PR(s) failed to merge`)
+    // Only fail the workflow if ALL PRs failed — partial success is acceptable
+    // since failed PRs get comments notifying their authors.
+    if (applied.length === 0) {
+      throw new Error(`All ${failed.length} PR(s) failed to merge`)
+    }
+    console.log(`WARNING: ${failed.length} PR(s) failed but ${applied.length} succeeded. Continuing with partial merge.`)
   }
 
   if (applied.length > 0) {

@@ -14,6 +14,7 @@ import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { LSPPool } from "./pool"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -137,6 +138,7 @@ export namespace LSP {
     servers: Record<string, LSPServer.Info>
     broken: Set<string>
     spawning: Map<string, Promise<LSPClient.Info | undefined>>
+    pool: LSPPool.Pool
   }
 
   export interface Interface {
@@ -207,16 +209,30 @@ export namespace LSP {
             })
           }
 
+          const lspMemory = cfg.experimental?.lsp_memory
+          const pool = LSPPool.create({
+            maxConcurrent: lspMemory?.max_concurrent ?? 5,
+            idleTimeoutMs: (lspMemory?.idle_timeout_minutes ?? 15) * 60_000,
+            maxMemoryMB: lspMemory?.max_memory_mb,
+          })
+
           const s: State = {
             clients: [],
             servers,
             broken: new Set(),
             spawning: new Map(),
+            pool,
           }
+
+          // When pool evicts a client, remove it from the clients array
+          pool.onEvict((entry) => {
+            const idx = s.clients.indexOf(entry.client)
+            if (idx !== -1) s.clients.splice(idx, 1)
+          })
 
           yield* Effect.addFinalizer(() =>
             Effect.promise(async () => {
-              await Promise.all(s.clients.map((client) => client.shutdown()))
+              await pool.shutdownAll()
             }),
           )
 
@@ -266,7 +282,13 @@ export namespace LSP {
               return existing
             }
 
+            // Evict LRU if at capacity before adding new client
+            if (s.pool.atCapacity()) {
+              await s.pool.evictLRU()
+            }
+
             s.clients.push(client)
+            s.pool.track(client, server.id, root)
             return client
           }
 
@@ -313,11 +335,14 @@ export namespace LSP {
 
       const run = Effect.fnUntraced(function* <T>(file: string, fn: (client: LSPClient.Info) => Promise<T>) {
         const clients = yield* getClients(file)
+        const s = yield* InstanceState.get(state)
+        for (const c of clients) s.pool.touch(c.serverID, c.root)
         return yield* Effect.promise(() => Promise.all(clients.map((x) => fn(x))))
       })
 
       const runAll = Effect.fnUntraced(function* <T>(fn: (client: LSPClient.Info) => Promise<T>) {
         const s = yield* InstanceState.get(state)
+        for (const c of s.clients) s.pool.touch(c.serverID, c.root)
         return yield* Effect.promise(() => Promise.all(s.clients.map((x) => fn(x))))
       })
 

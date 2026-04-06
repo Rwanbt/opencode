@@ -122,7 +122,7 @@ Read-only coordinator agent (50 max steps). Has access to `task` and `team` tool
 
 ### Multi-Provider Support
 
-21+ providers out of the box: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, plus any OpenAI-compatible endpoint. Pricing sourced from [models.dev](https://models.dev).
+25+ providers out of the box: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, Ollama Cloud, plus any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, LocalAI). Pricing sourced from [models.dev](https://models.dev).
 
 ### Agent System
 
@@ -201,7 +201,7 @@ To prevent confusion from AI-generated summaries of this project:
 | MCP agent scoping | Implemented | Per-agent allow/deny config |
 | 9-state lifecycle | Implemented | Persistent to SQLite |
 | Orchestrator agent | Implemented | Read-only coordinator |
-| Multi-provider (21+) | Implemented | Including local models |
+| Multi-provider (25+) | Implemented | Including local models via OpenAI-compatible API |
 | LSP integration | Implemented | Symbols, diagnostics, multi-language |
 | MCP protocol | Implemented | Client + server, 3 transports |
 | Plugin system | Implemented | SDK + hook architecture |
@@ -218,62 +218,119 @@ To prevent confusion from AI-generated summaries of this project:
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+| Collaborative mode | Implemented | JWT auth, presence, file locking, WebSocket broadcast |
+| Mobile app (Tauri) | Implemented | iOS/Android via Tauri 2.0, remote connection |
+| AnythingLLM bridge | Implemented | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
 
-## Future Roadmap
+## Architecture
 
-Three major initiatives are planned on dedicated feature branches. Each is designed to be modular — they can be developed independently and merged when ready.
+```mermaid
+graph TB
+  subgraph Clients
+    TUI[TUI - SolidJS + opentui]
+    Web[Web UI - SolidJS + Vite]
+    Desktop[Desktop - Tauri 2.0]
+    Mobile[Mobile - Tauri iOS/Android]
+  end
 
-### 🤝 Collaborative Mode (`dev_collaborative_mode`)
+  subgraph Server
+    Hono[Hono HTTP Server<br/>REST + SSE + WebSocket]
+    Auth[Auth - JWT + Basic]
+    Broadcast[WebSocket Broadcast]
+  end
 
-**Goal**: Multiple developers interacting with agents simultaneously in real-time.
+  subgraph "Agent Engine"
+    Session[Session + Agent Loop]
+    Router[Provider Router]
+    Tools[Tool Engine<br/>bash, read, write, edit, glob,<br/>grep, list, webfetch, task...]
+    Context[Context Manager<br/>Auto-compact + Token Pruning]
+  end
 
-| Component | Description |
-|-----------|-------------|
-| Multi-user auth | JWT-based authentication on the Hono server, user sessions, role-based access |
-| WebSocket broadcast | Real-time event streaming to all connected clients (agent activity, file changes, task status) |
-| File concurrency | Lock-based or CRDT-based conflict resolution when multiple agents/users edit the same file |
-| Presence UI | See who is connected, what they're working on, which agents are assigned to whom |
-| Shared context | Cross-user session history, shared learnings, team-wide RAG index |
+  subgraph Intelligence
+    Cloud[25+ Cloud APIs<br/>Anthropic, OpenAI, Google,<br/>Azure, Bedrock, Vertex...]
+    Local[Local Models<br/>Ollama, LM Studio, vLLM]
+    MCP[MCP Servers<br/>stdio, HTTP/SSE, StreamableHTTP]
+    LSP[15+ LSP Servers<br/>Auto-download + Symbol Index]
+  end
 
-**Scale**: ~3000+ LOC, major architectural change. Requires refactoring the server for multi-tenant support.
+  subgraph Storage
+    DB[(SQLite - Drizzle ORM<br/>Sessions, Messages, Snapshots)]
+    RAG[RAG - SQLite Vectors]
+    ALLM[AnythingLLM Bridge]
+  end
 
-### 📱 Mobile Version (`dev_mobile`)
+  TUI & Web & Desktop & Mobile --> Hono
+  Hono --> Session
+  Session --> Router
+  Router --> Cloud & Local
+  Session --> Tools
+  Tools --> LSP & MCP
+  Session --> Context
+  Context --> RAG & ALLM
+  Hono --> DB
+```
 
-**Goal**: Run OpenCode as a native mobile app on Android and iOS, with full agent capabilities.
+## Security & Governance
 
-| Component | Description |
-|-----------|-------------|
-| **Tauri 2.0 migration** | Leverage Tauri's mobile targets (Android/iOS) to package the existing SolidJS frontend as a native app |
-| **Runtime adaptation** | Bundle the TypeScript agent core with Vite for WebView execution; delegate performance-critical tasks to Tauri's Rust layer |
-| **isomorphic-git** | Replace system `git` calls with isomorphic-git for pure-JS git operations within the mobile sandbox |
-| **File system access** | Use `tauri-plugin-fs` for sandboxed file access + Document Picker integration |
-| **Remote mode** | Connect to a desktop OpenCode instance over a secure tunnel (Tailscale/Cloudflare) for full capability without local execution |
-| **Mobile-optimized UI** | Conversational interface that hides terminal complexity; swipe-based diff review; virtual keyboard optimizations |
+| Feature | Description |
+|---------|-------------|
+| **Sandbox** | Optional Docker execution (`experimental.sandbox.type: "docker"`) or host mode with project boundary enforcement |
+| **Permissions** | 3-state system (`allow` / `deny` / `ask`) with wildcard pattern matching. 100+ bash command definitions for fine-grained control |
+| **DLP** | Data Loss Prevention (`experimental.dlp`) redacts secrets, API keys, and credentials before sending to LLM providers |
+| **Policy Engine** | Conditional rules (`experimental.policy`) with `block` or `warn` actions. Protect paths, limit edit size, custom regex patterns |
+| **Privacy** | Local-first: all data in SQLite on disk. No telemetry by default. Secrets never logged. No data sent to third parties beyond the configured LLM provider |
 
-**Platform comparison**:
-- **Android** (via Termux or Tauri): Full Node.js support, broad file access, excellent performance
-- **iOS** (via Tauri/a-Shell): Sandbox restrictions, limited native packages, but strong Apple Silicon performance for local models
+## Intelligence Interface
 
-**Scale**: ~2000+ LOC for the Tauri mobile shell, ~500 LOC for isomorphic-git adapter, ~300 LOC for remote mode.
+| Feature | Description |
+|---------|-------------|
+| **MCP Compliant** | Full Model Context Protocol support — client and server modes, per-agent tool scoping via allow/deny lists |
+| **Context Files** | `.opencode/` directory with `opencode.jsonc` config. Agents defined as markdown with YAML frontmatter. Custom instructions via `instructions` config |
+| **Provider Router** | 25+ providers via `Provider.parseModel("provider/model")`. Automatic fallback, cost tracking, token-aware routing |
+| **RAG System** | Optional local vector search (`experimental.rag`) with configurable embedding models (OpenAI/Google). Auto-indexes modified files |
+| **AnythingLLM Bridge** | Optional integration (`experimental.anythingllm`) — context injection, MCP server adapter, vector store bridge, Agent Skills HTTP API |
 
-### 🔗 AnythingLLM Fusion (`dev_anything`)
+---
 
-**Goal**: Merge OpenCode's agentic coding capabilities with [AnythingLLM](https://github.com/mintplex-labs/anything-llm)'s document RAG and multi-user chat platform.
+## Feature Branches (Implemented on `dev`)
 
-| Component | Description |
-|-----------|-------------|
-| **Context bridge** | Pipe AnythingLLM's indexed documents (PDFs, wikis, Confluence, etc.) into OpenCode's system prompt as additional context |
-| **Agent skill plugin** | Expose OpenCode's core commands (`/plan`, `/build`, edit, bash) as an AnythingLLM Agent Skill via HTTP API |
-| **Unified vector store** | Merge OpenCode's SQLite RAG with AnythingLLM's vector DB backends (LanceDB, Pinecone, Chroma) for a single knowledge layer |
-| **Multi-user workspace** | Leverage AnythingLLM's existing multi-user and workspace management for team environments |
-| **Containerized deployment** | Docker Compose setup running both backends, with shared auth and a unified API gateway |
+Three major features have been implemented on dedicated branches and merged into `dev`. Each is feature-gated and backward-compatible.
 
-**Synergy**: AnythingLLM excels at document ingestion and RAG over non-code content. OpenCode excels at code manipulation, agentic tool use, and multi-provider LLM orchestration. Combined, they create a full-stack AI development platform that can reason over documentation AND write/execute code.
+### Collaborative Mode (`dev_collaborative_mode`)
 
-**Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
+Multi-user real-time collaboration. Implemented:
+- **JWT authentication** — HMAC-SHA256 tokens with refresh rotation, backward-compatible with basic auth
+- **User management** — Registration, roles (admin/member/viewer), RBAC enforcement
+- **WebSocket broadcast** — Real-time event streaming via GlobalBus → Broadcast wiring
+- **Presence system** — Online/idle/away status with 30s heartbeat
+- **File locking** — Optimistic locks on edit/write tools with conflict detection
+- **Frontend** — Login form, presence indicator, observer badge, WebSocket hooks
+
+Config: `experimental.collaborative.enabled: true`
+
+### Mobile Version (`dev_mobile`)
+
+Native Android/iOS app via Tauri 2.0. Implemented:
+- **Tauri mobile package** — Full `packages/mobile/` with iOS and Android targets
+- **Platform abstraction** — Extended `Platform` type with `"mobile"` + `"ios"/"android"` OS detection
+- **Remote connection** — Connect to desktop OpenCode server over network with JWT auth
+- **Mobile UI** — Swipe navigation drawer, touch-optimized message input, unified diff viewer with swipe
+- **Push notifications** — SSE-to-native notification bridge for background task completion
+
+### AnythingLLM Fusion (`dev_anything`)
+
+Bridge between OpenCode and AnythingLLM's document RAG platform. Implemented:
+- **REST client** — Full API wrapper for AnythingLLM workspaces, documents, search, chat
+- **MCP server adapter** — 4 tools: `anythingllm_search`, `anythingllm_list_workspaces`, `anythingllm_get_document`, `anythingllm_chat`
+- **Plugin context injection** — `experimental.chat.system.transform` hook injects relevant docs into system prompt
+- **Agent Skills HTTP API** — `GET /agent-skills` + `POST /agent-skills/:toolId/execute` to expose OpenCode tools to AnythingLLM
+- **Vector store bridge** — Composite search merging local SQLite RAG with AnythingLLM vector DB results
+- **Docker Compose** — Ready-to-use `docker-compose.anythingllm.yml` with shared network
+
+Config: `experimental.anythingllm.enabled: true`
 
 ---
 

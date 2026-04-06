@@ -23,7 +23,20 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
+      - name: Check required secrets
+        id: check-secrets
+        env:
+          HAS_KEY: ${{ secrets.OPENCODE_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Warning: OPENCODE_API_KEY not set, skipping recap generation"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate daily issues recap
+        if: steps.check-secrets.outputs.skip != 'true'
         id: recap
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -116,6 +129,7 @@ jobs:
           echo "recap_file=/tmp/recap.txt" >> $GITHUB_OUTPUT
 
       - name: Post to Discord
+        if: steps.check-secrets.outputs.skip != 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}
         run: |

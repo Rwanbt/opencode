@@ -1102,6 +1102,29 @@ export namespace Config {
             })
             .optional()
             .describe("Collaborative multi-user mode with JWT auth, presence, and session sharing"),
+          lsp_memory: z
+            .object({
+              idle_timeout_minutes: z
+                .number()
+                .int()
+                .positive()
+                .default(10)
+                .describe("Shut down LSP servers after this many minutes of inactivity"),
+              max_concurrent: z
+                .number()
+                .int()
+                .positive()
+                .default(3)
+                .describe("Maximum number of LSP servers running simultaneously"),
+              max_memory_mb: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Maximum RSS memory per LSP server in MB (restart if exceeded)"),
+            })
+            .optional()
+            .describe("Memory management for LSP servers (idle timeout, max concurrent, LRU eviction)"),
           anythingllm: z
             .object({
               enabled: z.boolean().default(false).describe("Enable AnythingLLM integration"),
