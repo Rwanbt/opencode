@@ -20,17 +20,26 @@
         --safe-area-right: env(safe-area-inset-right, 0px);
       }
       body {
+        margin: 0;
+        padding: 0;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+        overflow: hidden;
+        height: 100dvh;
+        width: 100dvw;
+      }
+      /* Apply safe area as padding inside the root container */
+      #root {
         padding-top: var(--safe-area-top);
         padding-bottom: var(--safe-area-bottom);
         padding-left: var(--safe-area-left);
         padding-right: var(--safe-area-right);
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        user-select: none;
+        box-sizing: border-box;
       }
     </style>
   </head>
-  <body class="antialiased overscroll-none text-12-regular overflow-hidden">
+  <body class="antialiased overscroll-none text-12-regular">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#ff0000;color:#ffffff;font-family:sans-serif;font-size:24px;font-weight:bold;z-index:9999">OPENCODE LOADING - IF YOU SEE THIS, HTML WORKS</div>
     <div id="root" class="flex flex-col h-dvh"></div>

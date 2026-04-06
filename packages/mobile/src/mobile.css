@@ -1,0 +1,57 @@
+/* Mobile-specific CSS overrides for OpenCode */
+
+/* ─── Show all toolbar buttons on small screens ─────────────────────── */
+/* The desktop app hides buttons below md (768px) and xl (1280px).
+   On mobile, we show them all since there's no sidebar taking space. */
+
+/* Search bar — show on mobile but make it smaller */
+@media (max-width: 767px) {
+  /* Force show buttons that are hidden below md */
+  #opencode-titlebar-right .hidden.md\:flex {
+    display: flex !important;
+  }
+
+  /* Hide the "Open Directory" button on very small screens — not useful on mobile */
+  #opencode-titlebar-right .hidden.xl\:flex {
+    display: none !important;
+  }
+
+  /* Make search bar narrower on small screens */
+  #opencode-titlebar-center .w-\[240px\] {
+    width: 160px;
+  }
+}
+
+/* ─── Landscape safe area fix ───────────────────────────────────────── */
+/* In landscape, the notch safe area should not create dead space.
+   The content should extend behind it with proper padding. */
+@media (orientation: landscape) {
+  #root {
+    /* Use safe area as padding so content doesn't go under notch */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/* ─── Touch-friendly adjustments ────────────────────────────────────── */
+/* Ensure tap targets are at least 44px for accessibility */
+.titlebar-icon {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* ─── Bottom bar overflow fix ───────────────────────────────────────── */
+/* Prevent the project/model selector bar from being clipped */
+@media (max-width: 500px) {
+  /* Allow horizontal scroll on the bottom toolbar */
+  [class*="prompt-footer"],
+  [class*="prompt-bar"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  [class*="prompt-footer"]::-webkit-scrollbar,
+  [class*="prompt-bar"]::-webkit-scrollbar {
+    display: none;
+  }
+}
