@@ -1,6 +1,4 @@
-import { createSignal, Show, onMount } from "solid-js"
-import { type as osType } from "@tauri-apps/plugin-os"
-import { checkRuntime, type RuntimeInfo } from "../runtime"
+import { createSignal, Show } from "solid-js"
 
 interface Props {
   onLocal: () => void
@@ -9,18 +7,8 @@ interface Props {
 }
 
 export function ModeSelector(props: Props) {
-  const os = osType()
-  const isAndroid = os === "android"
-  const [runtimeInfo, setRuntimeInfo] = createSignal<RuntimeInfo | null>(null)
-  const [checking, setChecking] = createSignal(true)
-
-  onMount(async () => {
-    if (isAndroid) {
-      const info = await checkRuntime()
-      setRuntimeInfo(info)
-    }
-    setChecking(false)
-  })
+  // Detect Android via user agent — no Tauri plugin import needed
+  const isAndroid = /android/i.test(navigator.userAgent)
 
   return (
     <div style={{
@@ -44,54 +32,25 @@ export function ModeSelector(props: Props) {
 
       <div style={{ display: "flex", "flex-direction": "column", gap: "16px", width: "100%", "max-width": "320px" }}>
         {/* Local mode — Android only */}
-        <Show when={isAndroid && !checking()}>
-          <Show
-            when={runtimeInfo()?.ready}
-            fallback={
-              <button
-                onClick={props.onExtract}
-                style={{
-                  padding: "16px 24px",
-                  "border-radius": "12px",
-                  border: "1px solid #3b82f6",
-                  background: "#1e3a5f",
-                  color: "#e5e5e5",
-                  "font-size": "16px",
-                  cursor: "pointer",
-                  "text-align": "left",
-                }}
-              >
-                <div style={{ "font-weight": "600" }}>Local Mode</div>
-                <div style={{ "font-size": "13px", color: "#94a3b8", "margin-top": "4px" }}>
-                  Set up embedded runtime (~15 seconds, one-time)
-                </div>
-              </button>
-            }
+        <Show when={isAndroid}>
+          <button
+            onClick={props.onExtract}
+            style={{
+              padding: "16px 24px",
+              "border-radius": "12px",
+              border: "1px solid #3b82f6",
+              background: "#1e3a5f",
+              color: "#e5e5e5",
+              "font-size": "16px",
+              cursor: "pointer",
+              "text-align": "left",
+            }}
           >
-            <button
-              onClick={props.onLocal}
-              style={{
-                padding: "16px 24px",
-                "border-radius": "12px",
-                border: "1px solid #3b82f6",
-                background: "#1e3a5f",
-                color: "#e5e5e5",
-                "font-size": "16px",
-                cursor: "pointer",
-                "text-align": "left",
-              }}
-            >
-              <div style={{ "font-weight": "600" }}>
-                Local Mode
-                <Show when={runtimeInfo()?.server_running}>
-                  <span style={{ color: "#22c55e", "margin-left": "8px", "font-size": "13px" }}>running</span>
-                </Show>
-              </div>
-              <div style={{ "font-size": "13px", color: "#94a3b8", "margin-top": "4px" }}>
-                Run AI agent directly on your phone
-              </div>
-            </button>
-          </Show>
+            <div style={{ "font-weight": "600" }}>Local Mode</div>
+            <div style={{ "font-size": "13px", color: "#94a3b8", "margin-top": "4px" }}>
+              Run AI agent directly on your phone
+            </div>
+          </button>
         </Show>
 
         {/* Remote mode — always available */}
