@@ -4,7 +4,7 @@ import { type as osType } from "@tauri-apps/plugin-os"
 import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { LazyStore } from "@tauri-apps/plugin-store"
-import { checkTermux, launchTermuxServer, checkLocalHealth, stopLocalServer as stopLocal } from "./termux"
+import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal } from "./runtime"
 
 const pkg = { version: "0.1.0" }
 
@@ -90,15 +90,23 @@ export async function createPlatform(): Promise<Platform> {
 
     async checkLocalAvailable() {
       if (os !== "android") return false
-      const info = await checkTermux()
-      return info.installed && info.bun_available
+      const info = await checkRuntime()
+      return info.ready
     },
 
     async startLocalServer() {
       if (os !== "android") return null
 
-      const info = await checkTermux()
-      if (!info.installed) return null
+      const info = await checkRuntime()
+
+      // Extract runtime if not ready
+      if (!info.ready) {
+        try {
+          await extractRuntime()
+        } catch {
+          return null
+        }
+      }
 
       const port = info.port
       const password = crypto.randomUUID()
@@ -113,9 +121,9 @@ export async function createPlatform(): Promise<Platform> {
         }
       }
 
-      // Launch server in Termux
+      // Start embedded server
       try {
-        await launchTermuxServer(port, password)
+        await startEmbeddedServer(port, password)
       } catch {
         return null
       }

@@ -1,7 +1,7 @@
 use tauri::Manager;
 
 #[cfg(target_os = "android")]
-mod termux;
+mod runtime;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,18 +13,18 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_haptics::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_shell::init());
+        .plugin(tauri_plugin_clipboard_manager::init());
 
-    // Register Android-only Termux commands
+    // Register Android-only embedded runtime commands
     #[cfg(target_os = "android")]
     {
         builder = builder.invoke_handler(tauri::generate_handler![
-            termux::check_termux,
-            termux::launch_termux_server,
-            termux::check_local_health,
-            termux::open_termux_setup,
-            termux::stop_local_server,
+            runtime::check_runtime,
+            runtime::extract_runtime,
+            runtime::start_embedded_server,
+            runtime::check_local_health,
+            runtime::stop_local_server,
+            runtime::install_extended_env,
         ]);
     }
 

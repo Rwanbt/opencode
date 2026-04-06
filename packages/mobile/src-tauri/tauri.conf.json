@@ -52,12 +52,6 @@
     },
     "notification": {
       "permissionText": "OpenCode needs notifications to alert you when tasks complete."
-    },
-    "shell": {
-      "scope": [
-        { "name": "am", "cmd": "am", "args": true },
-        { "name": "pm", "cmd": "pm", "args": true }
-      ]
     }
   }
 }
