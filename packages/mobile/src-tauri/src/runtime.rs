@@ -219,6 +219,7 @@ pub async fn start_embedded_server(
     let child = Command::new(&cmd_path)
         .args(&cmd_args)
         .env("PATH", &path)
+        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap_or(""))
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
