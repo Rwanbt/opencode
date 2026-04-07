@@ -299,11 +299,15 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   max-width: calc(100vw - 24px) !important;
 }
 
-/* Dialog panels */
-[data-slot="dialog-content"],
-[role="dialog"] > div {
-  max-width: calc(100vw - 32px) !important;
-  max-height: calc(100dvh - 48px) !important;
+/* Dialog container — fit viewport on mobile */
+[data-component="dialog"] [data-slot="dialog-container"] {
+  width: min(calc(100vw - 16px), 960px) !important;
+  height: min(calc(100dvh - 32px), 600px) !important;
+}
+
+/* Dialog content panel — don't exceed container */
+[data-slot="dialog-content"] {
+  max-width: 100% !important;
 }
 
 /* Status popover */
@@ -486,6 +490,28 @@ a:active,
   font-size: 13px !important;
 }
 
+/* Terminal tabs — touch-friendly */
+#terminal-panel [data-slot="tabs-list"] {
+  min-height: 40px !important;
+}
+
+#terminal-panel [data-slot="tabs-trigger-wrapper"] {
+  min-height: 36px !important;
+}
+
+/* New terminal button — bigger touch target */
+#terminal-panel [data-component="icon-button"] {
+  min-width: 40px !important;
+  min-height: 40px !important;
+}
+
+/* In landscape, terminal can take more space */
+@media (orientation: landscape) {
+  #terminal-panel {
+    max-height: 50dvh !important;
+  }
+}
+
 /* ─── 25. DIFF VIEW — scrollable code blocks ─────────────────────────────── */
 
 [data-slot="diff-view"],
@@ -493,6 +519,55 @@ a:active,
   overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
   font-size: 12px !important;
+}
+
+/* Diff file headers — more compact on mobile */
+@media (max-width: 767px) {
+  [data-slot="diff-view"] [data-slot="diff-header"] {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Diff line numbers — compact */
+  [data-slot="diff-view"] [data-slot="line-number"] {
+    min-width: 28px !important;
+    padding: 0 4px !important;
+    font-size: 11px !important;
+  }
+
+  /* Diff line content — prevent overflow, enable horizontal scroll */
+  [data-slot="diff-view"] [data-slot="line-content"] {
+    overflow-x: auto !important;
+    white-space: pre !important;
+    font-size: 12px !important;
+  }
+
+  /* Force unified diff on mobile (split is too narrow) */
+  [data-slot="diff-view"][data-style="split"] {
+    display: block !important;
+  }
+}
+
+/* ─── 25b. SETTINGS DIALOG — narrow sidebar on portrait ────────────────── */
+
+/* On narrow screens the 150/200px vertical tab list is too wide.
+   Shrink it, but keep the native vertical layout — switching to
+   horizontal tabs broke content visibility on Android WebView.       */
+@media (max-width: 767px) {
+  .settings-dialog > [data-slot="tabs-list"] {
+    width: 110px !important;
+    min-width: 110px !important;
+  }
+
+  /* Hide section titles to save space */
+  .settings-dialog [data-slot="tabs-section-title"] {
+    display: none !important;
+  }
+
+  /* Hide version info */
+  .settings-dialog > [data-slot="tabs-list"] .text-12-medium.text-text-weak {
+    display: none !important;
+  }
 }
 
 /* ─── 26. CONTEXT MENU / LONG-PRESS ──────────────────────────────────────── */
@@ -503,6 +578,87 @@ button,
 a,
 [role="button"] {
   -webkit-touch-callout: none;
+}
+
+/* ─── 27. NEW SESSION VIEW — mobile-friendly ────────────────────────────── */
+
+/* The "new session" empty state centered content */
+@media (max-width: 767px) {
+  [data-component="new-session-view"] {
+    padding: 16px !important;
+  }
+
+  [data-component="new-session-view"] h2 {
+    font-size: 20px !important;
+  }
+}
+
+/* ─── 28. SESSION COMPOSER — mobile improvements ────────────────────────── */
+
+/* Docks (followup, question, todo, revert, permission) — full width */
+@media (max-width: 767px) {
+  [data-component="session-dock"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  /* Question dock options — touch-friendly */
+  [data-component="question-dock"] button {
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Todo items — tap-friendly */
+  [data-component="todo-dock"] [data-slot="todo-item"] {
+    min-height: 40px !important;
+    padding: 6px 8px !important;
+  }
+
+  /* Permission request buttons — big tap targets */
+  [data-component="permission-dock"] button {
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* ─── 29. MESSAGE TIMELINE — mobile spacing ─────────────────────────────── */
+
+@media (max-width: 767px) {
+  /* Messages: tighter horizontal padding */
+  [data-component="message-timeline"] {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  /* Tool use blocks: prevent overflow */
+  [data-slot="tool-use"] {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+
+  /* Code blocks inside messages: horizontal scroll */
+  [data-slot="message-content"] pre {
+    max-width: calc(100vw - 32px) !important;
+    overflow-x: auto !important;
+  }
+}
+
+/* ─── 30. MOBILE TAB SWITCHER — session/changes tabs ────────────────────── */
+
+/* Make the session/changes tab switcher more prominent */
+@media (max-width: 767px) {
+  [data-component="mobile-tabs"] [role="tablist"] {
+    border-bottom: 1px solid var(--border-weaker-base, #333) !important;
+  }
+
+  [data-component="mobile-tabs"] [role="tab"] {
+    min-height: 44px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+  }
 }
 
 /* ─── MOBILE SIDE PANEL — vertical overlay in portrait ─────────────────── */

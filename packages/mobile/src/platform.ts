@@ -122,11 +122,53 @@ export async function createPlatform(): Promise<Platform> {
       }
     },
 
-    // File pickers — not needed on mobile, the app falls back to
-    // server-backed DialogSelectDirectory which works without native pickers
-    openDirectoryPickerDialog: undefined,
-    openFilePickerDialog: undefined,
-    saveFilePickerDialog: undefined,
+    // File pickers — use Tauri dialog plugin for native Android picker
+    async openDirectoryPickerDialog(opts) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const result = await open({
+          directory: true,
+          multiple: opts?.multiple ?? false,
+          title: opts?.title ?? "Choose folder",
+        })
+        if (!result) return null
+        return result
+      } catch {
+        return null
+      }
+    },
+
+    async openFilePickerDialog(opts) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const filters = opts?.extensions?.length
+          ? [{ name: "Files", extensions: opts.extensions }]
+          : undefined
+        const result = await open({
+          directory: false,
+          multiple: opts?.multiple ?? false,
+          title: opts?.title ?? "Choose file",
+          filters,
+        })
+        if (!result) return null
+        return result
+      } catch {
+        return null
+      }
+    },
+
+    async saveFilePickerDialog(opts) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog")
+        const result = await save({
+          title: opts?.title ?? "Save file",
+          defaultPath: opts?.defaultPath,
+        })
+        return result ?? null
+      } catch {
+        return null
+      }
+    },
 
     storage(name?: string) {
       return makeStorage(name ? createStore(name) : settingsStore)
