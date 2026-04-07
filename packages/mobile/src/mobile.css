@@ -192,9 +192,10 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   line-height: 1.4 !important;
   min-height: 36px !important;
   padding: 8px 44px 8px 44px !important; /* leave room for +/↑ buttons */
-  color: var(--text-strong, #e5e5e5) !important;
-  -webkit-text-fill-color: var(--text-strong, #e5e5e5) !important;
-  caret-color: var(--text-strong, #e5e5e5) !important;
+  color: #e5e5e5 !important;
+  -webkit-text-fill-color: #e5e5e5 !important;
+  caret-color: #e5e5e5 !important;
+  opacity: 1 !important;
 }
 
 /* Placeholder text */

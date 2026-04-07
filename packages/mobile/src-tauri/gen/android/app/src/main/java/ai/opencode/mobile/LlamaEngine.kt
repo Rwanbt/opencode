@@ -94,19 +94,98 @@ object LlamaEngine {
         }.apply { isDaemon = true }.start()
     }
 
-    /** Load a GGUF model file. Returns true if successful. */
+    private var serverProcess: Process? = null
+
+    /** Load a GGUF model file. Returns true if successful. Also starts HTTP server. */
     fun load(modelPath: String, contextSize: Int = 4096, threads: Int = 4): Boolean {
         init()
+        // Kill any existing server process
+        stopServer()
+
         val handle = loadModel(modelPath, contextSize, threads)
         val success = handle != 0L
         Log.i(TAG, "loadModel($modelPath) = $success")
+
+        if (success) {
+            // Also start llama-server for OpenAI-compatible HTTP API
+            startServer(modelPath, contextSize)
+        }
         return success
     }
 
     /** Unload the current model and free memory */
     fun unload() {
+        stopServer()
         unloadModel()
         Log.i(TAG, "Model unloaded")
+    }
+
+    private fun startServer(modelPath: String, ctxSize: Int) {
+        try {
+            // Find libllama_server.so in nativeLibraryDir
+            val nativeDir = appClassLoader?.let {
+                // Get from the .native_lib_dir file written by MainActivity
+                null
+            }
+
+            // Try to find the server binary
+            val possiblePaths = listOf(
+                "/data/data/ai.opencode.mobile/runtime/.native_lib_dir",
+                "/data/user/0/ai.opencode.mobile/runtime/.native_lib_dir"
+            )
+            var nativeLibDir: String? = null
+            for (p in possiblePaths) {
+                val f = java.io.File(p)
+                if (f.exists()) {
+                    nativeLibDir = f.readText().trim()
+                    break
+                }
+            }
+
+            if (nativeLibDir == null) {
+                Log.w(TAG, "Cannot find nativeLibraryDir, skipping HTTP server")
+                return
+            }
+
+            val serverBin = java.io.File(nativeLibDir, "libllama_server.so")
+            if (!serverBin.exists()) {
+                Log.w(TAG, "llama-server not found at ${serverBin.absolutePath}")
+                return
+            }
+
+            val homeDir = java.io.File(modelPath).parentFile?.parentFile?.let { java.io.File(it, "home") }
+            homeDir?.mkdirs()
+
+            val pb = ProcessBuilder(
+                serverBin.absolutePath,
+                "-m", modelPath,
+                "--host", "127.0.0.1",
+                "--port", "14097",
+                "-ngl", "0",
+                "--ctx-size", ctxSize.toString()
+            )
+            pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
+            pb.environment()["TMPDIR"] = homeDir?.absolutePath ?: "/tmp"
+            pb.redirectErrorStream(true)
+
+            serverProcess = pb.start()
+            Log.i(TAG, "llama-server started on port 14097")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start llama-server: ${e.message}")
+        }
+    }
+
+    private fun stopServer() {
+        serverProcess?.let {
+            try {
+                it.destroyForcibly()
+                it.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                Log.i(TAG, "llama-server stopped")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping server: ${e.message}")
+            }
+        }
+        serverProcess = null
     }
 
     /** Check if a model is currently loaded */
