@@ -4,11 +4,9 @@ import {
   listModels,
   downloadModel,
   deleteModel,
-  startLlmServer,
-  stopLlmServer,
-  checkLlmHealth,
-  registerLocalProvider,
-  unregisterLocalProvider,
+  loadModel,
+  unloadModel,
+  isModelLoaded,
   type ModelInfo,
   type ModelDownloadProgress,
 } from "../llm"
@@ -56,7 +54,7 @@ export function ModelManager(props: Props) {
     })
 
     // Check health on mount
-    const h = await checkLlmHealth()
+    const h = await isModelLoaded()
     setHealthy(h)
   })
 
@@ -88,17 +86,11 @@ export function ModelManager(props: Props) {
     clearError()
     setActionLoading(filename)
     try {
-      await startLlmServer(filename)
+      await loadModel(filename)
       setActiveModel(filename)
       setHealthy(true)
-      // Register local LLM as a provider in OpenCode so it appears in the model selector
-      if (props.serverUrl) {
-        const modelName = filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
-        await registerLocalProvider(props.serverUrl, modelName, 14097, props.serverAuth)
-        console.log("[OpenCode LLM] Registered local provider:", modelName)
-      }
     } catch (err) {
-      setError("Failed to start server: " + (err instanceof Error ? err.message : String(err)))
+      setError("Failed to load model: " + (err instanceof Error ? err.message : String(err)))
     } finally {
       setActionLoading(null)
     }
@@ -108,15 +100,11 @@ export function ModelManager(props: Props) {
     clearError()
     setActionLoading("__stop__")
     try {
-      await stopLlmServer()
+      await unloadModel()
       setActiveModel(null)
       setHealthy(false)
-      // Remove local LLM provider from OpenCode
-      if (props.serverUrl) {
-        await unregisterLocalProvider(props.serverUrl, props.serverAuth)
-      }
     } catch (err) {
-      setError("Failed to stop server: " + (err instanceof Error ? err.message : String(err)))
+      setError("Failed to unload: " + (err instanceof Error ? err.message : String(err)))
     } finally {
       setActionLoading(null)
     }
@@ -127,7 +115,7 @@ export function ModelManager(props: Props) {
     setActionLoading(filename)
     try {
       if (activeModel() === filename) {
-        await stopLlmServer()
+        await unloadModel()
         setActiveModel(null)
         setHealthy(false)
       }

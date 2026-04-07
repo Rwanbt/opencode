@@ -31,108 +31,43 @@ export async function deleteModel(filename: string): Promise<void> {
   return invoke("delete_model", { filename })
 }
 
-/** Start the local LLM server (llama-server) with the given model. */
-export async function startLlmServer(model: string, port?: number): Promise<void> {
-  return invoke("start_llm_server", { model, port: port ?? null })
+/** Load a GGUF model into memory for inference (JNI/FFI). */
+export async function loadModel(filename: string, nCtx?: number, nThreads?: number): Promise<void> {
+  return invoke("load_llm_model", { filename, nCtx: nCtx ?? null, nThreads: nThreads ?? null })
 }
 
-/** Stop the local LLM server. */
-export async function stopLlmServer(): Promise<void> {
-  return invoke("stop_llm_server")
+/** Unload the current model from memory. */
+export async function unloadModel(): Promise<void> {
+  return invoke("unload_llm_model")
 }
 
-/** Check if the LLM server is healthy. */
-export async function checkLlmHealth(port?: number): Promise<boolean> {
+/** Check if a model is currently loaded. */
+export async function isModelLoaded(): Promise<boolean> {
   try {
-    return await invoke<boolean>("check_llm_health", { port: port ?? null })
+    return await invoke<boolean>("is_llm_loaded")
   } catch {
     return false
   }
 }
 
-/**
- * Register the local LLM as a provider in the OpenCode server config.
- * This makes the local model appear in the model selector dropdown.
- * @param serverUrl - URL of the OpenCode bun server (e.g. http://127.0.0.1:14096)
- * @param modelName - Display name for the model
- * @param llmPort - Port of the llama-server (default 14097)
- * @param auth - Optional basic auth for the OpenCode server
- */
-export async function registerLocalProvider(
-  serverUrl: string,
-  modelName: string,
-  llmPort: number = 14097,
-  auth?: { username: string; password: string },
-): Promise<boolean> {
-  try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" }
-    if (auth) {
-      headers["Authorization"] = "Basic " + btoa(`${auth.username}:${auth.password}`)
-    }
-
-    // Get current config
-    const getRes = await fetch(`${serverUrl}/config`, { headers })
-    if (!getRes.ok) return false
-    const config = await getRes.json()
-
-    // Add local-llm provider with the llama-server endpoint
-    config.provider = config.provider ?? {}
-    config.provider["local-llm"] = {
-      name: "Local LLM",
-      npm: "@ai-sdk/openai-compatible",
-      options: {
-        baseURL: `http://127.0.0.1:${llmPort}/v1`,
-        apiKey: "local", // llama-server doesn't require a key but the SDK needs one
-      },
-      models: {
-        [modelName]: {
-          name: modelName,
-          attachment: false,
-        },
-      },
-    }
-
-    // Patch config
-    const patchRes = await fetch(`${serverUrl}/config`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify(config),
-    })
-    return patchRes.ok
-  } catch (e) {
-    console.error("[OpenCode LLM] Failed to register local provider:", e)
-    return false
-  }
+/** Abort the current generation. */
+export async function abortGeneration(): Promise<void> {
+  return invoke("abort_llm")
 }
 
 /**
- * Remove the local LLM provider from the OpenCode server config.
+ * Generate text from a prompt. Emits "llm-token" events for streaming.
+ * @returns The full generated text.
  */
-export async function unregisterLocalProvider(
-  serverUrl: string,
-  auth?: { username: string; password: string },
-): Promise<boolean> {
-  try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" }
-    if (auth) {
-      headers["Authorization"] = "Basic " + btoa(`${auth.username}:${auth.password}`)
-    }
+export async function generateText(prompt: string, maxTokens?: number, temperature?: number): Promise<string> {
+  return invoke<string>("generate_llm", {
+    prompt,
+    maxTokens: maxTokens ?? null,
+    temperature: temperature ?? null,
+  })
+}
 
-    const getRes = await fetch(`${serverUrl}/config`, { headers })
-    if (!getRes.ok) return false
-    const config = await getRes.json()
-
-    if (config.provider?.["local-llm"]) {
-      delete config.provider["local-llm"]
-      const patchRes = await fetch(`${serverUrl}/config`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(config),
-      })
-      return patchRes.ok
-    }
-    return true
-  } catch {
-    return false
-  }
+/** Check if the LLM is ready (model loaded). */
+export async function checkLlmHealth(): Promise<boolean> {
+  return isModelLoaded()
 }
