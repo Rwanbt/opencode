@@ -162,7 +162,8 @@ object LlamaEngine {
                 "--host", "127.0.0.1",
                 "--port", "14097",
                 "-ngl", "0",
-                "--ctx-size", ctxSize.toString()
+                "--ctx-size", ctxSize.toString(),
+                "--no-think"
             )
             pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
             pb.environment()["TMPDIR"] = homeDir?.absolutePath ?: "/tmp"
