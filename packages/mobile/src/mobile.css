@@ -192,11 +192,10 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   line-height: 1.4 !important;
   min-height: 36px !important;
   padding: 8px 44px 8px 44px !important;
-  /* Use theme variable — works in both light and dark mode */
-  color: var(--color-text-strong, inherit) !important;
-  -webkit-text-fill-color: var(--color-text-strong, inherit) !important;
-  caret-color: var(--color-text-strong, currentColor) !important;
-  opacity: 1 !important;
+  /* CRITICAL: -webkit-text-fill-color overrides color on WebKit/Android.
+     Must use the correct theme variable name (--text-strong, NOT --color-text-strong) */
+  -webkit-text-fill-color: var(--text-strong) !important;
+  caret-color: var(--text-strong) !important;
 }
 
 /* Placeholder text */
