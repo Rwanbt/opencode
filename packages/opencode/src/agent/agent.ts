@@ -132,6 +132,21 @@ export namespace Agent {
               mode: "primary",
               native: true,
             },
+            chat: {
+              name: "chat",
+              description: "Chat mode. General-purpose conversational AI with no tool access.",
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+              ),
+              prompt: "You are a helpful, general-purpose AI assistant. You are NOT in coding mode — the user wants to have a conversation. Answer questions on any topic: programming, science, writing, math, brainstorming, translation, analysis, or anything else. Be conversational, clear, and concise. Do not attempt to read, write, or modify any files. Do not reference the current project or workspace unless the user explicitly asks about it.",
+              mode: "primary",
+              native: true,
+              steps: 1,
+            },
             plan: {
               name: "plan",
               description: "Plan mode. Disallows all edit tools.",
