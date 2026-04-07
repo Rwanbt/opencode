@@ -187,15 +187,19 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 /* ─── 9. PROMPT INPUT — compact, aligned ─────────────────────────────────── */
 
 /* The contenteditable prompt — compact height, 16px to prevent iOS zoom */
-[data-dock-surface="shell"] [contenteditable="true"] {
+[data-dock-surface="shell"] [contenteditable="true"],
+[data-component="prompt-input"],
+[data-component="prompt-input"] * {
   font-size: 16px !important;
   line-height: 1.4 !important;
-  min-height: 36px !important;
-  padding: 8px 44px 8px 44px !important; /* leave room for +/↑ buttons */
   color: #e5e5e5 !important;
   -webkit-text-fill-color: #e5e5e5 !important;
   caret-color: #e5e5e5 !important;
   opacity: 1 !important;
+}
+[data-component="prompt-input"] {
+  min-height: 36px !important;
+  padding: 8px 44px 8px 44px !important;
 }
 
 /* Placeholder text */
