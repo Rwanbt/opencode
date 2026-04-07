@@ -85,7 +85,7 @@ export function DialogLocalLLM() {
       await invokeTauri("load_llm_model", { filename })
       setActiveModel(filename)
       setHealthy(true)
-      // Register local-llm as a provider so it appears in model selector
+      // Register local-llm as a provider and remove from disabled list
       const modelName = filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
       try {
         await globalSync.updateConfig({
@@ -101,7 +101,9 @@ export function DialogLocalLLM() {
               },
             },
           },
+          disabled_providers: [], // clear disabled to ensure local-llm is active
         })
+        console.log("[LLM] Provider registered:", modelName)
       } catch (e) {
         console.warn("[LLM] Failed to register provider:", e)
       }
@@ -117,10 +119,10 @@ export function DialogLocalLLM() {
       await invokeTauri("unload_llm_model")
       setActiveModel(null)
       setHealthy(false)
-      // Remove local-llm provider
+      // Remove local-llm provider from config
       try {
         await globalSync.updateConfig({
-          disabled_providers: [...([] as string[]), "local-llm"],
+          provider: { "local-llm": undefined as any },
         })
       } catch {}
     } catch (e) {
