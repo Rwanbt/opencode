@@ -12,6 +12,7 @@ import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -27,6 +28,7 @@ const ModelList: Component<{
 }> = (props) => {
   const model = props.model ?? useLocal().model
   const language = useLanguage()
+  const platform = usePlatform()
 
   const models = createMemo(() =>
     model
@@ -38,7 +40,7 @@ const ModelList: Component<{
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
-      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
+      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: platform.platform !== "mobile", action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
@@ -104,6 +106,7 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
+  const platform = usePlatform()
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
@@ -147,6 +150,9 @@ export function ModelSelectorPopover(props: {
             close("escape")
             event.preventDefault()
             event.stopPropagation()
+          }}
+          onOpenAutoFocus={(e) => {
+            if (platform.platform === "mobile") e.preventDefault()
           }}
           onPointerDownOutside={() => close("outside")}
           onFocusOutside={() => close("outside")}
