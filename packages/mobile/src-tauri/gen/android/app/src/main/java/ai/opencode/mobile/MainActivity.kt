@@ -17,6 +17,14 @@ class MainActivity : TauriActivity() {
         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
     }
 
+    // Load llama.cpp libraries so Rust FFI can find symbols
+    try {
+      LlamaEngine.init()
+      android.util.Log.i("OpenCode", "LlamaEngine initialized")
+    } catch (e: Exception) {
+      android.util.Log.w("OpenCode", "LlamaEngine init failed: ${e.message}")
+    }
+
     val baseDir = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
       dataDir
     } else {

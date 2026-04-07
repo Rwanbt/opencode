@@ -5,7 +5,6 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
-import { useGlobalSync } from "@/context/global-sync"
 
 // Use Tauri's global API if available (injected by withGlobalTauri: true in tauri.conf.json)
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
@@ -37,7 +36,6 @@ function formatBytes(bytes: number): string {
 
 export function DialogLocalLLM() {
   const dialog = useDialog()
-  const globalSync = useGlobalSync()
   const [models, { refetch }] = createResource((): Promise<ModelInfo[]> => invokeTauri("list_models").catch(() => []))
   const [activeModel, setActiveModel] = createSignal<string | null>(null)
   const [healthy, setHealthy] = createSignal(false)
@@ -82,28 +80,11 @@ export function DialogLocalLLM() {
     setError("")
     setLoading(filename)
     try {
-      await invokeTauri("start_llm_server", { model: filename, port: null })
+      await invokeTauri("load_llm_model", { filename, nCtx: null, nThreads: null })
       setActiveModel(filename)
       setHealthy(true)
-      // Register as provider so the model appears in the chat selector
-      const modelName = filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
-      globalSync.updateConfig({
-        provider: {
-          "local-llm": {
-            name: "Local AI",
-            npm: "@ai-sdk/openai-compatible",
-            options: {
-              baseURL: "http://127.0.0.1:14097/v1",
-              apiKey: "local",
-            },
-            models: {
-              [modelName]: { name: modelName },
-            },
-          },
-        },
-      })
     } catch (e) {
-      setError(`Start failed: ${e instanceof Error ? e.message : e}`)
+      setError(`Load failed: ${e instanceof Error ? e.message : e}`)
     }
     setLoading(null)
   }
@@ -111,11 +92,9 @@ export function DialogLocalLLM() {
   async function handleStop() {
     setLoading("__stop__")
     try {
-      await invokeTauri("stop_llm_server")
+      await invokeTauri("unload_llm_model")
       setActiveModel(null)
       setHealthy(false)
-      // Remove local provider from config
-      globalSync.updateConfig({ provider: { "local-llm": undefined as any } })
     } catch (e) {
       setError(`Stop failed: ${e}`)
     }
@@ -125,7 +104,7 @@ export function DialogLocalLLM() {
   async function handleDelete(filename: string) {
     setLoading(filename)
     try {
-      if (activeModel() === filename) { await invokeTauri("stop_llm_server"); setActiveModel(null); setHealthy(false) }
+      if (activeModel() === filename) { await invokeTauri("unload_llm_model"); setActiveModel(null); setHealthy(false) }
       await invokeTauri("delete_model", { filename })
       refetch()
     } catch (e) {

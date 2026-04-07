@@ -30,8 +30,11 @@ pub fn run() {
             llm::list_models,
             llm::download_model,
             llm::delete_model,
-            llm::start_llm_server,
-            llm::stop_llm_server,
+            llm::load_llm_model,
+            llm::unload_llm_model,
+            llm::is_llm_loaded,
+            llm::abort_llm,
+            llm::generate_llm,
             llm::check_llm_health,
         ]);
     }

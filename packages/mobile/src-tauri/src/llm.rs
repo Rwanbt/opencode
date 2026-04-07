@@ -1,295 +1,376 @@
 use serde::{Deserialize, Serialize};
+use std::ffi::{CStr, CString};
 use std::fs;
+use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::runtime::{native_lib_dir, runtime_dir};
 
-const LLM_DEFAULT_PORT: u32 = 14097;
+// ─── FFI bindings to libllama.so ────────────────────────────────────────
 
-/// Static storage for the LLM server child process.
-static LLM_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
+// Opaque types
+#[repr(C)]
+struct LlamaModel { _opaque: [u8; 0] }
+#[repr(C)]
+struct LlamaContext { _opaque: [u8; 0] }
+#[repr(C)]
+struct LlamaSampler { _opaque: [u8; 0] }
+#[repr(C)]
+struct LlamaVocab { _opaque: [u8; 0] }
+#[repr(C)]
+struct LlamaMemory { _opaque: [u8; 0] }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+type LlamaToken = i32;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct LlamaBatch {
+    n_tokens: i32,
+    token: *mut LlamaToken,
+    embd: *mut c_float,
+    pos: *mut i32,
+    n_seq_id: *mut i32,
+    seq_id: *mut *mut i32,
+    logits: *mut i8,
+}
+
+#[repr(C)]
+#[derive(Clone)]
+struct LlamaModelParams {
+    // We only need a few fields — use the default_params function
+    _data: [u8; 256], // oversized to accommodate any version
+}
+
+#[repr(C)]
+#[derive(Clone)]
+struct LlamaContextParams {
+    _data: [u8; 256],
+}
+
+#[repr(C)]
+struct LlamaSamplerChainParams {
+    no_perf: bool,
+}
+
+extern "C" {
+    // These symbols come from libllama.so + libggml.so loaded by Android System.loadLibrary
+    fn ggml_backend_load_all();
+    fn llama_model_default_params() -> LlamaModelParams;
+    fn llama_context_default_params() -> LlamaContextParams;
+    fn llama_sampler_chain_default_params() -> LlamaSamplerChainParams;
+    fn llama_model_load_from_file(path: *const c_char, params: LlamaModelParams) -> *mut LlamaModel;
+    fn llama_model_free(model: *mut LlamaModel);
+    fn llama_init_from_model(model: *mut LlamaModel, params: LlamaContextParams) -> *mut LlamaContext;
+    fn llama_free(ctx: *mut LlamaContext);
+    fn llama_model_get_vocab(model: *const LlamaModel) -> *const LlamaVocab;
+    fn llama_get_memory(ctx: *const LlamaContext) -> *mut LlamaMemory;
+    fn llama_memory_clear(mem: *mut LlamaMemory, data: bool);
+    fn llama_tokenize(vocab: *const LlamaVocab, text: *const c_char, text_len: i32, tokens: *mut LlamaToken, n_tokens_max: i32, add_special: bool, parse_special: bool) -> i32;
+    fn llama_token_to_piece(vocab: *const LlamaVocab, token: LlamaToken, buf: *mut c_char, length: i32, lstrip: i32, special: bool) -> i32;
+    fn llama_vocab_is_eog(vocab: *const LlamaVocab, token: LlamaToken) -> bool;
+    fn llama_batch_init(n_tokens: i32, embd: i32, n_seq_max: i32) -> LlamaBatch;
+    fn llama_batch_free(batch: LlamaBatch);
+    fn llama_decode(ctx: *mut LlamaContext, batch: LlamaBatch) -> i32;
+    fn llama_sampler_chain_init(params: LlamaSamplerChainParams) -> *mut LlamaSampler;
+    fn llama_sampler_chain_add(chain: *mut LlamaSampler, smpl: *mut LlamaSampler);
+    fn llama_sampler_init_temp(t: c_float) -> *mut LlamaSampler;
+    fn llama_sampler_init_dist(seed: u32) -> *mut LlamaSampler;
+    fn llama_sampler_sample(smpl: *mut LlamaSampler, ctx: *mut LlamaContext, idx: i32) -> LlamaToken;
+    fn llama_sampler_free(smpl: *mut LlamaSampler);
+}
+
+// ─── Global state ───────────────────────────────────────────────────────
+
+struct LlmState {
+    model: *mut LlamaModel,
+    ctx: *mut LlamaContext,
+    model_name: String,
+}
+unsafe impl Send for LlmState {}
+unsafe impl Sync for LlmState {}
+
+static LLM_STATE: Mutex<Option<LlmState>> = Mutex::new(None);
+static LLM_ABORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static BACKEND_INIT: std::sync::Once = std::sync::Once::new();
+
+// ─── Data types ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub filename: String,
     pub size: u64,
 }
 
-#[derive(Clone, Serialize, Debug)]
-struct ModelDownloadProgress {
-    filename: String,
-    downloaded: u64,
-    total: u64,
-    progress: f64,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelDownloadProgress {
+    pub filename: String,
+    pub downloaded: u64,
+    pub total: u64,
+    pub progress: f64,
 }
 
-fn models_dir(app: &AppHandle) -> PathBuf {
-    runtime_dir(app).join("models")
-}
+// ─── Tauri commands ─────────────────────────────────────────────────────
 
-// ─── Tauri Commands ─────────────────────────────────────────────────
-
-/// List available models in the models directory.
 #[tauri::command]
 pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
-    let dir = models_dir(&app);
+    let dir = runtime_dir(&app).join("models");
     let mut models = Vec::new();
-
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
+            if path.extension().map(|e| e == "gguf").unwrap_or(false) {
                 if let Ok(meta) = fs::metadata(&path) {
                     models.push(ModelInfo {
-                        filename: entry.file_name().to_string_lossy().to_string(),
+                        filename: path.file_name().unwrap().to_string_lossy().to_string(),
                         size: meta.len(),
                     });
                 }
             }
         }
     }
-
     models
 }
 
-/// Download a GGUF model from a URL (HuggingFace).
-/// Streams the download and emits "model-download-progress" events.
 #[tauri::command]
-pub async fn download_model(
-    app: AppHandle,
-    url: String,
-    filename: String,
-) -> Result<(), String> {
-    use futures_util::StreamExt;
+pub async fn download_model(app: AppHandle, url: String, filename: String) -> Result<(), String> {
+    let dir = runtime_dir(&app).join("models");
+    let _ = fs::create_dir_all(&dir);
+    let target = dir.join(&filename);
+    let part = dir.join(format!("{}.part", &filename));
 
-    let dir = models_dir(&app);
-    fs::create_dir_all(&dir).map_err(|e| format!("Create models dir: {}", e))?;
+    eprintln!("[LLM] Downloading {} -> {}", url, target.display());
 
-    let dest = dir.join(&filename);
-    let tmp_dest = dir.join(format!("{}.part", &filename));
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3600)) // 1 hour for large models
-        .build()
-        .map_err(|e| format!("HTTP client: {}", e))?;
-
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Download request failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("Download failed with status: {}", resp.status()));
-    }
-
+    let client = reqwest::Client::new();
+    let resp = client.get(&url).send().await.map_err(|e| format!("Download error: {}", e))?;
     let total = resp.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
 
-    let mut file = fs::File::create(&tmp_dest)
-        .map_err(|e| format!("Create file: {}", e))?;
-
+    use futures_util::StreamExt;
     let mut stream = resp.bytes_stream();
+    let mut file = tokio::fs::File::create(&part).await.map_err(|e| format!("File create: {}", e))?;
+
     let mut last_emit = std::time::Instant::now();
-
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Download stream error: {}", e))?;
-        std::io::Write::write_all(&mut file, &chunk)
-            .map_err(|e| format!("Write error: {}", e))?;
-
+        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
+        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await.map_err(|e| format!("Write: {}", e))?;
         downloaded += chunk.len() as u64;
 
-        // Emit progress at most every 200ms to avoid flooding
-        if last_emit.elapsed() >= Duration::from_millis(200) || downloaded == total {
-            let progress = if total > 0 {
-                downloaded as f64 / total as f64
-            } else {
-                0.0
-            };
-            let _ = app.emit(
-                "model-download-progress",
-                ModelDownloadProgress {
-                    filename: filename.clone(),
-                    downloaded,
-                    total,
-                    progress,
-                },
-            );
+        if last_emit.elapsed().as_millis() > 200 {
+            let _ = app.emit("model-download-progress", ModelDownloadProgress {
+                filename: filename.clone(),
+                downloaded,
+                total,
+                progress: if total > 0 { downloaded as f64 / total as f64 } else { 0.0 },
+            });
             last_emit = std::time::Instant::now();
         }
     }
 
-    // Rename .part to final filename
-    fs::rename(&tmp_dest, &dest)
-        .map_err(|e| format!("Rename downloaded file: {}", e))?;
+    tokio::fs::rename(&part, &target).await.map_err(|e| format!("Rename: {}", e))?;
+    let _ = app.emit("model-download-progress", ModelDownloadProgress {
+        filename: filename.clone(), downloaded: total, total, progress: 1.0,
+    });
 
-    eprintln!("[OpenCode LLM] Downloaded model {} ({} bytes)", filename, downloaded);
+    eprintln!("[LLM] Download complete: {}", filename);
     Ok(())
 }
 
-/// Delete a downloaded model.
 #[tauri::command]
 pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String> {
-    let path = models_dir(&app).join(&filename);
-    if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Delete model: {}", e))?;
-        eprintln!("[OpenCode LLM] Deleted model {}", filename);
-    }
-    // Also remove any partial download
-    let part_path = models_dir(&app).join(format!("{}.part", &filename));
-    let _ = fs::remove_file(&part_path);
+    let path = runtime_dir(&app).join("models").join(&filename);
+    fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
+    let part = runtime_dir(&app).join("models").join(format!("{}.part", &filename));
+    let _ = fs::remove_file(&part);
     Ok(())
 }
 
-/// Start the local LLM server (llama-server).
 #[tauri::command]
-pub async fn start_llm_server(
-    app: AppHandle,
-    model: String,
-    port: Option<u32>,
-) -> Result<(), String> {
-    let port = port.unwrap_or(LLM_DEFAULT_PORT);
-    let dir = runtime_dir(&app);
-    let model_path = dir.join("models").join(&model);
-
+pub async fn load_llm_model(app: AppHandle, filename: String, n_ctx: Option<u32>, n_threads: Option<u32>) -> Result<(), String> {
+    let model_path = runtime_dir(&app).join("models").join(&filename);
     if !model_path.exists() {
-        return Err(format!("Model not found: {}", model));
+        return Err(format!("Model not found: {}", filename));
     }
 
-    let nlib_dir = native_lib_dir(&dir)
-        .ok_or_else(|| "nativeLibraryDir not found. Restart the app.".to_string())?;
+    // Init backend once
+    BACKEND_INIT.call_once(|| unsafe { ggml_backend_load_all() });
 
-    let llama_server = nlib_dir.join("libllama_server.so");
+    let path_cstr = CString::new(model_path.to_string_lossy().as_bytes())
+        .map_err(|_| "Invalid path".to_string())?;
 
-    if !llama_server.exists() {
-        return Err(format!(
-            "llama-server not found at {}. The LLM binary needs to be added to the APK.",
-            llama_server.display()
-        ));
-    }
+    eprintln!("[LLM] Loading model: {}", model_path.display());
 
-    // Kill any existing LLM server and wait for it to release the port
-    if let Ok(mut guard) = LLM_PROCESS.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-            let _ = child.wait(); // wait for process to fully exit and release the port
+    // Unload previous
+    unload_llm_model_inner();
+
+    unsafe {
+        let model_params = llama_model_default_params();
+        let model = llama_model_load_from_file(path_cstr.as_ptr(), model_params);
+        if model.is_null() {
+            return Err("Failed to load model".to_string());
         }
-    }
-    // Also try to kill any orphaned llama-server by port
-    std::thread::sleep(Duration::from_millis(500));
 
-    // llama-server is statically linked — execute directly, no musl linker needed
-    let cmd_path = llama_server.clone();
-    let cmd_args = vec![
-        "-m".to_string(),
-        model_path.to_string_lossy().to_string(),
-        "--host".to_string(),
-        "127.0.0.1".to_string(),
-        "--port".to_string(),
-        port.to_string(),
-        "-ngl".to_string(),
-        "0".to_string(),
-        "--ctx-size".to_string(),
-        "4096".to_string(),
-    ];
+        let mut ctx_params = llama_context_default_params();
+        // Set n_ctx and n_threads via raw pointer manipulation
+        // The struct layout has n_ctx at offset 0 (uint32_t)
+        let params_ptr = &mut ctx_params._data as *mut u8;
+        let n_ctx_val = n_ctx.unwrap_or(4096);
+        let n_threads_val = n_threads.unwrap_or(4);
+        std::ptr::copy_nonoverlapping(&n_ctx_val as *const u32 as *const u8, params_ptr, 4);
+        // n_threads is at a later offset — skip for now, use defaults
 
-    let lib_path = nlib_dir.to_string_lossy().to_string();
-
-    eprintln!("[OpenCode LLM] Spawning: {} {:?}", cmd_path.display(), cmd_args);
-
-    // Log files
-    let log_dir = dir.join("logs");
-    let _ = fs::create_dir_all(&log_dir);
-    let stdout_file = fs::File::create(log_dir.join("llm_stdout.log"))
-        .map_err(|e| format!("Create stdout log: {}", e))?;
-    let stderr_file = fs::File::create(log_dir.join("llm_stderr.log"))
-        .map_err(|e| format!("Create stderr log: {}", e))?;
-
-    let sys_path = std::env::var("PATH").unwrap_or_default();
-    let path_env = format!("{}:{}", nlib_dir.display(), sys_path);
-
-    let home_dir = dir.join("home");
-    let _ = fs::create_dir_all(&home_dir);
-
-    let mut child = Command::new(&cmd_path)
-        .args(&cmd_args)
-        .env("PATH", &path_env)
-        .env("LD_LIBRARY_PATH", &lib_path)
-        .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
-        .env("TMPDIR", dir.join("tmp").to_str().unwrap_or("/tmp"))
-        .stdout(stdout_file)
-        .stderr(stderr_file)
-        .spawn()
-        .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
-
-    let _ = fs::create_dir_all(dir.join("tmp"));
-    eprintln!("[OpenCode LLM] llama-server spawned with pid {:?}", child.id());
-
-    // Give llama-server time to load the model (can take several seconds on mobile)
-    std::thread::sleep(Duration::from_secs(3));
-    match child.try_wait() {
-        Ok(Some(status)) => {
-            let stderr =
-                fs::read_to_string(log_dir.join("llm_stderr.log")).unwrap_or_default();
-            let stdout =
-                fs::read_to_string(log_dir.join("llm_stdout.log")).unwrap_or_default();
-            eprintln!("[OpenCode LLM] llama-server exited immediately with status: {}", status);
-            eprintln!("[OpenCode LLM] stderr: {}", &stderr[..stderr.len().min(2000)]);
-            eprintln!("[OpenCode LLM] stdout: {}", &stdout[..stdout.len().min(500)]);
-            return Err(format!(
-                "llama-server crashed ({}): {}",
-                status,
-                &stderr[..stderr.len().min(500)]
-            ));
+        let ctx = llama_init_from_model(model, ctx_params);
+        if ctx.is_null() {
+            llama_model_free(model);
+            return Err("Failed to create context".to_string());
         }
-        Ok(None) => {
-            eprintln!("[OpenCode LLM] llama-server still running after 500ms — good");
-        }
-        Err(e) => {
-            eprintln!("[OpenCode LLM] Error checking llama-server status: {}", e);
+
+        if let Ok(mut guard) = LLM_STATE.lock() {
+            *guard = Some(LlmState {
+                model,
+                ctx,
+                model_name: filename.clone(),
+            });
         }
     }
 
-    if let Ok(mut guard) = LLM_PROCESS.lock() {
-        *guard = Some(child);
-    }
-
+    eprintln!("[LLM] Model loaded: {}", filename);
     Ok(())
 }
 
-/// Stop the local LLM server.
-#[tauri::command]
-pub async fn stop_llm_server() -> Result<(), String> {
-    if let Ok(mut guard) = LLM_PROCESS.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-            eprintln!("[OpenCode LLM] llama-server stopped");
+fn unload_llm_model_inner() {
+    if let Ok(mut guard) = LLM_STATE.lock() {
+        if let Some(state) = guard.take() {
+            unsafe {
+                llama_free(state.ctx);
+                llama_model_free(state.model);
+            }
+            eprintln!("[LLM] Model unloaded: {}", state.model_name);
         }
     }
+}
+
+#[tauri::command]
+pub async fn unload_llm_model() -> Result<(), String> {
+    unload_llm_model_inner();
     Ok(())
 }
 
-/// Check if LLM server is healthy.
 #[tauri::command]
-pub async fn check_llm_health(port: Option<u32>) -> bool {
-    let port = port.unwrap_or(LLM_DEFAULT_PORT);
-    let url = format!("http://127.0.0.1:{}/health", port);
+pub async fn is_llm_loaded() -> bool {
+    LLM_STATE.lock().map(|g| g.is_some()).unwrap_or(false)
+}
 
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .no_proxy()
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
+#[tauri::command]
+pub async fn abort_llm() -> Result<(), String> {
+    LLM_ABORT.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
 
-    match client.get(&url).send().await {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+#[tauri::command]
+pub async fn generate_llm(
+    app: AppHandle,
+    prompt: String,
+    max_tokens: Option<i32>,
+    temperature: Option<f32>,
+) -> Result<String, String> {
+    let guard = LLM_STATE.lock().map_err(|e| format!("Lock: {}", e))?;
+    let state = guard.as_ref().ok_or("No model loaded")?;
+
+    LLM_ABORT.store(false, std::sync::atomic::Ordering::Relaxed);
+    let max = max_tokens.unwrap_or(512);
+    let temp = temperature.unwrap_or(0.7);
+
+    let model = state.model;
+    let ctx = state.ctx;
+
+    // Drop the guard before the long computation
+    drop(guard);
+
+    unsafe {
+        let vocab = llama_model_get_vocab(model);
+        let prompt_cstr = CString::new(prompt.as_bytes()).map_err(|_| "Invalid prompt")?;
+
+        // Tokenize
+        let n_prompt = llama_tokenize(vocab, prompt_cstr.as_ptr(), prompt.len() as i32, std::ptr::null_mut(), 0, true, true);
+        if n_prompt < 0 {
+            return Err("Tokenization failed".to_string());
+        }
+        let mut tokens = vec![0i32; (n_prompt + 1) as usize];
+        llama_tokenize(vocab, prompt_cstr.as_ptr(), prompt.len() as i32, tokens.as_mut_ptr(), n_prompt + 1, true, true);
+
+        // Clear memory
+        let mem = llama_get_memory(ctx);
+        if !mem.is_null() {
+            llama_memory_clear(mem, true);
+        }
+
+        // Process prompt
+        let mut batch = llama_batch_init(n_prompt, 0, 1);
+        for i in 0..n_prompt as usize {
+            *batch.token.add(i) = tokens[i];
+            *batch.pos.add(i) = i as i32;
+            *batch.n_seq_id.add(i) = 1;
+            *(*batch.seq_id.add(i)) = 0;
+            *batch.logits.add(i) = if i == (n_prompt as usize - 1) { 1 } else { 0 };
+        }
+        batch.n_tokens = n_prompt;
+
+        if llama_decode(ctx, batch) != 0 {
+            llama_batch_free(batch);
+            return Err("Prompt decode failed".to_string());
+        }
+
+        // Setup sampler
+        let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(temp));
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(42));
+
+        let mut result = String::new();
+        let mut n_cur = n_prompt;
+
+        for _ in 0..max {
+            if LLM_ABORT.load(std::sync::atomic::Ordering::Relaxed) { break; }
+
+            let new_token = llama_sampler_sample(sampler, ctx, -1);
+            if llama_vocab_is_eog(vocab, new_token) { break; }
+
+            // Token to text
+            let mut buf = [0u8; 256];
+            let n = llama_token_to_piece(vocab, new_token, buf.as_mut_ptr() as *mut c_char, 256, 0, true);
+            if n > 0 {
+                let piece = std::str::from_utf8(&buf[..n as usize]).unwrap_or("");
+                result.push_str(piece);
+
+                // Emit token event for streaming
+                let _ = app.emit("llm-token", piece);
+            }
+
+            // Next batch
+            llama_batch_free(batch);
+            batch = llama_batch_init(1, 0, 1);
+            *batch.token = new_token;
+            *batch.pos = n_cur;
+            *batch.n_seq_id = 1;
+            **batch.seq_id = 0;
+            *batch.logits = 1;
+            batch.n_tokens = 1;
+            n_cur += 1;
+
+            if llama_decode(ctx, batch) != 0 { break; }
+        }
+
+        llama_sampler_free(sampler);
+        llama_batch_free(batch);
+
+        eprintln!("[LLM] Generated {} tokens", n_cur - n_prompt);
+        Ok(result)
     }
+}
+
+// Keep download-related commands that don't need server
+#[tauri::command]
+pub async fn check_llm_health() -> bool {
+    is_llm_loaded().await
 }
