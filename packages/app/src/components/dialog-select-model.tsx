@@ -117,10 +117,6 @@ export function ModelSelectorPopover(props: {
     })
   }
 
-  const handleLocalModels = () => {
-    close("manage")
-    window.dispatchEvent(new CustomEvent("open-model-manager"))
-  }
 
   const handleConnectProvider = () => {
     close("provider")
@@ -190,16 +186,6 @@ export function ModelSelectorPopover(props: {
                     class="size-6"
                     aria-label={language.t("dialog.model.manage")}
                     onClick={handleManage}
-                  />
-                </Tooltip>
-                <Tooltip placement="top" value="Local AI Models">
-                  <IconButton
-                    icon="download"
-                    variant="ghost"
-                    iconSize="normal"
-                    class="size-6"
-                    aria-label="Local AI Models"
-                    onClick={handleLocalModels}
                   />
                 </Tooltip>
               </div>
