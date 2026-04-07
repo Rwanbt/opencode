@@ -77,7 +77,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         },
       },
       createStore({
-        autoAccept: {} as Record<string, boolean>,
+        autoAccept: {} as Record<string, boolean | "auto-edit">,
       }),
     )
 
@@ -258,6 +258,50 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
           return
         }
         enableDirectory(directory)
+      },
+      /** Set the accept mode for a session: true = Full Auto, "auto-edit" = Auto Edit, false = Ask */
+      setAcceptMode(mode: boolean | "auto-edit", sessionID?: string, directory?: string) {
+        if (sessionID && directory) {
+          const key = acceptKey(sessionID, directory)
+          setStore(
+            produce((draft) => {
+              draft.autoAccept[key] = mode
+              delete draft.autoAccept[sessionID]
+            }),
+          )
+          if (mode) {
+            // Auto-respond pending permissions
+            globalSDK.client.permission
+              .list({ directory })
+              .then((x) => {
+                for (const perm of x.data ?? []) {
+                  if (!perm?.id) continue
+                  if (!shouldAutoRespond(perm, directory)) continue
+                  respondOnce(perm, directory)
+                }
+              })
+              .catch(() => undefined)
+          }
+        } else if (directory) {
+          const key = directoryAcceptKey(directory)
+          setStore(
+            produce((draft) => {
+              draft.autoAccept[key] = mode
+            }),
+          )
+        }
+      },
+      /** Get the current accept mode for a session/directory */
+      getAcceptMode(sessionID?: string, directory?: string): boolean | "auto-edit" {
+        if (sessionID && directory) {
+          const key = acceptKey(sessionID, directory)
+          return store.autoAccept[key] ?? store.autoAccept[sessionID] ?? false
+        }
+        if (directory) {
+          const key = directoryAcceptKey(directory)
+          return store.autoAccept[key] ?? false
+        }
+        return false
       },
       enableAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) return

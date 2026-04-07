@@ -1079,12 +1079,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
   const accepting = createMemo(() => {
     const id = params.id
-    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
-    return permission.isAutoAccepting(id, sdk.directory)
+    if (!id) return !!permission.isAutoAcceptingDirectory(sdk.directory)
+    return !!permission.isAutoAccepting(id, sdk.directory)
+  })
+  const acceptMode = createMemo((): "Ask" | "Auto Edit" | "Full Auto" => {
+    const mode = permission.getAcceptMode(params.id, sdk.directory)
+    if (mode === true) return "Full Auto"
+    if (mode === "auto-edit") return "Auto Edit"
+    return "Ask"
   })
   const acceptLabel = createMemo(() =>
     language.t(accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable"),
   )
+  const setAcceptMode = (value: string) => {
+    const mode = value === "Full Auto" ? true : value === "Auto Edit" ? ("auto-edit" as const) : false
+    permission.setAcceptMode(mode, params.id, sdk.directory)
+  }
   const toggleAccept = () => {
     if (!params.id) {
       permission.toggleAutoAcceptDirectory(sdk.directory)
@@ -1490,7 +1500,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Select
                       size="normal"
                       options={agentNames()}
-                      current={local.agent.current()?.name ?? ""}
+                      current={local.agent.isChatOnly() ? "Chat Only" : (local.agent.current()?.name ?? "")}
                       onSelect={(value) => {
                         local.agent.set(value)
                         restoreFocus()
@@ -1579,13 +1589,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Select
                       size="normal"
                       options={["Ask", "Auto Edit", "Full Auto"]}
-                      current={accepting() ? "Full Auto" : "Ask"}
+                      current={acceptMode()}
                       onSelect={(value) => {
-                        if (value === "Full Auto") {
-                          if (!accepting()) toggleAccept()
-                        } else {
-                          if (accepting()) toggleAccept()
-                        }
+                        if (value) setAcceptMode(value)
                         restoreFocus()
                       }}
                       class="max-w-[120px] text-text-base"

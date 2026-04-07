@@ -35,6 +35,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  chatOnly?: boolean
 }
 
 type FollowupSendInput = {
@@ -157,6 +158,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      ...(input.draft.chatOnly
+        ? { system: "You are in Chat Only mode. Do NOT use any tools. Only respond with text. Never call functions or tools." }
+        : {}),
     })
     return true
   } catch (err) {
@@ -391,6 +395,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
+    const chatOnly = local.agent.isChatOnly()
     const context = prompt.context.items().slice()
     const draft: FollowupDraft = {
       sessionID: session.id,
@@ -400,6 +405,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      chatOnly,
     }
 
     const clearInput = () => {

@@ -103,7 +103,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
+    const CHAT_ONLY = "Chat Only"
+
     const pickAgent = (name: string | undefined) => {
+      if (name === CHAT_ONLY) return undefined
       const items = list()
       if (items.length === 0) return undefined
       return items.find((item) => item.name === name) ?? items[0]
@@ -174,10 +177,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = {
       list,
+      isChatOnly() {
+        return (scope()?.agent ?? store.current) === CHAT_ONLY
+      },
       current() {
+        if (agent.isChatOnly()) return pickAgent(undefined) // use default agent
         return pickAgent(scope()?.agent ?? store.current)
       },
       set(name: string | undefined) {
+        if (name === CHAT_ONLY) {
+          setStore("current", CHAT_ONLY)
+          return
+        }
         const item = pickAgent(name)
         if (!item) {
           setStore("current", undefined)
