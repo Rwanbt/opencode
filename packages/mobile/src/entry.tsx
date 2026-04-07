@@ -103,7 +103,6 @@ function App() {
           onLocal={() => setMode("extracting")}
           onRemote={handleRemotePrompt}
           onExtract={() => setMode("extracting")}
-          onModelManager={() => setShowModelManager(true)}
         />
         <Show when={error()}>
           <div style={{

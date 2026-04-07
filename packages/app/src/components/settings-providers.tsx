@@ -17,6 +17,7 @@ type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
+  { match: (id: string) => id === "local-llm", key: "dialog.provider.localLlm.note" },
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
@@ -197,12 +198,16 @@ export const SettingsProviders: Component = () => {
                   <Button
                     size="large"
                     variant="secondary"
-                    icon="plus-small"
+                    icon={item.id === "local-llm" ? "download" : "plus-small"}
                     onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                      if (item.id === "local-llm") {
+                        window.dispatchEvent(new CustomEvent("open-model-manager"))
+                      } else {
+                        dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                      }
                     }}
                   >
-                    {language.t("common.connect")}
+                    {item.id === "local-llm" ? "Manage" : language.t("common.connect")}
                   </Button>
                 </div>
               )}
