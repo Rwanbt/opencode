@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::runtime::runtime_dir;
@@ -22,7 +22,40 @@ pub struct ModelDownloadProgress {
     pub progress: f64,
 }
 
-static ACTIVE_MODEL: Mutex<Option<String>> = Mutex::new(None);
+// ─── IPC with Kotlin LlamaEngine ────────────────────────────────────────
+
+/// Send a command to Kotlin LlamaEngine via file IPC and wait for result.
+fn llm_command(app: &AppHandle, cmd: &str, timeout_secs: u64) -> Result<String, String> {
+    let ipc_dir = runtime_dir(app).join("llm_ipc");
+    let _ = fs::create_dir_all(&ipc_dir);
+    let request_file = ipc_dir.join("request");
+    let result_file = ipc_dir.join("result");
+
+    // Clean previous result
+    let _ = fs::remove_file(&result_file);
+
+    // Write command
+    fs::write(&request_file, cmd).map_err(|e| format!("Write request: {}", e))?;
+    eprintln!("[LLM] Sent command: {}", &cmd[..cmd.len().min(100)]);
+
+    // Poll for result
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    loop {
+        if start.elapsed() > timeout {
+            return Err("Command timed out".to_string());
+        }
+        if result_file.exists() {
+            let result = fs::read_to_string(&result_file).unwrap_or_default();
+            let _ = fs::remove_file(&result_file);
+            if result.starts_with("error:") {
+                return Err(result[6..].to_string());
+            }
+            return Ok(result);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
 
 // ─── Tauri commands ─────────────────────────────────────────────────────
 
@@ -99,101 +132,39 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
     Ok(())
 }
 
-/// Load a GGUF model via Kotlin LlamaEngine (JNI).
+/// Load a GGUF model via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
 pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), String> {
     let model_path = runtime_dir(&app).join("models").join(&filename);
     if !model_path.exists() {
         return Err(format!("Model not found: {}", filename));
     }
-
     let path_str = model_path.to_string_lossy().to_string();
-    eprintln!("[LLM] Loading model via Kotlin JNI: {}", path_str);
+    eprintln!("[LLM] Loading model: {}", path_str);
 
-    // Call Kotlin LlamaEngine.load(path, contextSize, threads) via Tauri's Android JNI
-    app.run_on_main_thread(move || {
-        let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-        let mut env = vm.attach_current_thread().unwrap();
-
-        // Find LlamaEngine class
-        let class = env.find_class("ai/opencode/mobile/LlamaEngine").unwrap();
-        let path_jstr = env.new_string(&path_str).unwrap();
-
-        // Call LlamaEngine.INSTANCE.load(path, 4096, 4)
-        let result = env.call_static_method(
-            class,
-            "load",
-            "(Ljava/lang/String;II)Z",
-            &[
-                jni::objects::JValue::Object(&path_jstr),
-                jni::objects::JValue::Int(4096),
-                jni::objects::JValue::Int(4),
-            ],
-        );
-
-        match result {
-            Ok(jni::objects::JValueGen::Bool(success)) => {
-                if success == 0 {
-                    eprintln!("[LLM] Kotlin LlamaEngine.load returned false");
-                } else {
-                    eprintln!("[LLM] Model loaded successfully via JNI");
-                }
-            }
-            Err(e) => {
-                eprintln!("[LLM] JNI call failed: {:?}", e);
-            }
-            _ => {}
-        }
-    }).map_err(|e| format!("Main thread error: {:?}", e))?;
-
-    if let Ok(mut guard) = ACTIVE_MODEL.lock() {
-        *guard = Some(filename);
-    }
-
+    // Send load command to Kotlin — timeout 120s for large models
+    llm_command(&app, &format!("load|{}", path_str), 120)?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn unload_llm_model(app: AppHandle) -> Result<(), String> {
-    app.run_on_main_thread(|| {
-        let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-        let mut env = vm.attach_current_thread().unwrap();
-        let class = env.find_class("ai/opencode/mobile/LlamaEngine").unwrap();
-        let _ = env.call_static_method(class, "unload", "()V", &[]);
-    }).map_err(|e| format!("Main thread error: {:?}", e))?;
-
-    if let Ok(mut guard) = ACTIVE_MODEL.lock() {
-        *guard = None;
-    }
+    llm_command(&app, "unload|", 10)?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn is_llm_loaded(app: AppHandle) -> bool {
-    let (tx, rx) = std::sync::mpsc::channel();
-    let _ = app.run_on_main_thread(move || {
-        let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-        let mut env = vm.attach_current_thread().unwrap();
-        let class = env.find_class("ai/opencode/mobile/LlamaEngine").unwrap();
-        let result = env.call_static_method(class, "loaded", "()Z", &[]);
-        let loaded = matches!(result, Ok(jni::objects::JValueGen::Bool(1)));
-        let _ = tx.send(loaded);
-    });
-    rx.recv().unwrap_or(false)
+    llm_command(&app, "loaded|", 5).map(|r| r.trim() == "true").unwrap_or(false)
 }
 
 #[tauri::command]
 pub async fn abort_llm(app: AppHandle) -> Result<(), String> {
-    app.run_on_main_thread(|| {
-        let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-        let mut env = vm.attach_current_thread().unwrap();
-        let class = env.find_class("ai/opencode/mobile/LlamaEngine").unwrap();
-        let _ = env.call_static_method(class, "stop", "()V", &[]);
-    }).map_err(|e| format!("Main thread error: {:?}", e))?;
+    llm_command(&app, "stop|", 5)?;
     Ok(())
 }
 
-/// Generate text via Kotlin LlamaEngine.chat() with streaming.
+/// Generate text via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
 pub async fn generate_llm(
     app: AppHandle,
@@ -204,42 +175,14 @@ pub async fn generate_llm(
     let max = max_tokens.unwrap_or(512);
     let temp = temperature.unwrap_or(0.7);
 
-    let (tx, rx) = std::sync::mpsc::channel();
-    let app_clone = app.clone();
+    // Send generate command — timeout 300s for generation
+    let cmd = format!("generate|{}|{}|{}", prompt, max, temp);
+    let result = llm_command(&app, &cmd, 300)?;
 
-    app.run_on_main_thread(move || {
-        let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-        let mut env = vm.attach_current_thread().unwrap();
-        let class = env.find_class("ai/opencode/mobile/LlamaEngine").unwrap();
-        let prompt_jstr = env.new_string(&prompt).unwrap();
+    // Emit full result as token event
+    let _ = app.emit("llm-token", &result);
 
-        // Call chat(prompt, maxTokens, temperature, null) — no callback for now
-        let result = env.call_static_method(
-            class,
-            "chat",
-            "(Ljava/lang/String;IFLkotlin/jvm/functions/Function1;)Ljava/lang/String;",
-            &[
-                jni::objects::JValue::Object(&prompt_jstr),
-                jni::objects::JValue::Int(max),
-                jni::objects::JValue::Float(temp),
-                jni::objects::JValue::Object(&jni::objects::JObject::null()),
-            ],
-        );
-
-        let text = match result {
-            Ok(jni::objects::JValueGen::Object(obj)) => {
-                let jstr = jni::objects::JString::from(obj);
-                env.get_string(&jstr).map(|s| s.into()).unwrap_or_else(|_| String::from("[ERROR] String conversion failed"))
-            }
-            Err(e) => format!("[ERROR] JNI call failed: {:?}", e),
-            _ => String::from("[ERROR] Unexpected return type"),
-        };
-
-        let _ = app_clone.emit("llm-token", &text);
-        let _ = tx.send(text);
-    }).map_err(|e| format!("Main thread error: {:?}", e))?;
-
-    rx.recv().map_err(|e| format!("Channel error: {}", e))
+    Ok(result)
 }
 
 #[tauri::command]
