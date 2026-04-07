@@ -163,7 +163,6 @@ pub async fn start_llm_server(
     let nlib_dir = native_lib_dir(&dir)
         .ok_or_else(|| "nativeLibraryDir not found. Restart the app.".to_string())?;
 
-    let ld_musl = nlib_dir.join("libmusl_linker.so");
     let llama_server = nlib_dir.join("libllama_server.so");
 
     if !llama_server.exists() {
@@ -180,46 +179,22 @@ pub async fn start_llm_server(
         }
     }
 
-    // Library search path
-    let lib_link_dir = dir.join("lib_links");
-    let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
+    // llama-server is statically linked — execute directly, no musl linker needed
+    let cmd_path = llama_server.clone();
+    let cmd_args = vec![
+        "-m".to_string(),
+        model_path.to_string_lossy().to_string(),
+        "--host".to_string(),
+        "127.0.0.1".to_string(),
+        "--port".to_string(),
+        port.to_string(),
+        "-ngl".to_string(),
+        "0".to_string(),
+        "--ctx-size".to_string(),
+        "4096".to_string(),
+    ];
 
-    let (cmd_path, cmd_args) = if ld_musl.exists() {
-        (
-            ld_musl,
-            vec![
-                "--library-path".to_string(),
-                lib_path.clone(),
-                llama_server.to_string_lossy().to_string(),
-                "-m".to_string(),
-                model_path.to_string_lossy().to_string(),
-                "--host".to_string(),
-                "127.0.0.1".to_string(),
-                "--port".to_string(),
-                port.to_string(),
-                "-ngl".to_string(),
-                "0".to_string(),
-                "--ctx-size".to_string(),
-                "4096".to_string(),
-            ],
-        )
-    } else {
-        (
-            llama_server.clone(),
-            vec![
-                "-m".to_string(),
-                model_path.to_string_lossy().to_string(),
-                "--host".to_string(),
-                "127.0.0.1".to_string(),
-                "--port".to_string(),
-                port.to_string(),
-                "-ngl".to_string(),
-                "0".to_string(),
-                "--ctx-size".to_string(),
-                "4096".to_string(),
-            ],
-        )
-    };
+    let lib_path = nlib_dir.to_string_lossy().to_string();
 
     eprintln!("[OpenCode LLM] Spawning: {} {:?}", cmd_path.display(), cmd_args);
 
