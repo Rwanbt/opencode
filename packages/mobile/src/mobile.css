@@ -186,48 +186,13 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 
 /* ─── 9. PROMPT INPUT — compact, aligned ─────────────────────────────────── */
 
-/* The contenteditable prompt — compact height, 16px to prevent iOS zoom */
+/* ─── PROMPT INPUT ──────────────────────────────────────────────────── */
+/* IMPORTANT: Do NOT override color, -webkit-text-fill-color, or padding
+   on the contenteditable — it breaks text rendering on Android WebView.
+   Only safe overrides: font-size (prevent iOS zoom) and line-height. */
 [data-component="prompt-input"] {
   font-size: 16px !important;
   line-height: 1.4 !important;
-  min-height: 36px !important;
-  padding: 8px 12px !important;
-}
-
-/* DEBUG: Force text visibility with maximum specificity.
-   Android WebView contenteditable text was invisible. */
-[role="textbox"][contenteditable="true"][data-component="prompt-input"],
-div[data-component="prompt-input"] {
-  color: currentColor !important;
-  -webkit-text-fill-color: currentColor !important;
-  caret-color: auto !important;
-  -webkit-text-stroke-width: 0 !important;
-  text-shadow: none !important;
-  background-clip: border-box !important;
-  -webkit-background-clip: border-box !important;
-}
-
-/* Placeholder text */
-[data-dock-surface="shell"] .text-14-regular.text-text-weak {
-  font-size: 16px !important;
-}
-
-/* Fix +/↑ button size */
-[data-dock-surface="shell"] [data-action="prompt-submit"],
-[data-dock-surface="shell"] [data-action="prompt-attach"],
-[data-dock-surface="shell"] .size-8 {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-}
-
-/* Fix +/↑ vertical centering — override absolute bottom-2 to center */
-[data-dock-surface="shell"] .absolute.bottom-2.right-2,
-[data-dock-surface="shell"] .absolute.bottom-2.left-2 {
-  bottom: auto !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
 }
 
 /* ─── 10. PROMPT TRAY / BOTTOM BAR — single line, compact ───────────────── */
