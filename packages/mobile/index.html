@@ -22,12 +22,17 @@
       body {
         margin: 0;
         padding: 0;
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        user-select: none;
         overflow: hidden;
         height: 100dvh;
         width: 100dvw;
+      }
+      /* Disable text selection on non-text elements only.
+         IMPORTANT: Do NOT put user-select:none on body — it breaks
+         contenteditable text rendering on Android WebView. */
+      button, a, [role="button"], img, svg, label, nav, header {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
       }
       /* Apply safe area as padding inside the root container */
       #root {
