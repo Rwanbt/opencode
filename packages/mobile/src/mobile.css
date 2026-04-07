@@ -191,11 +191,20 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   font-size: 16px !important;
   line-height: 1.4 !important;
   min-height: 36px !important;
-  padding: 8px 44px 8px 44px !important;
-  /* CRITICAL: -webkit-text-fill-color overrides color on WebKit/Android.
-     Must use the correct theme variable name (--text-strong, NOT --color-text-strong) */
-  -webkit-text-fill-color: var(--text-strong) !important;
-  caret-color: var(--text-strong) !important;
+  padding: 8px 12px !important;
+}
+
+/* DEBUG: Force text visibility with maximum specificity.
+   Android WebView contenteditable text was invisible. */
+[role="textbox"][contenteditable="true"][data-component="prompt-input"],
+div[data-component="prompt-input"] {
+  color: currentColor !important;
+  -webkit-text-fill-color: currentColor !important;
+  caret-color: auto !important;
+  -webkit-text-stroke-width: 0 !important;
+  text-shadow: none !important;
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
 }
 
 /* Placeholder text */
