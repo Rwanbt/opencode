@@ -211,12 +211,35 @@ pub async fn start_embedded_server(
         }
     }
 
+    // Create symlinks for executable binaries so they're found by `which`.
+    // Android packages them as lib*.so but tools look for "bash", "rg", etc.
+    let bin_link_dir = dir.join("bin");
+    let _ = fs::create_dir_all(&bin_link_dir);
+    let bin_links = [
+        ("libbash_exec.so", "bash"),
+        ("libbash_exec.so", "sh"),
+        ("librg_exec.so", "rg"),
+        ("libbun_exec.so", "bun"),
+    ];
+    for (src_name, link_name) in &bin_links {
+        let src = nlib_dir.join(src_name);
+        let link = bin_link_dir.join(link_name);
+        let needs = match fs::read_link(&link) {
+            Ok(target) => target != src,
+            Err(_) => true,
+        };
+        if needs && src.exists() {
+            let _ = fs::remove_file(&link);
+            let _ = std::os::unix::fs::symlink(&src, &link);
+        }
+    }
+
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
 
-    // Build PATH with nativeLibraryDir first
+    // Build PATH with bin links and nativeLibraryDir first
     let sys_path = std::env::var("PATH").unwrap_or_default();
-    let path = format!("{}:{}", nlib_dir.display(), sys_path);
+    let path = format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path);
 
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
     // linker shipped alongside (also in nativeLibraryDir for exec permission).
@@ -270,6 +293,7 @@ pub async fn start_embedded_server(
         .env("OPENCODE_CLIENT", "mobile-embedded")
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
+        .env("SHELL", bin_link_dir.join("bash").to_str().unwrap_or("/bin/sh"))
         .env("XDG_DATA_HOME", home_dir.join(".local/share").to_str().unwrap_or(""))
         .env("XDG_STATE_HOME", home_dir.join(".local/state").to_str().unwrap_or(""))
         .env("XDG_CACHE_HOME", home_dir.join(".cache").to_str().unwrap_or(""))
@@ -353,6 +377,12 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
         return Ok(()); // Already installed
     }
 
+    let nlib_dir = native_lib_dir(&dir)
+        .ok_or_else(|| "nativeLibraryDir not found".to_string())?;
+    let lib_link_dir = dir.join("lib_links");
+    let bin_link_dir = dir.join("bin");
+    let _ = fs::create_dir_all(&bin_link_dir);
+
     let _ = app.emit(
         "extraction-progress",
         ExtractionProgress {
@@ -363,7 +393,7 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
 
     // Download proot static binary
     let proot_url = "https://proot.gitlab.io/proot/bin/proot-aarch64-static";
-    let proot_path = dir.join("bin").join("proot");
+    let proot_path = bin_link_dir.join("proot");
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
@@ -418,10 +448,16 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
         },
     );
 
-    // Extract rootfs
+    // Extract rootfs — try system tar, then busybox
     fs::create_dir_all(&rootfs_dir).map_err(|e| format!("mkdir rootfs: {}", e))?;
 
-    let output = Command::new("tar")
+    let tar_bin = if Path::new("/system/bin/tar").exists() {
+        "/system/bin/tar"
+    } else {
+        "tar"
+    };
+
+    let output = Command::new(tar_bin)
         .args(["-xzf", alpine_path.to_str().unwrap_or("")])
         .current_dir(&rootfs_dir)
         .output()
@@ -437,14 +473,13 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
     fs::remove_file(&alpine_path).ok();
 
     // Create proot-run wrapper script
-    let bin_dir = dir.join("bin");
     let wrapper = format!(
         r#"#!/bin/sh
+export LD_LIBRARY_PATH="{lib_links}:{nlib}"
 exec {proot} \
   --rootfs={rootfs} \
-  --bind={bin}/bun:/usr/local/bin/bun \
-  --bind={bin}/git:/usr/local/bin/git \
-  --bind={bin}/rg:/usr/local/bin/rg \
+  --bind={bin}:/usr/local/bin \
+  --bind={nlib}:/usr/local/lib \
   --bind=/dev:/dev \
   --bind=/proc:/proc \
   --bind=/sys:/sys \
@@ -453,10 +488,12 @@ exec {proot} \
 "#,
         proot = proot_path.display(),
         rootfs = rootfs_dir.display(),
-        bin = bin_dir.display(),
+        bin = bin_link_dir.display(),
+        nlib = nlib_dir.display(),
+        lib_links = lib_link_dir.display(),
     );
 
-    let wrapper_path = bin_dir.join("proot-run");
+    let wrapper_path = bin_link_dir.join("proot-run");
     fs::write(&wrapper_path, wrapper).map_err(|e| format!("Write wrapper: {}", e))?;
     let mut perms = fs::metadata(&wrapper_path)
         .map_err(|e| format!("metadata: {}", e))?
