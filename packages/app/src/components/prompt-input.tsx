@@ -563,7 +563,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
-  const agentNames = createMemo(() => [...local.agent.list().map((agent) => agent.name), "Chat Only"])
+  const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -1500,7 +1500,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Select
                       size="normal"
                       options={agentNames()}
-                      current={local.agent.isChatOnly() ? "Chat Only" : (local.agent.current()?.name ?? "")}
+                      current={local.agent.current()?.name ?? ""}
                       onSelect={(value) => {
                         local.agent.set(value)
                         restoreFocus()
