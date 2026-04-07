@@ -199,6 +199,7 @@ function App() {
         <FullApp
           platform={platform()!}
           serverInfo={serverInfo()!}
+          onOpenModelManager={() => setShowModelManager(true)}
         />
       </Match>
     </Switch>
@@ -206,7 +207,11 @@ function App() {
   )
 }
 
-function FullApp(props: { platform: Awaited<ReturnType<typeof createPlatform>>; serverInfo: ServerInfo }) {
+function FullApp(props: {
+  platform: Awaited<ReturnType<typeof createPlatform>>;
+  serverInfo: ServerInfo;
+  onOpenModelManager?: () => void;
+}) {
   const connection = (): ServerConnection.Any => {
     if (props.serverInfo.variant === "embedded") {
       return {
@@ -231,6 +236,23 @@ function FullApp(props: { platform: Awaited<ReturnType<typeof createPlatform>>; 
   return (
     <PlatformProvider value={props.platform}>
       <AppBaseProviders>
+        {/* Floating AI Models button */}
+        <Show when={props.onOpenModelManager}>
+          <button
+            onClick={props.onOpenModelManager}
+            style={{
+              position: "fixed", bottom: "80px", right: "16px", "z-index": "999",
+              width: "48px", height: "48px", "border-radius": "24px",
+              background: "#3b82f6", color: "#fff", border: "none",
+              "font-size": "18px", "font-weight": "700", cursor: "pointer",
+              display: "flex", "align-items": "center", "justify-content": "center",
+              "box-shadow": "0 4px 12px rgba(0,0,0,0.4)",
+            }}
+            aria-label="AI Models"
+          >
+            AI
+          </button>
+        </Show>
         <AppInterface
           defaultServer={defaultKey()}
           servers={servers()}
