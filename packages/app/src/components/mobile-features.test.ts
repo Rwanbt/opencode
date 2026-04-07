@@ -11,17 +11,16 @@ import { describe, expect, test } from "bun:test"
 
 describe("mobile platform detection", () => {
   test("platform === 'mobile' guard for action menu", () => {
+    const isMobile = (p: { platform: string }) => p.platform === "mobile"
+
     // On mobile, the "more actions" button should render
-    const mobilePlatform = { platform: "mobile" as const, os: "android" as const }
-    expect(mobilePlatform.platform === "mobile").toBe(true)
+    expect(isMobile({ platform: "mobile" })).toBe(true)
 
     // On desktop, it should not render
-    const desktopPlatform = { platform: "desktop" as const, os: "windows" as const }
-    expect(desktopPlatform.platform === "mobile").toBe(false)
+    expect(isMobile({ platform: "desktop" })).toBe(false)
 
     // On web, it should not render
-    const webPlatform = { platform: "web" as const, os: "linux" as const }
-    expect(webPlatform.platform === "mobile").toBe(false)
+    expect(isMobile({ platform: "web" })).toBe(false)
   })
 })
 
