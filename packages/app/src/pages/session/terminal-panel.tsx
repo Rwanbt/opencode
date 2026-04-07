@@ -1,6 +1,7 @@
-import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -13,6 +14,7 @@ import { SortableTerminalTab } from "@/components/session"
 import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useLayout } from "@/context/layout"
 import { useTerminal } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
@@ -21,13 +23,92 @@ import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { terminalProbe } from "@/testing/terminal"
 
+/** Send a key sequence to the active terminal by dispatching a KeyboardEvent to its textarea. */
+function sendTerminalKey(id: string, key: string, opts?: { ctrlKey?: boolean; code?: string }) {
+  const wrapper = document.getElementById(`terminal-wrapper-${id}`)
+  if (!wrapper) return
+  const textarea = wrapper.querySelector("textarea")
+  if (!textarea) return
+  textarea.focus()
+  const event = new KeyboardEvent("keydown", {
+    key,
+    code: opts?.code ?? key,
+    ctrlKey: opts?.ctrlKey ?? false,
+    bubbles: true,
+    cancelable: true,
+  })
+  textarea.dispatchEvent(event)
+}
+
+function TerminalMobileToolbar(props: { activeId: () => string | undefined }) {
+  const [ctrlActive, setCtrlActive] = createSignal(false)
+
+  const send = (key: string, code?: string) => {
+    const id = props.activeId()
+    if (!id) return
+    sendTerminalKey(id, key, { ctrlKey: ctrlActive(), code })
+    if (ctrlActive()) setCtrlActive(false)
+  }
+
+  const keys = [
+    { label: "Esc", action: () => send("Escape", "Escape") },
+    { label: "Tab", action: () => send("Tab", "Tab") },
+    { label: "↑", action: () => send("ArrowUp", "ArrowUp") },
+    { label: "↓", action: () => send("ArrowDown", "ArrowDown") },
+    { label: "←", action: () => send("ArrowLeft", "ArrowLeft") },
+    { label: "→", action: () => send("ArrowRight", "ArrowRight") },
+    { label: "|", action: () => send("|") },
+    { label: "/", action: () => send("/") },
+    { label: "~", action: () => send("~") },
+  ]
+
+  return (
+    <div
+      data-component="terminal-mobile-toolbar"
+      class="flex items-center gap-1 px-2 py-1 border-b border-border-weaker-base bg-background-stronger overflow-x-auto"
+      style={{ "-webkit-overflow-scrolling": "touch", "scrollbar-width": "none" }}
+    >
+      <button
+        type="button"
+        class="shrink-0 px-3 h-8 rounded-md text-13-medium border"
+        classList={{
+          "bg-text-strong text-background-base border-text-strong": ctrlActive(),
+          "bg-surface-base text-text-base border-border-base": !ctrlActive(),
+        }}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          setCtrlActive(!ctrlActive())
+        }}
+      >
+        Ctrl
+      </button>
+      <For each={keys}>
+        {(k) => (
+          <button
+            type="button"
+            class="shrink-0 px-3 h-8 rounded-md text-13-medium bg-surface-base text-text-base border border-border-base active:bg-surface-base-active"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              k.action()
+            }}
+          >
+            {k.label}
+          </button>
+        )}
+      </For>
+    </div>
+  )
+}
+
 export function TerminalPanel() {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
   const language = useLanguage()
   const command = useCommand()
+  const platform = usePlatform()
   const { params, view } = useSessionLayout()
+  const isMobile = () => platform.platform === "mobile"
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -275,6 +356,9 @@ export function TerminalPanel() {
                   </div>
                 </Tabs.List>
               </Tabs>
+              <Show when={isMobile()}>
+                <TerminalMobileToolbar activeId={() => terminal.active()} />
+              </Show>
               <div class="flex-1 min-h-0 relative">
                 <Show when={terminal.active()} keyed>
                   {(id) => {
