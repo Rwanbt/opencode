@@ -91,7 +91,11 @@ function App() {
   return (
     <>
     <Show when={showModelManager()}>
-      <ModelManager onClose={() => setShowModelManager(false)} />
+      <ModelManager
+        onClose={() => setShowModelManager(false)}
+        serverUrl={serverInfo()?.url}
+        serverAuth={serverInfo()?.username ? { username: serverInfo()!.username!, password: serverInfo()!.password! } : undefined}
+      />
     </Show>
     <Switch>
       <Match when={mode() === "selecting"}>

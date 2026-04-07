@@ -7,6 +7,8 @@ import {
   startLlmServer,
   stopLlmServer,
   checkLlmHealth,
+  registerLocalProvider,
+  unregisterLocalProvider,
   type ModelInfo,
   type ModelDownloadProgress,
 } from "../llm"
@@ -14,6 +16,8 @@ import { MODEL_CATALOG, type CatalogModel } from "../model-catalog"
 
 interface Props {
   onClose: () => void
+  serverUrl?: string
+  serverAuth?: { username: string; password: string }
 }
 
 function formatBytes(bytes: number): string {
@@ -87,6 +91,12 @@ export function ModelManager(props: Props) {
       await startLlmServer(filename)
       setActiveModel(filename)
       setHealthy(true)
+      // Register local LLM as a provider in OpenCode so it appears in the model selector
+      if (props.serverUrl) {
+        const modelName = filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
+        await registerLocalProvider(props.serverUrl, modelName, 14097, props.serverAuth)
+        console.log("[OpenCode LLM] Registered local provider:", modelName)
+      }
     } catch (err) {
       setError("Failed to start server: " + (err instanceof Error ? err.message : String(err)))
     } finally {
@@ -101,6 +111,10 @@ export function ModelManager(props: Props) {
       await stopLlmServer()
       setActiveModel(null)
       setHealthy(false)
+      // Remove local LLM provider from OpenCode
+      if (props.serverUrl) {
+        await unregisterLocalProvider(props.serverUrl, props.serverAuth)
+      }
     } catch (err) {
       setError("Failed to stop server: " + (err instanceof Error ? err.message : String(err)))
     } finally {
