@@ -27,11 +27,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android NDK
+      - name: Install Android NDK + CMake
         run: |
-          # Remove pre-installed NDK to avoid version conflicts
-          rm -rf $ANDROID_HOME/ndk/29.* 2>/dev/null || true
-          sdkmanager "ndk;27.0.12077973"
+          # Remove ALL pre-installed NDKs to avoid version conflicts
+          rm -rf $ANDROID_HOME/ndk/* 2>/dev/null || true
+          sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
 
@@ -98,6 +98,65 @@ jobs:
 
           echo "JNI libs:"
           ls -lh "$JNIDIR/"
+
+      - name: Build llama.cpp for Android
+        run: |
+          JNIDIR="packages/mobile/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          HEADERS="packages/mobile/src-tauri/gen/android/llama-headers"
+          NDK=$ANDROID_HOME/ndk/27.0.12077973
+
+          # Clone llama.cpp
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp
+
+          # Build shared libraries with NDK
+          cmake -B /tmp/llama.cpp/build-android \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DCMAKE_C_FLAGS="-march=armv8.2-a+dotprod+fp16" \
+            -DCMAKE_CXX_FLAGS="-march=armv8.2-a+dotprod+fp16" \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -S /tmp/llama.cpp
+          cmake --build /tmp/llama.cpp/build-android --config Release -j$(nproc)
+
+          # Copy shared libs to jniLibs
+          cp /tmp/llama.cpp/build-android/bin/libllama.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml-base.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml-cpu.so "$JNIDIR/"
+
+          # Strip
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip "$JNIDIR"/libllama.so "$JNIDIR"/libggml*.so
+
+          # Also build static llama-server for HTTP endpoint
+          cmake -B /tmp/llama.cpp/build-static \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang \
+            -DCMAKE_CXX_COMPILER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++ \
+            -DCMAKE_C_FLAGS="-march=armv8.2-a" \
+            -DCMAKE_CXX_FLAGS="-march=armv8.2-a" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -S /tmp/llama.cpp
+          cmake --build /tmp/llama.cpp/build-static --config Release --target llama-server -j$(nproc)
+          cp /tmp/llama.cpp/build-static/bin/llama-server "$JNIDIR/libllama_server.so"
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip "$JNIDIR/libllama_server.so"
+
+          # Copy headers for JNI compilation
+          mkdir -p "$HEADERS"
+          cp /tmp/llama.cpp/include/*.h "$HEADERS/"
+          cp /tmp/llama.cpp/ggml/include/*.h "$HEADERS/"
+
+          echo "llama.cpp built:"
+          ls -lh "$JNIDIR"/libllama*.so "$JNIDIR"/libggml*.so
 
       - name: Bundle OpenCode CLI
         run: |
