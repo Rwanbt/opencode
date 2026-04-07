@@ -3,6 +3,27 @@
  * Only includes the `serve` command — no TUI, no terminal UI dependencies.
  * Bundled with `bun build --target=bun` for the Android APK.
  */
+
+// On Android, /etc/resolv.conf doesn't exist and is read-only.
+// Both musl's getaddrinfo and c-ares (used by Bun) need it for DNS resolution.
+// Fix: write a resolv.conf to our data dir and set LOCALDOMAIN to help c-ares,
+// plus use Node's dns.setServers() which configures c-ares directly.
+import { existsSync, writeFileSync, mkdirSync } from "fs"
+import dns from "dns"
+import path from "path"
+if (!existsSync("/etc/resolv.conf")) {
+  try {
+    // Configure c-ares DNS servers directly (works in Bun)
+    dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"])
+  } catch {}
+  try {
+    // Also write a resolv.conf for any code that reads it directly
+    const home = process.env.HOME || "/tmp"
+    const resolvPath = path.join(home, "resolv.conf")
+    writeFileSync(resolvPath, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n")
+  } catch {}
+}
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { ServeCommand } from "./cli/cmd/serve"
