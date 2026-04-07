@@ -696,3 +696,89 @@ a,
     min-width: 0 !important;
   }
 }
+
+/* ─── 31. LINE COMMENTS — touch-friendly on mobile ─────────────────────── */
+
+/* Comment button — bigger touch target */
+@media (max-width: 767px) {
+  [data-component="line-comment"] [data-slot="line-comment-button"] {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+  }
+
+  [data-component="line-comment"] [data-slot="line-comment-button"] [data-component="icon"],
+  [data-component="line-comment"] [data-slot="line-comment-button"] [data-slot="line-comment-icon"] {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Comment popover — full width on narrow screens */
+  [data-component="line-comment"] [data-slot="line-comment-popover"] {
+    right: 0 !important;
+    left: 0 !important;
+    min-width: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+    width: auto !important;
+  }
+
+  /* Editor popover — full width */
+  [data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  /* Textarea — comfortable size for touch */
+  [data-component="line-comment"] [data-slot="line-comment-textarea"] {
+    font-size: 16px !important;
+    min-height: 80px !important;
+    padding: 12px !important;
+  }
+
+  /* Action buttons — bigger touch targets */
+  [data-component="line-comment"] [data-slot="line-comment-action"] {
+    min-height: 40px !important;
+    padding: 0 16px !important;
+    font-size: 14px !important;
+  }
+
+  /* Mention items — touch-friendly */
+  [data-component="line-comment"] [data-slot="line-comment-mention-item"] {
+    min-height: 40px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Annotation slot — more padding on mobile */
+  [data-annotation-slot] {
+    padding: 8px !important;
+  }
+}
+
+/* ─── 32. WORKSPACE SIDEBAR — touch-friendly on mobile ─────────────────── */
+
+@media (max-width: 767px) {
+  /* Workspace header — bigger touch target */
+  [data-component="workspace-header"],
+  [data-slot="sidebar-workspace-header"] {
+    min-height: 44px !important;
+  }
+
+  /* Workspace actions menu trigger */
+  [data-component="workspace-actions"] button,
+  [data-slot="sidebar-workspace-actions"] button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+
+  /* Session items in workspace — touch-friendly */
+  [data-slot="sidebar-session-item"],
+  [data-slot="session-item"] {
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* New session button */
+  [data-slot="sidebar-new-session"] {
+    min-height: 44px !important;
+  }
+}
