@@ -1,5 +1,5 @@
 /* @refresh reload */
-import { createSignal, Show, Switch, Match, onMount } from "solid-js"
+import { createSignal, Show, Switch, Match, onMount, onCleanup } from "solid-js"
 import { render } from "solid-js/web"
 import {
   AppBaseProviders,
@@ -212,6 +212,12 @@ function FullApp(props: {
   serverInfo: ServerInfo;
   onOpenModelManager?: () => void;
 }) {
+  // Listen for "open-model-manager" custom event from the model selector
+  onMount(() => {
+    const handler = () => props.onOpenModelManager?.()
+    window.addEventListener("open-model-manager", handler)
+    onCleanup(() => window.removeEventListener("open-model-manager", handler))
+  })
   const connection = (): ServerConnection.Any => {
     if (props.serverInfo.variant === "embedded") {
       return {
@@ -236,23 +242,6 @@ function FullApp(props: {
   return (
     <PlatformProvider value={props.platform}>
       <AppBaseProviders>
-        {/* Floating AI Models button */}
-        <Show when={props.onOpenModelManager}>
-          <button
-            onClick={props.onOpenModelManager}
-            style={{
-              position: "fixed", bottom: "80px", right: "16px", "z-index": "999",
-              width: "48px", height: "48px", "border-radius": "24px",
-              background: "#3b82f6", color: "#fff", border: "none",
-              "font-size": "18px", "font-weight": "700", cursor: "pointer",
-              display: "flex", "align-items": "center", "justify-content": "center",
-              "box-shadow": "0 4px 12px rgba(0,0,0,0.4)",
-            }}
-            aria-label="AI Models"
-          >
-            AI
-          </button>
-        </Show>
         <AppInterface
           defaultServer={defaultKey()}
           servers={servers()}
