@@ -209,19 +209,25 @@ pub async fn start_llm_server(
     let sys_path = std::env::var("PATH").unwrap_or_default();
     let path_env = format!("{}:{}", nlib_dir.display(), sys_path);
 
+    let home_dir = dir.join("home");
+    let _ = fs::create_dir_all(&home_dir);
+
     let mut child = Command::new(&cmd_path)
         .args(&cmd_args)
         .env("PATH", &path_env)
         .env("LD_LIBRARY_PATH", &lib_path)
+        .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
+        .env("TMPDIR", dir.join("tmp").to_str().unwrap_or("/tmp"))
         .stdout(stdout_file)
         .stderr(stderr_file)
         .spawn()
         .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
 
+    let _ = fs::create_dir_all(dir.join("tmp"));
     eprintln!("[OpenCode LLM] llama-server spawned with pid {:?}", child.id());
 
-    // Check if process exited immediately (crash)
-    std::thread::sleep(Duration::from_millis(500));
+    // Give llama-server time to load the model (can take several seconds on mobile)
+    std::thread::sleep(Duration::from_secs(3));
     match child.try_wait() {
         Ok(Some(status)) => {
             let stderr =
