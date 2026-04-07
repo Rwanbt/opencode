@@ -10,6 +10,10 @@ object LlamaEngine {
     private const val TAG = "LlamaEngine"
     private var initialized = false
 
+    /** Store the app ClassLoader so Rust JNI threads can find our classes */
+    @JvmField
+    var appClassLoader: ClassLoader? = null
+
     /** Callback interface for streaming tokens during generation */
     interface TokenCallback {
         fun onToken(token: String)
@@ -24,6 +28,8 @@ object LlamaEngine {
             System.loadLibrary("llama")
             System.loadLibrary("llama_jni")
             Log.i(TAG, "Native libraries loaded successfully")
+            // Save the ClassLoader for use from Rust JNI threads
+            appClassLoader = LlamaEngine::class.java.classLoader
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "Failed to load native libraries: ${e.message}")
         }
@@ -36,6 +42,56 @@ object LlamaEngine {
             initialized = true
             Log.i(TAG, "Backend initialized")
         }
+    }
+
+    /**
+     * Start a background thread that polls for model load/unload requests.
+     * Rust writes commands to requestFile, Kotlin reads and executes them.
+     */
+    fun startCommandLoop(requestFile: java.io.File, resultFile: java.io.File) {
+        Thread {
+            Log.i(TAG, "Command loop started, watching: ${requestFile.absolutePath}")
+            while (true) {
+                try {
+                    if (requestFile.exists()) {
+                        val cmd = requestFile.readText().trim()
+                        requestFile.delete()
+
+                        Log.i(TAG, "Received command: $cmd")
+                        val parts = cmd.split("|", limit = 2)
+                        val action = parts[0]
+                        val arg = parts.getOrElse(1) { "" }
+
+                        val result = when (action) {
+                            "load" -> {
+                                val success = load(arg, 2048, 4)
+                                if (success) "ok" else "error:Failed to load model"
+                            }
+                            "unload" -> { unload(); "ok" }
+                            "loaded" -> if (loaded()) "true" else "false"
+                            "stop" -> { stop(); "ok" }
+                            "generate" -> {
+                                // arg = prompt|maxTokens|temperature
+                                val genParts = arg.split("|", limit = 3)
+                                val prompt = genParts[0]
+                                val maxTokens = genParts.getOrElse(1) { "512" }.toIntOrNull() ?: 512
+                                val temp = genParts.getOrElse(2) { "0.7" }.toFloatOrNull() ?: 0.7f
+                                chat(prompt, maxTokens, temp)
+                            }
+                            else -> "error:Unknown command: $action"
+                        }
+
+                        resultFile.writeText(result)
+                        Log.i(TAG, "Command result: ${result.take(100)}")
+                    }
+                    Thread.sleep(100)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Command loop error: ${e.message}")
+                    resultFile.writeText("error:${e.message}")
+                    Thread.sleep(500)
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     /** Load a GGUF model file. Returns true if successful. */

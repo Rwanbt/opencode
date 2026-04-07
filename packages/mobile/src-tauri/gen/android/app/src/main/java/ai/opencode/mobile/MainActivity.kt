@@ -17,14 +17,6 @@ class MainActivity : TauriActivity() {
         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
     }
 
-    // Load llama.cpp libraries so Rust FFI can find symbols
-    try {
-      LlamaEngine.init()
-      android.util.Log.i("OpenCode", "LlamaEngine initialized")
-    } catch (e: Exception) {
-      android.util.Log.w("OpenCode", "LlamaEngine init failed: ${e.message}")
-    }
-
     val baseDir = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
       dataDir
     } else {
@@ -38,6 +30,20 @@ class MainActivity : TauriActivity() {
     val nlFile = File(runtimeDir, ".native_lib_dir")
     runtimeDir.mkdirs()
     nlFile.writeText(nativeLibDir)
+
+    // Load llama.cpp libraries and start command loop
+    try {
+      LlamaEngine.init()
+      android.util.Log.i("OpenCode", "LlamaEngine initialized")
+      val llmDir = File(baseDir, "runtime/llm_ipc")
+      llmDir.mkdirs()
+      LlamaEngine.startCommandLoop(
+        File(llmDir, "request"),
+        File(llmDir, "result")
+      )
+    } catch (e: Exception) {
+      android.util.Log.w("OpenCode", "LlamaEngine init failed: ${e.message}")
+    }
 
     // Extract non-executable assets (opencode-cli.js, node_modules) on first launch
     val marker = File(runtimeDir, "opencode-cli.js")
