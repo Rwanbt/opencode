@@ -511,6 +511,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const restoreFocus = () => {
+    // On mobile, don't auto-focus the editor after selector interactions
+    // because it opens the virtual keyboard and obscures the dropdown menus
+    if (platform.platform === "mobile") return
     requestAnimationFrame(() => {
       const cursor = prompt.cursor() ?? promptLength(prompt.current())
       editorRef.focus()
