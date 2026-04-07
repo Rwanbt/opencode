@@ -97,6 +97,16 @@ REPO_ROOT="$(cd "$MOBILE_DIR/../.." && pwd)"
 if [ -f "$OPENCODE_DIR/src/mobile-entry.ts" ]; then
   cd "$REPO_ROOT"
 
+  # Inline SQL migrations so the bundle doesn't need filesystem access at runtime
+  MIGRATIONS=$(node -e "
+    const fs=require('fs'),p=require('path'),d=p.join('packages/opencode/migration');
+    const r=fs.readdirSync(d,{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name).map(n=>{
+      const f=p.join(d,n,'migration.sql');if(!fs.existsSync(f))return null;
+      const m=/^(\d{14})/.exec(n);
+      const t=m?Date.UTC(+m[1].slice(0,4),+m[1].slice(4,6)-1,+m[1].slice(6,8),+m[1].slice(8,10),+m[1].slice(10,12),+m[1].slice(12,14)):0;
+      return{sql:fs.readFileSync(f,'utf8'),timestamp:t,name:n}
+    }).filter(Boolean);console.log(JSON.stringify(r))")
+
   # Bundle the mobile-specific entry point (no TUI dependencies)
   bun build packages/opencode/src/mobile-entry.ts \
     --target=bun \
@@ -105,6 +115,7 @@ if [ -f "$OPENCODE_DIR/src/mobile-entry.ts" ]; then
     --external "@parcel/watcher/wrapper" \
     --external "@opentui/core" \
     --external "@opentui/solid" \
+    --define "OPENCODE_MIGRATIONS=$MIGRATIONS" \
     2>&1 || {
       echo "  ERROR: Bun build failed."
       exit 1
