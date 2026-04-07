@@ -476,6 +476,40 @@ export function SessionHeader() {
                     </Button>
                   </TooltipKeybind>
                 </div>
+
+                {/* Mobile-only: more actions menu */}
+                <Show when={platform.platform === "mobile"}>
+                  <DropdownMenu gutter={4} placement="bottom-end">
+                    <DropdownMenu.Trigger
+                      as={Button}
+                      variant="ghost"
+                      class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                      aria-label="More actions"
+                    >
+                      <Icon size="small" name="dot-grid" />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content>
+                        <DropdownMenu.Item onSelect={toggleTerminal}>
+                          <Icon name={view().terminal.opened() ? "terminal-active" : "terminal"} size="small" />
+                          <DropdownMenu.ItemLabel>{language.t("command.terminal.toggle")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => command.trigger("session.fork")}>
+                          <Icon name="fork" size="small" />
+                          <DropdownMenu.ItemLabel>{language.t("command.session.fork")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => command.trigger("file.open")}>
+                          <Icon name="magnifying-glass" size="small" />
+                          <DropdownMenu.ItemLabel>{language.t("session.header.searchFiles")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => command.trigger("settings.open")}>
+                          <Icon name="settings-gear" size="small" />
+                          <DropdownMenu.ItemLabel>{language.t("command.settings.open")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu>
+                </Show>
               </div>
             </div>
           </Portal>

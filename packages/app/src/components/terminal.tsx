@@ -28,12 +28,21 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onConnectError?: (error: unknown) => void
 }
 
-let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
+let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty | undefined }> | undefined
 
 const loadGhostty = () => {
   if (shared) return shared
   shared = import("ghostty-web")
-    .then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
+    .then(async (mod) => {
+      // Try loading WASM backend; fall back to canvas-only rendering on mobile/unsupported environments
+      let ghostty: Ghostty | undefined
+      try {
+        ghostty = await mod.Ghostty.load()
+      } catch (err) {
+        console.warn("[terminal] Ghostty WASM unavailable, using canvas renderer:", err)
+      }
+      return { mod, ghostty }
+    })
     .catch((err) => {
       shared = undefined
       throw err
@@ -356,7 +365,7 @@ export const Terminal = (props: TerminalProps) => {
       if (disposed) return
 
       const mod = loaded.mod
-      const g = loaded.ghostty
+      const g = loaded.ghostty // undefined when WASM is unavailable (e.g. mobile)
 
       const t = new mod.Terminal({
         cursorBlink: true,
@@ -369,14 +378,14 @@ export const Terminal = (props: TerminalProps) => {
         convertEol: false,
         theme: terminalColors(),
         scrollback: 10_000,
-        ghostty: g,
+        ...(g ? { ghostty: g } : {}),
       })
       cleanups.push(() => t.dispose())
       if (disposed) {
         cleanup()
         return
       }
-      ghostty = g
+      if (g) ghostty = g
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {

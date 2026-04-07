@@ -184,6 +184,33 @@ pub async fn start_embedded_server(
             let _ = std::os::unix::fs::symlink(&src, &link);
         }
     }
+    // Symlink librust_pty.so into the path bun-pty searches automatically.
+    // bun-pty looks at: {dataDir}/rust-pty/target/release/librust_pty_arm64.so
+    let pty_lib_src = nlib_dir.join("librust_pty.so");
+    if pty_lib_src.exists() {
+        let pty_dir = dir.join("rust-pty").join("target").join("release");
+        let _ = fs::create_dir_all(&pty_dir);
+        let pty_link = pty_dir.join("librust_pty_arm64.so");
+        let needs_pty_link = match fs::read_link(&pty_link) {
+            Ok(target) => target != pty_lib_src,
+            Err(_) => true,
+        };
+        if needs_pty_link {
+            let _ = fs::remove_file(&pty_link);
+            let _ = std::os::unix::fs::symlink(&pty_lib_src, &pty_link);
+        }
+        // Also create the non-arm64 name as fallback
+        let pty_link2 = pty_dir.join("librust_pty.so");
+        let needs_pty_link2 = match fs::read_link(&pty_link2) {
+            Ok(target) => target != pty_lib_src,
+            Err(_) => true,
+        };
+        if needs_pty_link2 {
+            let _ = fs::remove_file(&pty_link2);
+            let _ = std::os::unix::fs::symlink(&pty_lib_src, &pty_link2);
+        }
+    }
+
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
 
@@ -242,6 +269,7 @@ pub async fn start_embedded_server(
         .env("OPENCODE_SERVER_PASSWORD", &password)
         .env("OPENCODE_CLIENT", "mobile-embedded")
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
+        .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
         .env("XDG_DATA_HOME", home_dir.join(".local/share").to_str().unwrap_or(""))
         .env("XDG_STATE_HOME", home_dir.join(".local/state").to_str().unwrap_or(""))
         .env("XDG_CACHE_HOME", home_dir.join(".cache").to_str().unwrap_or(""))

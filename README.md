@@ -321,7 +321,14 @@ Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK,
 - **Direct process spawning** — No Termux, no intents — `std::process::Command` from Rust directly
 - **Auto-start server** — `bun opencode-cli.js serve` on localhost with UUID auth, same as desktop sidecar
 
-**Layer 2 — Extended Environment (optional download, ~150MB):**
+**Layer 2 — On-Device LLM Inference:**
+- **llama.cpp via JNI** — Kotlin LlamaEngine loads native .so libraries with JNI bridge
+- **File-based IPC** — Rust writes commands to `llm_ipc/request`, Kotlin daemon polls and returns results
+- **llama-server** — OpenAI-compatible HTTP API on port 14097 for provider integration
+- **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 9 pre-curated models
+- **Provider registration** — Local model appears as "Local AI" provider in model selector
+
+**Layer 3 — Extended Environment (optional download, ~150MB):**
 - **proot + Alpine rootfs** — Full Linux with `apt install` for additional packages
 - **Bind-mounted Layer 1** — Bun/Git/rg still run at native speed inside proot
 - **On-demand** — Downloaded only when user enables "Extended Environment" in settings
@@ -329,9 +336,10 @@ Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK,
 **Shared (Android + iOS):**
 - **Platform abstraction** — Extended `Platform` type with `"mobile"` + `"ios"/"android"` OS detection
 - **Remote connection** — Connect to desktop OpenCode server over network (iOS-only or Android fallback)
-- **Mobile UI** — Swipe navigation drawer, touch-optimized message input, unified diff viewer
+- **Mobile UI** — Responsive sidebar, touch-optimized message input, mobile diff view, terminal with canvas fallback
 - **Push notifications** — SSE-to-native notification bridge for background task completion
 - **Mode selector** — Choose Local (Android) or Remote (iOS + Android) on first launch
+- **Mobile action menu** — Quick access to fork, search, and settings from session header
 
 ### AnythingLLM Fusion (`dev_anything`)
 

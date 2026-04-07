@@ -1,38 +1,32 @@
-## Usage
+# @opencode-ai/app
 
-Dependencies for these templates are managed with [pnpm](https://pnpm.io) using `pnpm up -Lri`.
+Shared UI package for all OpenCode frontends (desktop, mobile, web). Built with SolidJS and Tailwind CSS.
 
-This is the reason you see a `pnpm-lock.yaml`. That said, any package manager will work. This file can safely be removed once you clone a template.
+## Development
 
 ```bash
-$ npm install # or pnpm install or yarn install
+bun install
+bun run dev          # Vite dev server on localhost:1430
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+## Build
 
-## Available Scripts
+```bash
+bun run build        # Production build to dist/
+```
 
-In the project directory, you can run:
+## Testing
 
-### `npm run dev` or `npm start`
+### Unit Tests
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+```bash
+bun run test:unit           # Run all unit tests (300+ tests)
+bun run test:unit:watch     # Watch mode
+```
 
-The page will reload if you make edits.<br>
-
-### `npm run build`
-
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
-
-## E2E Testing
+### E2E Tests (Playwright)
 
 Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an opencode backend (defaults to `localhost:4096`).
-Use the local runner to create a temp sandbox, seed data, and run the tests.
 
 ```bash
 bunx playwright install
@@ -41,11 +35,51 @@ bun run test:e2e:local -- --grep "settings"
 ```
 
 Environment options:
-
 - `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (backend address, default: `localhost:4096`)
 - `PLAYWRIGHT_PORT` (Vite dev server port, default: `3000`)
 - `PLAYWRIGHT_BASE_URL` (override base URL, default: `http://localhost:<PLAYWRIGHT_PORT>`)
 
-## Deployment
+## Architecture
 
-You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+```
+src/
+├── components/          # Shared UI components
+│   ├── prompt-input/    # Rich text prompt editor
+│   ├── session/         # Session header, message timeline
+│   ├── settings-*.tsx   # Settings dialog pages
+│   ├── dialog-*.tsx     # Modal dialogs
+│   └── terminal.tsx     # Terminal (Ghostty WASM + canvas fallback)
+├── context/             # SolidJS context providers
+│   ├── platform.tsx     # Platform abstraction (desktop/mobile/web)
+│   ├── terminal.tsx     # PTY session management
+│   ├── layout.tsx       # Persistent layout state
+│   ├── global-sync/     # Server data synchronization
+│   └── ...
+├── pages/
+│   ├── home.tsx         # Project selector
+│   ├── layout.tsx       # Main layout with sidebar
+│   └── session.tsx      # Chat session view
+├── hooks/               # Reusable hooks
+├── i18n/                # 18+ language translations
+└── utils/               # Utilities
+```
+
+### Platform Support
+
+The app adapts to three platforms via `PlatformProvider`:
+- **Desktop** (`platform: "desktop"`) — Tauri desktop with native features
+- **Mobile** (`platform: "mobile"`) — Tauri Android/iOS with touch optimizations
+- **Web** (`platform: "web"`) — Browser-only mode
+
+Responsive behavior uses `@solid-primitives/media` breakpoints:
+- `< 768px` — Mobile layout (tab switcher, vertical panels)
+- `768px - 1280px` — Tablet layout
+- `> 1280px` — Desktop layout (sidebar, horizontal panels)
+
+### Terminal
+
+The terminal component uses `ghostty-web` with a canvas renderer fallback:
+- Desktop: Full Ghostty WASM rendering
+- Mobile: If WASM fails to load, falls back to built-in canvas renderer
+- Connects to backend PTY via WebSocket (`/pty/{id}/connect`)
+- Mobile PTY uses a custom musl-compiled `librust_pty.so` (forkpty wrapper) loaded by bun-pty via `BUN_PTY_LIB`

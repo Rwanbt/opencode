@@ -33,3 +33,8 @@ target_link_libraries(llama_jni
     android
     log
 )
+
+# ─── PTY library for bun-pty (interactive terminal) ──────────────────
+# Provides forkpty-based PTY support loaded by bun-pty via BUN_PTY_LIB
+add_library(rust_pty SHARED rust_pty.c)
+target_link_libraries(rust_pty android log)
