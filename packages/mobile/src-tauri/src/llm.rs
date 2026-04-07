@@ -172,12 +172,15 @@ pub async fn start_llm_server(
         ));
     }
 
-    // Kill any existing LLM server
+    // Kill any existing LLM server and wait for it to release the port
     if let Ok(mut guard) = LLM_PROCESS.lock() {
         if let Some(mut child) = guard.take() {
             let _ = child.kill();
+            let _ = child.wait(); // wait for process to fully exit and release the port
         }
     }
+    // Also try to kill any orphaned llama-server by port
+    std::thread::sleep(Duration::from_millis(500));
 
     // llama-server is statically linked — execute directly, no musl linker needed
     let cmd_path = llama_server.clone();

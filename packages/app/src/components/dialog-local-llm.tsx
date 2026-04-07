@@ -146,7 +146,7 @@ export function DialogLocalLLM() {
         />
       }
     >
-      <div class="flex flex-col gap-4 px-4 pb-6">
+      <div class="flex flex-col gap-4 px-4 pb-6 overflow-y-auto max-h-[70vh]" style={{ "-webkit-overflow-scrolling": "touch" }}>
         {/* Header */}
         <div class="flex items-center gap-3">
           <ProviderIcon id="local-llm" class="size-6 shrink-0" />
