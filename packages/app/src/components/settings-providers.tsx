@@ -194,7 +194,9 @@ export const SettingsProviders: Component = () => {
                 variant="secondary"
                 icon="download"
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent("open-model-manager"))
+                  void import("./dialog-local-llm").then((x) => {
+                    dialog.show(() => <x.DialogLocalLLM />)
+                  })
                 }}
               >
                 Manage
