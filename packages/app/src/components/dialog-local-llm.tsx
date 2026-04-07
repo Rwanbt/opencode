@@ -5,6 +5,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
+import { useGlobalSync } from "@/context/global-sync"
 
 // Use Tauri's global API if available (injected by withGlobalTauri: true in tauri.conf.json)
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
@@ -36,6 +37,7 @@ function formatBytes(bytes: number): string {
 
 export function DialogLocalLLM() {
   const dialog = useDialog()
+  const globalSync = useGlobalSync()
   const [models, { refetch }] = createResource((): Promise<ModelInfo[]> => invokeTauri("list_models").catch(() => []))
   const [activeModel, setActiveModel] = createSignal<string | null>(null)
   const [healthy, setHealthy] = createSignal(false)
@@ -80,9 +82,29 @@ export function DialogLocalLLM() {
     setError("")
     setLoading(filename)
     try {
-      await invokeTauri("load_llm_model", { filename, nCtx: null, nThreads: null })
+      await invokeTauri("load_llm_model", { filename })
       setActiveModel(filename)
       setHealthy(true)
+      // Register local-llm as a provider so it appears in model selector
+      const modelName = filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
+      try {
+        await globalSync.updateConfig({
+          provider: {
+            "local-llm": {
+              name: "Local AI",
+              options: {
+                baseURL: "http://127.0.0.1:14097/v1",
+                apiKey: "local",
+              },
+              models: {
+                [modelName]: { name: modelName },
+              },
+            },
+          },
+        })
+      } catch (e) {
+        console.warn("[LLM] Failed to register provider:", e)
+      }
     } catch (e) {
       setError(`Load failed: ${e instanceof Error ? e.message : e}`)
     }
@@ -95,6 +117,12 @@ export function DialogLocalLLM() {
       await invokeTauri("unload_llm_model")
       setActiveModel(null)
       setHealthy(false)
+      // Remove local-llm provider
+      try {
+        await globalSync.updateConfig({
+          disabled_providers: [...([] as string[]), "local-llm"],
+        })
+      } catch {}
     } catch (e) {
       setError(`Stop failed: ${e}`)
     }
