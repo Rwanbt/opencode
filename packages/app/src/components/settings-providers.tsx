@@ -177,7 +177,31 @@ export const SettingsProviders: Component = () => {
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.providers.section.popular")}</h3>
           <SettingsList>
-            <For each={popular()}>
+            {/* Local AI — always shown first, opens model manager */}
+            <div class="flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base">
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-x-3">
+                  <ProviderIcon id="local-llm" class="size-5 shrink-0 icon-strong-base" />
+                  <span class="text-14-medium text-text-strong">Local AI</span>
+                  <Tag>On-device</Tag>
+                </div>
+                <span class="text-12-regular text-text-weak pl-8">
+                  {language.t("dialog.provider.localLlm.note")}
+                </span>
+              </div>
+              <Button
+                size="large"
+                variant="secondary"
+                icon="download"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("open-model-manager"))
+                }}
+              >
+                Manage
+              </Button>
+            </div>
+
+            <For each={popular().filter(p => p.id !== "local-llm")}>
               {(item) => (
                 <div class="flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
                   <div class="flex flex-col min-w-0">
