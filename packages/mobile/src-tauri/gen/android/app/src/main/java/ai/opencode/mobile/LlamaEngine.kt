@@ -239,10 +239,11 @@ object LlamaEngine {
             val nativeLibDir = libDir
 
             // Choose server binary:
-            // - Vulkan GPU: for large models on Vulkan 1.2+ SoCs
-            // - CPU: statically-linked with NEON+dotprod (fast on all ARM64)
-            val serverName = if (useVulkan) "libllama_server_vulkan.so" else "libllama_server.so"
-            Log.i(TAG, "Selecting server: $serverName (vulkan=$useVulkan)")
+            // Modern SoCs (Adreno 730+): OpenCL with Qualcomm-optimized kernels
+            // Old SoCs: CPU-only (statically-linked with NEON+dotprod)
+            val isModernSoC = detectVulkanCapable()  // Adreno 730+ = good OpenCL support
+            val serverName = if (isModernSoC) "libllama_server_opencl.so" else "libllama_server.so"
+            Log.i(TAG, "Selecting server: $serverName (modernSoC=$isModernSoC)")
             val serverBin = java.io.File(nativeLibDir, serverName)
             if (!serverBin.exists()) {
                 // Fallback to CPU-only if Vulkan binary not found
@@ -259,7 +260,8 @@ object LlamaEngine {
             homeDir?.mkdirs()
 
             // Build command with backend-specific args
-            val ngl = if (useVulkan) "99" else "0"
+            // GPU offload: OpenCL on modern SoCs, none on old SoCs
+            val ngl = if (isModernSoC) "99" else "0"
             // Detect optimal thread count based on CPU architecture
             // SD8Gen3: 1x X4 + 3x A720 + 4x A520 → use 4 big cores (X4 + A720)
             // SD865: 4x A77 + 4x A55 → use 4 big cores
