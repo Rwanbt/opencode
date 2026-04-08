@@ -35,6 +35,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  tools?: { [key: string]: boolean }
 }
 
 type FollowupSendInput = {
@@ -157,6 +158,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      tools: input.draft.tools,
     })
     return true
   } catch (err) {
@@ -180,6 +182,7 @@ type PromptSubmitInput = {
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
+  webSearch?: Accessor<boolean>
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
@@ -392,6 +395,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()
+    const tools = input.webSearch?.() ? { websearch: true } : undefined
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
@@ -400,6 +404,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      tools,
     }
 
     const clearInput = () => {

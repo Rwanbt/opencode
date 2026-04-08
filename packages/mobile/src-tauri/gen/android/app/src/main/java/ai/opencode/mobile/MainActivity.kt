@@ -33,6 +33,7 @@ class MainActivity : TauriActivity() {
 
     // Load llama.cpp libraries and start command loop
     try {
+      LlamaEngine.nativeLibDir = nativeLibDir
       LlamaEngine.init()
       android.util.Log.i("OpenCode", "LlamaEngine initialized")
       val llmDir = File(baseDir, "runtime/llm_ipc")
@@ -45,14 +46,42 @@ class MainActivity : TauriActivity() {
       android.util.Log.w("OpenCode", "LlamaEngine init failed: ${e.message}")
     }
 
-    // Extract non-executable assets (opencode-cli.js, node_modules) on first launch
-    val marker = File(runtimeDir, "opencode-cli.js")
-    if (!marker.exists()) {
+    // Auto-load last used local model if available
+    Thread {
+      try {
+        val modelsDir = File(runtimeDir, "models")
+        if (modelsDir.exists()) {
+          val ggufFiles = modelsDir.listFiles()?.filter { it.name.endsWith(".gguf") } ?: emptyList()
+          if (ggufFiles.isNotEmpty()) {
+            // Load the first (or most recently modified) model
+            val model = ggufFiles.maxByOrNull { it.lastModified() }
+            if (model != null) {
+              android.util.Log.i("OpenCode", "Auto-loading model (JNI/GPU): ${model.name}")
+              val ok = LlamaEngine.load(model.absolutePath)
+              android.util.Log.i("OpenCode", "Model loaded: $ok")
+            }
+          }
+        }
+      } catch (e: Exception) {
+        android.util.Log.w("OpenCode", "Auto-load model failed: ${e.message}")
+      }
+    }.start()
+
+    // Extract non-executable assets on first launch or after APK update.
+    // Compare lastUpdateTime to detect APK upgrades and re-extract the CLI bundle.
+    val versionFile = File(runtimeDir, ".apk_version")
+    val currentVersion = try {
+      packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
+    } catch (_: Exception) { "unknown" }
+    val installedVersion = if (versionFile.exists()) versionFile.readText().trim() else ""
+    val needsExtract = !File(runtimeDir, "opencode-cli.js").exists() || installedVersion != currentVersion
+    if (needsExtract) {
       Thread {
         android.util.Log.i("OpenCode", "Extracting runtime assets to ${runtimeDir.absolutePath}")
         val result = RuntimeExtractor.extractAll(this, runtimeDir.absolutePath)
         if (result.isEmpty()) {
-          android.util.Log.i("OpenCode", "Runtime extraction complete")
+          versionFile.writeText(currentVersion)
+          android.util.Log.i("OpenCode", "Runtime extraction complete (version=$currentVersion)")
         } else {
           android.util.Log.e("OpenCode", "Runtime extraction failed: $result")
         }

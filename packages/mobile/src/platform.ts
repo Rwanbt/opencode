@@ -211,12 +211,22 @@ export async function createPlatform(): Promise<Platform> {
       }
 
       const port = info.port
-      const password = crypto.randomUUID()
 
       if (info.server_running) {
         const savedPw = await settings.getItem("localServerPassword")
-        return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw ?? "" }
+        if (savedPw) {
+          console.log("[OpenCode] server already running, reusing saved password")
+          return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw }
+        }
+        // Server running but no saved password — stop and restart with a fresh one
+        console.log("[OpenCode] server running but no saved password, restarting...")
+        try { await stopLocal(port) } catch {}
       }
+
+      const password = crypto.randomUUID()
+      // Save password BEFORE starting server to avoid race conditions
+      await settings.setItem("localServerPassword", password)
+      await settings.setItem("localServerPort", String(port))
 
       console.log("[OpenCode] starting embedded server on port", port)
       try {
@@ -225,9 +235,6 @@ export async function createPlatform(): Promise<Platform> {
         console.error("[OpenCode] startEmbeddedServer failed:", e)
         throw new Error(`Server start failed: ${e}`)
       }
-
-      await settings.setItem("localServerPassword", password)
-      await settings.setItem("localServerPort", String(port))
 
       console.log("[OpenCode] waiting for health check...")
       for (let i = 0; i < 30; i++) {

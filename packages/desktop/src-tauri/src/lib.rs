@@ -1,5 +1,6 @@
 mod cli;
 mod constants;
+mod llm;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -387,7 +388,13 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            llm::list_models,
+            llm::download_model,
+            llm::delete_model,
+            llm::check_llm_health,
+            llm::load_llm_model,
+            llm::unload_llm_model
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

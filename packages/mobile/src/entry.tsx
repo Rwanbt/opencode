@@ -13,6 +13,7 @@ import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
 import { ModelManager } from "./components/model-manager"
 import { createPlatform } from "./platform"
+import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 
 const root = document.getElementById("root")
 
@@ -216,6 +217,16 @@ function FullApp(props: {
     const handler = () => props.onOpenModelManager?.()
     window.addEventListener("open-model-manager", handler)
     onCleanup(() => window.removeEventListener("open-model-manager", handler))
+  })
+
+  // Auto-start local LLM when model is selected
+  onMount(() => {
+    const handler = (e: CustomEvent) => {
+      const { providerID, modelID } = e.detail ?? {}
+      ensureLocalLLMLoaded(providerID, modelID)
+    }
+    window.addEventListener("model-selected" as any, handler as any)
+    onCleanup(() => window.removeEventListener("model-selected" as any, handler as any))
   })
   const connection = (): ServerConnection.Any => {
     if (props.serverInfo.variant === "embedded") {

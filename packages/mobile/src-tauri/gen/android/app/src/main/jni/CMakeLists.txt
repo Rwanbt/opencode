@@ -14,6 +14,12 @@ set_target_properties(ggml-base PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libg
 add_library(ggml-cpu SHARED IMPORTED)
 set_target_properties(ggml-cpu PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-cpu.so)
 
+add_library(ggml-opencl SHARED IMPORTED)
+set_target_properties(ggml-opencl PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-opencl.so)
+
+add_library(ggml-vulkan SHARED IMPORTED)
+set_target_properties(ggml-vulkan PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-vulkan.so)
+
 add_library(llama SHARED IMPORTED)
 set_target_properties(llama PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libllama.so)
 
@@ -30,6 +36,8 @@ target_link_libraries(llama_jni
     ggml
     ggml-base
     ggml-cpu
+    ggml-opencl
+    ggml-vulkan
     android
     log
 )
@@ -38,3 +46,8 @@ target_link_libraries(llama_jni
 # Provides forkpty-based PTY support loaded by bun-pty via BUN_PTY_LIB
 add_library(rust_pty SHARED rust_pty.c)
 target_link_libraries(rust_pty android log)
+
+# NOTE: resolv_override.c is NOT built here. NDK compiles against Bionic,
+# but bun uses musl — a Bionic .so cannot be LD_PRELOADed into a musl process.
+# DNS is handled via dns.setServers() in mobile-entry.ts.
+# TLS certs via SSL_CERT_FILE env var (concatenated Android CA certs).
