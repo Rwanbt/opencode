@@ -238,8 +238,11 @@ object LlamaEngine {
             }
             val nativeLibDir = libDir
 
-            // Choose server binary: Vulkan for modern SoCs, CPU-only for older
+            // Choose server binary:
+            // - Vulkan GPU: for large models on Vulkan 1.2+ SoCs
+            // - CPU: statically-linked with NEON+dotprod (fast on all ARM64)
             val serverName = if (useVulkan) "libllama_server_vulkan.so" else "libllama_server.so"
+            Log.i(TAG, "Selecting server: $serverName (vulkan=$useVulkan)")
             val serverBin = java.io.File(nativeLibDir, serverName)
             if (!serverBin.exists()) {
                 // Fallback to CPU-only if Vulkan binary not found
@@ -262,7 +265,10 @@ object LlamaEngine {
             // SD865: 4x A77 + 4x A55 → use 4 big cores
             // General: use nproc/2 to avoid LITTLE cores that slow things down
             val nCores = Runtime.getRuntime().availableProcessors()
-            val nThreads = (nCores / 2).coerceIn(2, 6)  // Big cores only
+            // Modern SoCs (8+ cores): use big+prime cores (avoid LITTLE)
+            // SD8Gen3: 1x X4(prime) + 3x A720(big) + 4x A520(LITTLE) → 4 threads optimal
+            // SD865: 1x A77(prime) + 3x A77(big) + 4x A55(LITTLE) → 4 threads optimal
+            val nThreads = if (nCores >= 8) 4 else (nCores / 2).coerceIn(2, 4)
             Log.i(TAG, "CPU cores: $nCores, using threads: $nThreads")
 
             val args = mutableListOf(
