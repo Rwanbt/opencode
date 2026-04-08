@@ -71,7 +71,7 @@ export namespace ProviderTransform {
             const updated = [...msg.content]
             for (let j = updated.length - 1; j >= 0; j--) {
               if (updated[j] && updated[j].type === "text") {
-                updated[j] = { ...updated[j], text: updated[j].text + " /no_think" }
+                updated[j] = { ...updated[j], text: (updated[j] as any).text + " /no_think" }
                 msgs[i] = { ...msg, content: updated }
                 break
               }

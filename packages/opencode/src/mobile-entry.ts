@@ -101,7 +101,7 @@ if (process.env.HTTPS_PROXY) {
 
   process.stderr.write(`[PROXY] Patching fetch() to use proxy ${proxyHost}:${proxyPort}\n`)
 
-  globalThis.fetch = async (input: any, init?: any): Promise<Response> => {
+  ;(globalThis as any).fetch = async (input: any, init?: any): Promise<Response> => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
 
     // Don't proxy local connections
