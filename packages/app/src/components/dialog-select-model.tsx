@@ -69,6 +69,12 @@ const ModelList: Component<{
         model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
         })
+        // Emit event for mobile auto-start (local LLM loading)
+        if (x) {
+          window.dispatchEvent(new CustomEvent("model-selected", {
+            detail: { providerID: x.provider.id, modelID: x.id },
+          }))
+        }
         props.onSelect()
       }}
     >

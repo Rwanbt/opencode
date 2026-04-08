@@ -539,6 +539,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [composing, setComposing] = createSignal(false)
+  const [webSearch, setWebSearch] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
@@ -1120,6 +1121,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
+    webSearch,
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
@@ -1428,6 +1430,55 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <Show when={variants().length > 1}>
+                <Tooltip
+                  placement="top"
+                  value={
+                    local.model.variant.current()
+                      ? `Thinking: ${local.model.variant.current()}`
+                      : "Enable thinking"
+                  }
+                >
+                  <IconButton
+                    data-action="prompt-thinking-toggle"
+                    icon="brain"
+                    variant={local.model.variant.current() ? "primary" : "ghost"}
+                    class="size-8"
+                    style={buttons()}
+                    aria-label="Toggle thinking"
+                    onClick={(e: MouseEvent) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const list = local.model.variant.list()
+                      if (local.model.variant.current()) {
+                        // Disable thinking
+                        local.model.variant.set(undefined)
+                      } else {
+                        // Enable thinking with first available variant
+                        local.model.variant.set(list[0])
+                      }
+                    }}
+                  />
+                </Tooltip>
+              </Show>
+              <Tooltip
+                placement="top"
+                value={webSearch() ? "Disable web search" : "Enable web search"}
+              >
+                <IconButton
+                  data-action="prompt-web-search-toggle"
+                  icon="globe"
+                  variant={webSearch() ? "primary" : "ghost"}
+                  class="size-8"
+                  style={buttons()}
+                  aria-label="Toggle web search"
+                  onClick={(e: MouseEvent) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setWebSearch(!webSearch())
+                  }}
+                />
+              </Tooltip>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
@@ -1601,30 +1652,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       variant="ghost"
                     />
                   </div>
-                  <div data-component="prompt-variant-control">
-                    <TooltipKeybind
-                      placement="top"
-                      gutter={4}
-                      title={language.t("command.model.variant.cycle")}
-                      keybind={command.keybind("model.variant.cycle")}
-                    >
-                      <Select
-                        size="normal"
-                        options={variants()}
-                        current={local.model.variant.current() ?? "default"}
-                        label={(x) => (x === "default" ? language.t("common.default") : x)}
-                        onSelect={(value) => {
-                          local.model.variant.set(value === "default" ? undefined : value)
-                          restoreFocus()
-                        }}
-                        class="capitalize max-w-[160px] text-text-base"
-                        valueClass="truncate text-13-regular text-text-base"
-                        triggerStyle={control()}
-                        triggerProps={{ "data-action": "prompt-model-variant" }}
-                        variant="ghost"
-                      />
-                    </TooltipKeybind>
-                  </div>
+                  <Show when={variants().length > 1}>
+                    <div data-component="prompt-variant-control">
+                      <TooltipKeybind
+                        placement="top"
+                        gutter={4}
+                        title={language.t("command.model.variant.cycle")}
+                        keybind={command.keybind("model.variant.cycle")}
+                      >
+                        <Select
+                          size="normal"
+                          options={variants()}
+                          current={local.model.variant.current() ?? "default"}
+                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          onSelect={(value) => {
+                            local.model.variant.set(value === "default" ? undefined : value)
+                            restoreFocus()
+                          }}
+                          class="capitalize max-w-[160px] text-text-base"
+                          valueClass="truncate text-13-regular text-text-base"
+                          triggerStyle={control()}
+                          triggerProps={{ "data-action": "prompt-model-variant" }}
+                          variant="ghost"
+                        />
+                      </TooltipKeybind>
+                    </div>
+                  </Show>
                 </Show>
               </div>
             </div>

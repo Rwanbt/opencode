@@ -137,6 +137,12 @@ pub async fn start_embedded_server(
     let home_dir = dir.join("home");
     let cli_path = dir.join("opencode-cli.js");
 
+    // Start local CONNECT proxy (Rust/tokio uses Android's native DNS)
+    let proxy_port = crate::proxy::start_proxy()
+        .await
+        .map_err(|e| format!("Proxy start failed: {}", e))?;
+    let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
+
     // Get nativeLibraryDir where Android installs JNI libs (with exec permission)
     let nlib_dir = native_lib_dir(&dir)
         .ok_or_else(|| "nativeLibraryDir not found. Restart the app.".to_string())?;
@@ -234,6 +240,38 @@ pub async fn start_embedded_server(
         }
     }
 
+    // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
+    let resolv_path = dir.join("resolv.conf");
+    let _ = fs::write(&resolv_path, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n");
+
+    // Concatenate Android CA certificates into a single PEM file for TLS.
+    // musl-linked Bun/BoringSSL can't find Android's certs at /system/etc/security/cacerts/.
+    let ca_bundle_path = dir.join("ca-certificates.crt");
+    if !ca_bundle_path.exists() {
+        let mut bundle = String::new();
+        let cert_dirs = ["/system/etc/security/cacerts", "/system/etc/security/cacerts_google"];
+        for cert_dir in &cert_dirs {
+            if let Ok(entries) = fs::read_dir(cert_dir) {
+                for entry in entries.flatten() {
+                    if let Ok(content) = fs::read_to_string(entry.path()) {
+                        if content.contains("BEGIN CERTIFICATE") {
+                            bundle.push_str(&content);
+                            if !content.ends_with('\n') {
+                                bundle.push('\n');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !bundle.is_empty() {
+            let _ = fs::write(&ca_bundle_path, &bundle);
+            eprintln!("[OpenCode] Created CA bundle with {} bytes", bundle.len());
+        } else {
+            eprintln!("[OpenCode] WARNING: No CA certificates found on device");
+        }
+    }
+
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
 
@@ -243,21 +281,54 @@ pub async fn start_embedded_server(
 
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
     // linker shipped alongside (also in nativeLibraryDir for exec permission).
+    // Write env vars to a file — musl linker doesn't pass Command::env() to bun.
+    // mobile-entry.ts reads this file and applies env vars at startup.
+    let env_file = dir.join(".env_vars");
+    let env_content = format!(
+        "HOME={home}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        home = home_dir.display(),
+        cert = ca_bundle_path.display(),
+        resolv = resolv_path.display(),
+        shell = bin_link_dir.join("bash").display(),
+        pty = nlib_dir.join("librust_pty.so").display(),
+        pw = password,
+        xdg_data = home_dir.join(".local/share").display(),
+        xdg_state = home_dir.join(".local/state").display(),
+        xdg_cache = home_dir.join(".cache").display(),
+        xdg_config = home_dir.join(".config").display(),
+        path_val = path,
+        lib_path_val = lib_path,
+        proxy = proxy_url,
+    );
+    // Also add NO_PROXY for local connections
+    let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
+    let _ = fs::write(&env_file, &env_content);
+
+    // Build command: use --preload to load resolv_override.so via CLI arg
+    // (bypasses env var transmission issue with musl linker)
+    let resolv_override = nlib_dir.join("libresolv_override.so");
+
     let (cmd_path, cmd_args) = if ld_musl.exists() {
-        (
-            ld_musl,
-            vec![
-                "--library-path".to_string(),
-                lib_path.clone(),
-                bun_path.to_string_lossy().to_string(),
-                cli_path.to_string_lossy().to_string(),
-                "serve".to_string(),
-                "--hostname".to_string(),
-                "127.0.0.1".to_string(),
-                "--port".to_string(),
-                port.to_string(),
-            ],
-        )
+        let mut args = vec![
+            "--library-path".to_string(),
+            lib_path.clone(),
+        ];
+        // --preload passes LD_PRELOAD via CLI instead of env var
+        if resolv_override.exists() {
+            args.push("--preload".to_string());
+            args.push(resolv_override.to_string_lossy().to_string());
+        }
+        args.extend([
+            bun_path.to_string_lossy().to_string(),
+            cli_path.to_string_lossy().to_string(),
+            "serve".to_string(),
+            "--hostname".to_string(),
+            "127.0.0.1".to_string(),
+            "--port".to_string(),
+            port.to_string(),
+            "--print-logs".to_string(),
+        ]);
+        (ld_musl, args)
     } else {
         (
             bun_path.clone(),
@@ -268,20 +339,22 @@ pub async fn start_embedded_server(
                 "127.0.0.1".to_string(),
                 "--port".to_string(),
                 port.to_string(),
+                "--print-logs".to_string(),
             ],
         )
     };
 
+    let resolv_override_path = nlib_dir.join("libresolv_override.so");
     eprintln!("[OpenCode] Spawning: {} {:?}", cmd_path.display(), cmd_args);
     eprintln!("[OpenCode] LD_LIBRARY_PATH={}", lib_path);
+    eprintln!("[OpenCode] LD_PRELOAD={} (exists={})", resolv_override_path.display(), resolv_override_path.exists());
+    eprintln!("[OpenCode] SSL_CERT_FILE={} (exists={})", ca_bundle_path.display(), ca_bundle_path.exists());
 
-    // Use log files instead of piped stdout/stderr to avoid blocking on full pipe buffer
+    // Log files for post-mortem analysis + stderr piped through a thread to logcat
     let log_dir = dir.join("logs");
     let _ = fs::create_dir_all(&log_dir);
     let stdout_file = fs::File::create(log_dir.join("server_stdout.log"))
         .map_err(|e| format!("Create stdout log: {}", e))?;
-    let stderr_file = fs::File::create(log_dir.join("server_stderr.log"))
-        .map_err(|e| format!("Create stderr log: {}", e))?;
 
     let mut child = Command::new(&cmd_path)
         .args(&cmd_args)
@@ -294,14 +367,36 @@ pub async fn start_embedded_server(
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
         .env("SHELL", bin_link_dir.join("bash").to_str().unwrap_or("/bin/sh"))
+        .env("SSL_CERT_FILE", ca_bundle_path.to_str().unwrap_or(""))
+        .env("NODE_EXTRA_CA_CERTS", ca_bundle_path.to_str().unwrap_or(""))
+        .env("RESOLV_CONF", resolv_path.to_str().unwrap_or(""))
+        .env("LD_PRELOAD", nlib_dir.join("libresolv_override.so").to_str().unwrap_or(""))
         .env("XDG_DATA_HOME", home_dir.join(".local/share").to_str().unwrap_or(""))
         .env("XDG_STATE_HOME", home_dir.join(".local/state").to_str().unwrap_or(""))
         .env("XDG_CACHE_HOME", home_dir.join(".cache").to_str().unwrap_or(""))
         .env("XDG_CONFIG_HOME", home_dir.join(".config").to_str().unwrap_or(""))
         .stdout(stdout_file)
-        .stderr(stderr_file)
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn server: {}", e))?;
+
+    // Stream stderr to logcat + file in a background thread
+    if let Some(stderr_pipe) = child.stderr.take() {
+        let log_file_path = log_dir.join("server_stderr.log");
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader, Write};
+            let reader = BufReader::new(stderr_pipe);
+            let mut file = fs::File::create(&log_file_path).ok();
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    eprintln!("[bun] {}", line);
+                    if let Some(ref mut f) = file {
+                        let _ = writeln!(f, "{}", line);
+                    }
+                }
+            }
+        });
+    }
 
     eprintln!("[OpenCode] Server spawned with pid {:?}", child.id());
 
@@ -309,11 +404,9 @@ pub async fn start_embedded_server(
     std::thread::sleep(Duration::from_millis(500));
     match child.try_wait() {
         Ok(Some(status)) => {
+            std::thread::sleep(Duration::from_millis(500)); // let stderr thread flush
             let stderr = fs::read_to_string(log_dir.join("server_stderr.log")).unwrap_or_default();
-            let stdout = fs::read_to_string(log_dir.join("server_stdout.log")).unwrap_or_default();
             eprintln!("[OpenCode] Server exited immediately with status: {}", status);
-            eprintln!("[OpenCode] stderr: {}", &stderr[..stderr.len().min(2000)]);
-            eprintln!("[OpenCode] stdout: {}", &stdout[..stdout.len().min(500)]);
             return Err(format!("Server crashed ({}): {}", status, &stderr[..stderr.len().min(500)]));
         }
         Ok(None) => {
@@ -335,6 +428,22 @@ pub async fn start_embedded_server(
 #[tauri::command]
 pub async fn check_local_health(port: u32, password: Option<String>) -> bool {
     check_health(port, password.as_deref()).await
+}
+
+/// Read the last N lines of the server stderr log (for debugging).
+#[tauri::command]
+pub async fn read_server_logs(app: AppHandle, lines: Option<usize>) -> String {
+    let dir = runtime_dir(&app);
+    let log_path = dir.join("logs").join("server_stderr.log");
+    match fs::read_to_string(&log_path) {
+        Ok(content) => {
+            let n = lines.unwrap_or(100);
+            let all_lines: Vec<&str> = content.lines().collect();
+            let start = if all_lines.len() > n { all_lines.len() - n } else { 0 };
+            all_lines[start..].join("\n")
+        }
+        Err(e) => format!("Error reading log: {}", e),
+    }
 }
 
 /// Stop the embedded server. Tries graceful shutdown first, then kills the process.

@@ -51,6 +51,37 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    // Local LLM: strip reasoning parts from history and append /no_think to suppress
+    // Qwen/DeepSeek thinking tags that llama.cpp can't disable via API
+    if (model.providerID === "local-llm" && !model.capabilities.reasoning) {
+      msgs = msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          return { ...msg, content: msg.content.filter((part: any) => part.type !== "reasoning") }
+        }
+        return msg
+      })
+      // Add /no_think suffix to the last user message
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const msg = msgs[i]
+        if (msg.role === "user") {
+          if (typeof msg.content === "string") {
+            msgs[i] = { ...msg, content: msg.content + " /no_think" }
+          } else if (Array.isArray(msg.content)) {
+            // Find the last text part (not necessarily the last element)
+            const updated = [...msg.content]
+            for (let j = updated.length - 1; j >= 0; j--) {
+              if (updated[j] && updated[j].type === "text") {
+                updated[j] = { ...updated[j], text: updated[j].text + " /no_think" }
+                msgs[i] = { ...msg, content: updated }
+                break
+              }
+            }
+          }
+          break
+        }
+      }
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
@@ -161,8 +192,8 @@ export namespace ProviderTransform {
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
+          // Include reasoning_content | reasoning_details directly on the message for reasoning-capable models only
+          if (reasoningText && model.capabilities.reasoning) {
             return {
               ...msg,
               content: filteredContent,
@@ -757,6 +788,11 @@ export namespace ProviderTransform {
       input.model.api.npm === "@ai-sdk/github-copilot"
     ) {
       result["store"] = false
+    }
+
+    // Disable thinking for local LLM models (llama.cpp Qwen etc. generate <think> tags otherwise)
+    if (input.model.providerID === "local-llm" && !input.model.capabilities.reasoning) {
+      result["chat_template_args"] = { enable_thinking: false }
     }
 
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {

@@ -37,11 +37,12 @@ NPROC="${NPROC:-$(nproc 2>/dev/null || echo 4)}"
 detect_ndk() {
   # Check common NDK locations
   local candidates=(
-    "$ANDROID_NDK"
-    "$ANDROID_NDK_HOME"
-    "$ANDROID_NDK_ROOT"
+    "${ANDROID_NDK:-}"
+    "${ANDROID_NDK_HOME:-}"
+    "${ANDROID_NDK_ROOT:-}"
     "/usr/local/lib/android/sdk/ndk/27.0.12077973"
     "$HOME/Android/Sdk/ndk/27.0.12077973"
+    "$HOME/android-ndk"
     "/opt/android-ndk"
   )
   for dir in "${candidates[@]}"; do
@@ -109,6 +110,9 @@ build_ndk() {
     -DCMAKE_CXX_FLAGS="-march=armv8.2a+dotprod+fp16" \
     -DGGML_OPENMP=OFF \
     -DGGML_LLAMAFILE=OFF \
+    -DGGML_VULKAN=ON \
+    -DVulkan_INCLUDE_DIR=/usr/include \
+    -DVulkan_LIBRARY=$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/29/libvulkan.so \
     -DLLAMA_BUILD_TESTS=OFF \
     -DLLAMA_BUILD_EXAMPLES=ON \
     -DLLAMA_BUILD_SERVER=ON \
