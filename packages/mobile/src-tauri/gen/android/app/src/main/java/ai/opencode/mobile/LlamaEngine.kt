@@ -180,33 +180,23 @@ object LlamaEngine {
 
     private var serverProcess: Process? = null
 
-    /** Load a GGUF model — uses external server on old SoCs (fast), JNI on modern (GPU). */
+    /** Load a GGUF model — always uses external server process for best performance.
+     *  Vulkan GPU is only beneficial for large models (>2B params).
+     *  For small models, CPU with NEON/dotprod is faster due to GPU transfer overhead. */
     fun load(modelPath: String, contextSize: Int = 4096, threads: Int = 4): Boolean {
         init()
         stopServer()
 
-        val useGpu = detectVulkanCapable()
+        // Check model size to decide GPU vs CPU
+        val modelFile = java.io.File(modelPath)
+        val modelSizeMB = modelFile.length() / (1024 * 1024)
+        val isLargeModel = modelSizeMB > 1500  // >1.5GB ~ >2B params quantized
+        val vulkanCapable = detectVulkanCapable()
+        val useVulkan = vulkanCapable && isLargeModel
 
-        if (!useGpu) {
-            // Old SoC: use external server process (statically-linked NEON/dotprod = fast)
-            Log.i(TAG, "Old SoC → using external llama-server (CPU-optimized)")
-            startServer(modelPath, contextSize)
-            return true
-        }
-
-        // Modern SoC: use JNI with Vulkan GPU (in-process for full GPU access)
-        val gpuIdx = 0 // Vulkan
-        Log.i(TAG, "Modern SoC → using JNI with Vulkan GPU (mainGpu=$gpuIdx)")
-        val handle = loadModel(modelPath, contextSize, threads, gpuIdx)
-        val success = handle != 0L
-        Log.i(TAG, "loadModel($modelPath) JNI GPU = $success")
-
-        if (success) {
-            val name = java.io.File(modelPath).nameWithoutExtension
-                .replace(Regex("[-_]Q\\d.*$", RegexOption.IGNORE_CASE), "")
-            LlamaHttpServer.start(port = 14097, model = name)
-        }
-        return success
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), vulkan=$vulkanCapable, useGPU=$useVulkan")
+        startServer(modelPath, contextSize, useVulkan)
+        return true
     }
 
     /** Start only the llama-server HTTP process (Vulkan GPU). Skip JNI model loading. */
@@ -224,7 +214,7 @@ object LlamaEngine {
         Log.i(TAG, "Model unloaded")
     }
 
-    private fun startServer(modelPath: String, ctxSize: Int) {
+    private fun startServer(modelPath: String, ctxSize: Int, useVulkan: Boolean = false) {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -248,34 +238,55 @@ object LlamaEngine {
             }
             val nativeLibDir = libDir
 
-            val serverBin = java.io.File(nativeLibDir, "libllama_server.so")
+            // Choose server binary: Vulkan for modern SoCs, CPU-only for older
+            val serverName = if (useVulkan) "libllama_server_vulkan.so" else "libllama_server.so"
+            val serverBin = java.io.File(nativeLibDir, serverName)
             if (!serverBin.exists()) {
-                Log.w(TAG, "llama-server not found at ${serverBin.absolutePath}")
-                return
+                // Fallback to CPU-only if Vulkan binary not found
+                Log.w(TAG, "$serverName not found, falling back to libllama_server.so")
+                val fallback = java.io.File(nativeLibDir, "libllama_server.so")
+                if (!fallback.exists()) {
+                    Log.w(TAG, "No llama-server binary found")
+                    return
+                }
             }
+            val actualBin = if (serverBin.exists()) serverBin else java.io.File(nativeLibDir, "libllama_server.so")
 
             val homeDir = java.io.File(modelPath).parentFile?.parentFile?.let { java.io.File(it, "home") }
             homeDir?.mkdirs()
 
-            val pb = ProcessBuilder(
-                serverBin.absolutePath,
+            // Build command with backend-specific args
+            val ngl = if (useVulkan) "99" else "0"
+            // Detect optimal thread count based on CPU architecture
+            // SD8Gen3: 1x X4 + 3x A720 + 4x A520 → use 4 big cores (X4 + A720)
+            // SD865: 4x A77 + 4x A55 → use 4 big cores
+            // General: use nproc/2 to avoid LITTLE cores that slow things down
+            val nCores = Runtime.getRuntime().availableProcessors()
+            val nThreads = (nCores / 2).coerceIn(2, 6)  // Big cores only
+            Log.i(TAG, "CPU cores: $nCores, using threads: $nThreads")
+
+            val args = mutableListOf(
+                actualBin.absolutePath,
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "14097",
-                "-ngl", "0",              // CPU-only (GPU needs in-app process)
+                "-ngl", ngl,
                 "--ctx-size", ctxSize.toString(),
-                "--threads", "4",         // SD865: 4x Cortex-A77 big cores
-                "--threads-batch", "4",   // Parallel prompt processing
-                "--batch-size", "512",    // Larger batch = faster prompt eval
+                "--threads", nThreads.toString(),
+                "--threads-batch", nThreads.toString(),
+                "--batch-size", "512",
                 "--jinja"
             )
+            Log.i(TAG, "Starting server: ${actualBin.name} ngl=$ngl")
+
+            val pb = ProcessBuilder(args)
             pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
             pb.environment()["TMPDIR"] = homeDir?.absolutePath ?: "/tmp"
             pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:/vendor/lib64:/system/vendor/lib64"
             pb.redirectErrorStream(true)
 
             serverProcess = pb.start()
-            Log.i(TAG, "llama-server started on port 14097")
+            Log.i(TAG, "llama-server started on port 14097 (${if (useVulkan) "Vulkan GPU" else "CPU-only"})")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start llama-server: ${e.message}")
         }
