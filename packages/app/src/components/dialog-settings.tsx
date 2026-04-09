@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsAudio } from "./settings-audio"
+import { SettingsConfiguration } from "./settings-configuration"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
@@ -50,6 +51,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="configuration">
+                      <Icon name="console" />
+                      Configuration
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -74,6 +79,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
+        </Tabs.Content>
+        <Tabs.Content value="configuration" class="no-scrollbar">
+          <SettingsConfiguration />
         </Tabs.Content>
       </Tabs>
     </Dialog>
