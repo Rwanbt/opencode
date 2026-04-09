@@ -374,6 +374,28 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         _ => { /* auto: already configured with -fitt 512 */ }
     }
 
+    // Speculative decoding: use a small draft model for 2-3x speedup
+    let draft_model = std::env::var("OPENCODE_DRAFT_MODEL").ok();
+    if let Some(ref draft) = draft_model {
+        let draft_path = models_dir(&app).join(draft);
+        if draft_path.exists() {
+            // VRAM Guard: check if enough free VRAM for the draft model
+            if check_vram_free(1500) {
+                cmd.arg("--model-draft")
+                    .arg(draft_path.to_string_lossy().to_string())
+                    .arg("--draft")
+                    .arg("16")
+                    .arg("--draft-p-min")
+                    .arg("0.75")
+                    .arg("--gpu-layers-draft")
+                    .arg("99");
+                tracing::info!("[LLM] Speculative decoding enabled with {}", draft);
+            } else {
+                tracing::info!("[LLM] Speculative decoding skipped (insufficient VRAM)");
+            }
+        }
+    }
+
     cmd.kill_on_drop(true);
 
     #[cfg(windows)]
@@ -480,6 +502,27 @@ pub async fn check_llm_health(app: AppHandle, _port: Option<u16>) -> bool {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
     }
+}
+
+/// Check if enough free VRAM is available (for speculative decoding guard)
+fn check_vram_free(min_mib: u64) -> bool {
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
+        .output()
+    {
+        if output.status.success() {
+            let free: u64 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .lines()
+                .next()
+                .unwrap_or("0")
+                .parse()
+                .unwrap_or(0);
+            return free >= min_mib;
+        }
+    }
+    // Fallback: if can't detect, enable anyway (OOM rare with --fit on)
+    true
 }
 
 /// Get GPU VRAM info (total, used, free) in MiB

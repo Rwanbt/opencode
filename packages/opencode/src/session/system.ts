@@ -11,6 +11,7 @@ import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_LOCAL from "./prompt/local.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -30,10 +31,16 @@ export namespace SystemPrompt {
     if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
     if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
     if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
+    if (model.providerID === "local-llm") return [PROMPT_LOCAL]
     return [PROMPT_DEFAULT]
   }
 
   export async function environment(model: Provider.Model) {
+    // Minimal environment for local models (saves ~150 tokens)
+    if (model.providerID === "local-llm") {
+      return [`Working directory: ${Instance.directory}, Platform: ${process.platform}`]
+    }
+
     const project = Instance.project
     return [
       [
@@ -60,7 +67,9 @@ export namespace SystemPrompt {
     ]
   }
 
-  export async function skills(agent: Agent.Info) {
+  export async function skills(agent: Agent.Info, model?: Provider.Model) {
+    // Skip skills for local models — they can't use them and it wastes ~800 tokens
+    if (model?.providerID === "local-llm") return
     if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
     const list = await Skill.available(agent)

@@ -196,7 +196,23 @@ export namespace ToolRegistry {
       ) {
         const s = yield* InstanceState.get(state)
         const allTools = yield* all(s.custom)
+        // Local-llm: minimal tool set with skeleton descriptions (saves ~12K tokens)
+        const LOCAL_TOOLS = new Set(["bash", "read", "edit", "write", "glob", "grep", "question"])
+        const LOCAL_SKELETONS: Record<string, string> = {
+          bash: "Execute shell command. Args: {command: string}. Returns stdout.",
+          read: "Read file content. Args: {file_path: string, offset?: number, limit?: number}. Returns file text.",
+          edit: "Replace exact text in file. Args: {file_path: string, old_string: string, new_string: string}. old_string must match exactly.",
+          write: "Create or overwrite file. Args: {file_path: string, content: string}. Use edit for partial changes.",
+          glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
+          grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
+          question: "Ask user a question. Args: {question: string}. Use when you need clarification.",
+        }
+        const isLocal = model.providerID === ("local-llm" as ProviderID)
+
         const filtered = allTools.filter((tool) => {
+          // Local-llm: only essential tools
+          if (isLocal) return LOCAL_TOOLS.has(tool.id)
+
           if (tool.id === "codesearch" || tool.id === "websearch") {
             return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
@@ -214,8 +230,12 @@ export namespace ToolRegistry {
           Effect.fnUntraced(function* (tool: Tool.Info) {
             using _ = log.time(tool.id)
             const next = yield* Effect.promise(() => tool.init({ agent }))
+            // For local-llm: use skeleton descriptions instead of full prose
+            const description = isLocal
+              ? (LOCAL_SKELETONS[tool.id] ?? next.description.split("\n")[0].slice(0, 100))
+              : next.description
             const output = {
-              description: next.description,
+              description,
               parameters: next.parameters,
             }
             yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)

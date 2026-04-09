@@ -3,7 +3,6 @@ mod constants;
 mod llm;
 mod kokoro;
 mod parakeet;
-mod rag;
 mod speech;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
@@ -354,7 +353,6 @@ pub fn run() {
             handle.manage(logging::init(&log_dir));
             handle.manage(llm::LlmServerState::new());
             handle.manage(speech::SpeechState::new());
-            handle.manage(rag::RagState::new());
 
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
@@ -412,11 +410,6 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             llm::load_llm_model,
             llm::unload_llm_model,
             llm::get_vram_info,
-            rag::rag_add,
-            rag::rag_search,
-            rag::rag_load,
-            rag::rag_stats,
-            rag::rag_clear,
             speech::stt_download_model,
             speech::stt_load_model,
             speech::stt_transcribe,
