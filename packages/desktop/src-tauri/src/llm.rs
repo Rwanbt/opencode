@@ -9,19 +9,21 @@ use tokio::io::AsyncWriteExt;
 const LLM_PORT: u16 = 14097;
 
 
-const LLAMA_RELEASE_TAG: &str = "b8709";
+// Latest llama.cpp with Hadamard rotation for KV cache (PR #21038)
+const LLAMA_RELEASE_TAG: &str = "b8731";
 
-fn llama_asset_name() -> &'static str {
+fn llama_asset_name() -> String {
+    let tag = LLAMA_RELEASE_TAG;
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    { "llama-b8709-bin-win-vulkan-x64.zip" }
+    { format!("llama-{tag}-bin-win-vulkan-x64.zip") }
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    { "llama-b8709-bin-ubuntu-x64.zip" }
+    { format!("llama-{tag}-bin-ubuntu-x64.tar.gz") }
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    { "llama-b8709-bin-ubuntu-arm64.zip" }
+    { format!("llama-{tag}-bin-ubuntu-arm64.tar.gz") }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    { "llama-b8709-bin-macos-arm64.zip" }
+    { format!("llama-{tag}-bin-macos-arm64.tar.gz") }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    { "llama-b8709-bin-macos-x64.zip" }
+    { format!("llama-{tag}-bin-macos-x64.tar.gz") }
 }
 
 fn llama_server_exe() -> &'static str {
@@ -307,6 +309,11 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         LLM_PORT
     );
 
+    // Read KV cache type from user settings (via localStorage on frontend)
+    // Default to q4_0 which benefits from Hadamard rotation in b8731+
+    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE").unwrap_or_else(|_| "q4_0".to_string());
+    tracing::info!("[LLM] KV cache type: {}", kv_cache_type);
+
     // Detect physical CPU cores for thread count
     let n_threads = std::thread::available_parallelism()
         .map(|n| n.get() / 2) // use physical cores, not hyperthreads
@@ -333,11 +340,12 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         // Flash Attention for memory efficiency
         .arg("--flash-attn")
         .arg("on")
-        // KV cache quantization: q8_0 = good quality + 47% VRAM savings
+        // KV cache quantization — read from user settings or default to q8_0
+        // With llama.cpp b8731+, Hadamard rotation is auto-applied for better quality
         .arg("--cache-type-k")
-        .arg("q8_0")
+        .arg(&kv_cache_type)
         .arg("--cache-type-v")
-        .arg("q8_0")
+        .arg(&kv_cache_type)
         // Single slot to minimize VRAM usage
         .arg("-np")
         .arg("1")
@@ -450,5 +458,40 @@ pub async fn check_llm_health(app: AppHandle, _port: Option<u16>) -> bool {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
     }
+}
+
+/// Get GPU VRAM info (total, used, free) in MiB
+#[derive(serde::Serialize, specta::Type)]
+pub struct VramInfo {
+    pub total_mib: u64,
+    pub used_mib: u64,
+    pub free_mib: u64,
+    pub gpu_name: String,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_vram_info() -> Result<VramInfo, String> {
+    // Try nvidia-smi
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.total,memory.used,memory.free,name", "--format=csv,noheader,nounits"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(line) = stdout.lines().next() {
+                let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                if parts.len() >= 4 {
+                    return Ok(VramInfo {
+                        total_mib: parts[0].parse().unwrap_or(0),
+                        used_mib: parts[1].parse().unwrap_or(0),
+                        free_mib: parts[2].parse().unwrap_or(0),
+                        gpu_name: parts[3].to_string(),
+                    });
+                }
+            }
+        }
+    }
+    Err("GPU not detected (nvidia-smi not available)".to_string())
 }
 
