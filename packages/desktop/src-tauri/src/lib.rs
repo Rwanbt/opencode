@@ -409,6 +409,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             llm::check_llm_health,
             llm::load_llm_model,
             llm::unload_llm_model,
+            llm::get_vram_info,
             speech::stt_download_model,
             speech::stt_load_model,
             speech::stt_transcribe,

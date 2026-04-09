@@ -1,9 +1,17 @@
-import { Component, createSignal, JSX, Show } from "solid-js"
+import { Component, createSignal, createResource, JSX, Show } from "solid-js"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
+import { Button } from "@opencode-ai/ui/button"
 import { createStore } from "solid-js/store"
 
+function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
+  const tauri = (globalThis as any).__TAURI__
+  if (!tauri?.core?.invoke) return Promise.reject("Tauri not available")
+  return tauri.core.invoke(cmd, args)
+}
+
 export type ModelConfiguration = {
+  preset: "custom" | "fast" | "quality" | "eco" | "long-context"
   outputTokensMode: "auto" | "manual"
   outputTokensManual: number
   temperature: number
@@ -13,7 +21,15 @@ export type ModelConfiguration = {
   kvCacheType: "auto" | "q8_0" | "q4_0" | "f16"
 }
 
+const PRESETS: Record<string, Omit<ModelConfiguration, "preset">> = {
+  fast: { outputTokensMode: "auto", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 8192, kvCacheType: "q4_0" },
+  quality: { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q8_0" },
+  eco: { outputTokensMode: "manual", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 16384, kvCacheType: "q4_0" },
+  "long-context": { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q4_0" },
+}
+
 const DEFAULT_CONFIG: ModelConfiguration = {
+  preset: "quality",
   outputTokensMode: "auto",
   outputTokensManual: 8192,
   temperature: 0.7,
@@ -55,6 +71,41 @@ export const SettingsConfiguration: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
+        {/* GPU Info */}
+        <VramWidget />
+
+        {/* Presets */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">Preset</h3>
+          <SettingsList>
+            <SettingsRow title="Configuration profile" description="Pre-configured settings for common use cases">
+              <Select
+                size="normal"
+                options={["custom", "fast", "quality", "eco", "long-context"]}
+                current={config.preset}
+                label={(x) => {
+                  const m: Record<string, string> = {
+                    custom: "Custom",
+                    fast: "Fast (low VRAM, quick responses)",
+                    quality: "Quality (balanced, recommended)",
+                    eco: "Eco (minimal VRAM usage)",
+                    "long-context": "Long Context (128K+, q4_0 KV)",
+                  }
+                  return m[x] ?? x
+                }}
+                onSelect={(v) => {
+                  if (!v) return
+                  update("preset", v as any)
+                  if (v !== "custom" && PRESETS[v]) {
+                    const p = PRESETS[v]
+                    Object.entries(p).forEach(([k, val]) => update(k as any, val as any))
+                  }
+                }}
+              />
+            </SettingsRow>
+          </SettingsList>
+        </div>
+
         {/* Output Tokens */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">Output Tokens</h3>
@@ -192,6 +243,50 @@ export const SettingsConfiguration: Component = () => {
         </div>
       </div>
     </div>
+  )
+}
+
+function VramWidget() {
+  const [vram, setVram] = createSignal<{ total_mib: number; used_mib: number; free_mib: number; gpu_name: string } | null>(null)
+
+  ;(async () => {
+    try {
+      const info = await invokeTauri("get_vram_info")
+      setVram(info)
+    } catch {}
+  })()
+
+  return (
+    <Show when={vram()}>
+      {(info) => {
+        const pct = () => Math.round((info().used_mib / info().total_mib) * 100)
+        return (
+          <div class="bg-surface-base rounded-lg px-4 py-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-13-medium text-text-strong">{info().gpu_name}</span>
+              <span class="text-12-regular text-text-weak">
+                {info().used_mib} / {info().total_mib} MiB ({pct()}%)
+              </span>
+            </div>
+            <div class="w-full h-2 bg-surface-inset rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all"
+                classList={{
+                  "bg-icon-success-base": pct() < 70,
+                  "bg-yellow-500": pct() >= 70 && pct() < 90,
+                  "bg-icon-critical-base": pct() >= 90,
+                }}
+                style={{ width: `${pct()}%` }}
+              />
+            </div>
+            <div class="flex justify-between mt-1">
+              <span class="text-11-regular text-text-weak">{info().free_mib} MiB free</span>
+              <span class="text-11-regular text-text-weak">VRAM</span>
+            </div>
+          </div>
+        )
+      }}
+    </Show>
   )
 }
 
