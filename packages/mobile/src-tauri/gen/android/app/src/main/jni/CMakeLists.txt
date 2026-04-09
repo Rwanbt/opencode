@@ -14,11 +14,20 @@ set_target_properties(ggml-base PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libg
 add_library(ggml-cpu SHARED IMPORTED)
 set_target_properties(ggml-cpu PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-cpu.so)
 
-add_library(ggml-opencl SHARED IMPORTED)
-set_target_properties(ggml-opencl PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-opencl.so)
+# Optional GPU backends — only link if the .so exists (device-dependent)
+set(GPU_LIBS "")
 
-add_library(ggml-vulkan SHARED IMPORTED)
-set_target_properties(ggml-vulkan PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-vulkan.so)
+if(EXISTS ${JNILIBS_DIR}/libggml-opencl.so)
+    add_library(ggml-opencl SHARED IMPORTED)
+    set_target_properties(ggml-opencl PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-opencl.so)
+    list(APPEND GPU_LIBS ggml-opencl)
+endif()
+
+if(EXISTS ${JNILIBS_DIR}/libggml-vulkan.so)
+    add_library(ggml-vulkan SHARED IMPORTED)
+    set_target_properties(ggml-vulkan PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libggml-vulkan.so)
+    list(APPEND GPU_LIBS ggml-vulkan)
+endif()
 
 add_library(llama SHARED IMPORTED)
 set_target_properties(llama PROPERTIES IMPORTED_LOCATION ${JNILIBS_DIR}/libllama.so)
@@ -36,8 +45,7 @@ target_link_libraries(llama_jni
     ggml
     ggml-base
     ggml-cpu
-    ggml-opencl
-    ggml-vulkan
+    ${GPU_LIBS}
     android
     log
 )
