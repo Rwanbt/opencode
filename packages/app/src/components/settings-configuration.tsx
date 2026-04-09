@@ -19,13 +19,15 @@ export type ModelConfiguration = {
   contextMode: "auto" | "manual"
   contextManual: number
   kvCacheType: "auto" | "q8_0" | "q4_0" | "f16"
+  offloadMode: "auto" | "gpu-max" | "balanced"
+  mmapMode: "auto" | "on" | "off"
 }
 
 const PRESETS: Record<string, Omit<ModelConfiguration, "preset">> = {
-  fast: { outputTokensMode: "auto", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 8192, kvCacheType: "q4_0" },
-  quality: { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q8_0" },
-  eco: { outputTokensMode: "manual", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 16384, kvCacheType: "q4_0" },
-  "long-context": { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q4_0" },
+  fast: { outputTokensMode: "auto", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 8192, kvCacheType: "q4_0", offloadMode: "gpu-max", mmapMode: "auto" },
+  quality: { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q8_0", offloadMode: "auto", mmapMode: "auto" },
+  eco: { outputTokensMode: "manual", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 16384, kvCacheType: "q4_0", offloadMode: "balanced", mmapMode: "on" },
+  "long-context": { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q4_0", offloadMode: "auto", mmapMode: "auto" },
 }
 
 const DEFAULT_CONFIG: ModelConfiguration = {
@@ -37,6 +39,8 @@ const DEFAULT_CONFIG: ModelConfiguration = {
   contextMode: "auto",
   contextManual: 32768,
   kvCacheType: "auto",
+  offloadMode: "auto",
+  mmapMode: "auto",
 }
 
 const STORAGE_KEY = "opencode-model-config"
@@ -238,7 +242,65 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Q8_0 saves 47% VRAM vs FP16 with minimal quality loss. Q4_0 saves 72% but may reduce accuracy.
+            With llama.cpp b8731+, Hadamard rotation is auto-applied to Q4_0/Q8_0 for near-lossless compression (TurboQuant PR #21038).
+          </div>
+        </div>
+
+        {/* GPU/CPU Offloading */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">GPU/CPU Offloading</h3>
+          <SettingsList>
+            <SettingsRow
+              title="Mode"
+              description="How to split model layers between GPU and CPU"
+            >
+              <Select
+                size="normal"
+                options={["auto", "gpu-max", "balanced"]}
+                current={config.offloadMode}
+                label={(x) => {
+                  const m: Record<string, string> = {
+                    auto: "Auto (--fit, recommended)",
+                    "gpu-max": "GPU priority (max layers on GPU)",
+                    balanced: "Balanced (stable throughput)",
+                  }
+                  return m[x] ?? x
+                }}
+                onSelect={(v) => { if (v) update("offloadMode", v as any) }}
+              />
+            </SettingsRow>
+          </SettingsList>
+          <div class="text-11-regular text-text-weak mt-1 px-1">
+            Auto uses llama.cpp --fit to detect VRAM and place layers optimally. For MoE models (Gemma 26B), overflow experts go to CPU automatically.
+          </div>
+        </div>
+
+        {/* Memory Management */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">Memory</h3>
+          <SettingsList>
+            <SettingsRow
+              title="Memory mapping (mmap)"
+              description="Use OS memory mapping for model weights"
+            >
+              <Select
+                size="normal"
+                options={["auto", "on", "off"]}
+                current={config.mmapMode}
+                label={(x) => {
+                  const m: Record<string, string> = {
+                    auto: "Auto (recommended)",
+                    on: "Force on (SSD streaming)",
+                    off: "Force off (all in RAM)",
+                  }
+                  return m[x] ?? x
+                }}
+                onSelect={(v) => { if (v) update("mmapMode", v as any) }}
+              />
+            </SettingsRow>
+          </SettingsList>
+          <div class="text-11-regular text-text-weak mt-1 px-1">
+            mmap lets the OS page model weights from SSD on demand. Useful for large models that exceed RAM. Disable for maximum speed if the model fits in RAM.
           </div>
         </div>
       </div>

@@ -100,6 +100,36 @@ export function DialogLocalLLM() {
   const [hfSearching, setHfSearching] = createSignal(false)
   const [hfExpanded, setHfExpanded] = createSignal<string | null>(null)
   const [hfError, setHfError] = createSignal("")
+  const [vramMib, setVramMib] = createSignal(0)
+
+  // Detect VRAM on mount
+  onMount(async () => {
+    try {
+      const info = await invokeTauri("get_vram_info")
+      setVramMib(info?.total_mib ?? 0)
+    } catch {}
+  })
+
+  // Recommend quantization based on VRAM
+  function recommendQuant(modelSizeGB: number): string {
+    const vram = vramMib()
+    if (vram === 0) return ""
+    const freeAfterModel = vram - modelSizeGB * 1024
+    if (freeAfterModel > 4096) return "Fits easily"
+    if (freeAfterModel > 1024) return "Good fit"
+    if (freeAfterModel > 0) return "Tight — try smaller quant"
+    return "Too large for your GPU"
+  }
+
+  function vramBadgeClass(modelSizeGB: number): string {
+    const vram = vramMib()
+    if (vram === 0) return ""
+    const freeAfterModel = vram - modelSizeGB * 1024
+    if (freeAfterModel > 4096) return "text-icon-success-base"
+    if (freeAfterModel > 1024) return "text-syntax-property"
+    if (freeAfterModel > 0) return "text-yellow-500"
+    return "text-icon-critical-base"
+  }
 
   let hfSearchTimeout: ReturnType<typeof setTimeout> | undefined
 
@@ -166,9 +196,7 @@ export function DialogLocalLLM() {
       // Read model config from settings
       const configRaw = localStorage.getItem("opencode-model-config")
       const modelConfig = configRaw ? JSON.parse(configRaw) : {}
-      const outputTokens = modelConfig.outputTokensMode === "manual"
-        ? modelConfig.outputTokensManual || 8192
-        : 8192 // auto: reasonable default for local models
+
       const contextSize = modelConfig.contextMode === "manual"
         ? modelConfig.contextManual || 32768
         : 131072 // auto: use model's native context
@@ -176,6 +204,22 @@ export function DialogLocalLLM() {
       const modelEntries: Record<string, { name: string; limit?: { context: number; output: number } }> = {}
       for (const m of allModels) {
         const name = m.filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
+
+        // Dynamic output tokens based on model size and context
+        let outputTokens: number
+        if (modelConfig.outputTokensMode === "manual") {
+          outputTokens = modelConfig.outputTokensManual || 8192
+        } else {
+          // Auto mode: allocate 1/3 of context for output, capped by model capacity
+          // Small models (< 3GB) → cap at 4096 (they can't generate long coherent text)
+          // Medium models (3-6GB) → cap at 8192
+          // Large models (6GB+) → cap at 16384
+          const sizeGB = m.size / 1e9
+          const maxBySize = sizeGB < 3 ? 4096 : sizeGB < 6 ? 8192 : 16384
+          const maxByContext = Math.floor(contextSize / 3)
+          outputTokens = Math.min(maxBySize, maxByContext, 32000)
+        }
+
         modelEntries[name] = {
           name,
           limit: { context: contextSize, output: outputTokens },
@@ -286,6 +330,18 @@ export function DialogLocalLLM() {
           </div>
         </div>
 
+        {/* VRAM info */}
+        <Show when={vramMib() > 0}>
+          <div class="text-12-regular text-text-weak bg-surface-inset rounded-md px-3 py-1.5">
+            GPU: {(vramMib() / 1024).toFixed(1)} GB VRAM — {
+              vramMib() >= 12288 ? "Large models (7B+ Q5)" :
+              vramMib() >= 8192 ? "Medium models (4-7B Q4)" :
+              vramMib() >= 4096 ? "Small models (2-4B Q4)" :
+              "Tiny models only (< 2B)"
+            }
+          </div>
+        </Show>
+
         {/* Error */}
         <Show when={error()}>
           <div class="text-13-regular text-text-critical-base bg-surface-critical-base/10 rounded-md px-3 py-2">
@@ -329,7 +385,12 @@ export function DialogLocalLLM() {
                     <span class="text-14-regular text-text-strong">{item.name}</span>
                     <Show when={item.recommended}><Tag>Recommended</Tag></Show>
                   </div>
-                  <span class="text-12-regular text-text-weak">{item.description} — {item.size}</span>
+                  <span class="text-12-regular text-text-weak">
+                    {item.description} — {item.size}
+                    <Show when={vramMib() > 0 && recommendQuant(item.sizeBytes / 1e9)}>
+                      {" · "}<span class={vramBadgeClass(item.sizeBytes / 1e9)}>{recommendQuant(item.sizeBytes / 1e9)}</span>
+                    </Show>
+                  </span>
                 </div>
                 <Show when={isDownloaded(item.filename)} fallback={
                   <Show when={downloading()[item.filename] !== undefined} fallback={
