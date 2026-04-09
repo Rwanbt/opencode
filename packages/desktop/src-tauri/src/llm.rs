@@ -309,10 +309,11 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         LLM_PORT
     );
 
-    // Read KV cache type from user settings (via localStorage on frontend)
-    // Default to q4_0 which benefits from Hadamard rotation in b8731+
+    // Read settings from env vars (set by frontend via auto-start hook)
     let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE").unwrap_or_else(|_| "q4_0".to_string());
-    tracing::info!("[LLM] KV cache type: {}", kv_cache_type);
+    let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
+    let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
+    tracing::info!("[LLM] Config: kv={}, offload={}, mmap={}", kv_cache_type, offload_mode, mmap_mode);
 
     // Detect physical CPU cores for thread count
     let n_threads = std::thread::available_parallelism()
@@ -351,8 +352,29 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         .arg("1")
         // CPU threads
         .arg("--threads")
-        .arg(n_threads.to_string())
-        .kill_on_drop(true);
+        .arg(n_threads.to_string());
+
+    // Memory mapping control
+    match mmap_mode.as_str() {
+        "off" => { cmd.arg("--no-mmap"); }
+        "on" => { /* mmap is default, nothing to add */ }
+        _ => { /* auto: let llama.cpp decide */ }
+    }
+
+    // GPU offloading mode
+    match offload_mode.as_str() {
+        "gpu-max" => {
+            // Override fit to push maximum layers to GPU
+            cmd.arg("-fitt").arg("256"); // leave only 256 MiB free
+        }
+        "balanced" => {
+            // More conservative: leave plenty of VRAM headroom
+            cmd.arg("-fitt").arg("1024");
+        }
+        _ => { /* auto: already configured with -fitt 512 */ }
+    }
+
+    cmd.kill_on_drop(true);
 
     #[cfg(windows)]
     {
