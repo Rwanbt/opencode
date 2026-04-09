@@ -6,6 +6,7 @@ mod runtime;
 mod llm;
 #[cfg(target_os = "android")]
 mod proxy;
+mod speech;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +41,18 @@ pub fn run() {
             llm::abort_llm,
             llm::generate_llm,
             llm::check_llm_health,
+            speech::stt_download_model,
+            speech::stt_load_model,
+            speech::stt_transcribe,
+            speech::stt_available,
+            speech::stt_loaded,
+            speech::tts_start,
+            speech::tts_speak,
+            speech::tts_stop,
+            speech::tts_save_voice_clone,
+            speech::tts_list_voice_clones,
+            speech::tts_delete_voice_clone,
+            speech::tts_available,
         ]);
     }
 
