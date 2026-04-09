@@ -162,10 +162,13 @@ export function DialogLocalLLM() {
     try {
       const allModels: ModelInfo[] = await invokeTauri("list_models").catch(() => [])
       if (allModels.length === 0) return
-      const modelEntries: Record<string, { name: string }> = {}
+      const modelEntries: Record<string, { name: string; limit?: { context: number; output: number } }> = {}
       for (const m of allModels) {
         const name = m.filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
-        modelEntries[name] = { name }
+        modelEntries[name] = {
+          name,
+          limit: { context: 131072, output: 4096 },
+        }
       }
       await globalSync.updateConfig({
         provider: {

@@ -1,6 +1,8 @@
 mod cli;
 mod constants;
 mod llm;
+mod parakeet;
+mod speech;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -348,6 +350,8 @@ pub fn run() {
             // Hold the guard in managed state so it lives for the app's lifetime,
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
+            handle.manage(llm::LlmServerState::new());
+            handle.manage(speech::SpeechState::new());
 
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
@@ -365,6 +369,15 @@ pub fn run() {
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 tracing::info!("Received Exit");
+
+                // Kill LLM server if running
+                if let Some(state) = app.try_state::<llm::LlmServerState>() {
+                    if let Ok(mut guard) = state.child.lock() {
+                        if let Some(ref mut child) = *guard {
+                            let _ = child.start_kill();
+                        }
+                    }
+                }
 
                 kill_sidecar(app.clone());
             }
@@ -394,7 +407,13 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             llm::delete_model,
             llm::check_llm_health,
             llm::load_llm_model,
-            llm::unload_llm_model
+            llm::unload_llm_model,
+            speech::stt_download_model,
+            speech::stt_load_model,
+            speech::stt_transcribe,
+            speech::stt_available,
+            speech::stt_loaded,
+            speech::tts_available
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

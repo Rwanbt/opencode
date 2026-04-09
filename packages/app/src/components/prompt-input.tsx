@@ -540,6 +540,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [composing, setComposing] = createSignal(false)
   const [webSearch, setWebSearch] = createSignal(false)
+  const [recording, setRecording] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
@@ -1394,13 +1395,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
               style={{ "padding-bottom": space }}
             />
-            <Show when={!prompt.dirty()}>
+            <Show when={!prompt.dirty() && !recording()}>
               <div
                 class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
                 style={{ "padding-bottom": space }}
               >
                 {placeholder()}
+              </div>
+            </Show>
+            <Show when={recording()}>
+              <div class="absolute top-0 inset-x-0 flex items-center gap-1 pl-3 pr-2 pt-3 pointer-events-none">
+                <div class="flex items-end gap-0.5 h-5">
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar1" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar3" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar4" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar5" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar3" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar1" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar4" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar5" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar1" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar3" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar4" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar5" />
+                  <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
+                </div>
+                <span class="text-13-regular text-text-critical-base ml-2">Listening...</span>
               </div>
             </Show>
           </div>
@@ -1476,6 +1500,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     e.preventDefault()
                     e.stopPropagation()
                     setWebSearch(!webSearch())
+                  }}
+                />
+              </Tooltip>
+              <Tooltip
+                placement="top"
+                value={recording() ? "Stop recording" : "Voice input"}
+              >
+                <IconButton
+                  data-action="prompt-stt-toggle"
+                  icon="microphone"
+                  variant={recording() ? "primary" : "ghost"}
+                  class="size-8"
+                  style={buttons()}
+                  aria-label={recording() ? "Stop recording" : "Voice input"}
+                  onClick={(e: MouseEvent) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (recording()) {
+                      // Stop recording - dispatch event for STT handler
+                      window.dispatchEvent(new CustomEvent("stt-stop"))
+                      setRecording(false)
+                    } else {
+                      // Start recording
+                      window.dispatchEvent(new CustomEvent("stt-start"))
+                      setRecording(true)
+                    }
                   }}
                 />
               </Tooltip>

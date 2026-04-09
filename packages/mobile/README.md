@@ -150,4 +150,4 @@ Pre-curated model catalog:
 | Phi-4 Mini 3.8B | 2.3 GB | Strong reasoning/STEM |
 | Llama 3.2 3B | 1.8 GB | Meta's on-device optimized |
 
-Custom models can be downloaded from any HuggingFace GGUF URL.
+Custom models can be searched and downloaded directly from HuggingFace via the built-in search in Settings > Providers > Local AI > Manage.

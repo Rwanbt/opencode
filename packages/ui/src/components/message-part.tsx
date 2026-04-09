@@ -1432,6 +1432,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 onClick={handleCopy}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
               />
+              <Show when={props.message.role === "assistant"}>
+                <IconButton
+                  icon="speaker"
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("tts-speak", { detail: { text: text() } }))
+                  }}
+                  aria-label="Read aloud"
+                />
+              </Show>
             </Tooltip>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">

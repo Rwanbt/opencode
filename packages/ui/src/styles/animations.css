@@ -44,6 +44,18 @@
   }
 }
 
+/* STT waveform bars */
+@keyframes stt-wave {
+  0%, 100% { height: 4px; }
+  50% { height: 20px; }
+}
+
+.animate-stt-bar1 { animation: stt-wave 0.8s ease-in-out infinite; }
+.animate-stt-bar2 { animation: stt-wave 0.8s ease-in-out 0.1s infinite; }
+.animate-stt-bar3 { animation: stt-wave 0.8s ease-in-out 0.2s infinite; }
+.animate-stt-bar4 { animation: stt-wave 0.8s ease-in-out 0.3s infinite; }
+.animate-stt-bar5 { animation: stt-wave 0.8s ease-in-out 0.4s infinite; }
+
 .fade-up-text {
   animation: fadeUp 0.4s ease-out forwards;
   opacity: 0;
