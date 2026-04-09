@@ -6,6 +6,7 @@ mod runtime;
 mod llm;
 #[cfg(target_os = "android")]
 mod proxy;
+mod kokoro;
 mod parakeet;
 mod speech;
 
