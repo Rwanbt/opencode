@@ -26,11 +26,31 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-[target.'cfg(target_os = "android")'.dependencies]
 tokio = { version = "1", features = ["time", "rt", "net", "io-util", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 futures-util = "0.3"
+
+[target.'cfg(target_os = "android")'.dependencies]
 url = "2"
+
+# STT/TTS engines (cross-platform)
+[dependencies.ort]
+version = "=2.0.0-rc.10"
+features = ["download-binaries"]
+
+[dependencies.ndarray]
+version = "0.16.1"
+
+[dependencies.hound]
+version = "3.5.1"
+
+[dependencies.zip]
+version = "2"
+default-features = false
+features = ["deflate"]
+
+[dependencies.tracing]
+version = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"

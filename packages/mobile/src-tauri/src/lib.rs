@@ -6,6 +6,7 @@ mod runtime;
 mod llm;
 #[cfg(target_os = "android")]
 mod proxy;
+mod parakeet;
 mod speech;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -58,6 +59,7 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            app.manage(speech::SpeechState::new());
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();
