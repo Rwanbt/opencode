@@ -19,6 +19,7 @@
         { "url": "https://*" },
         { "url": "http://*:*/*" }
       ]
-    }
+    },
+    "dialog:default"
   ]
 }
