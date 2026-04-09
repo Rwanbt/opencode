@@ -1,7 +1,11 @@
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
+
+use crate::parakeet::ParakeetEngine;
+
+const STT_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip";
 
 fn data_dir(app: &AppHandle) -> PathBuf {
     app.path()
@@ -9,46 +13,160 @@ fn data_dir(app: &AppHandle) -> PathBuf {
         .expect("failed to resolve app data dir")
 }
 
+fn model_dir(app: &AppHandle) -> PathBuf {
+    data_dir(app).join("speech").join("parakeet-tdt-0.6b-v3-int8")
+}
+
 fn speech_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join("speech")
 }
 
-// ─── STT ───────────────────────────────────────────────────────────────
-// On mobile, STT uses the browser SpeechRecognition API (no Parakeet).
-// These commands exist so the shared UI code doesn't crash.
+// ─── State ─────────────────────────────────────────────────────────────
+
+pub struct SpeechState {
+    stt_engine: Mutex<ParakeetEngine>,
+    stt_loaded: Mutex<bool>,
+}
+
+impl SpeechState {
+    pub fn new() -> Self {
+        Self {
+            stt_engine: Mutex::new(ParakeetEngine::new()),
+            stt_loaded: Mutex::new(false),
+        }
+    }
+}
+
+// ─── STT (Parakeet via ONNX Runtime) ──────────────────────────────────
 
 #[tauri::command]
-pub async fn stt_download_model(_app: AppHandle) -> Result<(), String> {
-    // No model needed on mobile — uses browser SpeechRecognition
+pub async fn stt_download_model(app: AppHandle) -> Result<(), String> {
+    let dir = model_dir(&app);
+    if dir.join("encoder-model.int8.onnx").exists() {
+        return Ok(());
+    }
+
+    tracing::info!("[STT] Downloading Parakeet model...");
+    let _ = fs::create_dir_all(speech_dir(&app));
+    let zip_path = speech_dir(&app).join("parakeet-model.zip");
+
+    let client = reqwest::Client::new();
+    let resp = client.get(STT_MODEL_URL).send().await.map_err(|e| format!("Download: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let mut file = tokio::fs::File::create(&zip_path).await.map_err(|e| format!("Create: {}", e))?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Stream: {}", e))?;
+        file.write_all(&chunk).await.map_err(|e| format!("Write: {}", e))?;
+    }
+    file.flush().await.map_err(|e| format!("Flush: {}", e))?;
+    drop(file);
+
+    // Extract
+    let zip_clone = zip_path.clone();
+    let dir_clone = speech_dir(&app);
+    tokio::task::spawn_blocking(move || {
+        let file = fs::File::open(&zip_clone).map_err(|e| format!("Open: {}", e))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Zip: {}", e))?;
+        archive.extract(&dir_clone).map_err(|e| format!("Extract: {}", e))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?
+    .map_err(|e: String| e)?;
+
+    let _ = fs::remove_file(&zip_path);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stt_load_model(_app: AppHandle) -> Result<(), String> {
+pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
+    {
+        let state = app.state::<SpeechState>();
+        if *state.stt_loaded.lock().unwrap() { return Ok(()); }
+    }
+
+    let dir = model_dir(&app);
+    if !dir.join("encoder-model.int8.onnx").exists() {
+        return Err("Model not downloaded".to_string());
+    }
+
+    tracing::info!("[STT] Loading Parakeet model...");
+    let start = std::time::Instant::now();
+    let dir_clone = dir.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut engine = ParakeetEngine::new();
+        engine.load(&dir_clone)?;
+        Ok::<ParakeetEngine, String>(engine)
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?;
+
+    let engine = result?;
+    {
+        let state = app.state::<SpeechState>();
+        *state.stt_engine.lock().unwrap() = engine;
+        *state.stt_loaded.lock().unwrap() = true;
+    }
+    tracing::info!("[STT] Model loaded in {:?}", start.elapsed());
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stt_transcribe(_app: AppHandle, _audio_base64: String) -> Result<String, String> {
-    Err("Use browser SpeechRecognition on mobile".to_string())
+pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
+    {
+        let state = app.state::<SpeechState>();
+        if !*state.stt_loaded.lock().unwrap() {
+            drop(state);
+            stt_load_model(app.clone()).await?;
+        }
+    }
+
+    let audio_bytes = base64_decode(&audio_base64)?;
+    let samples = tokio::task::spawn_blocking(move || wav_to_samples(&audio_bytes))
+        .await
+        .map_err(|e| format!("Task: {}", e))?
+        .map_err(|e| format!("WAV: {}", e))?;
+
+    let app_clone = app.clone();
+    let text = tokio::task::spawn_blocking(move || {
+        let state = app_clone.state::<SpeechState>();
+        let mut engine = state.stt_engine.lock().unwrap();
+        engine.transcribe(&samples)
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?
+    .map_err(|e| format!("STT: {}", e))?;
+
+    Ok(text)
 }
 
 #[tauri::command]
-pub async fn stt_available(_app: AppHandle) -> bool {
-    false // STT handled by browser API on mobile
+pub async fn stt_available(app: AppHandle) -> bool {
+    model_dir(&app).join("encoder-model.int8.onnx").exists()
 }
 
 #[tauri::command]
-pub async fn stt_loaded(_app: AppHandle) -> bool {
-    false
+pub async fn stt_loaded(app: AppHandle) -> bool {
+    let state = app.state::<SpeechState>();
+    let guard = state.stt_loaded.lock().unwrap();
+    let val = *guard;
+    drop(guard);
+    val
 }
 
-// ─── TTS ───────────────────────────────────────────────────────────────
-// On mobile, TTS uses the browser SpeechSynthesis API (no Pocket TTS).
+// ─── TTS (browser SpeechSynthesis fallback on mobile) ──────────────────
 
 #[tauri::command]
 pub async fn tts_start(_app: AppHandle) -> Result<u16, String> {
-    Err("TTS uses browser SpeechSynthesis on mobile".to_string())
+    // TTS handled by browser SpeechSynthesis on mobile
+    Err("Use browser SpeechSynthesis on mobile".to_string())
 }
 
 #[tauri::command]
@@ -57,26 +175,18 @@ pub async fn tts_speak(_app: AppHandle, _text: String, _voice: Option<String>) -
 }
 
 #[tauri::command]
-pub async fn tts_stop(_app: AppHandle) -> Result<(), String> {
-    Ok(())
-}
+pub async fn tts_stop(_app: AppHandle) -> Result<(), String> { Ok(()) }
 
 #[tauri::command]
-pub async fn tts_available() -> bool {
-    false // TTS handled by browser API on mobile
-}
+pub async fn tts_available() -> bool { false }
 
-// ─── Voice Cloning ─────────────────────────────────────────────────────
-// Voice cloning stores WAV files but actual cloning requires Pocket TTS (desktop only).
+// ─── Voice Cloning (WAV storage) ───────────────────────────────────────
 
 #[tauri::command]
 pub async fn tts_save_voice_clone(app: AppHandle, audio_base64: String, name: String) -> Result<String, String> {
     let dir = speech_dir(&app).join("voices");
     let _ = fs::create_dir_all(&dir);
-
-    // Decode base64
-    let data = audio_base64.find(',').map(|i| &audio_base64[i + 1..]).unwrap_or(&audio_base64);
-    let wav_bytes = base64_decode(data)?;
+    let wav_bytes = base64_decode(&audio_base64)?;
     let wav_path = dir.join(format!("{}.wav", name));
     fs::write(&wav_path, &wav_bytes).map_err(|e| format!("Write: {}", e))?;
     Ok(wav_path.to_string_lossy().to_string())
@@ -106,8 +216,38 @@ pub async fn tts_delete_voice_clone(app: AppHandle, name: String) -> Result<(), 
     Ok(())
 }
 
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+fn wav_to_samples(wav_bytes: &[u8]) -> Result<Vec<f32>, String> {
+    let cursor = std::io::Cursor::new(wav_bytes);
+    let reader = hound::WavReader::new(cursor).map_err(|e| format!("WAV: {}", e))?;
+    let spec = reader.spec();
+    let mut samples: Vec<f32> = reader
+        .into_samples::<i16>()
+        .filter_map(|s| s.ok())
+        .map(|s| s as f32 / 32768.0)
+        .collect();
+    if spec.channels > 1 {
+        samples = samples.chunks(spec.channels as usize)
+            .map(|c| c.iter().sum::<f32>() / c.len() as f32).collect();
+    }
+    if spec.sample_rate != 16000 {
+        let ratio = spec.sample_rate as f64 / 16000.0;
+        let len = (samples.len() as f64 / ratio) as usize;
+        samples = (0..len).map(|i| {
+            let idx = i as f64 * ratio;
+            let lo = idx as usize;
+            let hi = (lo + 1).min(samples.len() - 1);
+            let f = (idx - lo as f64) as f32;
+            samples[lo] * (1.0 - f) + samples[hi] * f
+        }).collect();
+    }
+    Ok(samples)
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    let clean: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    let data = input.find(',').map(|i| &input[i + 1..]).unwrap_or(input);
+    let clean: Vec<u8> = data.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     let mut out = Vec::new();
     let len = clean.len();
     let mut i = 0;
