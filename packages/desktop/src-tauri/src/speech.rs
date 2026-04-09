@@ -22,35 +22,44 @@ fn speech_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join("speech")
 }
 
-fn find_python() -> Option<PathBuf> {
-    // Check common Python locations on Windows
+fn find_pocket_tts() -> Option<PathBuf> {
+    let exe_name = if cfg!(windows) { "pocket-tts.exe" } else { "pocket-tts" };
+
+    // Windows: check Python Scripts dirs
+    #[cfg(windows)]
     if let Some(home) = dirs::home_dir() {
-        let base = home
-            .join("AppData")
-            .join("Local")
-            .join("Programs")
-            .join("Python");
+        let base = home.join("AppData").join("Local").join("Programs").join("Python");
         if let Ok(entries) = fs::read_dir(&base) {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.is_dir() {
-                    let exe = p.join("Scripts").join("pocket-tts.exe");
-                    if exe.exists() {
-                        return Some(exe);
-                    }
+                    let exe = p.join("Scripts").join(exe_name);
+                    if exe.exists() { return Some(exe); }
                 }
             }
         }
     }
-    // Check PATH
-    if let Ok(output) = std::process::Command::new("where").arg("pocket-tts").output() {
+
+    // Unix: check common locations
+    #[cfg(not(windows))]
+    if let Some(home) = dirs::home_dir() {
+        for dir in &[
+            home.join(".local").join("bin"),
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/usr/bin"),
+        ] {
+            let p = dir.join(exe_name);
+            if p.exists() { return Some(p); }
+        }
+    }
+
+    // Fallback: which/where
+    let which = if cfg!(windows) { "where" } else { "which" };
+    if let Ok(output) = std::process::Command::new(which).arg("pocket-tts").output() {
         if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout);
-            if let Some(line) = path.lines().next() {
+            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
                 let p = PathBuf::from(line.trim());
-                if p.exists() {
-                    return Some(p);
-                }
+                if p.exists() { return Some(p); }
             }
         }
     }
@@ -58,17 +67,27 @@ fn find_python() -> Option<PathBuf> {
 }
 
 fn find_python_dir() -> Option<String> {
+    let python = if cfg!(windows) { "python.exe" } else { "python3" };
+    let which = if cfg!(windows) { "where" } else { "which" };
+
+    #[cfg(windows)]
     if let Some(home) = dirs::home_dir() {
-        let base = home
-            .join("AppData")
-            .join("Local")
-            .join("Programs")
-            .join("Python");
+        let base = home.join("AppData").join("Local").join("Programs").join("Python");
         if let Ok(entries) = fs::read_dir(&base) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.is_dir() && p.join("python.exe").exists() {
+                if p.is_dir() && p.join(python).exists() {
                     return Some(p.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new(which).arg(python).output() {
+        if output.status.success() {
+            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
+                if let Some(parent) = std::path::Path::new(line.trim()).parent() {
+                    return Some(parent.to_string_lossy().to_string());
                 }
             }
         }
@@ -270,7 +289,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         }
     }
 
-    let pocket_tts = find_python().ok_or("pocket-tts not found. Run: pip install pocket-tts")?;
+    let pocket_tts = find_pocket_tts().ok_or("pocket-tts not found. Run: pip install pocket-tts")?;
 
     tracing::info!("[TTS] Starting Pocket TTS server on port {}", TTS_PORT);
 
@@ -285,7 +304,8 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     // Add Python to PATH
     if let Some(py_dir) = find_python_dir() {
         let path = std::env::var("PATH").unwrap_or_default();
-        cmd.env("PATH", format!("{};{}", py_dir, path));
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        cmd.env("PATH", format!("{}{}{}", py_dir, sep, path));
     }
 
     #[cfg(windows)]
@@ -457,7 +477,7 @@ pub async fn tts_delete_voice_clone(app: AppHandle, name: String) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_available() -> bool {
-    find_python().is_some()
+    find_pocket_tts().is_some()
 }
 
 // ─── WAV helpers ───────────────────────────────────────────────────────

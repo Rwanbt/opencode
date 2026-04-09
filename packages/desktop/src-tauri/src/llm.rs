@@ -9,9 +9,24 @@ use tokio::io::AsyncWriteExt;
 const LLM_PORT: u16 = 14097;
 
 
-/// Latest llama.cpp release tag and asset for Windows Vulkan x64
 const LLAMA_RELEASE_TAG: &str = "b8709";
-const LLAMA_ASSET_NAME: &str = "llama-b8709-bin-win-vulkan-x64.zip";
+
+fn llama_asset_name() -> &'static str {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    { "llama-b8709-bin-win-vulkan-x64.zip" }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    { "llama-b8709-bin-ubuntu-x64.zip" }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    { "llama-b8709-bin-ubuntu-arm64.zip" }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    { "llama-b8709-bin-macos-arm64.zip" }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    { "llama-b8709-bin-macos-x64.zip" }
+}
+
+fn llama_server_exe() -> &'static str {
+    if cfg!(windows) { "llama-server.exe" } else { "llama-server" }
+}
 
 fn data_dir(app: &AppHandle) -> PathBuf {
     app.path()
@@ -28,7 +43,7 @@ fn runtime_dir(app: &AppHandle) -> PathBuf {
 }
 
 fn llama_server_path(app: &AppHandle) -> PathBuf {
-    runtime_dir(app).join("llama-server.exe")
+    runtime_dir(app).join(llama_server_exe())
 }
 
 // ─── State ─────────────────────────────────────────────────────────────
@@ -153,7 +168,7 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
 
     let zip_url = format!(
         "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-        LLAMA_RELEASE_TAG, LLAMA_ASSET_NAME
+        LLAMA_RELEASE_TAG, llama_asset_name()
     );
     let zip_path = rt_dir.join("llama-runtime.zip");
 
@@ -200,7 +215,14 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     let _ = fs::remove_file(&zip_path);
 
     if !server.exists() {
-        return Err("llama-server.exe not found after extraction".to_string());
+        return Err(format!("{} not found after extraction", llama_server_exe()));
+    }
+
+    // Make executable on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&server, fs::Permissions::from_mode(0o755));
     }
 
     tracing::info!("[LLM] Runtime ready at {}", server.display());
