@@ -151,3 +151,10 @@ Pre-curated model catalog:
 | Llama 3.2 3B | 1.8 GB | Meta's on-device optimized |
 
 Custom models can be searched and downloaded directly from HuggingFace via the built-in search in Settings > Providers > Local AI > Manage.
+
+### Shared UI Features (Mobile + Desktop)
+
+- **Web search toggle**: Globe icon in prompt toolbar
+- **Voice input (STT)**: Microphone button with waveform animation
+- **Read aloud (TTS)**: Speaker button under AI responses (click to play/pause, double-click to reset)
+- **Audio settings**: Settings > Audio tab (STT engine, TTS voice, speed, voice cloning)

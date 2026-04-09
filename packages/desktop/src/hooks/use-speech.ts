@@ -16,30 +16,37 @@ let audioChunks: Blob[] = []
 export function initSpeechListeners() {
   window.addEventListener("stt-start", handleSttStart)
   window.addEventListener("stt-stop", handleSttStop)
-  window.addEventListener("tts-speak", handleTtsSpeak as EventListener)
+  window.addEventListener("tts-toggle", ((e: Event) => { handleTtsToggle(e as CustomEvent) }) as EventListener)
+  console.log("[Speech] All listeners initialized (stt-start, stt-stop, tts-toggle)")
   // Pre-load Parakeet model so it's warm when user presses mic
-  preloadSttModel()
+  preloadModels()
 }
 
-async function preloadSttModel() {
+async function preloadModels() {
   try {
     const available = await invokeTauri("stt_available")
-    if (!available) {
-      console.log("[STT] Model not downloaded yet, will download on first use")
-      return
+    if (available) {
+      console.log("[STT] Pre-loading Parakeet model...")
+      await invokeTauri("stt_load_model")
+      console.log("[STT] Model loaded")
     }
-    console.log("[STT] Pre-loading Parakeet model...")
-    await invokeTauri("stt_load_model")
-    console.log("[STT] Model loaded, ready for transcription")
   } catch (e) {
     console.warn("[STT] Pre-load failed:", e)
+  }
+  // Pre-start Pocket TTS server so first click is fast
+  try {
+    console.log("[TTS] Starting Pocket TTS server...")
+    await invokeTauri("tts_start")
+    console.log("[TTS] Pocket TTS ready")
+  } catch (e) {
+    console.warn("[TTS] Pre-start failed:", e)
   }
 }
 
 export function cleanupSpeechListeners() {
   window.removeEventListener("stt-start", handleSttStart)
   window.removeEventListener("stt-stop", handleSttStop)
-  window.removeEventListener("tts-speak", handleTtsSpeak as EventListener)
+  // Note: can't remove exact reference since we wrapped it, but cleanup on app close is fine
 }
 
 // ─── STT ───────────────────────────────────────────────────────────────
@@ -99,21 +106,84 @@ function handleSttStop() {
   }
 }
 
-// ─── TTS ───────────────────────────────────────────────────────────────
+// ─── TTS (Kokoro) ──────────────────────────────────────────────────────
 
-let speaking = false
+type TtsState = "idle" | "loading" | "playing" | "paused"
+let ttsState: TtsState = "idle"
+let currentAudio: HTMLAudioElement | null = null
+let lastDblClick = 0
 
-function handleTtsSpeak(e: CustomEvent) {
+function getAudioSettings() {
+  try {
+    const raw = localStorage.getItem("opencode-audio-settings")
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+async function handleTtsToggle(e: CustomEvent) {
+  console.log("[TTS] Toggle event received, state:", ttsState, "detail:", e.detail?.text?.substring(0, 30))
+  const now = Date.now()
+  const isDoubleClick = now - lastDblClick < 400
+  lastDblClick = now
+
+  // Double-click: full stop + reset
+  if (isDoubleClick && currentAudio) {
+    currentAudio.pause()
+    currentAudio.currentTime = 0
+    currentAudio = null
+    ttsState = "idle"
+    console.log("[TTS] Reset")
+    return
+  }
+
+  // If playing → pause
+  if (ttsState === "playing" && currentAudio) {
+    currentAudio.pause()
+    ttsState = "paused"
+    console.log("[TTS] Paused")
+    return
+  }
+
+  // If paused → resume
+  if (ttsState === "paused" && currentAudio) {
+    currentAudio.play()
+    ttsState = "playing"
+    console.log("[TTS] Resumed")
+    return
+  }
+
+  // If loading, ignore
+  if (ttsState === "loading") return
+
   const text = e.detail?.text
   if (!text) return
-  if ("speechSynthesis" in window) {
-    if (speaking) { speechSynthesis.cancel(); speaking = false; return }
-    speaking = true
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1.0
-    utterance.onend = () => { speaking = false }
-    utterance.onerror = () => { speaking = false }
-    speechSynthesis.speak(utterance)
+
+  // Read settings
+  const settings = getAudioSettings()
+  const voice = settings.ttsVoice || "af_heart"
+  const speed = settings.ttsSpeed || 1.0
+
+  ttsState = "loading"
+  try {
+    console.log("[TTS] Synthesizing with Kokoro, voice:", voice)
+    const wavBase64: string = await invokeTauri("tts_speak", { text, voice })
+    console.log("[TTS] Audio ready, base64 length:", wavBase64.length)
+
+    // If user clicked stop during synthesis
+    if (ttsState !== "loading") return
+
+    const audio = new Audio(`data:audio/wav;base64,${wavBase64}`)
+    audio.playbackRate = speed
+    currentAudio = audio
+    audio.onended = () => { ttsState = "idle"; currentAudio = null }
+    audio.onerror = () => { ttsState = "idle"; currentAudio = null }
+    await audio.play()
+    ttsState = "playing"
+    console.log("[TTS] Playing")
+  } catch (e) {
+    console.error("[TTS] Kokoro failed:", e)
+    ttsState = "idle"
+    currentAudio = null
   }
 }
 

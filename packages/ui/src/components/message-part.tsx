@@ -1439,7 +1439,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                   variant="ghost"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent("tts-speak", { detail: { text: text() } }))
+                    window.dispatchEvent(new CustomEvent("tts-toggle", { detail: { text: text() } }))
                   }}
                   aria-label="Read aloud"
                 />
