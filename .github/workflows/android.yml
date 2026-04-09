@@ -215,6 +215,30 @@ jobs:
           # Remove any cached .cargo/config.toml with Windows paths
           rm -f packages/mobile/src-tauri/.cargo/config.toml
 
+      - name: Download ONNX Runtime for Android
+        run: |
+          echo "Downloading ONNX Runtime for Android (aarch64)..."
+          ORT_VERSION="1.22.0"
+
+          # Download Microsoft's official ONNX Runtime Android AAR
+          curl -fsSL "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
+            -o /tmp/ort.aar
+
+          # Extract the native .so for arm64
+          cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
+          mkdir -p /tmp/ort-android/lib
+          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/lib/
+          ls -la /tmp/ort-android/lib/
+
+          # Also need the headers — download the full release for headers
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
+            -o /tmp/ort-headers.aar 2>/dev/null || true
+
+          # Set ORT_LIB_LOCATION for ort-sys build
+          echo "ORT_LIB_LOCATION=/tmp/ort-android" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+          echo "ONNX Runtime Android ready at /tmp/ort-android"
+
       - name: Build Android APK
         working-directory: packages/mobile
         run: bunx tauri android build --target aarch64
