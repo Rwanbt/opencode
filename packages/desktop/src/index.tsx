@@ -27,6 +27,8 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
 import { createResource, onCleanup, onMount, Show } from "solid-js"
+import { ensureLocalLLMLoaded, autoStartLocalLLM } from "./hooks/use-auto-start-llm"
+import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -468,6 +470,28 @@ render(() => {
   function Inner() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
+
+    // Auto-start local LLM on model selection events
+    onMount(() => {
+      const handler = (e: Event) => {
+        const { providerID, modelID } = (e as CustomEvent).detail ?? {}
+        ensureLocalLLMLoaded(providerID, modelID)
+      }
+      window.addEventListener("model-selected", handler)
+      onCleanup(() => window.removeEventListener("model-selected", handler))
+    })
+
+    // Auto-start on launch: if models exist, preload the first one
+    onMount(() => {
+      autoStartLocalLLM()
+    })
+
+    // Initialize speech listeners (STT/TTS)
+    onMount(() => {
+      initSpeechListeners()
+      onCleanup(cleanupSpeechListeners)
+    })
+
     return null
   }
 
