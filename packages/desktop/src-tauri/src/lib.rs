@@ -1,6 +1,7 @@
 mod cli;
 mod constants;
 mod llm;
+mod kokoro;
 mod parakeet;
 mod speech;
 #[cfg(target_os = "linux")]

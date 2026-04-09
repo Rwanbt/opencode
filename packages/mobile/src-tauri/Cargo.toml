@@ -44,6 +44,10 @@ version = "0.16.1"
 [dependencies.hound]
 version = "3.5.1"
 
+[dependencies.bincode]
+version = "2.0"
+features = ["std", "derive"]
+
 [dependencies.zip]
 version = "2"
 default-features = false
