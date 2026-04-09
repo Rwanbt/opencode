@@ -162,6 +162,27 @@ pub async fn start_embedded_server(
     let _ = fs::create_dir_all(&home_dir);
     let _ = fs::create_dir_all(home_dir.join(".opencode"));
 
+    // Expose external storage to the server via symlinks
+    // Android apps can access /sdcard with READ/WRITE_EXTERNAL_STORAGE permissions
+    let external_storage = PathBuf::from("/sdcard");
+    if external_storage.exists() {
+        // Symlink common user directories into HOME so the server can browse them
+        for dir_name in &["Documents", "Downloads", "projects", "Projects", "dev", "code"] {
+            let target = external_storage.join(dir_name);
+            let link = home_dir.join(dir_name);
+            if target.exists() && !link.exists() {
+                let _ = std::os::unix::fs::symlink(&target, &link);
+                eprintln!("[OpenCode] Symlinked {} -> {}", link.display(), target.display());
+            }
+        }
+        // Also create a "storage" link to the full /sdcard
+        let storage_link = home_dir.join("storage");
+        if !storage_link.exists() {
+            let _ = std::os::unix::fs::symlink(&external_storage, &storage_link);
+            eprintln!("[OpenCode] Symlinked {} -> {}", storage_link.display(), external_storage.display());
+        }
+    }
+
     // Kill any existing server
     if let Ok(mut guard) = SERVER_PROCESS.lock() {
         if let Some(mut child) = guard.take() {
@@ -361,6 +382,8 @@ pub async fn start_embedded_server(
         .env("PATH", &path)
         .env("LD_LIBRARY_PATH", &lib_path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
+        .env("EXTERNAL_STORAGE", "/sdcard")
+        .env("OPENCODE_HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
         .env("OPENCODE_CLIENT", "mobile-embedded")
