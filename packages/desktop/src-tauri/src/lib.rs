@@ -413,6 +413,12 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             speech::stt_transcribe,
             speech::stt_available,
             speech::stt_loaded,
+            speech::tts_start,
+            speech::tts_speak,
+            speech::tts_stop,
+            speech::tts_save_voice_clone,
+            speech::tts_list_voice_clones,
+            speech::tts_delete_voice_clone,
             speech::tts_available
         ])
         .events(tauri_specta::collect_events![
