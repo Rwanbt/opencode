@@ -48,6 +48,21 @@
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
 > Kept in sync with upstream. See [dev branch](https://github.com/Rwanbt/opencode/tree/dev) for latest changes.
 
+#### Local-First AI Optimization
+
+OpenCode is heavily optimized for running AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM):
+
+- **~1K token system prompt** for local models (vs ~16K for cloud — 94% reduction via skeleton tool schemas + dynamic tool loading)
+- **Speculative decoding** support with VRAM Guard (auto-disables if insufficient memory)
+- **Hadamard rotation KV cache** (llama.cpp b8731+) for near-lossless 4-bit compression
+- **Integrated STT** (Parakeet TDT 0.6B, 300ms/5s audio, 25 languages, ONNX Runtime)
+- **Integrated TTS** (Kyutai Pocket TTS, French-native, zero-shot voice cloning)
+- **VRAM monitoring** widget with color-coded usage bar
+- **Configuration presets** (Fast / Quality / Eco / Long Context) for one-click optimization
+- **Cross-platform**: Windows (Vulkan), Linux, macOS, Android (with external storage access)
+
+This enables real-world coding workflows on 4B–7B local models without cloud dependency.
+
 #### Background Tasks
 
 Delegate work to subagents that run asynchronously. Set `mode: "background"` on the task tool and it returns a `task_id` immediately while the agent works in the background. Bus events (`TaskCreated`, `TaskCompleted`, `TaskFailed`) are published for lifecycle tracking.
