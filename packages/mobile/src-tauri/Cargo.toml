@@ -33,7 +33,8 @@ futures-util = "0.3"
 [target.'cfg(target_os = "android")'.dependencies]
 url = "2"
 
-# STT/TTS engines (cross-platform)
+# STT/TTS engines (cross-platform ONNX Runtime)
+# On Android CI, set ORT_LIB_LOCATION to the ONNX Runtime Android .so directory
 [dependencies.ort]
 version = "=2.0.0-rc.10"
 features = ["download-binaries"]
