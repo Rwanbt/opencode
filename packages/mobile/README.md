@@ -9,10 +9,24 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 - **Remote Mode**: Connects to a desktop OpenCode instance over the network
 
 ### Local LLM Inference
-- On-device inference via llama.cpp with JNI bridge
+- On-device inference via llama.cpp with JNI bridge (GPU optional: OpenCL/Vulkan)
 - Model management: download GGUF models from HuggingFace, load/unload/delete
 - OpenAI-compatible HTTP API via llama-server on port 14097
 - File-based IPC between Rust backend and Kotlin LlamaEngine
+- HuggingFace search for additional GGUF models
+
+### Speech-to-Text (STT)
+- NVIDIA Parakeet TDT 0.6B v3 (INT8) via ONNX Runtime (same engine as desktop)
+- ~300ms transcription for 5s of audio on CPU
+- 25 European languages supported
+- Auto-download model (~460 MB) on first use
+- Waveform animation during recording
+
+### External Storage Access
+- Symlinks from server HOME to `/sdcard/` directories (Documents, Downloads, projects, etc.)
+- `MANAGE_EXTERNAL_STORAGE` permission requested at startup (Android 11+)
+- `requestLegacyExternalStorage` for Android 10 compatibility
+- Native file picker via `tauri-plugin-dialog`
 
 ### Interactive Terminal
 - Full PTY terminal on Android via custom musl-compatible `librust_pty.so` (forkpty wrapper)
@@ -87,11 +101,14 @@ packages/mobile/
 │   └── notifications.ts       # SSE → push notification bridge
 ├── src-tauri/
 │   ├── tauri.conf.json        # Tauri mobile config + permissions
-│   ├── Cargo.toml             # Rust deps (reqwest, futures, serde)
+│   ├── Cargo.toml             # Rust deps (ort, ndarray, reqwest, hound, zip, bincode)
 │   ├── src/
-│   │   ├── lib.rs             # Tauri commands (runtime + LLM)
-│   │   ├── runtime.rs         # Embedded server (bun + symlinks)
-│   │   └── llm.rs             # LLM command handler (IPC bridge)
+│   │   ├── lib.rs             # Tauri commands (runtime + LLM + speech)
+│   │   ├── runtime.rs         # Embedded server (bun + /sdcard symlinks)
+│   │   ├── llm.rs             # LLM command handler (IPC bridge)
+│   │   ├── speech.rs          # STT (Parakeet) + TTS stubs + voice clone storage
+│   │   ├── parakeet/engine.rs # ONNX STT inference (preprocess → encode → decode)
+│   │   └── kokoro/engine.rs   # ONNX TTS engine (G2P + tokenizer + synthesis)
 │   └── gen/android/
 │       └── app/src/main/
 │           ├── java/.../LlamaEngine.kt  # Kotlin JNI bridge for llama.cpp
@@ -155,6 +172,9 @@ Custom models can be searched and downloaded directly from HuggingFace via the b
 ### Shared UI Features (Mobile + Desktop)
 
 - **Web search toggle**: Globe icon in prompt toolbar
-- **Voice input (STT)**: Microphone button with waveform animation
+- **Voice input (STT)**: Microphone button with waveform animation (Parakeet, 25 languages)
 - **Read aloud (TTS)**: Speaker button under AI responses (click to play/pause, double-click to reset)
+- **Audio settings**: Settings > Audio tab (STT engine, TTS voice, speed, voice cloning)
+- **Configuration**: Settings > Configuration (presets, output tokens, context, sampling, KV cache, offloading)
+- **Voice cloning**: Upload WAV or record mic sample for custom TTS voice
 - **Audio settings**: Settings > Audio tab (STT engine, TTS voice, speed, voice cloning)
