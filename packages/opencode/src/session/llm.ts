@@ -120,6 +120,13 @@ export namespace LLM {
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
+    // Prompt profiler for local models
+    if (input.model.providerID === "local-llm") {
+      const estimateTokens = (text: string) => Math.ceil(text.length / 4)
+      const systemTokens = estimateTokens(system.join("\n"))
+      log.info("prompt profile", { systemTokens, model: input.model.api.id })
+    }
+
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
