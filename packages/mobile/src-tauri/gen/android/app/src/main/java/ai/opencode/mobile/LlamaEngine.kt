@@ -56,6 +56,49 @@ object LlamaEngine {
         }
     }
 
+    /** Detect big/prime CPU cores by reading max frequencies from sysfs.
+     *  Returns a bitmask where each bit represents a core (1=big, 0=LITTLE).
+     *  E.g., SD8Gen3: cores 2-7 are big → 0xFC, SD865: cores 4-7 → 0xF0 */
+    private fun detectBigCoreMask(): Int {
+        try {
+            val nCores = Runtime.getRuntime().availableProcessors()
+            val freqs = mutableListOf<Pair<Int, Long>>()  // (core_index, max_freq_khz)
+
+            for (i in 0 until nCores) {
+                val freq = try {
+                    java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq")
+                        .readText().trim().toLong()
+                } catch (_: Exception) { 0L }
+                freqs.add(i to freq)
+            }
+
+            if (freqs.isEmpty() || freqs.all { it.second == 0L }) {
+                // Fallback: assume top half of cores are big
+                val mask = ((1 shl nCores) - 1) and (((1 shl nCores) - 1) xor ((1 shl (nCores / 2)) - 1))
+                Log.w(TAG, "CPU freq detection failed, using fallback mask: 0x${Integer.toHexString(mask)}")
+                return mask
+            }
+
+            // Find the threshold: big cores have significantly higher max freq than LITTLE cores
+            val maxFreq = freqs.maxOf { it.second }
+            val threshold = maxFreq * 70 / 100  // Cores with >70% of max freq are "big"
+
+            var mask = 0
+            for ((core, freq) in freqs) {
+                if (freq >= threshold) {
+                    mask = mask or (1 shl core)
+                }
+            }
+
+            Log.i(TAG, "CPU freqs: ${freqs.map { "${it.first}:${it.second/1000}MHz" }}")
+            Log.i(TAG, "Big core mask: 0x${Integer.toHexString(mask)} (threshold=${threshold/1000}MHz)")
+            return if (mask != 0) mask else ((1 shl nCores) - 1)  // Fallback to all cores
+        } catch (e: Exception) {
+            Log.w(TAG, "CPU topology detection failed: ${e.message}")
+            return 0xFF  // Default: all 8 cores
+        }
+    }
+
     /** Detect if Vulkan is the preferred GPU backend for this device.
      *  Vulkan 1.3+ devices (Adreno 730+) work well with Vulkan.
      *  Older devices (Adreno 6xx, Vulkan 1.1) should use OpenCL. */
@@ -238,12 +281,10 @@ object LlamaEngine {
             }
             val nativeLibDir = libDir
 
-            // Choose server binary:
-            // Modern SoCs (Adreno 730+): OpenCL with Qualcomm-optimized kernels
-            // Old SoCs: CPU-only (statically-linked with NEON+dotprod)
-            val isModernSoC = detectVulkanCapable()  // Adreno 730+ = good OpenCL support
-            val serverName = if (isModernSoC) "libllama_server_opencl.so" else "libllama_server.so"
-            Log.i(TAG, "Selecting server: $serverName (modernSoC=$isModernSoC)")
+            // Use CPU-only server for Q4_K_M (OpenCL only optimized for Q4_0)
+            // CPU with armv8.7a + i8mm + big-core pinning is fastest for Q4_K_M
+            val serverName = "libllama_server.so"
+            Log.i(TAG, "Selecting server: $serverName (CPU-only, optimized for Q4_K_M)")
             val serverBin = java.io.File(nativeLibDir, serverName)
             if (!serverBin.exists()) {
                 // Fallback to CPU-only if Vulkan binary not found
@@ -260,18 +301,15 @@ object LlamaEngine {
             homeDir?.mkdirs()
 
             // Build command with backend-specific args
-            // GPU offload: OpenCL on modern SoCs, none on old SoCs
-            val ngl = if (isModernSoC) "99" else "0"
-            // Detect optimal thread count based on CPU architecture
-            // SD8Gen3: 1x X4 + 3x A720 + 4x A520 → use 4 big cores (X4 + A720)
-            // SD865: 4x A77 + 4x A55 → use 4 big cores
-            // General: use nproc/2 to avoid LITTLE cores that slow things down
-            val nCores = Runtime.getRuntime().availableProcessors()
-            // Modern SoCs (8+ cores): use big+prime cores (avoid LITTLE)
-            // SD8Gen3: 1x X4(prime) + 3x A720(big) + 4x A520(LITTLE) → 4 threads optimal
-            // SD865: 1x A77(prime) + 3x A77(big) + 4x A55(LITTLE) → 4 threads optimal
-            val nThreads = if (nCores >= 8) 4 else (nCores / 2).coerceIn(2, 4)
-            Log.i(TAG, "CPU cores: $nCores, using threads: $nThreads")
+            val ngl = "0"  // CPU-only: GPU offload disabled (Q4_K_M not optimized for GPU)
+
+            // Detect big-core topology for CPU affinity pinning
+            // This is critical: Android EAS schedules threads on LITTLE cores by default,
+            // which can make inference 2-3x slower. We pin to big/prime cores only.
+            val cpuMask = detectBigCoreMask()
+            val nBigCores = Integer.bitCount(cpuMask)
+            val nThreads = nBigCores.coerceIn(2, 4)  // Use big cores only, max 4
+            Log.i(TAG, "CPU topology: mask=0x${Integer.toHexString(cpuMask).uppercase()}, bigCores=$nBigCores, threads=$nThreads")
 
             val args = mutableListOf(
                 actualBin.absolutePath,
@@ -285,7 +323,7 @@ object LlamaEngine {
                 "--batch-size", "512",
                 "--jinja"
             )
-            Log.i(TAG, "Starting server: ${actualBin.name} ngl=$ngl")
+            Log.i(TAG, "Starting server: ${actualBin.name} ngl=$ngl cpuMask=0x${Integer.toHexString(cpuMask).uppercase()}")
 
             val pb = ProcessBuilder(args)
             pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
