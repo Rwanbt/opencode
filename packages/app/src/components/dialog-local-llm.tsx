@@ -162,12 +162,23 @@ export function DialogLocalLLM() {
     try {
       const allModels: ModelInfo[] = await invokeTauri("list_models").catch(() => [])
       if (allModels.length === 0) return
+
+      // Read model config from settings
+      const configRaw = localStorage.getItem("opencode-model-config")
+      const modelConfig = configRaw ? JSON.parse(configRaw) : {}
+      const outputTokens = modelConfig.outputTokensMode === "manual"
+        ? modelConfig.outputTokensManual || 8192
+        : 8192 // auto: reasonable default for local models
+      const contextSize = modelConfig.contextMode === "manual"
+        ? modelConfig.contextManual || 32768
+        : 131072 // auto: use model's native context
+
       const modelEntries: Record<string, { name: string; limit?: { context: number; output: number } }> = {}
       for (const m of allModels) {
         const name = m.filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
         modelEntries[name] = {
           name,
-          limit: { context: 131072, output: 4096 },
+          limit: { context: contextSize, output: outputTokens },
         }
       }
       await globalSync.updateConfig({
