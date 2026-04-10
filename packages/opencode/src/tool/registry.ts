@@ -200,9 +200,9 @@ export namespace ToolRegistry {
         const LOCAL_TOOLS = new Set(["bash", "read", "edit", "write", "glob", "grep", "question"])
         const LOCAL_SKELETONS: Record<string, string> = {
           bash: "Execute shell command. Args: {command: string}. Returns stdout.",
-          read: "Read file content. Args: {file_path: string, offset?: number, limit?: number}. Returns file text.",
-          edit: "Replace exact text in file. Args: {file_path: string, old_string: string, new_string: string}. old_string must be copied EXACTLY from file (whitespace matters). Read file first.",
-          write: "Create or overwrite file. Args: {file_path: string, content: string}. Use edit for partial changes.",
+          read: "Read file content. Args: {filePath: string, offset?: number, limit?: number}. Returns file text.",
+          edit: "Replace exact text in file. Args: {filePath: string, oldString: string, newString: string}. oldString must be copied EXACTLY from file (whitespace matters). Read file first.",
+          write: "Create or overwrite file. Args: {filePath: string, content: string}. Use edit for partial changes.",
           glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
           grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
           question: "Ask user a question. Args: {question: string}. Use when you need clarification.",

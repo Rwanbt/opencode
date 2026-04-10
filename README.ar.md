@@ -48,6 +48,61 @@
 > هذا فورك من [anomalyco/opencode](https://github.com/anomalyco/opencode) يديره [Rwanbt](https://github.com/Rwanbt).
 > يتم الحفاظ على المزامنة مع المستودع الأصلي. راجع [فرع dev](https://github.com/Rwanbt/opencode/tree/dev) لآخر التغييرات.
 
+#### الذكاء الاصطناعي المحلي أولاً
+
+يشغّل OpenCode نماذج AI محلياً على أجهزة المستهلك (8 جيجابايت VRAM / 16 جيجابايت RAM)، دون أي اعتماد على السحابة لنماذج 4B–7B.
+
+**تحسين الأوامر (تخفيض 94%)**
+- ~1K رمز للأمر النظامي للنماذج المحلية (مقابل ~16K للسحابية)
+- مخططات أدوات هيكلية (توقيعات من سطر واحد بدلاً من أوصاف بالكيلوبايت)
+- قائمة بيضاء من 7 أدوات (bash, read, edit, write, glob, grep, question)
+- بدون قسم skills، معلومات بيئة محدودة
+
+**محرك الاستدلال (llama.cpp b8731)**
+- واجهة GPU خلفية Vulkan، تُحمَّل تلقائياً عند أول تحميل نموذج
+- `--flash-attn on` — Flash Attention لكفاءة الذاكرة
+- `--cache-type-k/v q4_0` — ذاكرة KV المؤقتة مع دوران Hadamard (توفير 72% من الذاكرة)
+- `--fit on` — ضبط تلقائي لحجم السياق وتوزيع طبقات GPU حسب VRAM المتاحة
+- فك الترميز التخميني (`--model-draft`) مع حماية VRAM (تعطيل تلقائي عند < 1.5 جيجابايت حرة)
+- فتحة واحدة (`-np 1`) لتقليل استهلاك الذاكرة
+
+**تحويل الكلام إلى نص (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet عبر ONNX Runtime — ~300 مللي ثانية لـ 5 ثوانٍ من الصوت (18x الوقت الفعلي)
+- 25 لغة أوروبية (الإنجليزية، الفرنسية، الألمانية، الإسبانية، إلخ)
+- صفر VRAM: معالج فقط (~700 ميجابايت RAM)
+- تحميل تلقائي للنموذج (~460 ميجابايت) عند أول ضغطة ميكروفون
+- رسم متحرك لشكل الموجة أثناء التسجيل
+
+**تحويل النص إلى كلام (Kyutai Pocket TTS)**
+- TTS فرنسي الأصل من Kyutai (باريس)، 100 مليون معامل
+- 8 أصوات مدمجة: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- استنساخ صوت بدون تدريب: ارفع ملف WAV أو سجّل من الميكروفون
+- معالج فقط، ~6x الوقت الفعلي، خادم HTTP على المنفذ 14100
+- بديل: محرك Kokoro TTS ONNX (54 صوتاً، 9 لغات، CMUDict G2P)
+
+**إدارة النماذج**
+- بحث HuggingFace مع شارات توافق VRAM/RAM لكل نموذج
+- تحميل وتشغيل وإيقاف وحذف نماذج GGUF من الواجهة
+- كتالوج مُنتقى مسبقاً: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- عدد رموز إخراج ديناميكي حسب حجم النموذج
+- كشف تلقائي لنموذج المسودة (0.5B–0.8B) لفك الترميز التخميني
+
+**التكوين**
+- إعدادات مسبقة: Fast / Quality / Eco / Long Context (تحسين بنقرة واحدة)
+- أداة مراقبة VRAM مع شريط استخدام مرمّز بالألوان (أخضر / أصفر / أحمر)
+- نوع ذاكرة KV المؤقتة: auto / q8_0 / q4_0 / f16
+- تفريغ GPU: auto / gpu-max / balanced
+- تعيين الذاكرة: auto / on / off
+- مفتاح البحث على الويب (أيقونة الكرة الأرضية في شريط الأوامر)
+
+**موثوقية الوكيل (النماذج المحلية)**
+- فحوصات ما قبل التنفيذ (على مستوى الكود، 0 رمز): فحص وجود الملف قبل التحرير، التحقق من محتوى old_string، فرض القراءة قبل التحرير، منع الكتابة على ملف موجود
+- كسر تلقائي لحلقة الدوران: استدعاءان متطابقان لأداة → حقن خطأ (حماية على مستوى الكود، وليس الأمر)
+- قياس أداء الأدوات: معدل نجاح/خطأ لكل جلسة مع تفصيل لكل أداة، تسجيل تلقائي
+- الهدف: >85% معدل نجاح الأدوات على نماذج 4B
+
+**متعدد المنصات**: Windows (Vulkan)، Linux، macOS، Android
+
 #### المهام الخلفية
 
 فوّض العمل إلى وكلاء فرعيين يعملون بشكل غير متزامن. اضبط `mode: "background"` على أداة task وستُرجع `task_id` فوراً بينما يعمل الوكيل في الخلفية. يتم نشر أحداث الناقل (`TaskCreated`، `TaskCompleted`، `TaskFailed`) لتتبع دورة الحياة.
@@ -122,23 +177,23 @@ REST API كامل لإدارة دورة حياة المهام:
 
 ### دعم مزودين متعددين
 
-أكثر من 21 مزوداً جاهزاً: Anthropic، OpenAI، Google Gemini، Azure، AWS Bedrock، Vertex AI، OpenRouter، GitHub Copilot، XAI، Mistral، Groq، DeepInfra، Cerebras، Cohere، TogetherAI، Perplexity، Vercel، Venice، GitLab، Gateway، بالإضافة إلى أي endpoint متوافق مع OpenAI. الأسعار مأخوذة من [models.dev](https://models.dev).
+أكثر من 25 مزوداً جاهزاً: Anthropic، OpenAI، Google Gemini، Azure، AWS Bedrock، Vertex AI، OpenRouter، GitHub Copilot، XAI، Mistral، Groq، DeepInfra، Cerebras، Cohere، TogetherAI، Perplexity، Vercel، Venice، GitLab، Gateway، Ollama Cloud، بالإضافة إلى أي endpoint متوافق مع OpenAI (Ollama، LM Studio، vLLM، LocalAI). الأسعار مأخوذة من [models.dev](https://models.dev).
 
 ### نظام الوكلاء
 
 | Agent | Mode | Access | Description |
 |-------|------|--------|-------------|
-| **build** | primary | full | Default development agent |
-| **plan** | primary | read-only | Analysis and code exploration |
-| **general** | subagent | full (no todowrite) | Complex multi-step tasks |
-| **explore** | subagent | read-only | Fast codebase search |
-| **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
-| **critic** | subagent | read-only + bash + LSP | Code review: bugs, security, performance |
-| **tester** | subagent | full (no todowrite) | Write and run tests, verify coverage |
-| **documenter** | subagent | full (no todowrite) | JSDoc, README, inline documentation |
-| compaction | hidden | none | AI-driven context summarization |
-| title | hidden | none | Session title generation |
-| summary | hidden | none | Session summarization |
+| **build** | primary | full | وكيل التطوير الافتراضي |
+| **plan** | primary | read-only | التحليل واستكشاف الكود |
+| **general** | subagent | full (no todowrite) | مهام معقدة متعددة الخطوات |
+| **explore** | subagent | read-only | بحث سريع في قاعدة الكود |
+| **orchestrator** | subagent | read-only + task/team | منسق متعدد الوكلاء (50 خطوة) |
+| **critic** | subagent | read-only + bash + LSP | مراجعة الكود: أخطاء، أمان، أداء |
+| **tester** | subagent | full (no todowrite) | كتابة وتشغيل الاختبارات، التحقق من التغطية |
+| **documenter** | subagent | full (no todowrite) | JSDoc، README، توثيق مضمّن |
+| compaction | hidden | none | تلخيص السياق بالذكاء الاصطناعي |
+| title | hidden | none | توليد عنوان الجلسة |
+| summary | hidden | none | تلخيص الجلسة |
 
 ### تكامل LSP
 
@@ -184,13 +239,14 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 
 - **واجهة TUI مكتوبة بـ TypeScript** (SolidJS + @opentui لعرض الطرفية)، وليس Rust.
 - **Tree-sitter** يُستخدم فقط لتلوين بناء الجملة في TUI وتحليل أوامر bash، وليس لتحليل الكود على مستوى الوكيل.
-- **لا يوجد Docker/E2B sandboxing** -- العزل يتم عبر git worktrees.
-- **لا توجد قاعدة بيانات متجهية أو نظام RAG** -- يُدار السياق عبر فهرسة رموز LSP + الضغط التلقائي.
+- **Docker sandboxing** اختياري (`experimental.sandbox.type: "docker"`)؛ العزل الافتراضي يتم عبر git worktrees.
+- **RAG** اختياري (`experimental.rag.enabled: true`)؛ إدارة السياق الافتراضية عبر فهرسة رموز LSP + الضغط التلقائي.
 - **لا يوجد "وضع مراقبة" يقترح إصلاحات تلقائية** -- مراقب الملفات موجود لأغراض البنية التحتية فقط.
 - **التصحيح الذاتي** يستخدم حلقة الوكيل القياسية (يرى LLM الأخطاء في نتائج الأدوات ويعيد المحاولة)، وليس آلية إصلاح تلقائي متخصصة.
 
 ## مصفوفة القدرات
 
+### ميزات الوكيل الأساسية
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Background tasks | Implemented | `mode: "background"` on task tool |
@@ -201,80 +257,216 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | MCP agent scoping | Implemented | Per-agent allow/deny config |
 | 9-state lifecycle | Implemented | Persistent to SQLite |
 | Orchestrator agent | Implemented | Read-only coordinator |
-| Multi-provider (21+) | Implemented | Including local models |
+| Multi-provider (25+) | Implemented | Including local models via OpenAI-compatible API |
 | LSP integration | Implemented | Symbols, diagnostics, multi-language |
 | MCP protocol | Implemented | Client + server, 3 transports |
 | Plugin system | Implemented | SDK + hook architecture |
 | Cost tracking | Implemented | Per-message, per-team, per-model |
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
-| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Specialized agents | Implemented | critic, tester, documenter subagents |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Web search | Implemented | Globe toggle in prompt toolbar |
+
+### الذكاء الاصطناعي المحلي (سطح المكتب + الجوال)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
+| Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
+| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
+| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
+| Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
+| Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+
+### الأمان والحوكمة
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+
+### المعرفة والذاكرة
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+
+### امتدادات المنصة (تجريبية)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
+| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
----
-
-## Future Roadmap
-
-Three major initiatives are planned on dedicated feature branches. Each is designed to be modular — they can be developed independently and merged when ready.
-
-### 🤝 Collaborative Mode ()
-
-**Goal**: Multiple developers interacting with agents simultaneously in real-time.
-
-| Component | Description |
-|-----------|-------------|
-| Multi-user auth | JWT-based authentication on the Hono server, user sessions, role-based access |
-| WebSocket broadcast | Real-time event streaming to all connected clients (agent activity, file changes, task status) |
-| File concurrency | Lock-based or CRDT-based conflict resolution when multiple agents/users edit the same file |
-| Presence UI | See who is connected, what they're working on, which agents are assigned to whom |
-| Shared context | Cross-user session history, shared learnings, team-wide RAG index |
-
-**Scale**: ~3000+ LOC, major architectural change. Requires refactoring the server for multi-tenant support.
-
-### 📱 Mobile Version ()
-
-**Goal**: Run OpenCode as a native mobile app on Android and iOS, with full agent capabilities.
-
-| Component | Description |
-|-----------|-------------|
-| **Tauri 2.0 migration** | Leverage Tauri's mobile targets (Android/iOS) to package the existing SolidJS frontend as a native app |
-| **Runtime adaptation** | Bundle the TypeScript agent core with Vite for WebView execution; delegate performance-critical tasks to Tauri's Rust layer |
-| **isomorphic-git** | Replace system  calls with isomorphic-git for pure-JS git operations within the mobile sandbox |
-| **File system access** | Use  for sandboxed file access + Document Picker integration |
-| **Remote mode** | Connect to a desktop OpenCode instance over a secure tunnel (Tailscale/Cloudflare) for full capability without local execution |
-| **Mobile-optimized UI** | Conversational interface that hides terminal complexity; swipe-based diff review; virtual keyboard optimizations |
-
-**Platform comparison**:
-- **Android** (via Termux or Tauri): Full Node.js support, broad file access, excellent performance
-- **iOS** (via Tauri/a-Shell): Sandbox restrictions, limited native packages, but strong Apple Silicon performance for local models
-
-**Scale**: ~2000+ LOC for the Tauri mobile shell, ~500 LOC for isomorphic-git adapter, ~300 LOC for remote mode.
-
-### 🔗 AnythingLLM Fusion ()
-
-**Goal**: Merge OpenCode's agentic coding capabilities with [AnythingLLM](https://github.com/mintplex-labs/anything-llm)'s document RAG and multi-user chat platform.
-
-| Component | Description |
-|-----------|-------------|
-| **Context bridge** | Pipe AnythingLLM's indexed documents (PDFs, wikis, Confluence, etc.) into OpenCode's system prompt as additional context |
-| **Agent skill plugin** | Expose OpenCode's core commands (, , edit, bash) as an AnythingLLM Agent Skill via HTTP API |
-| **Unified vector store** | Merge OpenCode's SQLite RAG with AnythingLLM's vector DB backends (LanceDB, Pinecone, Chroma) for a single knowledge layer |
-| **Multi-user workspace** | Leverage AnythingLLM's existing multi-user and workspace management for team environments |
-| **Containerized deployment** | Docker Compose setup running both backends, with shared auth and a unified API gateway |
-
-**Synergy**: AnythingLLM excels at document ingestion and RAG over non-code content. OpenCode excels at code manipulation, agentic tool use, and multi-provider LLM orchestration. Combined, they create a full-stack AI development platform that can reason over documentation AND write/execute code.
-
-**Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
 
 ---
+
+## البنية المعمارية
+
+```mermaid
+graph TB
+  subgraph Clients
+    TUI[TUI - SolidJS + opentui]
+    Web[Web UI - SolidJS + Vite]
+    Desktop[Desktop - Tauri 2.0]
+    Mobile[Mobile - Tauri iOS/Android]
+  end
+
+  subgraph Server
+    Hono[Hono HTTP Server<br/>REST + SSE + WebSocket]
+    Auth[Auth - JWT + Basic]
+    Broadcast[WebSocket Broadcast]
+  end
+
+  subgraph "Agent Engine"
+    Session[Session + Agent Loop]
+    Router[Provider Router]
+    Tools[Tool Engine<br/>bash, read, write, edit, glob,<br/>grep, list, webfetch, task...]
+    Context[Context Manager<br/>Auto-compact + Token Pruning]
+  end
+
+  subgraph Intelligence
+    Cloud[25+ Cloud APIs<br/>Anthropic, OpenAI, Google,<br/>Azure, Bedrock, Vertex...]
+    Local[Local LLM<br/>llama.cpp b8731 Vulkan<br/>port 14097]
+    MCP[MCP Servers<br/>stdio, HTTP/SSE, StreamableHTTP]
+    LSP[15+ LSP Servers<br/>Auto-download + Symbol Index]
+  end
+
+  subgraph "Speech (ONNX Runtime)"
+    STT[Parakeet TDT 0.6B<br/>25 languages, ~300ms/5s]
+    TTS[Pocket TTS + Kokoro<br/>Voice Cloning, port 14100]
+  end
+
+  subgraph Storage
+    DB[(SQLite - Drizzle ORM<br/>Sessions, Messages, Snapshots)]
+    RAG[RAG - SQLite Vectors]
+    ALLM[AnythingLLM Bridge]
+  end
+
+  TUI & Web & Desktop & Mobile --> Hono
+  Hono --> Session
+  Session --> Router
+  Router --> Cloud & Local
+  Session --> Tools
+  Tools --> LSP & MCP
+  Session --> Context
+  Context --> RAG & ALLM
+  Hono --> DB
+  Desktop & Mobile --> STT & TTS
+```
+
+### منافذ الخدمات
+
+| Service | Port | Protocol |
+|---------|------|----------|
+| OpenCode Server | 4096 | HTTP (REST + SSE + WebSocket) |
+| LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
+| TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
+
+## الأمان والحوكمة
+
+| Feature | Description |
+|---------|-------------|
+| **Sandbox** | تنفيذ Docker اختياري (`experimental.sandbox.type: "docker"`) أو وضع المضيف مع فرض حدود المشروع |
+| **Permissions** | نظام من 3 حالات (`allow` / `deny` / `ask`) مع مطابقة أنماط wildcard. أكثر من 100 تعريف لأوامر bash للتحكم الدقيق |
+| **DLP** | منع فقدان البيانات (`experimental.dlp`) — إخفاء المفاتيح السرية ومفاتيح API وبيانات الاعتماد قبل إرسالها لمزودي LLM |
+| **Policy Engine** | قواعد شرطية (`experimental.policy`) مع إجراءات `block` أو `warn`. حماية المسارات، تحديد حجم التحرير، أنماط regex مخصصة |
+| **Privacy** | المحلي أولاً: جميع البيانات في SQLite على القرص. لا قياس عن بُعد افتراضياً. المفاتيح السرية لا تُسجَّل أبداً. لا تُرسل بيانات لأطراف ثالثة باستثناء مزود LLM المُعدّ |
+
+## واجهة الذكاء
+
+| Feature | Description |
+|---------|-------------|
+| **MCP Compliant** | دعم كامل لـ Model Context Protocol — أوضاع العميل والخادم، تحديد نطاق الأدوات لكل وكيل عبر قوائم allow/deny |
+| **Context Files** | مجلد `.opencode/` مع إعداد `opencode.jsonc`. الوكلاء مُعرَّفون كـ markdown مع YAML frontmatter. تعليمات مخصصة عبر إعداد `instructions` |
+| **Provider Router** | أكثر من 25 مزوداً عبر `Provider.parseModel("provider/model")`. انتقال تلقائي، تتبع التكاليف، توجيه واعٍ بالرموز |
+| **RAG System** | بحث متجهي محلي اختياري (`experimental.rag`) مع نماذج تضمين قابلة للتكوين (OpenAI/Google). فهرسة تلقائية للملفات المعدَّلة |
+| **AnythingLLM Bridge** | تكامل اختياري (`experimental.anythingllm`) — حقن السياق، محول خادم MCP، جسر مخزن المتجهات، Agent Skills HTTP API |
+
+---
+
+## فروع الميزات (مُنفَّذة على `dev`)
+
+تم تنفيذ ثلاث ميزات رئيسية في فروع مخصصة ودمجها في `dev`. كل منها مُدارة بأعلام الميزات ومتوافقة مع الإصدارات السابقة.
+
+### الوضع التعاوني (`dev_collaborative_mode`)
+
+تعاون متعدد المستخدمين في الوقت الفعلي. تم التنفيذ:
+- **مصادقة JWT** — رموز HMAC-SHA256 مع تدوير التحديث، متوافقة مع basic auth
+- **إدارة المستخدمين** — تسجيل، أدوار (admin/member/viewer)، تطبيق RBAC
+- **WebSocket broadcast** — بث أحداث في الوقت الفعلي عبر GlobalBus → Broadcast
+- **نظام الحضور** — حالة online/idle/away مع heartbeat كل 30 ثانية
+- **قفل الملفات** — أقفال متفائلة على أدوات edit/write مع كشف التعارضات
+- **الواجهة الأمامية** — نموذج تسجيل الدخول، مؤشر الحضور، شارة المراقب، WebSocket hooks
+
+الإعداد: `experimental.collaborative.enabled: true`
+
+### النسخة المحمولة (`dev_mobile`)
+
+تطبيق Android/iOS أصلي عبر Tauri 2.0 مع **بيئة تشغيل مدمجة** — APK واحد، صفر تبعيات خارجية. تم التنفيذ:
+
+**الطبقة 1 — بيئة التشغيل المدمجة (Android، أداء أصلي 100%):**
+- **ملفات ثنائية ثابتة في APK** — Bun، Git، Bash، Ripgrep (aarch64-linux-musl) تُستخرج عند أول تشغيل (~15 ثانية)
+- **CLI مُجمَّع** — OpenCode CLI كحزمة JS يشغّلها Bun المدمج، لا حاجة للشبكة للنواة
+- **إطلاق عمليات مباشر** — بدون Termux، بدون intents — `std::process::Command` من Rust مباشرة
+- **تشغيل تلقائي للخادم** — `bun opencode-cli.js serve` على localhost مع مصادقة UUID، مثل sidecar سطح المكتب
+
+**الطبقة 2 — استدلال LLM على الجهاز:**
+- **llama.cpp عبر JNI** — Kotlin LlamaEngine يحمّل مكتبات .so الأصلية عبر جسر JNI
+- **IPC عبر الملفات** — Rust يكتب الأوامر في `llm_ipc/request`، خدمة Kotlin تستطلع وتُرجع النتائج
+- **llama-server** — HTTP API متوافق مع OpenAI على المنفذ 14097 لتكامل المزود
+- **إدارة النماذج** — تحميل نماذج GGUF من HuggingFace، تشغيل/إيقاف/حذف، 9 نماذج مُنتقاة مسبقاً
+- **تسجيل المزود** — النموذج المحلي يظهر كمزود "Local AI" في محدد النموذج
+- **Flash Attention** — `--flash-attn on` لاستدلال فعال الذاكرة
+- **تكميم ذاكرة KV المؤقتة** — `--cache-type-k/v q4_0` مع دوران Hadamard (توفير 72% من الذاكرة)
+- **فك الترميز التخميني** — كشف تلقائي لنموذج المسودة (0.5B–0.8B) مع RAM Guard عبر `/proc/meminfo`
+- **مراقبة RAM** — أداة ذاكرة الجهاز (إجمالي/مستخدم/حر) عبر `/proc/meminfo`
+- **إعدادات التكوين المسبقة** — نفس إعدادات Fast/Quality/Eco/Long Context كسطح المكتب
+- **اختيار GPU ذكي** — Vulkan لـ Adreno 730+ (SD 8 Gen 1+)، OpenCL لـ SoC الأقدم، CPU احتياطي
+- **تثبيت الأنوية الكبيرة** — يكتشف طوبولوجيا ARM big.LITTLE، يثبّت الاستدلال على أنوية الأداء فقط
+
+**الطبقة 3 — البيئة الموسعة (تحميل اختياري، ~150 ميجابايت):**
+- **proot + Alpine rootfs** — Linux كامل مع `apt install` للحزم الإضافية
+- **Bind-mounted الطبقة 1** — Bun/Git/rg لا تزال تعمل بسرعة أصلية داخل proot
+- **عند الطلب** — تُحمَّل فقط عندما يُمكّن المستخدم "Extended Environment" في الإعدادات
+
+**الطبقة 4 — الكلام والوسائط:**
+- **STT (Parakeet TDT 0.6B)** — نفس محرك ONNX Runtime كسطح المكتب، ~300 مللي ثانية/5 ثوانٍ صوت، 25 لغة
+- **رسم متحرك لشكل الموجة** — تغذية بصرية راجعة أثناء التسجيل
+- **منتقي ملفات أصلي** — `tauri-plugin-dialog` لاختيار الملفات/المجلدات والمرفقات
+
+**مشترك (Android + iOS):**
+- **تجريد المنصة** — نوع `Platform` موسّع مع `"mobile"` + كشف نظام التشغيل `"ios"/"android"`
+- **اتصال عن بُعد** — الاتصال بخادم OpenCode على سطح المكتب عبر الشبكة (iOS فقط أو Android احتياطي)
+- **طرفية تفاعلية** — PTY كامل عبر musl مخصص `librust_pty.so` (غلاف forkpty)، Ghostty WASM renderer مع canvas احتياطي
+- **تخزين خارجي** — روابط رمزية من HOME الخادم إلى مجلدات `/sdcard/` (Documents، Downloads، projects)
+- **واجهة جوال** — شريط جانبي متجاوب، إدخال رسائل محسّن للمس، عرض diff للجوال، أهداف لمس 44px، دعم safe area
+- **إشعارات فورية** — جسر SSE→إشعارات أصلية لإكمال المهام الخلفية
+- **محدد الوضع** — اختيار Local (Android) أو Remote (iOS + Android) عند أول تشغيل
+- **قائمة إجراءات الجوال** — وصول سريع للطرفية، fork، البحث والإعدادات من رأس الجلسة
+
+### دمج AnythingLLM (`dev_anything`)
+
+جسر بين OpenCode ومنصة AnythingLLM لـ RAG الوثائقي. تم التنفيذ:
+- **عميل REST** — غلاف API كامل لمساحات عمل AnythingLLM، الوثائق، البحث، المحادثة
+- **محول خادم MCP** — 4 أدوات: `anythingllm_search`، `anythingllm_list_workspaces`، `anythingllm_get_document`، `anythingllm_chat`
+- **حقن السياق عبر الإضافة** — خطاف `experimental.chat.system.transform` يحقن الوثائق ذات الصلة في الأمر النظامي
+- **Agent Skills HTTP API** — `GET /agent-skills` + `POST /agent-skills/:toolId/execute` لتوفير أدوات OpenCode في AnythingLLM
+- **جسر مخزن المتجهات** — بحث مركّب يدمج SQLite RAG المحلي مع نتائج قاعدة بيانات المتجهات في AnythingLLM
+- **Docker Compose** — `docker-compose.anythingllm.yml` جاهز للاستخدام مع شبكة مشتركة
+
+الإعداد: `experimental.anythingllm.enabled: true`
 
 ### التثبيت
 

@@ -48,6 +48,61 @@
 > นี่คือ fork ของ [anomalyco/opencode](https://github.com/anomalyco/opencode) ที่ดูแลโดย [Rwanbt](https://github.com/Rwanbt)
 > ซิงค์กับ upstream อยู่เสมอ ดู [สาขา dev](https://github.com/Rwanbt/opencode/tree/dev) สำหรับการเปลี่ยนแปลงล่าสุด
 
+#### AI แบบ Local-First
+
+OpenCode รันโมเดล AI แบบโลคัลบนฮาร์ดแวร์ผู้บริโภค (8 GB VRAM / 16 GB RAM) โดยไม่ต้องพึ่งพาระบบคลาวด์สำหรับโมเดล 4B-7B
+
+**การเพิ่มประสิทธิภาพ Prompt (ลด 94%)**
+- ~1K token system prompt สำหรับโมเดลโลคัล (เทียบกับ ~16K สำหรับคลาวด์)
+- Skeleton tool schemas (ลายเซ็น 1 บรรทัด เทียบกับข้อความหลาย KB)
+- 7-tool whitelist (bash, read, edit, write, glob, grep, question)
+- ไม่มีส่วน skills, ข้อมูลสภาพแวดล้อมน้อยที่สุด
+
+**เอนจินอนุมาน (llama.cpp b8731)**
+- Vulkan GPU backend ดาวน์โหลดอัตโนมัติเมื่อโหลดโมเดลครั้งแรก
+- `--flash-attn on` — Flash Attention เพื่อประสิทธิภาพหน่วยความจำ
+- `--cache-type-k/v q4_0` — Hadamard rotation KV cache (ประหยัดหน่วยความจำ 72%)
+- `--fit on` — ปรับขนาดบริบทและการจัดวาง GPU layer ตาม VRAM ที่มีอยู่โดยอัตโนมัติ
+- Speculative decoding (`--model-draft`) พร้อม VRAM Guard (ปิดอัตโนมัติหาก < 1.5 GB ว่าง)
+- Single slot (`-np 1`) เพื่อลดการใช้หน่วยความจำ
+
+**เสียงเป็นข้อความ (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet ผ่าน ONNX Runtime — ~300ms สำหรับเสียง 5 วินาที (18x real-time)
+- 25 ภาษายุโรป (อังกฤษ ฝรั่งเศส เยอรมัน สเปน ฯลฯ)
+- VRAM เป็นศูนย์: CPU เท่านั้น (~700 MB RAM)
+- ดาวน์โหลดโมเดลอัตโนมัติ (~460 MB) เมื่อกดไมโครโฟนครั้งแรก
+- แอนิเมชันรูปคลื่นขณะบันทึก
+
+**ข้อความเป็นเสียง (Kyutai Pocket TTS)**
+- TTS ภาษาฝรั่งเศสสร้างโดย Kyutai (ปารีส) พารามิเตอร์ 100M
+- 8 เสียงในตัว: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Zero-shot voice cloning: อัปโหลด WAV หรือบันทึกจากไมโครโฟน
+- CPU เท่านั้น, ~6x real-time, HTTP server บนพอร์ต 14100
+- Fallback: Kokoro TTS ONNX engine (54 เสียง, 9 ภาษา, CMUDict G2P)
+
+**การจัดการโมเดล**
+- ค้นหา HuggingFace พร้อมป้ายความเข้ากันได้ VRAM/RAM ต่อโมเดล
+- ดาวน์โหลด, โหลด, ยกเลิกการโหลด, ลบโมเดล GGUF จาก UI
+- แค็ตตาล็อกที่คัดสรร: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Output token แบบไดนามิกตามขนาดโมเดล
+- ตรวจจับ draft model อัตโนมัติ (0.5B-0.8B) สำหรับ speculative decoding
+
+**การตั้งค่า**
+- พรีเซ็ต: Fast / Quality / Eco / Long Context (เพิ่มประสิทธิภาพด้วยคลิกเดียว)
+- วิดเจ็ตตรวจสอบ VRAM พร้อมแถบการใช้งานรหัสสี (เขียว / เหลือง / แดง)
+- KV cache type: auto / q8_0 / q4_0 / f16
+- GPU offloading: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- ค้นหาเว็บ (ไอคอนลูกโลกในแถบเครื่องมือ prompt)
+
+**ความน่าเชื่อถือของเอเจนต์ (โมเดลโลคัล)**
+- Pre-flight guards (ระดับโค้ด, 0 token): ตรวจสอบไฟล์มีอยู่ก่อนแก้ไข, ตรวจสอบเนื้อหา old_string, บังคับอ่านก่อนแก้ไข, ป้องกันเขียนทับไฟล์ที่มีอยู่
+- Doom loop auto-break: เรียกเครื่องมือซ้ำ 2 ครั้ง → ฉีดข้อผิดพลาด (guard ระดับโค้ด ไม่ใช่แค่ prompt)
+- Tool telemetry: อัตราสำเร็จ/ข้อผิดพลาดต่อเซสชันพร้อมรายละเอียดต่อเครื่องมือ บันทึกอัตโนมัติ
+- เป้าหมาย: >85% อัตราความสำเร็จของเครื่องมือบนโมเดล 4B
+
+**ข้ามแพลตฟอร์ม**: Windows (Vulkan), Linux, macOS, Android
+
 #### งานเบื้องหลัง
 
 มอบหมายงานให้ subagent ที่ทำงานแบบอะซิงโครนัส ตั้งค่า `mode: "background"` บนเครื่องมือ task แล้วจะคืนค่า `task_id` ทันทีในขณะที่เอเจนต์ทำงานในเบื้องหลัง Bus event (`TaskCreated`, `TaskCompleted`, `TaskFailed`) จะถูกเผยแพร่สำหรับการติดตามวงจรชีวิต

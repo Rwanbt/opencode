@@ -48,6 +48,61 @@
 > Dette er en fork af [anomalyco/opencode](https://github.com/anomalyco/opencode) vedligeholdt af [Rwanbt](https://github.com/Rwanbt).
 > Holdes synkroniseret med upstream. Se [dev-branch](https://github.com/Rwanbt/opencode/tree/dev) for seneste ændringer.
 
+#### Lokal-først AI
+
+OpenCode kører AI-modeller lokalt på forbrugerhardware (8 GB VRAM / 16 GB RAM), med nul cloud-afhængighed for 4B-7B modeller.
+
+**Promptoptimering (94% reduktion)**
+- ~1K token system prompt til lokale modeller (mod ~16K for cloud)
+- Skelet-værktøjsskemaer (1-linje signaturer mod multi-KB prosa)
+- 7-værktøjs whitelist (bash, read, edit, write, glob, grep, question)
+- Ingen skills-sektion, minimal miljøinformation
+
+**Inferensmotor (llama.cpp b8731)**
+- Vulkan GPU-backend, auto-downloadet ved første modelindlæsning
+- `--flash-attn on` — Flash Attention for hukommelseseffektivitet
+- `--cache-type-k/v q4_0` — Hadamard-rotation KV-cache (72% hukommelsesbesparelse)
+- `--fit on` — auto-tilpasser kontekststørrelse og GPU-lagplacering til tilgængelig VRAM
+- Spekulativ dekodning (`--model-draft`) med VRAM Guard (auto-deaktiverer hvis < 1,5 GB ledig)
+- Enkelt slot (`-np 1`) for at minimere hukommelsesfodaftryk
+
+**Tale-til-tekst (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet via ONNX Runtime — ~300ms for 5s lyd (18x realtid)
+- 25 europæiske sprog (engelsk, fransk, tysk, spansk osv.)
+- Nul VRAM: kun CPU (~700 MB RAM)
+- Auto-download model (~460 MB) ved første mikrofontryk
+- Bølgeformsanimation under optagelse
+
+**Tekst-til-tale (Kyutai Pocket TTS)**
+- Fransksproget TTS skabt af Kyutai (Paris), 100M parametre
+- 8 indbyggede stemmer: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Zero-shot stemmekloning: upload WAV eller optag fra mikrofon
+- Kun CPU, ~6x realtid, HTTP-server på port 14100
+- Fallback: Kokoro TTS ONNX-motor (54 stemmer, 9 sprog, CMUDict G2P)
+
+**Modelstyring**
+- HuggingFace-søgning med VRAM/RAM-kompatibilitetsmærker per model
+- Download, indlæs, aflæs, slet GGUF-modeller fra brugergrænsefladen
+- Forkureret katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Dynamiske output-tokens baseret på modelstørrelse
+- Auto-detektering af draft-model (0.5B-0.8B) til spekulativ dekodning
+
+**Konfiguration**
+- Forudindstillinger: Fast / Quality / Eco / Long Context (ét-klik optimering)
+- VRAM-overvågningswidget med farvekodede brugsbjælker (grøn / gul / rød)
+- KV-cache type: auto / q8_0 / q4_0 / f16
+- GPU-offloading: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Websøgning (globus-ikon i prompt-værktøjslinjen)
+
+**Agent-pålidelighed (lokale modeller)**
+- Pre-flight guards (kodeniveau, 0 tokens): fil-eksistens-tjek før redigering, old_string indholdsverifikation, læs-før-redigering håndhævelse, skriv-på-eksisterende forebyggelse
+- Doom loop auto-break: 2x identiske værktøjskald → fejl injiceres (kodeniveau guard, ikke kun prompt)
+- Værktøjstelemetri: per-session succes/fejlrate med per-værktøj nedbrydning, logges automatisk
+- Mål: >85% værktøjssuccesrate på 4B-modeller
+
+**Tværplatform**: Windows (Vulkan), Linux, macOS, Android
+
 #### Baggrundsopgaver
 
 Deleger arbejde til underagenter, der kører asynkront. Sæt `mode: "background"` på task-værktøjet, og det returnerer straks et `task_id`, mens agenten arbejder i baggrunden. Bus-events (`TaskCreated`, `TaskCompleted`, `TaskFailed`) publiceres til livscyklussporing.
