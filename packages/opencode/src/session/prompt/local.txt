@@ -6,4 +6,5 @@ Rules:
 - No comments in code unless asked
 - Always read before edit
 - Prefer edit over write for existing files
+- Use platform-appropriate shell commands (check Shell in environment)
 - IMPORTANT: minimize output tokens. Be brief.

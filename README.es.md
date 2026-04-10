@@ -48,6 +48,61 @@
 > Este es un fork de [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenido por [Rwanbt](https://github.com/Rwanbt).
 > Sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/opencode/tree/dev) para los últimos cambios.
 
+#### IA local primero
+
+OpenCode ejecuta modelos de IA localmente en hardware de consumo (8 GB VRAM / 16 GB RAM), sin ninguna dependencia de la nube para modelos 4B-7B.
+
+**Optimización de prompts (reducción del 94%)**
+- Prompt de sistema de ~1K tokens para modelos locales (vs ~16K para la nube)
+- Esquemas de herramientas esqueleto (firmas de 1 línea vs prosa de varios KB)
+- Lista blanca de 7 herramientas (bash, read, edit, write, glob, grep, question)
+- Sin sección de skills, información de entorno mínima
+
+**Motor de inferencia (llama.cpp b8731)**
+- Backend GPU Vulkan, descargado automáticamente en la primera carga de modelo
+- `--flash-attn on` — Flash Attention para eficiencia de memoria
+- `--cache-type-k/v q4_0` — Caché KV con rotación de Hadamard (72% de ahorro de memoria)
+- `--fit on` — ajusta automáticamente el tamaño del contexto y la ubicación de capas GPU según la VRAM disponible
+- Decodificación especulativa (`--model-draft`) con guardia de VRAM (desactivación automática si < 1.5 GB libre)
+- Slot único (`-np 1`) para minimizar la huella de memoria
+
+**Reconocimiento de voz (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet vía ONNX Runtime — ~300ms para 5s de audio (18x tiempo real)
+- 25 idiomas europeos (inglés, francés, alemán, español, etc.)
+- Cero VRAM: solo CPU (~700 MB RAM)
+- Descarga automática del modelo (~460 MB) al primer pulso del micrófono
+- Animación de forma de onda durante la grabación
+
+**Síntesis de voz (Kyutai Pocket TTS)**
+- TTS nativo francés creado por Kyutai (París), 100M parámetros
+- 8 voces integradas: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Clonación de voz zero-shot: sube un WAV o graba desde el micrófono
+- Solo CPU, ~6x tiempo real, servidor HTTP en el puerto 14100
+- Fallback: motor Kokoro TTS ONNX (54 voces, 9 idiomas, CMUDict G2P)
+
+**Gestión de modelos**
+- Búsqueda en HuggingFace con insignias de compatibilidad VRAM/RAM por modelo
+- Descargar, cargar, descargar, eliminar modelos GGUF desde la interfaz
+- Catálogo pre-seleccionado: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Tokens de salida dinámicos según el tamaño del modelo
+- Detección automática del modelo draft (0.5B-0.8B) para decodificación especulativa
+
+**Configuración**
+- Preajustes: Fast / Quality / Eco / Long Context (optimización con un clic)
+- Widget de monitoreo de VRAM con barra de uso codificada por colores (verde / amarillo / rojo)
+- Tipo de caché KV: auto / q8_0 / q4_0 / f16
+- Descarga a GPU: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Alternancia de búsqueda web (icono de globo en la barra de prompt)
+
+**Fiabilidad del agente (modelos locales)**
+- Guardias pre-vuelo (a nivel de código, 0 tokens): verificación de existencia de archivo antes de editar, verificación del contenido de old_string, lectura obligatoria antes de edición, prevención de escritura sobre archivo existente
+- Ruptura automática de bucle infinito: 2x llamadas de herramientas idénticas → error inyectado (guardia a nivel de código, no solo en el prompt)
+- Telemetría de herramientas: tasa de éxito/error por sesión con desglose por herramienta, registrado automáticamente
+- Objetivo: >85% de tasa de éxito de herramientas en modelos 4B
+
+**Multiplataforma**: Windows (Vulkan), Linux, macOS, Android
+
 #### Tareas en segundo plano
 
 Delegue trabajo a subagentes que se ejecutan de forma asíncrona. Establezca `mode: "background"` en la herramienta task y devuelve un `task_id` inmediatamente mientras el agente trabaja en segundo plano. Se publican eventos de bus (`TaskCreated`, `TaskCompleted`, `TaskFailed`) para el seguimiento del ciclo de vida.

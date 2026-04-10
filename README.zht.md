@@ -48,6 +48,61 @@
 > 這是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的 fork，由 [Rwanbt](https://github.com/Rwanbt) 維護。
 > 與上游保持同步。查看 [dev 分支](https://github.com/Rwanbt/opencode/tree/dev) 了解最新變更。
 
+#### 本地優先 AI
+
+OpenCode 在消費級硬體（VRAM 8 GB / RAM 16 GB）上本地執行 AI 模型，4B~7B 模型零雲端依賴。
+
+**提示詞最佳化（94% 縮減）**
+- 本地模型使用 ~1K token 系統提示（對比雲端 ~16K）
+- 骨架工具結構描述（1 行簽名 vs 多 KB 的詳細描述）
+- 7 工具白名單（bash, read, edit, write, glob, grep, question）
+- 無 skills 區段，最少環境資訊
+
+**推理引擎 (llama.cpp b8731)**
+- Vulkan GPU 後端，首次模型載入時自動下載
+- `--flash-attn on` — Flash Attention 提升記憶體效率
+- `--cache-type-k/v q4_0` — Hadamard 旋轉 KV 快取（72% 記憶體節省）
+- `--fit on` — 根據可用 VRAM 自動調整上下文大小與 GPU 層分佈
+- 推測性解碼（`--model-draft`）及 VRAM 守衛（可用空間 < 1.5 GB 時自動停用）
+- 單槽位（`-np 1`）最小化記憶體佔用
+
+**語音辨識 (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet（透過 ONNX Runtime）— 5 秒音訊約 300ms（18 倍即時）
+- 25 種歐洲語言（英語、法語、德語、西班牙語等）
+- 零 VRAM：僅 CPU（約 700 MB RAM）
+- 首次按麥克風時自動下載模型（約 460 MB）
+- 錄音時波形動畫
+
+**文字轉語音 (Kyutai Pocket TTS)**
+- Kyutai（巴黎）開發的法語原生 TTS，1 億參數
+- 8 種內建語音：Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- 零樣本語音複製：上傳 WAV 或從麥克風錄製
+- 僅 CPU，約 6 倍即時，連接埠 14100 HTTP 伺服器
+- 備選：Kokoro TTS ONNX 引擎（54 種語音，9 種語言，CMUDict G2P）
+
+**模型管理**
+- HuggingFace 搜尋（每個模型附帶 VRAM/RAM 相容性徽章）
+- 從 UI 下載、載入、卸載、刪除 GGUF 模型
+- 預篩選目錄：Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- 基於模型大小的動態輸出 token
+- 推測性解碼的草稿模型自動偵測（0.5B~0.8B）
+
+**組態**
+- 預設：Fast / Quality / Eco / Long Context（一鍵最佳化）
+- 帶顏色編碼使用率條（綠 / 黃 / 紅）的 VRAM 監控小工具
+- KV 快取類型：auto / q8_0 / q4_0 / f16
+- GPU 卸載：auto / gpu-max / balanced
+- 記憶體對映：auto / on / off
+- Web 搜尋切換（提示工具列的地球圖示）
+
+**代理可靠性（本地模型）**
+- 預檢守衛（程式碼層級，0 token）：編輯前檔案存在檢查、old_string 內容驗證、read-before-edit 強制、防止對已有檔案 write
+- 死迴圈自動中斷：相同工具呼叫 2 次即注入錯誤（程式碼層級守衛，非僅提示詞）
+- 工具遙測：每工作階段成功/錯誤率及每工具分類自動記錄
+- 目標：4B 模型 >85% 工具成功率
+
+**跨平台**：Windows (Vulkan)、Linux、macOS、Android
+
 #### 背景任務
 
 將工作委派給非同步執行的子代理。在 task 工具上設定 `mode: "background"`，它會立即回傳 `task_id`，同時代理在背景中工作。發布匯流排事件（`TaskCreated`、`TaskCompleted`、`TaskFailed`）用於生命週期追蹤。
@@ -122,7 +177,7 @@
 
 ### 多供應商支援
 
-開箱即用支援 21+ 個供應商：Anthropic、OpenAI、Google Gemini、Azure、AWS Bedrock、Vertex AI、OpenRouter、GitHub Copilot、XAI、Mistral、Groq、DeepInfra、Cerebras、Cohere、TogetherAI、Perplexity、Vercel、Venice、GitLab、Gateway，以及任何 OpenAI 相容端點。定價來源於 [models.dev](https://models.dev)。
+開箱即用支援 25+ 個供應商：Anthropic、OpenAI、Google Gemini、Azure、AWS Bedrock、Vertex AI、OpenRouter、GitHub Copilot、XAI、Mistral、Groq、DeepInfra、Cerebras、Cohere、TogetherAI、Perplexity、Vercel、Venice、GitLab、Gateway、Ollama Cloud，以及任何 OpenAI 相容端點（Ollama、LM Studio、vLLM、LocalAI）。定價來源於 [models.dev](https://models.dev)。
 
 ### 代理系統
 
@@ -184,13 +239,14 @@ Model Context Protocol 用戶端與伺服器。支援 stdio、HTTP/SSE 和 Strea
 
 - **TUI 是 TypeScript** 撰寫的（SolidJS + @opentui 用於終端機渲染），不是 Rust。
 - **Tree-sitter** 僅用於 TUI 語法高亮與 bash 指令解析，不用於代理層級的程式碼分析。
-- **沒有 Docker/E2B 沙箱** -- 隔離由 git worktree 提供。
-- **沒有向量資料庫或 RAG 系統** -- 上下文透過 LSP 符號索引 + 自動壓縮進行管理。
+- **Docker 沙箱**是選用的（`experimental.sandbox.type: "docker"`）；預設隔離方式是 git worktree。
+- **RAG** 是選用的（`experimental.rag.enabled: true`）；預設上下文透過 LSP 符號索引 + 自動壓縮進行管理。
 - **沒有會自動提出修正建議的「監聽模式」** -- 檔案監聽器僅用於基礎設施目的。
 - **自我修正**使用標準代理迴圈（LLM 查看工具結果中的錯誤並重試），不是專門的自動修復機制。
 
 ## 能力矩陣
 
+### 核心代理功能
 | 能力 | Status | Notes |
 |------|--------|-------|
 | Background tasks | Implemented | `mode: "background"` on task tool |
@@ -201,78 +257,216 @@ Model Context Protocol 用戶端與伺服器。支援 stdio、HTTP/SSE 和 Strea
 | MCP agent scoping | Implemented | Per-agent allow/deny config |
 | 9-state lifecycle | Implemented | Persistent to SQLite |
 | Orchestrator agent | Implemented | Read-only coordinator |
-| Multi-provider (21+) | Implemented | Including local models |
+| Multi-provider (25+) | Implemented | Including local models via OpenAI-compatible API |
 | LSP integration | Implemented | Symbols, diagnostics, multi-language |
 | MCP protocol | Implemented | Client + server, 3 transports |
 | Plugin system | Implemented | SDK + hook architecture |
 | Cost tracking | Implemented | Per-message, per-team, per-model |
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
-| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Specialized agents | Implemented | critic, tester, documenter subagents |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Web search | Implemented | Globe toggle in prompt toolbar |
+
+### 本地 AI（桌面 + 行動裝置）
+| 能力 | Status | Notes |
+|------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
+| Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
+| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
+| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
+| Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
+| Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+
+### 安全與治理
+| 能力 | Status | Notes |
+|------|--------|-------|
+| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+
+### 知識與記憶
+| 能力 | Status | Notes |
+|------|--------|-------|
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+
+### 平台擴充（實驗性）
+| 能力 | Status | Notes |
+|------|--------|-------|
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
+| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
+
 ---
 
-## Future Roadmap
+## 架構
 
-Three major initiatives are planned on dedicated feature branches. Each is designed to be modular — they can be developed independently and merged when ready.
+```mermaid
+graph TB
+  subgraph Clients
+    TUI[TUI - SolidJS + opentui]
+    Web[Web UI - SolidJS + Vite]
+    Desktop[Desktop - Tauri 2.0]
+    Mobile[Mobile - Tauri iOS/Android]
+  end
 
-### 🤝 Collaborative Mode ()
+  subgraph Server
+    Hono[Hono HTTP Server<br/>REST + SSE + WebSocket]
+    Auth[Auth - JWT + Basic]
+    Broadcast[WebSocket Broadcast]
+  end
 
-**Goal**: Multiple developers interacting with agents simultaneously in real-time.
+  subgraph "Agent Engine"
+    Session[Session + Agent Loop]
+    Router[Provider Router]
+    Tools[Tool Engine<br/>bash, read, write, edit, glob,<br/>grep, list, webfetch, task...]
+    Context[Context Manager<br/>Auto-compact + Token Pruning]
+  end
 
-| Component | Description |
-|-----------|-------------|
-| Multi-user auth | JWT-based authentication on the Hono server, user sessions, role-based access |
-| WebSocket broadcast | Real-time event streaming to all connected clients (agent activity, file changes, task status) |
-| File concurrency | Lock-based or CRDT-based conflict resolution when multiple agents/users edit the same file |
-| Presence UI | See who is connected, what they're working on, which agents are assigned to whom |
-| Shared context | Cross-user session history, shared learnings, team-wide RAG index |
+  subgraph Intelligence
+    Cloud[25+ Cloud APIs<br/>Anthropic, OpenAI, Google,<br/>Azure, Bedrock, Vertex...]
+    Local[Local LLM<br/>llama.cpp b8731 Vulkan<br/>port 14097]
+    MCP[MCP Servers<br/>stdio, HTTP/SSE, StreamableHTTP]
+    LSP[15+ LSP Servers<br/>Auto-download + Symbol Index]
+  end
 
-**Scale**: ~3000+ LOC, major architectural change. Requires refactoring the server for multi-tenant support.
+  subgraph "Speech (ONNX Runtime)"
+    STT[Parakeet TDT 0.6B<br/>25 languages, ~300ms/5s]
+    TTS[Pocket TTS + Kokoro<br/>Voice Cloning, port 14100]
+  end
 
-### 📱 Mobile Version ()
+  subgraph Storage
+    DB[(SQLite - Drizzle ORM<br/>Sessions, Messages, Snapshots)]
+    RAG[RAG - SQLite Vectors]
+    ALLM[AnythingLLM Bridge]
+  end
 
-**Goal**: Run OpenCode as a native mobile app on Android and iOS, with full agent capabilities.
+  TUI & Web & Desktop & Mobile --> Hono
+  Hono --> Session
+  Session --> Router
+  Router --> Cloud & Local
+  Session --> Tools
+  Tools --> LSP & MCP
+  Session --> Context
+  Context --> RAG & ALLM
+  Hono --> DB
+  Desktop & Mobile --> STT & TTS
+```
 
-| Component | Description |
-|-----------|-------------|
-| **Tauri 2.0 migration** | Leverage Tauri's mobile targets (Android/iOS) to package the existing SolidJS frontend as a native app |
-| **Runtime adaptation** | Bundle the TypeScript agent core with Vite for WebView execution; delegate performance-critical tasks to Tauri's Rust layer |
-| **isomorphic-git** | Replace system  calls with isomorphic-git for pure-JS git operations within the mobile sandbox |
-| **File system access** | Use  for sandboxed file access + Document Picker integration |
-| **Remote mode** | Connect to a desktop OpenCode instance over a secure tunnel (Tailscale/Cloudflare) for full capability without local execution |
-| **Mobile-optimized UI** | Conversational interface that hides terminal complexity; swipe-based diff review; virtual keyboard optimizations |
+### 服務連接埠
 
-**Platform comparison**:
-- **Android** (via Termux or Tauri): Full Node.js support, broad file access, excellent performance
-- **iOS** (via Tauri/a-Shell): Sandbox restrictions, limited native packages, but strong Apple Silicon performance for local models
+| Service | Port | Protocol |
+|---------|------|----------|
+| OpenCode Server | 4096 | HTTP (REST + SSE + WebSocket) |
+| LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
+| TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
-**Scale**: ~2000+ LOC for the Tauri mobile shell, ~500 LOC for isomorphic-git adapter, ~300 LOC for remote mode.
+## 安全與治理
 
-### 🔗 AnythingLLM Fusion ()
+| 功能 | 描述 |
+|------|------|
+| **沙箱** | 選用 Docker 執行（`experimental.sandbox.type: "docker"`）或帶專案邊界限制的主機模式 |
+| **權限** | 3 狀態系統（`allow` / `deny` / `ask`），支援萬用字元模式比對。100 多個 bash 指令定義實現精細控制 |
+| **DLP** | 資料防洩漏（`experimental.dlp`），在傳送給 LLM 供應商前對密鑰、API 密鑰和憑證進行脫敏 |
+| **策略引擎** | 條件規則（`experimental.policy`），支援 `block` 或 `warn` 動作。路徑保護、編輯大小限制、自訂正規表示式模式 |
+| **隱私** | 本地優先：所有資料儲存在磁碟上的 SQLite 中。預設無遙測。密鑰不記錄日誌。除設定的 LLM 供應商外不向第三方傳送資料 |
 
-**Goal**: Merge OpenCode's agentic coding capabilities with [AnythingLLM](https://github.com/mintplex-labs/anything-llm)'s document RAG and multi-user chat platform.
+## 智慧介面
 
-| Component | Description |
-|-----------|-------------|
-| **Context bridge** | Pipe AnythingLLM's indexed documents (PDFs, wikis, Confluence, etc.) into OpenCode's system prompt as additional context |
-| **Agent skill plugin** | Expose OpenCode's core commands (, , edit, bash) as an AnythingLLM Agent Skill via HTTP API |
-| **Unified vector store** | Merge OpenCode's SQLite RAG with AnythingLLM's vector DB backends (LanceDB, Pinecone, Chroma) for a single knowledge layer |
-| **Multi-user workspace** | Leverage AnythingLLM's existing multi-user and workspace management for team environments |
-| **Containerized deployment** | Docker Compose setup running both backends, with shared auth and a unified API gateway |
+| 功能 | 描述 |
+|------|------|
+| **MCP 合規** | 完整的 Model Context Protocol 支援 — 用戶端/伺服器模式，透過允許/拒絕清單實現按代理工具範圍 |
+| **上下文檔案** | `.opencode/` 目錄，`opencode.jsonc` 組態檔。代理以帶 YAML 前置元資料的 Markdown 定義。透過 `instructions` 組態自訂指令 |
+| **供應商路由器** | 透過 `Provider.parseModel("provider/model")` 支援 25+ 個供應商。自動回退、成本追蹤、token 感知路由 |
+| **RAG 系統** | 選用的本地向量搜尋（`experimental.rag`），可設定嵌入模型（OpenAI/Google）。自動索引已修改檔案 |
+| **AnythingLLM 橋接** | 選用整合（`experimental.anythingllm`）— 上下文注入、MCP 伺服器轉接器、向量儲存橋接、Agent Skills HTTP API |
 
-**Synergy**: AnythingLLM excels at document ingestion and RAG over non-code content. OpenCode excels at code manipulation, agentic tool use, and multi-provider LLM orchestration. Combined, they create a full-stack AI development platform that can reason over documentation AND write/execute code.
+---
 
-**Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
+## 功能分支（已在 `dev` 上實作）
+
+三個主要功能已在專用分支上實作並合併到 `dev`。每個功能都有功能開關且向後相容。
+
+### 協作模式 (`dev_collaborative_mode`)
+
+多使用者即時協作。已實作：
+- **JWT 認證** — HMAC-SHA256 令牌，帶重新整理輪換，與 Basic 認證向後相容
+- **使用者管理** — 註冊、角色（admin/member/viewer）、RBAC 強制執行
+- **WebSocket 廣播** — 透過 GlobalBus → Broadcast 連接實現即時事件推送
+- **線上狀態系統** — 30 秒心跳的線上/閒置/離開狀態
+- **檔案鎖定** — edit/write 工具上的樂觀鎖及衝突偵測
+- **前端** — 登入表單、線上狀態指示器、觀察者徽章、WebSocket 鉤子
+
+組態：`experimental.collaborative.enabled: true`
+
+### 行動版 (`dev_mobile`)
+
+透過 Tauri 2.0 的 Android/iOS 原生應用程式，**內嵌執行階段** — 單一 APK，零外部依賴。已實作：
+
+**第 1 層 — 內嵌執行階段（Android，100% 原生效能）：**
+- **APK 中的靜態二進位檔** — Bun、Git、Bash、Ripgrep (aarch64-linux-musl)，首次啟動時解壓（約 15 秒）
+- **捆綁 CLI** — OpenCode CLI 作為 JS 套件由內嵌 Bun 執行，核心功能無需網路
+- **直接處理程序生成** — 無 Termux、無 intent — 從 Rust 直接 `std::process::Command`
+- **自動啟動伺服器** — `bun opencode-cli.js serve`，與桌面 sidecar 相同的 UUID 認證，localhost
+
+**第 2 層 — 裝置端 LLM 推理：**
+- **透過 JNI 的 llama.cpp** — Kotlin LlamaEngine 透過 JNI 橋接載入原生 .so 函式庫
+- **基於檔案的 IPC** — Rust 將指令寫入 `llm_ipc/request`，Kotlin 守護程序輪詢並回傳結果
+- **llama-server** — 連接埠 14097 的 OpenAI 相容 HTTP API（用於供應商整合）
+- **模型管理** — 從 HuggingFace 下載 GGUF 模型，載入/卸載/刪除，9 個預篩選模型
+- **供應商註冊** — 本地模型在模型選擇器中顯示為 "Local AI" 供應商
+- **Flash Attention** — 用於記憶體高效推理的 `--flash-attn on`
+- **KV 快取量化** — 帶 Hadamard 旋轉的 `--cache-type-k/v q4_0`（72% 記憶體節省）
+- **推測性解碼** — 透過 `/proc/meminfo` 的 RAM 守衛自動偵測草稿模型（0.5B~0.8B）
+- **RAM 監控** — 透過 `/proc/meminfo` 的裝置記憶體小工具（總量/已用/可用）
+- **組態預設** — 與桌面相同的 Fast/Quality/Eco/Long Context 預設
+- **智慧 GPU 選擇** — Adreno 730+（SD 8 Gen 1+）用 Vulkan，舊 SoC 用 OpenCL，CPU 回退
+- **大核心固定** — 偵測 ARM big.LITTLE 拓撲，將推理固定到效能核心
+
+**第 3 層 — 擴充環境（選用下載，約 150MB）：**
+- **proot + Alpine rootfs** — 完整 Linux，可 `apt install` 安裝額外套件
+- **繫結掛載第 1 層** — Bun/Git/rg 在 proot 內仍以原生速度執行
+- **按需下載** — 僅在使用者啟用設定中的「擴充環境」時下載
+
+**第 4 層 — 語音與媒體：**
+- **STT (Parakeet TDT 0.6B)** — 與桌面相同的 ONNX Runtime 引擎，約 300ms/5 秒音訊，25 種語言
+- **波形動畫** — 錄音時的視覺回饋
+- **原生檔案選取器** — 用於檔案/目錄選取和附件的 `tauri-plugin-dialog`
+
+**共用（Android + iOS）：**
+- **平台抽象** — 擴充的 `Platform` 型別，包含 `"mobile"` + `"ios"/"android"` 系統偵測
+- **遠端連線** — 透過網路連線桌面 OpenCode 伺服器（僅 iOS 或 Android 回退）
+- **互動式終端機** — 透過自訂 musl `librust_pty.so`（forkpty 包裝器）的完整 PTY，Ghostty WASM 渲染器帶 canvas 回退
+- **外部儲存** — 從伺服器 HOME 到 `/sdcard/` 目錄（Documents、Downloads、projects）的符號連結
+- **行動端 UI** — 響應式側邊欄、觸控最佳化訊息輸入、行動端 diff 檢視、44px 觸控目標、安全區域支援
+- **推播通知** — 用於背景任務完成的 SSE 轉原生通知橋接
+- **模式選擇器** — 首次啟動時選擇 Local（Android）或 Remote（iOS + Android）
+- **行動端操作選單** — 從工作階段標題列快速存取終端機、fork、搜尋和設定
+
+### AnythingLLM Fusion (`dev_anything`)
+
+OpenCode 與 AnythingLLM 文件 RAG 平台之間的橋接。已實作：
+- **REST 用戶端** — AnythingLLM 工作區、文件、搜尋、聊天的完整 API 封裝
+- **MCP 伺服器轉接器** — 4 個工具：`anythingllm_search`、`anythingllm_list_workspaces`、`anythingllm_get_document`、`anythingllm_chat`
+- **外掛上下文注入** — `experimental.chat.system.transform` 鉤子將相關文件注入系統提示
+- **Agent Skills HTTP API** — `GET /agent-skills` + `POST /agent-skills/:toolId/execute` 將 OpenCode 工具暴露給 AnythingLLM
+- **向量儲存橋接** — 合併本地 SQLite RAG 與 AnythingLLM 向量 DB 結果的複合搜尋
+- **Docker Compose** — 帶共用網路的 `docker-compose.anythingllm.yml`
+
+組態：`experimental.anythingllm.enabled: true`
 
 ---
 

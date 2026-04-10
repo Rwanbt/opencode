@@ -48,6 +48,61 @@
 > Questo è un fork di [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenuto da [Rwanbt](https://github.com/Rwanbt).
 > Sincronizzato con upstream. Vedi il [branch dev](https://github.com/Rwanbt/opencode/tree/dev) per le ultime modifiche.
 
+#### IA Locale
+
+OpenCode esegue modelli IA localmente su hardware consumer (8 GB VRAM / 16 GB RAM), senza dipendenze cloud per modelli da 4B a 7B.
+
+**Ottimizzazione del Prompt (riduzione del 94%)**
+- Prompt di sistema di ~1K token per modelli locali (vs ~16K per cloud)
+- Schemi degli strumenti scheletrici (firme di 1 riga vs descrizioni multi-KB)
+- Whitelist di 7 strumenti (bash, read, edit, write, glob, grep, question)
+- Nessuna sezione skill, informazioni ambiente minimali
+
+**Motore di Inferenza (llama.cpp b8731)**
+- Backend GPU Vulkan, scaricato automaticamente al primo caricamento del modello
+- `--flash-attn on` — Flash Attention per efficienza di memoria
+- `--cache-type-k/v q4_0` — Cache KV con rotazione di Hadamard (risparmio di memoria del 72%)
+- `--fit on` — adatta automaticamente la dimensione del contesto e il posizionamento dei layer GPU alla VRAM disponibile
+- Decodifica speculativa (`--model-draft`) con VRAM Guard (disattivazione automatica se < 1.5 GB liberi)
+- Slot singolo (`-np 1`) per minimizzare l'impronta di memoria
+
+**Speech-to-Text (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet via ONNX Runtime — ~300ms per 5s di audio (18x tempo reale)
+- 25 lingue europee (inglese, francese, tedesco, spagnolo, ecc.)
+- Zero VRAM: solo CPU (~700 MB RAM)
+- Download automatico del modello (~460 MB) alla prima pressione del microfono
+- Animazione della forma d'onda durante la registrazione
+
+**Text-to-Speech (Kyutai Pocket TTS)**
+- TTS nativo francese creato da Kyutai (Parigi), 100M parametri
+- 8 voci integrate: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Clonazione vocale zero-shot: carica WAV o registra dal microfono
+- Solo CPU, ~6x tempo reale, server HTTP sulla porta 14100
+- Fallback: motore TTS Kokoro ONNX (54 voci, 9 lingue, CMUDict G2P)
+
+**Gestione dei Modelli**
+- Ricerca HuggingFace con badge di compatibilità VRAM/RAM per modello
+- Scarica, carica, scarica, elimina modelli GGUF dall'interfaccia
+- Catalogo pre-curato: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Token di output dinamici basati sulla dimensione del modello
+- Rilevamento automatico del modello draft (0.5B–0.8B) per la decodifica speculativa
+
+**Configurazione**
+- Preset: Fast / Quality / Eco / Long Context (ottimizzazione con un clic)
+- Widget di monitoraggio VRAM con barra di utilizzo colorata (verde / giallo / rosso)
+- Tipo cache KV: auto / q8_0 / q4_0 / f16
+- Offloading GPU: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Toggle ricerca web (icona globo nella barra del prompt)
+
+**Affidabilità dell'Agente (modelli locali)**
+- Controlli pre-volo (a livello di codice, 0 token): verifica esistenza file prima della modifica, verifica contenuto old_string, obbligo di lettura prima della modifica, prevenzione scrittura su file esistente
+- Interruzione automatica doom loop: 2 chiamate identiche consecutive → errore iniettato (guardia a livello di codice, non solo prompt)
+- Telemetria degli strumenti: tasso di successo/errore per sessione con dettaglio per strumento, registrato automaticamente
+- Obiettivo: >85% di tasso di successo degli strumenti su modelli 4B
+
+**Multipiattaforma**: Windows (Vulkan), Linux, macOS, Android
+
 #### Attività in Background
 
 Delega il lavoro a sotto-agenti che vengono eseguiti in modo asincrono. Imposta `mode: "background"` sullo strumento task e restituisce immediatamente un `task_id` mentre l'agente lavora in background. Gli eventi bus (`TaskCreated`, `TaskCompleted`, `TaskFailed`) vengono pubblicati per il tracciamento del ciclo di vita.
@@ -122,7 +177,7 @@ Agente coordinatore in sola lettura (massimo 50 passaggi). Ha accesso agli strum
 
 ### Supporto Multi-Provider
 
-21+ provider pronti all'uso: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, più qualsiasi endpoint compatibile con OpenAI. Prezzi provenienti da [models.dev](https://models.dev).
+25+ provider pronti all'uso: Anthropic, OpenAI, Google Gemini, Azure, AWS Bedrock, Vertex AI, OpenRouter, GitHub Copilot, XAI, Mistral, Groq, DeepInfra, Cerebras, Cohere, TogetherAI, Perplexity, Vercel, Venice, GitLab, Gateway, Ollama Cloud, più qualsiasi endpoint compatibile con OpenAI (Ollama, LM Studio, vLLM, LocalAI). Prezzi provenienti da [models.dev](https://models.dev).
 
 ### Sistema di Agenti
 
@@ -184,13 +239,14 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 
 - La **TUI è in TypeScript** (SolidJS + @opentui per il rendering nel terminale), non Rust.
 - **Tree-sitter** è usato solo per l'evidenziazione della sintassi nella TUI e il parsing dei comandi bash, non per l'analisi del codice a livello di agente.
-- **Non c'è sandboxing Docker/E2B** -- l'isolamento è fornito dai git worktree.
-- **Non c'è database vettoriale o sistema RAG** -- il contesto è gestito tramite indicizzazione dei simboli LSP + auto-compact.
+- Il **sandboxing Docker** è opzionale (`experimental.sandbox.type: "docker"`); l'isolamento predefinito è tramite git worktree.
+- Il **RAG** è opzionale (`experimental.rag.enabled: true`); il contesto predefinito è gestito tramite indicizzazione dei simboli LSP + auto-compact.
 - **Non c'è una "modalità watch" che propone correzioni automatiche** -- il file watcher esiste solo per scopi infrastrutturali.
 - L'**auto-correzione** usa il loop standard dell'agente (l'LLM vede gli errori nei risultati degli strumenti e riprova), non un meccanismo specializzato di auto-riparazione.
 
 ## Matrice delle Capacità
 
+### Funzionalità Core dell'Agente
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Background tasks | Implemented | `mode: "background"` on task tool |
@@ -201,80 +257,216 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | MCP agent scoping | Implemented | Per-agent allow/deny config |
 | 9-state lifecycle | Implemented | Persistent to SQLite |
 | Orchestrator agent | Implemented | Read-only coordinator |
-| Multi-provider (21+) | Implemented | Including local models |
+| Multi-provider (25+) | Implemented | Including local models via OpenAI-compatible API |
 | LSP integration | Implemented | Symbols, diagnostics, multi-language |
 | MCP protocol | Implemented | Client + server, 3 transports |
 | Plugin system | Implemented | SDK + hook architecture |
 | Cost tracking | Implemented | Per-message, per-team, per-model |
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
-| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Specialized agents | Implemented | critic, tester, documenter subagents |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Web search | Implemented | Globe toggle in prompt toolbar |
+
+### IA Locale (Desktop + Mobile)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
+| Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
+| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
+| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
+| Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
+| Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+
+### Sicurezza e Governance
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+
+### Conoscenza e Memoria
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+
+### Estensioni della Piattaforma (Sperimentali)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
+| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
----
-
-## Future Roadmap
-
-Three major initiatives are planned on dedicated feature branches. Each is designed to be modular — they can be developed independently and merged when ready.
-
-### 🤝 Collaborative Mode ()
-
-**Goal**: Multiple developers interacting with agents simultaneously in real-time.
-
-| Component | Description |
-|-----------|-------------|
-| Multi-user auth | JWT-based authentication on the Hono server, user sessions, role-based access |
-| WebSocket broadcast | Real-time event streaming to all connected clients (agent activity, file changes, task status) |
-| File concurrency | Lock-based or CRDT-based conflict resolution when multiple agents/users edit the same file |
-| Presence UI | See who is connected, what they're working on, which agents are assigned to whom |
-| Shared context | Cross-user session history, shared learnings, team-wide RAG index |
-
-**Scale**: ~3000+ LOC, major architectural change. Requires refactoring the server for multi-tenant support.
-
-### 📱 Mobile Version ()
-
-**Goal**: Run OpenCode as a native mobile app on Android and iOS, with full agent capabilities.
-
-| Component | Description |
-|-----------|-------------|
-| **Tauri 2.0 migration** | Leverage Tauri's mobile targets (Android/iOS) to package the existing SolidJS frontend as a native app |
-| **Runtime adaptation** | Bundle the TypeScript agent core with Vite for WebView execution; delegate performance-critical tasks to Tauri's Rust layer |
-| **isomorphic-git** | Replace system  calls with isomorphic-git for pure-JS git operations within the mobile sandbox |
-| **File system access** | Use  for sandboxed file access + Document Picker integration |
-| **Remote mode** | Connect to a desktop OpenCode instance over a secure tunnel (Tailscale/Cloudflare) for full capability without local execution |
-| **Mobile-optimized UI** | Conversational interface that hides terminal complexity; swipe-based diff review; virtual keyboard optimizations |
-
-**Platform comparison**:
-- **Android** (via Termux or Tauri): Full Node.js support, broad file access, excellent performance
-- **iOS** (via Tauri/a-Shell): Sandbox restrictions, limited native packages, but strong Apple Silicon performance for local models
-
-**Scale**: ~2000+ LOC for the Tauri mobile shell, ~500 LOC for isomorphic-git adapter, ~300 LOC for remote mode.
-
-### 🔗 AnythingLLM Fusion ()
-
-**Goal**: Merge OpenCode's agentic coding capabilities with [AnythingLLM](https://github.com/mintplex-labs/anything-llm)'s document RAG and multi-user chat platform.
-
-| Component | Description |
-|-----------|-------------|
-| **Context bridge** | Pipe AnythingLLM's indexed documents (PDFs, wikis, Confluence, etc.) into OpenCode's system prompt as additional context |
-| **Agent skill plugin** | Expose OpenCode's core commands (, , edit, bash) as an AnythingLLM Agent Skill via HTTP API |
-| **Unified vector store** | Merge OpenCode's SQLite RAG with AnythingLLM's vector DB backends (LanceDB, Pinecone, Chroma) for a single knowledge layer |
-| **Multi-user workspace** | Leverage AnythingLLM's existing multi-user and workspace management for team environments |
-| **Containerized deployment** | Docker Compose setup running both backends, with shared auth and a unified API gateway |
-
-**Synergy**: AnythingLLM excels at document ingestion and RAG over non-code content. OpenCode excels at code manipulation, agentic tool use, and multi-provider LLM orchestration. Combined, they create a full-stack AI development platform that can reason over documentation AND write/execute code.
-
-**Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
 
 ---
+
+## Architettura
+
+```mermaid
+graph TB
+  subgraph Clients
+    TUI[TUI - SolidJS + opentui]
+    Web[Web UI - SolidJS + Vite]
+    Desktop[Desktop - Tauri 2.0]
+    Mobile[Mobile - Tauri iOS/Android]
+  end
+
+  subgraph Server
+    Hono[Hono HTTP Server<br/>REST + SSE + WebSocket]
+    Auth[Auth - JWT + Basic]
+    Broadcast[WebSocket Broadcast]
+  end
+
+  subgraph "Agent Engine"
+    Session[Session + Agent Loop]
+    Router[Provider Router]
+    Tools[Tool Engine<br/>bash, read, write, edit, glob,<br/>grep, list, webfetch, task...]
+    Context[Context Manager<br/>Auto-compact + Token Pruning]
+  end
+
+  subgraph Intelligence
+    Cloud[25+ Cloud APIs<br/>Anthropic, OpenAI, Google,<br/>Azure, Bedrock, Vertex...]
+    Local[Local LLM<br/>llama.cpp b8731 Vulkan<br/>port 14097]
+    MCP[MCP Servers<br/>stdio, HTTP/SSE, StreamableHTTP]
+    LSP[15+ LSP Servers<br/>Auto-download + Symbol Index]
+  end
+
+  subgraph "Speech (ONNX Runtime)"
+    STT[Parakeet TDT 0.6B<br/>25 languages, ~300ms/5s]
+    TTS[Pocket TTS + Kokoro<br/>Voice Cloning, port 14100]
+  end
+
+  subgraph Storage
+    DB[(SQLite - Drizzle ORM<br/>Sessions, Messages, Snapshots)]
+    RAG[RAG - SQLite Vectors]
+    ALLM[AnythingLLM Bridge]
+  end
+
+  TUI & Web & Desktop & Mobile --> Hono
+  Hono --> Session
+  Session --> Router
+  Router --> Cloud & Local
+  Session --> Tools
+  Tools --> LSP & MCP
+  Session --> Context
+  Context --> RAG & ALLM
+  Hono --> DB
+  Desktop & Mobile --> STT & TTS
+```
+
+### Porte dei Servizi
+
+| Service | Port | Protocol |
+|---------|------|----------|
+| OpenCode Server | 4096 | HTTP (REST + SSE + WebSocket) |
+| LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
+| TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
+
+## Sicurezza e Governance
+
+| Feature | Description |
+|---------|-------------|
+| **Sandbox** | Esecuzione opzionale in Docker (`experimental.sandbox.type: "docker"`) o modalità host con applicazione dei confini del progetto |
+| **Permessi** | Sistema a 3 stati (`allow` / `deny` / `ask`) con corrispondenza di pattern con caratteri jolly. 100+ definizioni di comandi bash per controllo granulare |
+| **DLP** | Data Loss Prevention (`experimental.dlp`) redige segreti, chiavi API e credenziali prima dell'invio ai provider LLM |
+| **Policy Engine** | Regole condizionali (`experimental.policy`) con azioni `block` o `warn`. Protezione dei percorsi, limite dimensione modifiche, pattern regex personalizzati |
+| **Privacy** | Locale per primo: tutti i dati in SQLite su disco. Nessuna telemetria per impostazione predefinita. I segreti non vengono mai registrati. Nessun dato inviato a terze parti oltre al provider LLM configurato |
+
+## Interfaccia di Intelligenza
+
+| Feature | Description |
+|---------|-------------|
+| **MCP Compliant** | Supporto completo Model Context Protocol — modalità client e server, scoping degli strumenti per agente tramite liste allow/deny |
+| **Context Files** | Directory `.opencode/` con configurazione `opencode.jsonc`. Agenti definiti come markdown con frontmatter YAML. Istruzioni personalizzate tramite configurazione `instructions` |
+| **Provider Router** | 25+ provider tramite `Provider.parseModel("provider/model")`. Fallback automatico, tracciamento costi, routing consapevole dei token |
+| **Sistema RAG** | Ricerca vettoriale locale opzionale (`experimental.rag`) con modelli di embedding configurabili (OpenAI/Google). Indicizzazione automatica dei file modificati |
+| **Bridge AnythingLLM** | Integrazione opzionale (`experimental.anythingllm`) — iniezione di contesto, adattatore server MCP, bridge vector store, API HTTP Agent Skills |
+
+---
+
+## Branch delle Funzionalità (Implementati su `dev`)
+
+Tre funzionalità principali sono state implementate su branch dedicati e integrate in `dev`. Ciascuna è protetta da feature gate e retrocompatibile.
+
+### Modalità Collaborativa (`dev_collaborative_mode`)
+
+Collaborazione multi-utente in tempo reale. Implementato:
+- **Autenticazione JWT** — Token HMAC-SHA256 con rotazione del refresh, retrocompatibile con basic auth
+- **Gestione utenti** — Registrazione, ruoli (admin/member/viewer), applicazione RBAC
+- **Broadcast WebSocket** — Streaming di eventi in tempo reale tramite GlobalBus → Broadcast wiring
+- **Sistema di presenza** — Stato online/idle/away con heartbeat ogni 30s
+- **Blocco file** — Blocchi ottimistici sugli strumenti edit/write con rilevamento conflitti
+- **Frontend** — Modulo di login, indicatore di presenza, badge osservatore, hook WebSocket
+
+Config: `experimental.collaborative.enabled: true`
+
+### Versione Mobile (`dev_mobile`)
+
+App nativa Android/iOS tramite Tauri 2.0 con **runtime integrato** — un singolo APK, zero dipendenze esterne. Implementato:
+
+**Layer 1 — Runtime Integrato (Android, 100% prestazioni native):**
+- **Binari statici nell'APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) estratti al primo avvio (~15s)
+- **CLI integrata** — CLI OpenCode come bundle JS eseguito dal Bun integrato, nessuna rete richiesta per il core
+- **Spawn diretto dei processi** — Nessun Termux, nessun intent — `std::process::Command` da Rust direttamente
+- **Avvio automatico del server** — `bun opencode-cli.js serve` su localhost con autenticazione UUID, come il sidecar desktop
+
+**Layer 2 — Inferenza LLM sul Dispositivo:**
+- **llama.cpp via JNI** — Kotlin LlamaEngine carica librerie native .so con bridge JNI
+- **IPC basato su file** — Rust scrive comandi in `llm_ipc/request`, il daemon Kotlin effettua polling e restituisce i risultati
+- **llama-server** — API HTTP compatibile OpenAI sulla porta 14097 per l'integrazione con i provider
+- **Gestione modelli** — Scarica modelli GGUF da HuggingFace, carica/scarica/elimina, 9 modelli pre-curati
+- **Registrazione provider** — Il modello locale appare come provider "Local AI" nel selettore modelli
+- **Flash Attention** — `--flash-attn on` per inferenza efficiente in memoria
+- **Quantizzazione cache KV** — `--cache-type-k/v q4_0` con rotazione di Hadamard (risparmio memoria del 72%)
+- **Decodifica speculativa** — Rilevamento automatico del modello draft (0.5B–0.8B) con RAM Guard tramite `/proc/meminfo`
+- **Monitoraggio RAM** — Widget memoria del dispositivo (totale/usata/libera) tramite `/proc/meminfo`
+- **Preset di configurazione** — Stessi preset Fast/Quality/Eco/Long Context del desktop
+- **Selezione GPU intelligente** — Vulkan per Adreno 730+ (SD 8 Gen 1+), OpenCL per SoC più vecchi, fallback CPU
+- **Pinning big-core** — Rileva topologia ARM big.LITTLE, vincola l'inferenza ai soli core ad alte prestazioni
+
+**Layer 3 — Ambiente Esteso (download opzionale, ~150MB):**
+- **proot + Alpine rootfs** — Linux completo con `apt install` per pacchetti aggiuntivi
+- **Layer 1 montato tramite bind** — Bun/Git/rg funzionano ancora a velocità nativa dentro proot
+- **Su richiesta** — Scaricato solo quando l'utente abilita "Extended Environment" nelle impostazioni
+
+**Layer 4 — Voce e Media:**
+- **STT (Parakeet TDT 0.6B)** — Stesso motore ONNX Runtime del desktop, ~300ms/5s audio, 25 lingue
+- **Animazione della forma d'onda** — Feedback visivo durante la registrazione
+- **File picker nativo** — `tauri-plugin-dialog` per selezione file/directory e allegati
+
+**Condiviso (Android + iOS):**
+- **Astrazione della piattaforma** — Tipo `Platform` esteso con rilevamento `"mobile"` + `"ios"/"android"` OS
+- **Connessione remota** — Connessione al server OpenCode desktop tramite rete (solo iOS o fallback Android)
+- **Terminale interattivo** — PTY completo tramite `librust_pty.so` musl personalizzato (wrapper forkpty), renderer Ghostty WASM con fallback canvas
+- **Storage esterno** — Symlink dalla HOME del server alle directory `/sdcard/` (Documents, Downloads, projects)
+- **UI mobile** — Barra laterale responsive, input messaggi ottimizzato per touch, vista diff mobile, target touch 44px, supporto safe area
+- **Notifiche push** — Bridge SSE-to-native notification per il completamento delle attività in background
+- **Selettore modalità** — Scegli Local (Android) o Remote (iOS + Android) al primo avvio
+- **Menu azioni mobile** — Accesso rapido a terminale, fork, ricerca e impostazioni dall'intestazione della sessione
+
+### Fusione AnythingLLM (`dev_anything`)
+
+Bridge tra OpenCode e la piattaforma RAG per documenti di AnythingLLM. Implementato:
+- **Client REST** — Wrapper API completo per workspace, documenti, ricerca, chat di AnythingLLM
+- **Adattatore server MCP** — 4 strumenti: `anythingllm_search`, `anythingllm_list_workspaces`, `anythingllm_get_document`, `anythingllm_chat`
+- **Iniezione contesto plugin** — Hook `experimental.chat.system.transform` inietta documenti rilevanti nel prompt di sistema
+- **API HTTP Agent Skills** — `GET /agent-skills` + `POST /agent-skills/:toolId/execute` per esporre gli strumenti OpenCode ad AnythingLLM
+- **Bridge vector store** — Ricerca composita che unisce RAG SQLite locale con risultati del vector DB di AnythingLLM
+- **Docker Compose** — `docker-compose.anythingllm.yml` pronto all'uso con rete condivisa
+
+Config: `experimental.anythingllm.enabled: true`
 
 ### Installazione
 

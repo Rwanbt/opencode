@@ -48,6 +48,61 @@
 > Đây là một fork của [anomalyco/opencode](https://github.com/anomalyco/opencode) được duy trì bởi [Rwanbt](https://github.com/Rwanbt).
 > Được đồng bộ với upstream. Xem [nhánh dev](https://github.com/Rwanbt/opencode/tree/dev) để biết các thay đổi mới nhất.
 
+#### AI Ưu tiên Cục bộ
+
+OpenCode chạy các mô hình AI cục bộ trên phần cứng tiêu dùng (8 GB VRAM / 16 GB RAM), không phụ thuộc cloud cho các mô hình 4B-7B.
+
+**Tối ưu hóa Prompt (giảm 94%)**
+- ~1K token system prompt cho mô hình cục bộ (so với ~16K cho cloud)
+- Skeleton tool schemas (chữ ký 1 dòng thay vì nhiều KB văn bản)
+- 7-tool whitelist (bash, read, edit, write, glob, grep, question)
+- Không có phần skills, thông tin môi trường tối thiểu
+
+**Engine Suy luận (llama.cpp b8731)**
+- Vulkan GPU backend, tự động tải về lần đầu nạp mô hình
+- `--flash-attn on` — Flash Attention cho hiệu quả bộ nhớ
+- `--cache-type-k/v q4_0` — Hadamard rotation KV cache (tiết kiệm 72% bộ nhớ)
+- `--fit on` — tự động điều chỉnh kích thước ngữ cảnh và vị trí GPU layer theo VRAM khả dụng
+- Speculative decoding (`--model-draft`) với VRAM Guard (tự động tắt nếu < 1.5 GB trống)
+- Single slot (`-np 1`) để giảm thiểu dấu chân bộ nhớ
+
+**Giọng nói thành Văn bản (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet qua ONNX Runtime — ~300ms cho 5s âm thanh (18x thời gian thực)
+- 25 ngôn ngữ châu Âu (tiếng Anh, Pháp, Đức, Tây Ban Nha, v.v.)
+- Không cần VRAM: chỉ CPU (~700 MB RAM)
+- Tự động tải mô hình (~460 MB) khi nhấn micro lần đầu
+- Hoạt ảnh dạng sóng khi ghi âm
+
+**Văn bản thành Giọng nói (Kyutai Pocket TTS)**
+- TTS tiếng Pháp bản địa do Kyutai (Paris) tạo, 100M tham số
+- 8 giọng tích hợp: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Zero-shot nhân bản giọng nói: tải lên WAV hoặc ghi từ micro
+- Chỉ CPU, ~6x thời gian thực, HTTP server trên cổng 14100
+- Dự phòng: Kokoro TTS ONNX engine (54 giọng, 9 ngôn ngữ, CMUDict G2P)
+
+**Quản lý Mô hình**
+- Tìm kiếm HuggingFace với huy hiệu tương thích VRAM/RAM theo mô hình
+- Tải xuống, nạp, gỡ, xóa mô hình GGUF từ giao diện
+- Danh mục được tuyển chọn: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Output token động dựa trên kích thước mô hình
+- Tự động phát hiện draft model (0.5B-0.8B) cho speculative decoding
+
+**Cấu hình**
+- Preset: Fast / Quality / Eco / Long Context (tối ưu hóa một cú nhấp)
+- Widget giám sát VRAM với thanh sử dụng mã màu (xanh / vàng / đỏ)
+- KV cache type: auto / q8_0 / q4_0 / f16
+- GPU offloading: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Chuyển đổi tìm kiếm web (biểu tượng quả cầu trên thanh công cụ prompt)
+
+**Độ tin cậy Agent (mô hình cục bộ)**
+- Pre-flight guards (cấp mã, 0 token): kiểm tra tệp tồn tại trước khi chỉnh sửa, xác minh nội dung old_string, bắt buộc đọc-trước-chỉnh-sửa, ngăn ghi-đè-tệp-có-sẵn
+- Doom loop auto-break: 2x cuộc gọi công cụ giống hệt → tiêm lỗi (guard cấp mã, không chỉ prompt)
+- Đo lường công cụ: tỷ lệ thành công/lỗi theo phiên với phân tích theo công cụ, ghi log tự động
+- Mục tiêu: >85% tỷ lệ thành công công cụ trên mô hình 4B
+
+**Đa nền tảng**: Windows (Vulkan), Linux, macOS, Android
+
 #### Tác vụ nền
 
 Ủy thác công việc cho các subagent chạy bất đồng bộ. Đặt `mode: "background"` trên công cụ task và nó trả về `task_id` ngay lập tức trong khi agent làm việc ở nền. Các bus event (`TaskCreated`, `TaskCompleted`, `TaskFailed`) được phát hành để theo dõi vòng đời.

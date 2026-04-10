@@ -48,6 +48,61 @@
 > Ovo je fork projekta [anomalyco/opencode](https://github.com/anomalyco/opencode) koji održava [Rwanbt](https://github.com/Rwanbt).
 > Sinhronizovano sa upstream-om. Pogledajte [dev granu](https://github.com/Rwanbt/opencode/tree/dev) za najnovije promjene.
 
+#### Lokalna AI
+
+OpenCode pokrece AI modele lokalno na potrosackom hardveru (8 GB VRAM / 16 GB RAM), sa nula zavisnosti od oblaka za 4B-7B modele.
+
+**Optimizacija promptova (94% smanjenje)**
+- ~1K token system prompt za lokalne modele (naspram ~16K za oblak)
+- Skeletni alat-sheme (1-linijske signature naspram multi-KB proze)
+- 7-alatna bijela lista (bash, read, edit, write, glob, grep, question)
+- Bez sekcije skills, minimalne informacije o okruzenju
+
+**Motor za inferenciju (llama.cpp b8731)**
+- Vulkan GPU backend, automatski preuzet pri prvom ucitavanju modela
+- `--flash-attn on` — Flash Attention za efikasnost memorije
+- `--cache-type-k/v q4_0` — Hadamard rotacija KV cache (72% ustede memorije)
+- `--fit on` — automatski prilagodava velicinu konteksta i raspodjelu GPU slojeva na dostupni VRAM
+- Spekulativno dekodiranje (`--model-draft`) sa VRAM Guard (automatski deaktivira ako < 1,5 GB slobodno)
+- Jedan slot (`-np 1`) za minimiziranje memorijskog otiska
+
+**Govor-u-tekst (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet putem ONNX Runtime — ~300ms za 5s zvuka (18x u realnom vremenu)
+- 25 evropskih jezika (engleski, francuski, njemacki, spanski itd.)
+- Nula VRAM: samo CPU (~700 MB RAM)
+- Automatsko preuzimanje modela (~460 MB) pri prvom pritisku mikrofona
+- Animacija talasnog oblika tokom snimanja
+
+**Tekst-u-govor (Kyutai Pocket TTS)**
+- Francuski TTS kreiran od strane Kyutai (Pariz), 100M parametara
+- 8 ugradenih glasova: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Zero-shot kloniranje glasa: uploadajte WAV ili snimite s mikrofona
+- Samo CPU, ~6x u realnom vremenu, HTTP server na portu 14100
+- Rezerva: Kokoro TTS ONNX motor (54 glasa, 9 jezika, CMUDict G2P)
+
+**Upravljanje modelima**
+- HuggingFace pretraga sa VRAM/RAM znackama kompatibilnosti po modelu
+- Preuzimanje, ucitavanje, iskljucivanje, brisanje GGUF modela iz korisnickog interfejsa
+- Unaprijed kurirani katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Dinamicki izlazni tokeni bazirani na velicini modela
+- Auto-detekcija draft modela (0.5B-0.8B) za spekulativno dekodiranje
+
+**Konfiguracija**
+- Presetovi: Fast / Quality / Eco / Long Context (optimizacija jednim klikom)
+- VRAM widget za nadgledanje sa obojenim trakama koristenja (zeleno / zuto / crveno)
+- KV cache tip: auto / q8_0 / q4_0 / f16
+- GPU offloading: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Web pretraga (ikona globusa u alatnoj traci prompta)
+
+**Pouzdanost agenta (lokalni modeli)**
+- Pre-flight guards (nivo koda, 0 tokena): provjera postojanja datoteke prije uredivanja, verifikacija sadrzaja old_string, provodjenje citanja-prije-uredivanja, sprecavanje pisanja-na-postojece
+- Doom loop auto-break: 2x identicna poziva alata → greska se ubacuje (guard na nivou koda, ne samo prompt)
+- Telemetrija alata: stopa uspjeha/greske po sesiji sa razlomkom po alatu, automatski loguje
+- Cilj: >85% stopa uspjeha alata na 4B modelima
+
+**Viseplatformski**: Windows (Vulkan), Linux, macOS, Android
+
 #### Pozadinski zadaci
 
 Delegirajte posao podagentima koji rade asinhrono. Postavite `mode: "background"` na task alatu i on odmah vraća `task_id` dok agent radi u pozadini. Bus eventi (`TaskCreated`, `TaskCompleted`, `TaskFailed`) se objavljuju za praćenje životnog ciklusa.
