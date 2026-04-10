@@ -121,7 +121,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       const servers = [
         ...(props.servers ?? []),
-        ...store.list.map((value) =>
+        ...(store.list ?? []).map((value) =>
           typeof value === "string"
             ? {
                 type: "http" as const,
@@ -182,7 +182,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url_) return
       const conn = { ...input, http: { ...input.http, url: url_ } }
       return batch(() => {
-        const existing = store.list.findIndex((x) => url(x) === url_)
+        const existing = (store.list ?? []).findIndex((x) => url(x) === url_)
         if (existing !== -1) {
           setStore("list", existing, conn)
         } else {
@@ -194,7 +194,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => url(x) !== key)
+      const list = (store.list ?? []).filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
         if (state.active === key) {
@@ -222,9 +222,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
-    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
-      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
-    )
+    const current: Accessor<ServerConnection.Any | undefined> = createMemo(() => {
+      const all = allServers() ?? []
+      return all.find((s) => ServerConnection.key(s) === state.active) ?? all[0]
+    })
     const isLocal = createMemo(() => {
       const c = current()
       return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))

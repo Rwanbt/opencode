@@ -168,7 +168,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function merge(defaults: unknown, value: unknown): unknown {
   if (value === undefined) return defaults
-  if (value === null) return value
+  if (value === null) return defaults
 
   if (Array.isArray(defaults)) {
     if (Array.isArray(value)) return value

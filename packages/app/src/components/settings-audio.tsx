@@ -12,6 +12,7 @@ export type AudioSettings = {
   sttEngine: string
   sttLanguage: string
   ttsEnabled: boolean
+  ttsProvider: "pocket" | "kokoro"
   ttsVoice: string
   ttsAutoPlay: boolean
   ttsSpeed: number
@@ -22,6 +23,7 @@ const DEFAULT_AUDIO: AudioSettings = {
   sttEngine: "parakeet",
   sttLanguage: "auto",
   ttsEnabled: true,
+  ttsProvider: "pocket",
   ttsVoice: "alba",
   ttsAutoPlay: false,
   ttsSpeed: 1.0,
@@ -61,10 +63,59 @@ function saveSettings(s: AudioSettings) {
 
 export const SettingsAudio: Component = () => {
   const [settings, setSettings] = createStore<AudioSettings>(loadAudioSettings())
+  const [kokoroVoices, setKokoroVoices] = createSignal<string[]>([])
+  const [kokoroAvailable, setKokoroAvailable] = createSignal(false)
+  const [kokoroDownloading, setKokoroDownloading] = createSignal(false)
+  const [downloadProgress, setDownloadProgress] = createSignal(0)
+
+  // Check Kokoro availability on mount
+  ;(async () => {
+    try {
+      const avail = await invokeTauri("kokoro_available")
+      setKokoroAvailable(avail)
+      if (avail) {
+        const loaded = await invokeTauri("kokoro_loaded")
+        if (loaded) {
+          const voices: string[] = await invokeTauri("kokoro_voices")
+          setKokoroVoices(voices)
+        }
+      }
+    } catch {}
+  })()
+
+  const handleDownloadKokoro = async () => {
+    setKokoroDownloading(true)
+    try {
+      await invokeTauri("kokoro_download_model")
+      setKokoroAvailable(true)
+      await invokeTauri("kokoro_load")
+      const voices: string[] = await invokeTauri("kokoro_voices")
+      setKokoroVoices(voices)
+    } catch (e) {
+      console.error("Kokoro download failed:", e)
+    }
+    setKokoroDownloading(false)
+  }
 
   const update = <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) => {
     setSettings(key, value as any)
     saveSettings({ ...settings })
+  }
+
+  const handleProviderChange = async (provider: "pocket" | "kokoro") => {
+    update("ttsProvider", provider)
+    if (provider === "kokoro") {
+      update("ttsVoice", "af_heart")
+      if (kokoroAvailable() && kokoroVoices().length === 0) {
+        try {
+          await invokeTauri("kokoro_load")
+          const voices: string[] = await invokeTauri("kokoro_voices")
+          setKokoroVoices(voices)
+        } catch {}
+      }
+    } else {
+      update("ttsVoice", "alba")
+    }
   }
 
   return (
@@ -108,14 +159,51 @@ export const SettingsAudio: Component = () => {
             <SettingsRow title="Enable TTS" description="Show speaker button under AI responses">
               <Switch checked={settings.ttsEnabled} onChange={(v) => update("ttsEnabled", v)} />
             </SettingsRow>
-            <SettingsRow title="Voice" description="Pocket TTS — Kyutai (EN + FR, voice cloning)">
-              <Select
-                size="normal"
-                options={TTS_VOICES.map((v) => v.id)}
-                current={settings.ttsVoice}
-                label={(id) => TTS_VOICES.find((v) => v.id === id)?.label ?? id}
-                onSelect={(v) => { if (v) update("ttsVoice", v) }}
-              />
+            <SettingsRow title="Provider" description="TTS engine to use for speech synthesis">
+              <div class="flex items-center gap-2">
+                <Select
+                  size="normal"
+                  options={["pocket", "kokoro"]}
+                  current={settings.ttsProvider || "pocket"}
+                  label={(id) => id === "kokoro" ? "Kokoro (ONNX, GPU)" : "Pocket TTS (Kyutai)"}
+                  onSelect={(v) => { if (v) handleProviderChange(v as "pocket" | "kokoro") }}
+                />
+                <Show when={settings.ttsProvider === "kokoro" && !kokoroAvailable()}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={handleDownloadKokoro}
+                    disabled={kokoroDownloading()}
+                  >
+                    {kokoroDownloading() ? `Downloading... ${Math.round(downloadProgress() * 100)}%` : "Download (~336 MB)"}
+                  </Button>
+                </Show>
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title="Voice"
+              description={settings.ttsProvider === "kokoro"
+                ? `Kokoro — ${kokoroVoices().length} voices (ONNX, DirectML GPU)`
+                : "Pocket TTS — Kyutai (EN + FR, voice cloning)"
+              }
+            >
+              <Show when={settings.ttsProvider === "kokoro"} fallback={
+                <Select
+                  size="normal"
+                  options={TTS_VOICES.map((v) => v.id)}
+                  current={settings.ttsVoice}
+                  label={(id) => TTS_VOICES.find((v) => v.id === id)?.label ?? id}
+                  onSelect={(v) => { if (v) update("ttsVoice", v) }}
+                />
+              }>
+                <Select
+                  size="normal"
+                  options={kokoroVoices().length > 0 ? kokoroVoices() : ["af_heart"]}
+                  current={settings.ttsVoice}
+                  label={(id) => id}
+                  onSelect={(v) => { if (v) update("ttsVoice", v) }}
+                />
+              </Show>
             </SettingsRow>
             <SettingsRow title="Speed" description="Playback speed">
               <Select
@@ -131,15 +219,21 @@ export const SettingsAudio: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-2 px-1">
-            Powered by Kyutai Pocket TTS (CC-BY-4.0). French-native, voice cloning supported. Model downloaded on first use. Click to play/pause, double-click to reset.
+            <Show when={settings.ttsProvider === "kokoro"} fallback={
+              <>Powered by Kyutai Pocket TTS (CC-BY-4.0). French-native, voice cloning supported. Click to play/pause, double-click to reset.</>
+            }>
+              Powered by Kokoro v1.0 (Apache-2.0). 54+ voices, DirectML GPU acceleration. Click to play/pause, double-click to reset.
+            </Show>
           </div>
         </div>
 
-        {/* Voice Cloning Section */}
-        <VoiceCloneSection
-          currentVoice={settings.ttsVoice}
-          onSelectClone={(name) => update("ttsVoice", name)}
-        />
+        {/* Voice Cloning Section — Pocket TTS only */}
+        <Show when={settings.ttsProvider !== "kokoro"}>
+          <VoiceCloneSection
+            currentVoice={settings.ttsVoice}
+            onSelectClone={(name) => update("ttsVoice", name)}
+          />
+        </Show>
       </div>
     </div>
   )

@@ -14,11 +14,15 @@ edition = "2024"
 name = "opencode_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["onnx"]
+onnx = ["dep:ort", "dep:ndarray", "dep:bincode"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -47,9 +51,9 @@ specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 dirs = "6.0.0"
-ort = { version = "=2.0.0-rc.10", features = ["download-binaries"] }
-bincode = { version = "2.0", features = ["std", "derive", "serde"] }
-ndarray = "0.16.1"
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries"], optional = true }
+bincode = { version = "2.0", features = ["std", "derive", "serde"], optional = true }
+ndarray = { version = "0.16.1", optional = true }
 hound = "3.5.1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tracing = "0.1"
