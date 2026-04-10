@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -132,6 +131,34 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
     Ok(())
 }
 
+/// Write LLM configuration to IPC file for Kotlin LlamaEngine to read.
+fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
+    let ipc_dir = runtime_dir(app).join("llm_ipc");
+    let _ = fs::create_dir_all(&ipc_dir);
+    let config_file = ipc_dir.join("llm_config");
+
+    // Read settings from env vars (set by frontend via Tauri invoke)
+    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE").unwrap_or_else(|_| "q4_0".to_string());
+    let flash_attn = std::env::var("OPENCODE_FLASH_ATTN").unwrap_or_else(|_| "true".to_string());
+    let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
+    let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
+
+    // Build draft model path if provided
+    let draft_path = draft_model.map(|d| {
+        runtime_dir(app).join("models").join(&d).to_string_lossy().to_string()
+    }).unwrap_or_default();
+
+    let config = format!(
+        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\nn_gpu_layers=0\n",
+        kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path
+    );
+
+    match fs::write(&config_file, &config) {
+        Ok(_) => eprintln!("[LLM] Config written: kv={}, flash={}, offload={}, mmap={}", kv_cache_type, flash_attn, offload_mode, mmap_mode),
+        Err(e) => eprintln!("[LLM] Failed to write config: {}", e),
+    }
+}
+
 /// Load a GGUF model via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
 pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), String> {
@@ -142,9 +169,39 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
     let path_str = model_path.to_string_lossy().to_string();
     eprintln!("[LLM] Loading model: {}", path_str);
 
+    // Auto-detect draft model for speculative decoding
+    let draft_model = find_draft_model(&app, &filename);
+
+    // Write config for Kotlin to read before loading
+    write_llm_config(&app, draft_model);
+
     // Send load command to Kotlin — timeout 120s for large models
     llm_command(&app, &format!("load|{}", path_str), 120)?;
     Ok(())
+}
+
+/// Find a small draft model (0.5B-0.8B) for speculative decoding
+fn find_draft_model(app: &AppHandle, main_model: &str) -> Option<String> {
+    let dir = runtime_dir(app).join("models");
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == main_model { continue; }
+            if !name.ends_with(".gguf") { continue; }
+            let lower = name.to_lowercase();
+            // Look for small draft models (0.5B or 0.8B)
+            if lower.contains("0.5b") || lower.contains("0.8b") || lower.contains("0_5b") || lower.contains("0_8b") {
+                // Verify file size is small enough (<1GB)
+                if let Ok(meta) = entry.metadata() {
+                    if meta.len() < 1_000_000_000 {
+                        eprintln!("[LLM] Found draft model: {}", name);
+                        return Some(name);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 #[tauri::command]
@@ -188,4 +245,72 @@ pub async fn generate_llm(
 #[tauri::command]
 pub async fn check_llm_health(app: AppHandle) -> bool {
     is_llm_loaded(app).await
+}
+
+/// Set LLM configuration env vars (called by frontend before load)
+#[tauri::command]
+pub async fn set_llm_config(
+    kv_cache_type: Option<String>,
+    flash_attn: Option<bool>,
+    offload_mode: Option<String>,
+    mmap_mode: Option<String>,
+) -> Result<(), String> {
+    if let Some(kv) = kv_cache_type {
+        std::env::set_var("OPENCODE_KV_CACHE_TYPE", &kv);
+    }
+    if let Some(fa) = flash_attn {
+        std::env::set_var("OPENCODE_FLASH_ATTN", if fa { "true" } else { "false" });
+    }
+    if let Some(off) = offload_mode {
+        std::env::set_var("OPENCODE_OFFLOAD_MODE", &off);
+    }
+    if let Some(mm) = mmap_mode {
+        std::env::set_var("OPENCODE_MMAP_MODE", &mm);
+    }
+    eprintln!("[LLM] Config updated via set_llm_config");
+    Ok(())
+}
+
+// ─── Memory monitoring ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryInfo {
+    pub total_mb: u64,
+    pub available_mb: u64,
+    pub used_mb: u64,
+}
+
+/// Get device memory info from /proc/meminfo (works on Android without root)
+#[tauri::command]
+pub async fn get_memory_info() -> Result<MemoryInfo, String> {
+    let meminfo = fs::read_to_string("/proc/meminfo")
+        .map_err(|e| format!("Failed to read /proc/meminfo: {}", e))?;
+
+    let mut total_kb: u64 = 0;
+    let mut available_kb: u64 = 0;
+
+    for line in meminfo.lines() {
+        if line.starts_with("MemTotal:") {
+            total_kb = parse_meminfo_value(line);
+        } else if line.starts_with("MemAvailable:") {
+            available_kb = parse_meminfo_value(line);
+        }
+    }
+
+    let total_mb = total_kb / 1024;
+    let available_mb = available_kb / 1024;
+    let used_mb = total_mb.saturating_sub(available_mb);
+
+    Ok(MemoryInfo {
+        total_mb,
+        available_mb,
+        used_mb,
+    })
+}
+
+fn parse_meminfo_value(line: &str) -> u64 {
+    line.split_whitespace()
+        .nth(1)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
 }

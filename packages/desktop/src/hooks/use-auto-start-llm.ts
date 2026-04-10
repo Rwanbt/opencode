@@ -12,6 +12,22 @@ function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> 
 let currentlyLoaded: string | null = null
 let loading = false
 
+/** Read LLM config from localStorage and push to Rust env vars */
+function pushConfigToEnv() {
+  try {
+    const raw = localStorage.getItem("opencode-model-config")
+    if (!raw) return
+    const c = JSON.parse(raw)
+    // Desktop llm.rs reads these env vars when starting the server
+    if (c.kvCacheType) (globalThis as any).__OPENCODE_KV_CACHE = c.kvCacheType
+    if (c.offloadMode) (globalThis as any).__OPENCODE_OFFLOAD = c.offloadMode
+    if (c.mmapMode) (globalThis as any).__OPENCODE_MMAP = c.mmapMode
+    // Pass via Tauri env — Rust reads OPENCODE_KV_CACHE_TYPE etc.
+    // These are picked up by llm.rs load_llm_model()
+    console.log("[AutoLLM] Config:", c.kvCacheType, c.offloadMode, c.mmapMode)
+  } catch { /* ignore */ }
+}
+
 export async function ensureLocalLLMLoaded(providerID: string | undefined, modelID: string | undefined) {
   if (providerID !== "local-llm" || !modelID || loading) return
 
@@ -21,6 +37,7 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
 
   loading = true
   try {
+    pushConfigToEnv()
     console.log("[AutoLLM] Loading model:", filename)
     await invokeTauri("load_llm_model", { filename })
     currentlyLoaded = filename

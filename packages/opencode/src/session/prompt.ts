@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs"
 import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -385,6 +386,55 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return input.messages
       })
 
+      function preflightCheck(
+        toolId: string,
+        args: any,
+        model: Provider.Model,
+        messages: MessageV2.WithParts[],
+      ): string | undefined {
+        if (model.providerID !== "local-llm") return
+
+        if (toolId === "edit" && args.file_path) {
+          // Guard 3 — old_string empty
+          if (args.old_string !== undefined && (!args.old_string || !args.old_string.trim())) {
+            return "old_string cannot be empty. Read the file and copy the exact text to replace."
+          }
+
+          // Guard 4 (PRIORITY) — old_string must exist in file
+          if (args.old_string) {
+            try {
+              const content = fs.readFileSync(args.file_path, "utf-8")
+              if (!content.includes(args.old_string)) {
+                return "old_string not found in file. Read the file and copy exact text."
+              }
+            } catch {}
+          }
+
+          // Guard 1 — read before edit
+          const hasRead = messages.some((m) =>
+            m.parts.some(
+              (p) =>
+                p.type === "tool" &&
+                p.tool === "read" &&
+                p.state.status === "completed" &&
+                (p.state as any).input?.file_path === args.file_path,
+            ),
+          )
+          if (!hasRead) {
+            return "You must read this file before editing it: " + args.file_path
+          }
+        }
+
+        // Guard 2 — write on existing file
+        if (toolId === "write" && args.file_path) {
+          try {
+            if (fs.existsSync(args.file_path)) {
+              return "File already exists. Use edit instead."
+            }
+          } catch {}
+        }
+      }
+
       const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
         agent: Agent.Info
         model: Provider.Model
@@ -446,6 +496,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               return Effect.runPromise(
                 Effect.gen(function* () {
                   const ctx = context(args, options)
+                  const pfError = preflightCheck(item.id, args, input.model, input.messages)
+                  if (pfError) throw new Error(pfError)
                   yield* plugin.trigger(
                     "tool.execute.before",
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },

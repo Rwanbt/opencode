@@ -20,7 +20,7 @@ import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 
 export namespace SessionProcessor {
-  const DOOM_LOOP_THRESHOLD = 3
+  const DOOM_LOOP_THRESHOLD = 2
   const log = Log.create({ service: "session.processor" })
 
   export type Result = "compact" | "stop" | "continue"
@@ -44,8 +44,17 @@ export namespace SessionProcessor {
     readonly create: (input: Input) => Effect.Effect<Handle>
   }
 
+  /** Per-session tool call telemetry (local models) */
+  interface ToolTelemetry {
+    calls: number
+    success: number
+    errors: number
+    byTool: Record<string, { calls: number; errors: number }>
+  }
+
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
+    telemetry: ToolTelemetry
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
@@ -93,6 +102,7 @@ export namespace SessionProcessor {
           sessionID: input.sessionID,
           model: input.model,
           toolcalls: {},
+          telemetry: { calls: 0, success: 0, errors: 0, byTool: {} },
           shouldBreak: false,
           snapshot: initialSnapshot,
           blocked: false,
@@ -200,6 +210,22 @@ export namespace SessionProcessor {
                 return
               }
 
+              // Local models: auto-break instead of asking permission (4B models can't recover from loops)
+              if (ctx.model.providerID === "local-llm") {
+                log.warn("doom loop detected for local model, injecting error", { tool: value.toolName })
+                ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
+                  ...match,
+                  tool: value.toolName,
+                  state: {
+                    status: "error",
+                    input: value.input,
+                    error: `STOP: You called ${value.toolName} twice with identical args. Change your parameters or use a different tool.`,
+                    time: { start: Date.now(), end: Date.now() },
+                  },
+                } satisfies MessageV2.ToolPart)
+                return
+              }
+
               const agent = yield* agents.get(ctx.assistantMessage.agent)
               yield* permission.ask({
                 permission: "doom_loop",
@@ -215,6 +241,13 @@ export namespace SessionProcessor {
             case "tool-result": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+              // Telemetry: track success
+              ctx.telemetry.calls++
+              ctx.telemetry.success++
+              const toolName = match.tool
+              if (!ctx.telemetry.byTool[toolName]) ctx.telemetry.byTool[toolName] = { calls: 0, errors: 0 }
+              ctx.telemetry.byTool[toolName].calls++
+
               yield* session.updatePart({
                 ...match,
                 state: {
@@ -234,6 +267,14 @@ export namespace SessionProcessor {
             case "tool-error": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+              // Telemetry: track error
+              ctx.telemetry.calls++
+              ctx.telemetry.errors++
+              const toolName = match.tool
+              if (!ctx.telemetry.byTool[toolName]) ctx.telemetry.byTool[toolName] = { calls: 0, errors: 0 }
+              ctx.telemetry.byTool[toolName].calls++
+              ctx.telemetry.byTool[toolName].errors++
+
               yield* session.updatePart({
                 ...match,
                 state: {
@@ -411,6 +452,18 @@ export namespace SessionProcessor {
           }
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
+
+          // Log tool telemetry for local models
+          if (ctx.telemetry.calls > 0 && ctx.model.providerID === "local-llm") {
+            const rate = Math.round((ctx.telemetry.success / ctx.telemetry.calls) * 100)
+            log.info("tool telemetry", {
+              calls: ctx.telemetry.calls,
+              success: ctx.telemetry.success,
+              errors: ctx.telemetry.errors,
+              successRate: `${rate}%`,
+              byTool: ctx.telemetry.byTool,
+            })
+          }
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {

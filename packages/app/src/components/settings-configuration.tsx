@@ -313,9 +313,21 @@ function VramWidget() {
 
   ;(async () => {
     try {
+      // Try desktop GPU VRAM first (nvidia-smi)
       const info = await invokeTauri("get_vram_info")
       setVram(info)
-    } catch {}
+    } catch {
+      // Fallback to mobile RAM info (/proc/meminfo)
+      try {
+        const mem: { total_mb: number; available_mb: number; used_mb: number } = await invokeTauri("get_memory_info")
+        setVram({
+          total_mib: mem.total_mb,
+          used_mib: mem.used_mb,
+          free_mib: mem.available_mb,
+          gpu_name: "Device RAM",
+        })
+      } catch { /* no memory info available */ }
+    }
   })()
 
   return (
@@ -343,7 +355,7 @@ function VramWidget() {
             </div>
             <div class="flex justify-between mt-1">
               <span class="text-11-regular text-text-weak">{info().free_mib} MiB free</span>
-              <span class="text-11-regular text-text-weak">VRAM</span>
+              <span class="text-11-regular text-text-weak">{info().gpu_name === "Device RAM" ? "RAM" : "VRAM"}</span>
             </div>
           </div>
         )
