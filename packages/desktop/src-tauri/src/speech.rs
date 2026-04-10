@@ -3,9 +3,17 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(feature = "onnx")]
+use crate::kokoro::KokoroEngine;
+#[cfg(feature = "onnx")]
 use crate::parakeet::ParakeetEngine;
 
+#[cfg(feature = "onnx")]
 const STT_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip";
+#[cfg(feature = "onnx")]
+const KOKORO_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/kokoro-v1.0.onnx";
+#[cfg(feature = "onnx")]
+const KOKORO_VOICES_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/voices-v1.0.bin";
 const TTS_PORT: u16 = 14100;
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -14,12 +22,18 @@ fn data_dir(app: &AppHandle) -> PathBuf {
         .expect("failed to resolve app data dir")
 }
 
+#[cfg(feature = "onnx")]
 fn model_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join("speech").join("parakeet-tdt-0.6b-v3-int8")
 }
 
 fn speech_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join("speech")
+}
+
+#[cfg(feature = "onnx")]
+fn kokoro_dir(app: &AppHandle) -> PathBuf {
+    data_dir(app).join("speech").join("kokoro")
 }
 
 fn find_pocket_tts() -> Option<PathBuf> {
@@ -98,23 +112,45 @@ fn find_python_dir() -> Option<String> {
 // ─── State ─────────────────────────────────────────────────────────────
 
 pub struct SpeechState {
+    #[cfg(feature = "onnx")]
     stt_engine: Mutex<ParakeetEngine>,
+    #[cfg(feature = "onnx")]
     stt_loaded: Mutex<bool>,
     tts_child: Mutex<Option<tokio::process::Child>>,
+    tts_client: reqwest::Client,
+    tts_ready: Mutex<bool>,
+    #[cfg(feature = "onnx")]
+    kokoro_engine: Mutex<KokoroEngine>,
+    #[cfg(feature = "onnx")]
+    kokoro_loaded: Mutex<bool>,
 }
 
 impl SpeechState {
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "onnx")]
             stt_engine: Mutex::new(ParakeetEngine::new()),
+            #[cfg(feature = "onnx")]
             stt_loaded: Mutex::new(false),
             tts_child: Mutex::new(None),
+            tts_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .pool_max_idle_per_host(1)
+                .tcp_nodelay(true)
+                .build()
+                .expect("Failed to create HTTP client"),
+            tts_ready: Mutex::new(false),
+            #[cfg(feature = "onnx")]
+            kokoro_engine: Mutex::new(KokoroEngine::new()),
+            #[cfg(feature = "onnx")]
+            kokoro_loaded: Mutex::new(false),
         }
     }
 }
 
 // ─── STT (Parakeet) ───────────────────────────────────────────────────
 
+#[cfg(feature = "onnx")]
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_download_model(app: AppHandle) -> Result<(), String> {
@@ -172,6 +208,7 @@ pub async fn stt_download_model(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "onnx")]
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
@@ -208,6 +245,7 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "onnx")]
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
@@ -242,12 +280,14 @@ pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<Stri
     Ok(text)
 }
 
+#[cfg(feature = "onnx")]
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_available(app: AppHandle) -> bool {
     model_dir(&app).join("encoder-model.int8.onnx").exists()
 }
 
+#[cfg(feature = "onnx")]
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_loaded(app: AppHandle) -> bool {
@@ -261,21 +301,30 @@ pub async fn stt_loaded(app: AppHandle) -> bool {
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
-    // Check if already running
+    // Fast path: already running and confirmed healthy
+    {
+        let state = app.state::<SpeechState>();
+        if *state.tts_ready.lock().unwrap() && state.tts_child.lock().unwrap().is_some() {
+            return Ok(TTS_PORT);
+        }
+    }
+
+    // Check if child exists but not confirmed ready yet
     let has_child = {
         let state = app.state::<SpeechState>();
         state.tts_child.lock().unwrap().is_some()
     };
 
     if has_child {
-        let client = reqwest::Client::new();
-        if let Ok(resp) = client
+        let state = app.state::<SpeechState>();
+        if let Ok(resp) = state.tts_client
             .get(format!("http://127.0.0.1:{}/health", TTS_PORT))
             .timeout(std::time::Duration::from_secs(1))
             .send()
             .await
         {
             if resp.status().is_success() {
+                *state.tts_ready.lock().unwrap() = true;
                 return Ok(TTS_PORT);
             }
         }
@@ -287,6 +336,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         if let Some(mut c) = state.tts_child.lock().unwrap().take() {
             let _ = c.start_kill();
         }
+        *state.tts_ready.lock().unwrap() = false;
     }
 
     let pocket_tts = find_pocket_tts().ok_or("pocket-tts not found. Run: pip install pocket-tts")?;
@@ -301,7 +351,6 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         .arg("127.0.0.1")
         .kill_on_drop(true);
 
-    // Add Python to PATH
     if let Some(py_dir) = find_python_dir() {
         let path = std::env::var("PATH").unwrap_or_default();
         let sep = if cfg!(windows) { ";" } else { ":" };
@@ -310,7 +359,6 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
@@ -321,25 +369,37 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         *state.tts_child.lock().unwrap() = Some(child);
     }
 
-    // Wait for server to be ready
-    let client = reqwest::Client::new();
+    // Wait for server ready (shared client = connection reuse on subsequent calls)
+    let state = app.state::<SpeechState>();
     let start = std::time::Instant::now();
     loop {
         if start.elapsed().as_secs() > 60 {
-            let state = app.state::<SpeechState>();
             if let Some(mut c) = state.tts_child.lock().unwrap().take() {
                 let _ = c.start_kill();
             }
             return Err("TTS server failed to start".to_string());
         }
-        if let Ok(resp) = client
+        if let Ok(resp) = state.tts_client
             .get(format!("http://127.0.0.1:{}/health", TTS_PORT))
             .timeout(std::time::Duration::from_secs(1))
             .send()
             .await
         {
             if resp.status().is_success() {
+                *state.tts_ready.lock().unwrap() = true;
                 tracing::info!("[TTS] Pocket TTS ready after {:?}", start.elapsed());
+
+                // Warmup: force model load + GPU init with a tiny synthesis
+                let warmup = reqwest::multipart::Form::new()
+                    .text("text", ".")
+                    .text("voice_url", "alba");
+                let _ = state.tts_client
+                    .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
+                    .multipart(warmup)
+                    .send()
+                    .await;
+                tracing::info!("[TTS] Warmup done in {:?}", start.elapsed());
+
                 return Ok(TTS_PORT);
             }
         }
@@ -347,83 +407,101 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     }
 }
 
-/// Synthesize text to speech via Pocket TTS HTTP API, returns base64 WAV
-#[tauri::command]
-#[specta::specta]
-pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
-    // Ensure server running
-    tts_start(app.clone()).await?;
-
-    let voice_name = voice.unwrap_or_else(|| "alba".to_string());
-
-    // Truncate to ~300 chars at sentence boundary
-    let text = if text.len() > 300 {
-        let truncated = &text[..text.char_indices()
-            .take_while(|(i, _)| *i < 300)
-            .last()
-            .map(|(i, c)| i + c.len_utf8())
-            .unwrap_or(300)];
-        let end = truncated
-            .rfind(|c: char| c == '.' || c == '!' || c == '?' || c == '\n')
-            .map(|i| i + 1)
-            .unwrap_or(truncated.len());
-        text[..end].to_string()
-    } else {
-        text
-    };
-
-    tracing::info!("[TTS] Synthesizing {} chars with voice {}", text.len(), voice_name);
-    let start = std::time::Instant::now();
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    // Check if voice is a custom clone (file exists in voices dir)
-    let clone_path = speech_dir(&app).join("voices").join(format!("{}.wav", &voice_name));
-    let form = if clone_path.exists() {
-        // Voice cloning: send the WAV file
+/// Build multipart form for Pocket TTS (text + voice_url or voice_wav clone)
+fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwest::multipart::Form, String> {
+    let clone_path = speech_dir(app).join("voices").join(format!("{}.wav", voice_name));
+    if clone_path.exists() {
         let wav_bytes = fs::read(&clone_path).map_err(|e| format!("Read clone: {}", e))?;
         let part = reqwest::multipart::Part::bytes(wav_bytes)
             .file_name(format!("{}.wav", voice_name))
             .mime_str("audio/wav")
             .map_err(|e| e.to_string())?;
-        reqwest::multipart::Form::new()
-            .text("text", text)
-            .part("voice_wav", part)
+        Ok(reqwest::multipart::Form::new()
+            .text("text", text.to_string())
+            .part("voice_wav", part))
     } else {
-        // Built-in voice
-        reqwest::multipart::Form::new()
-            .text("text", text)
-            .text("voice", voice_name)
-    };
+        // Pocket TTS API uses "voice_url" for predefined voice names (alba, marius, etc.)
+        Ok(reqwest::multipart::Form::new()
+            .text("text", text.to_string())
+            .text("voice_url", voice_name.to_string()))
+    }
+}
 
-    let resp = client
+/// Synthesize text via Pocket TTS HTTP API.
+/// Buffers the full response and writes a single complete WAV file.
+/// Sentence-level chunking in the frontend handles latency for long texts.
+#[tauri::command]
+#[specta::specta]
+pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
+    {
+        let state = app.state::<SpeechState>();
+        if !*state.tts_ready.lock().unwrap() {
+            drop(state);
+            tts_start(app.clone()).await?;
+        }
+    }
+
+    let voice_name = voice.unwrap_or_else(|| "alba".to_string());
+
+    tracing::info!("[TTS] Synthesizing {} chars with voice {}", text.len(), voice_name);
+    let start = std::time::Instant::now();
+
+    let form = build_tts_form(&app, &text, &voice_name)?;
+    let state = app.state::<SpeechState>();
+    let resp = state.tts_client
         .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
         .multipart(form)
         .send()
-        .await
-        .map_err(|e| format!("TTS request: {}", e))?;
+        .await;
 
-    if !resp.status().is_success() {
-        return Err(format!("TTS HTTP {}", resp.status()));
-    }
+    let resp = match resp {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) => {
+            *state.tts_ready.lock().unwrap() = false;
+            return Err(format!("TTS HTTP {}", r.status()));
+        }
+        Err(e) => {
+            tracing::warn!("[TTS] Request failed, retrying: {}", e);
+            *state.tts_ready.lock().unwrap() = false;
+            drop(state);
+            tts_start(app.clone()).await?;
+            let retry_form = build_tts_form(&app, &text, &voice_name)?;
+            let state = app.state::<SpeechState>();
+            state.tts_client
+                .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
+                .multipart(retry_form)
+                .send()
+                .await
+                .map_err(|e| format!("TTS retry failed: {}", e))?
+        }
+    };
 
-    let wav_bytes = resp.bytes().await.map_err(|e| format!("TTS read: {}", e))?;
-    tracing::info!("[TTS] Generated {} bytes WAV in {:?}", wav_bytes.len(), start.elapsed());
+    // Buffer full response and write a single complete WAV file.
+    // With voice_url fix, Pocket TTS does ~300 chars in ~300ms — no need
+    // for intra-request streaming. Sentence-level chunking in the frontend
+    // handles latency for long texts.
+    let out_dir = speech_dir(&app).join("tts_chunks");
+    let _ = fs::create_dir_all(&out_dir);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let out_path = out_dir.join(format!("chunk_{}.wav", ts));
 
-    Ok(base64_encode(&wav_bytes))
+    let wav_bytes = resp.bytes().await.map_err(|e| format!("Read response: {}", e))?;
+    fs::write(&out_path, &wav_bytes).map_err(|e| format!("Write WAV: {}", e))?;
+    tracing::info!("[TTS] Synthesized {} bytes in {:?}", wav_bytes.len(), start.elapsed());
+
+    Ok(out_path.to_string_lossy().to_string())
 }
 
 /// Stop TTS server
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_stop(app: AppHandle) -> Result<(), String> {
-    let child_opt = {
-        let state = app.state::<SpeechState>();
-        state.tts_child.lock().unwrap().take()
-    };
+    let state = app.state::<SpeechState>();
+    *state.tts_ready.lock().unwrap() = false;
+    let child_opt = state.tts_child.lock().unwrap().take();
     if let Some(mut child) = child_opt {
         tracing::info!("[TTS] Stopping Pocket TTS");
         let _ = child.start_kill();
@@ -480,8 +558,209 @@ pub async fn tts_available() -> bool {
     find_pocket_tts().is_some()
 }
 
+/// Delete all temp WAV chunk files
+#[tauri::command]
+#[specta::specta]
+pub async fn tts_cleanup_chunks(app: AppHandle) -> Result<(), String> {
+    let dir = speech_dir(&app).join("tts_chunks");
+    if dir.exists() {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+    Ok(())
+}
+
+// ─── Kokoro TTS (ONNX, built-in) ─────────────────────────────────────
+
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_available(app: AppHandle) -> bool {
+    let dir = kokoro_dir(&app);
+    dir.join("kokoro-v1.0.onnx").exists() && dir.join("voices-v1.0.bin").exists()
+}
+
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
+    let dir = kokoro_dir(&app);
+    let _ = fs::create_dir_all(&dir);
+
+    let model_path = dir.join("kokoro-v1.0.onnx");
+    let voices_path = dir.join("voices-v1.0.bin");
+
+    if model_path.exists() && voices_path.exists() {
+        return Ok(());
+    }
+
+    let client = reqwest::Client::new();
+
+    // Download model
+    if !model_path.exists() {
+        tracing::info!("[Kokoro] Downloading model...");
+        let resp = client.get(KOKORO_MODEL_URL).send().await.map_err(|e| format!("Download model: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let total = resp.content_length().unwrap_or(0);
+        let mut downloaded: u64 = 0;
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(&model_path).await.map_err(|e| format!("Create: {}", e))?;
+        let mut last_emit = std::time::Instant::now();
+        let mut stream = resp.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("Stream: {}", e))?;
+            file.write_all(&chunk).await.map_err(|e| format!("Write: {}", e))?;
+            downloaded += chunk.len() as u64;
+            if last_emit.elapsed().as_millis() > 300 {
+                let progress = if total > 0 { downloaded as f64 / total as f64 * 0.9 } else { 0.0 };
+                let _ = app.emit("kokoro-download-progress", progress);
+                last_emit = std::time::Instant::now();
+            }
+        }
+        file.flush().await.map_err(|e| format!("Flush: {}", e))?;
+        tracing::info!("[Kokoro] Model downloaded");
+    }
+
+    // Download voices
+    if !voices_path.exists() {
+        tracing::info!("[Kokoro] Downloading voices...");
+        let resp = client.get(KOKORO_VOICES_URL).send().await.map_err(|e| format!("Download voices: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| format!("Read: {}", e))?;
+        fs::write(&voices_path, &bytes).map_err(|e| format!("Write: {}", e))?;
+        tracing::info!("[Kokoro] Voices downloaded");
+    }
+
+    let _ = app.emit("kokoro-download-progress", 1.0_f64);
+    Ok(())
+}
+
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_load(app: AppHandle) -> Result<(), String> {
+    {
+        let state = app.state::<SpeechState>();
+        if *state.kokoro_loaded.lock().unwrap() {
+            return Ok(());
+        }
+    }
+
+    let dir = kokoro_dir(&app);
+    let model_path = dir.join("kokoro-v1.0.onnx");
+    let voices_path = dir.join("voices-v1.0.bin");
+
+    if !model_path.exists() || !voices_path.exists() {
+        return Err("Kokoro model not downloaded".to_string());
+    }
+
+    tracing::info!("[Kokoro] Loading model...");
+    let start = std::time::Instant::now();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut engine = KokoroEngine::new();
+        engine.load(&model_path, &voices_path)?;
+        Ok::<KokoroEngine, String>(engine)
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?;
+
+    let engine = result?;
+    {
+        let state = app.state::<SpeechState>();
+        *state.kokoro_engine.lock().unwrap() = engine;
+        *state.kokoro_loaded.lock().unwrap() = true;
+    }
+    tracing::info!("[Kokoro] Model loaded in {:?}", start.elapsed());
+    Ok(())
+}
+
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_loaded(app: AppHandle) -> bool {
+    let state = app.state::<SpeechState>();
+    *state.kokoro_loaded.lock().unwrap()
+}
+
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_voices(app: AppHandle) -> Vec<String> {
+    let state = app.state::<SpeechState>();
+    let engine = state.kokoro_engine.lock().unwrap();
+    let mut names = engine.voice_names();
+    names.sort();
+    names
+}
+
+/// Synthesize text with Kokoro ONNX engine, returns file path to WAV
+#[cfg(feature = "onnx")]
+#[tauri::command]
+#[specta::specta]
+pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, speed: f32) -> Result<String, String> {
+    // Ensure loaded
+    {
+        let state = app.state::<SpeechState>();
+        if !*state.kokoro_loaded.lock().unwrap() {
+            drop(state);
+            kokoro_load(app.clone()).await?;
+        }
+    }
+
+    tracing::info!("[Kokoro] Synthesizing {} chars with voice {}", text.len(), voice);
+    let start = std::time::Instant::now();
+
+    let app_clone = app.clone();
+    let voice_clone = voice.clone();
+    let samples = tokio::task::spawn_blocking(move || {
+        let state = app_clone.state::<SpeechState>();
+        let mut engine = state.kokoro_engine.lock().unwrap();
+        engine.synthesize(&text, &voice_clone, speed)
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?
+    .map_err(|e| format!("Synthesis: {}", e))?;
+
+    tracing::info!("[Kokoro] Synthesized {} samples in {:?}", samples.len(), start.elapsed());
+
+    // Encode to WAV and write to unique temp file
+    let out_dir = speech_dir(&app).join("tts_chunks");
+    let _ = fs::create_dir_all(&out_dir);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let out_path = out_dir.join(format!("chunk_{}.wav", ts));
+
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 24000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(&out_path, spec)
+        .map_err(|e| format!("WAV writer: {}", e))?;
+    for &s in &samples {
+        let clamped = s.max(-1.0).min(1.0);
+        let i16_val = if clamped < 0.0 { (clamped * 32768.0) as i16 } else { (clamped * 32767.0) as i16 };
+        writer.write_sample(i16_val).map_err(|e| format!("WAV write: {}", e))?;
+    }
+    writer.finalize().map_err(|e| format!("WAV finalize: {}", e))?;
+
+    Ok(out_path.to_string_lossy().to_string())
+}
+
 // ─── WAV helpers ───────────────────────────────────────────────────────
 
+#[cfg(feature = "onnx")]
 fn wav_to_samples(wav_bytes: &[u8]) -> Result<Vec<f32>, String> {
     let cursor = std::io::Cursor::new(wav_bytes);
     let reader = hound::WavReader::new(cursor).map_err(|e| format!("WAV: {}", e))?;
@@ -500,6 +779,7 @@ fn wav_to_samples(wav_bytes: &[u8]) -> Result<Vec<f32>, String> {
     Ok(samples)
 }
 
+#[cfg(feature = "onnx")]
 fn resample(samples: &[f32], from: usize, to: usize) -> Vec<f32> {
     let ratio = from as f64 / to as f64;
     let len = (samples.len() as f64 / ratio) as usize;
@@ -546,18 +826,3 @@ fn b64val(c: u8) -> Result<u8, String> {
     }
 }
 
-fn base64_encode(data: &[u8]) -> String {
-    const C: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        out.push(C[((n >> 18) & 63) as usize] as char);
-        out.push(C[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { C[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { C[(n & 63) as usize] as char } else { '=' });
-    }
-    out
-}

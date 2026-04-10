@@ -28,16 +28,18 @@ export function useProviders() {
     return globalSync.data.provider
   }
   return {
-    all: () => providers().all,
-    default: () => providers().default,
-    popular: () => providers().all.filter((p) => popularProviderSet.has(p.id)),
+    all: () => providers()?.all ?? [],
+    default: () => providers()?.default ?? {},
+    popular: () => (providers()?.all ?? []).filter((p) => popularProviderSet.has(p.id)),
     connected: () => {
-      const connected = new Set(providers().connected)
-      return providers().all.filter((p) => connected.has(p.id))
+      const p = providers()
+      const connected = new Set(p?.connected ?? [])
+      return (p?.all ?? []).filter((p) => connected.has(p.id))
     },
     paid: () => {
-      const connected = new Set(providers().connected)
-      return providers().all.filter(
+      const p = providers()
+      const connected = new Set(p?.connected ?? [])
+      return (p?.all ?? []).filter(
         (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
       )
     },

@@ -386,8 +386,9 @@ pub fn run() {
 }
 
 fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    // NOTE: tauri_specta::Builder::commands() REPLACES (does not append).
+    // All commands MUST be in a single .commands() call.
     tauri_specta::Builder::<tauri::Wry>::new()
-        // Then register them (separated by a comma)
         .commands(tauri_specta::collect_commands![
             kill_sidecar,
             cli::install_cli,
@@ -410,18 +411,25 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             llm::load_llm_model,
             llm::unload_llm_model,
             llm::get_vram_info,
-            speech::stt_download_model,
-            speech::stt_load_model,
-            speech::stt_transcribe,
-            speech::stt_available,
-            speech::stt_loaded,
             speech::tts_start,
             speech::tts_speak,
             speech::tts_stop,
             speech::tts_save_voice_clone,
             speech::tts_list_voice_clones,
             speech::tts_delete_voice_clone,
-            speech::tts_available
+            speech::tts_available,
+            speech::tts_cleanup_chunks,
+            speech::stt_download_model,
+            speech::stt_load_model,
+            speech::stt_transcribe,
+            speech::stt_available,
+            speech::stt_loaded,
+            speech::kokoro_available,
+            speech::kokoro_download_model,
+            speech::kokoro_load,
+            speech::kokoro_loaded,
+            speech::kokoro_voices,
+            speech::kokoro_synthesize,
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
