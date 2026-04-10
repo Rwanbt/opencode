@@ -34,7 +34,8 @@ futures-util = "0.3"
 url = "2"
 
 # STT/TTS engines (cross-platform ONNX Runtime)
-# On Android CI, set ORT_LIB_LOCATION to the ONNX Runtime Android .so directory
+# Android: set ORT_LIB_LOCATION to ONNX Runtime AAR extracted .so directory before building.
+# download-binaries is needed for API availability; ORT_LIB_LOCATION overrides the download.
 [dependencies.ort]
 version = "=2.0.0-rc.10"
 features = ["download-binaries"]

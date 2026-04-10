@@ -709,8 +709,7 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         if (next.type !== "sse") return fail(next)
         if (mode === "responses") return send(responses(next, modelFrom(body)))
         if (next.reset) {
-          yield* reset(next)
-          return HttpServerResponse.empty()
+          return yield* reset(next)
         }
         return send(next)
       })

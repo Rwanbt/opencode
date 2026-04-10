@@ -238,8 +238,56 @@ object LlamaEngine {
         val useVulkan = vulkanCapable && isLargeModel
 
         Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), vulkan=$vulkanCapable, useGPU=$useVulkan")
-        startServer(modelPath, contextSize, useVulkan)
+
+        // Read config from IPC file (written by Rust backend)
+        val config = readLlmConfig(modelPath)
+        startServer(modelPath, contextSize, useVulkan, config)
         return true
+    }
+
+    /** Configuration for llama-server, read from IPC config file */
+    data class LlmConfig(
+        val kvCacheType: String = "q4_0",
+        val flashAttn: Boolean = true,
+        val offloadMode: String = "auto",
+        val mmapMode: String = "auto",
+        val draftModelPath: String? = null,
+        val nGpuLayers: Int = 0,
+    )
+
+    /** Read LLM config from IPC file written by Rust backend */
+    private fun readLlmConfig(modelPath: String): LlmConfig {
+        try {
+            val configFile = java.io.File(modelPath).parentFile?.parentFile?.let {
+                java.io.File(it, "llm_ipc/llm_config")
+            }
+            if (configFile != null && configFile.exists()) {
+                val lines = configFile.readLines()
+                var kvCache = "q4_0"
+                var flashAttn = true
+                var offload = "auto"
+                var mmap = "auto"
+                var draftModel: String? = null
+                var ngl = 0
+                for (line in lines) {
+                    val parts = line.split("=", limit = 2)
+                    if (parts.size != 2) continue
+                    when (parts[0].trim()) {
+                        "kv_cache_type" -> kvCache = parts[1].trim()
+                        "flash_attn" -> flashAttn = parts[1].trim() == "true"
+                        "offload_mode" -> offload = parts[1].trim()
+                        "mmap_mode" -> mmap = parts[1].trim()
+                        "draft_model" -> draftModel = parts[1].trim().ifEmpty { null }
+                        "n_gpu_layers" -> ngl = parts[1].trim().toIntOrNull() ?: 0
+                    }
+                }
+                Log.i(TAG, "Config: kv=$kvCache, flash=$flashAttn, offload=$offload, mmap=$mmap, draft=$draftModel, ngl=$ngl")
+                return LlmConfig(kvCache, flashAttn, offload, mmap, draftModel, ngl)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read LLM config: ${e.message}")
+        }
+        return LlmConfig()
     }
 
     /** Start only the llama-server HTTP process (Vulkan GPU). Skip JNI model loading. */
@@ -257,7 +305,7 @@ object LlamaEngine {
         Log.i(TAG, "Model unloaded")
     }
 
-    private fun startServer(modelPath: String, ctxSize: Int, useVulkan: Boolean = false) {
+    private fun startServer(modelPath: String, ctxSize: Int, useVulkan: Boolean = false, config: LlmConfig = LlmConfig()) {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -281,38 +329,27 @@ object LlamaEngine {
             }
             val nativeLibDir = libDir
 
-            // Use CPU-only server for Q4_K_M (OpenCL only optimized for Q4_0)
-            // CPU with armv8.7a + i8mm + big-core pinning is fastest for Q4_K_M
             val serverName = "libllama_server.so"
-            Log.i(TAG, "Selecting server: $serverName (CPU-only, optimized for Q4_K_M)")
             val serverBin = java.io.File(nativeLibDir, serverName)
             if (!serverBin.exists()) {
-                // Fallback to CPU-only if Vulkan binary not found
-                Log.w(TAG, "$serverName not found, falling back to libllama_server.so")
-                val fallback = java.io.File(nativeLibDir, "libllama_server.so")
-                if (!fallback.exists()) {
-                    Log.w(TAG, "No llama-server binary found")
-                    return
-                }
+                Log.w(TAG, "No llama-server binary found")
+                return
             }
-            val actualBin = if (serverBin.exists()) serverBin else java.io.File(nativeLibDir, "libllama_server.so")
 
             val homeDir = java.io.File(modelPath).parentFile?.parentFile?.let { java.io.File(it, "home") }
             homeDir?.mkdirs()
 
-            // Build command with backend-specific args
-            val ngl = "0"  // CPU-only: GPU offload disabled (Q4_K_M not optimized for GPU)
+            // GPU layers: use config or auto-detect
+            val ngl = if (useVulkan) config.nGpuLayers.coerceAtLeast(99).toString() else "0"
 
             // Detect big-core topology for CPU affinity pinning
-            // This is critical: Android EAS schedules threads on LITTLE cores by default,
-            // which can make inference 2-3x slower. We pin to big/prime cores only.
             val cpuMask = detectBigCoreMask()
             val nBigCores = Integer.bitCount(cpuMask)
-            val nThreads = nBigCores.coerceIn(2, 4)  // Use big cores only, max 4
+            val nThreads = nBigCores.coerceIn(2, 4)
             Log.i(TAG, "CPU topology: mask=0x${Integer.toHexString(cpuMask).uppercase()}, bigCores=$nBigCores, threads=$nThreads")
 
             val args = mutableListOf(
-                actualBin.absolutePath,
+                serverBin.absolutePath,
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "14097",
@@ -321,9 +358,53 @@ object LlamaEngine {
                 "--threads", nThreads.toString(),
                 "--threads-batch", nThreads.toString(),
                 "--batch-size", "512",
-                "--jinja"
+                "--jinja",
+                // Single slot to minimize memory usage
+                "-np", "1"
             )
-            Log.i(TAG, "Starting server: ${actualBin.name} ngl=$ngl cpuMask=0x${Integer.toHexString(cpuMask).uppercase()}")
+
+            // Flash Attention — significant memory savings on mobile
+            if (config.flashAttn) {
+                args.addAll(listOf("--flash-attn", "on"))
+                Log.i(TAG, "Flash Attention enabled")
+            }
+
+            // KV cache quantization — q4_0 with Hadamard rotation saves ~72% KV memory
+            val kvType = config.kvCacheType
+            if (kvType != "f16") {
+                args.addAll(listOf("--cache-type-k", kvType, "--cache-type-v", kvType))
+                Log.i(TAG, "KV cache quantization: $kvType")
+            }
+
+            // Memory mapping control
+            when (config.mmapMode) {
+                "off" -> { args.add("--no-mmap"); Log.i(TAG, "mmap disabled") }
+                "on" -> Log.i(TAG, "mmap enabled (default)")
+                else -> Log.i(TAG, "mmap auto")
+            }
+
+            // Speculative decoding with draft model
+            if (config.draftModelPath != null) {
+                val draftFile = java.io.File(config.draftModelPath)
+                if (draftFile.exists()) {
+                    // RAM guard: check available memory before enabling draft model
+                    val freeRamMB = getAvailableRamMB()
+                    if (freeRamMB > 1000) {  // Need at least 1GB free for draft model
+                        args.addAll(listOf(
+                            "--model-draft", config.draftModelPath,
+                            "--draft", "16",
+                            "--draft-p-min", "0.75"
+                        ))
+                        Log.i(TAG, "Speculative decoding enabled: ${draftFile.name} (free RAM: ${freeRamMB}MB)")
+                    } else {
+                        Log.i(TAG, "Speculative decoding skipped (free RAM: ${freeRamMB}MB < 1000MB)")
+                    }
+                } else {
+                    Log.w(TAG, "Draft model not found: ${config.draftModelPath}")
+                }
+            }
+
+            Log.i(TAG, "Starting server: ${serverBin.name} ngl=$ngl kv=${config.kvCacheType} flash=${config.flashAttn}")
 
             val pb = ProcessBuilder(args)
             pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
@@ -332,10 +413,26 @@ object LlamaEngine {
             pb.redirectErrorStream(true)
 
             serverProcess = pb.start()
-            Log.i(TAG, "llama-server started on port 14097 (${if (useVulkan) "Vulkan GPU" else "CPU-only"})")
+            Log.i(TAG, "llama-server started on port 14097 (${if (useVulkan) "Vulkan GPU" else "CPU-only"}, args=${args.size})")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start llama-server: ${e.message}")
         }
+    }
+
+    /** Get available RAM in MB using /proc/meminfo (more reliable than ActivityManager) */
+    private fun getAvailableRamMB(): Long {
+        try {
+            val meminfo = java.io.File("/proc/meminfo").readText()
+            for (line in meminfo.lines()) {
+                if (line.startsWith("MemAvailable:")) {
+                    val kb = line.replace(Regex("[^0-9]"), "").toLongOrNull() ?: 0
+                    return kb / 1024
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read /proc/meminfo: ${e.message}")
+        }
+        return 2000  // Optimistic fallback
     }
 
     private fun stopServer() {

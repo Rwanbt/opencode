@@ -48,20 +48,60 @@
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
 > Kept in sync with upstream. See [dev branch](https://github.com/Rwanbt/opencode/tree/dev) for latest changes.
 
-#### Local-First AI Optimization
+#### Local-First AI
 
-OpenCode is heavily optimized for running AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM):
+OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), with zero cloud dependency for 4B–7B models.
 
-- **~1K token system prompt** for local models (vs ~16K for cloud — 94% reduction via skeleton tool schemas + dynamic tool loading)
-- **Speculative decoding** support with VRAM Guard (auto-disables if insufficient memory)
-- **Hadamard rotation KV cache** (llama.cpp b8731+) for near-lossless 4-bit compression
-- **Integrated STT** (Parakeet TDT 0.6B, 300ms/5s audio, 25 languages, ONNX Runtime)
-- **Integrated TTS** (Kyutai Pocket TTS, French-native, zero-shot voice cloning)
-- **VRAM monitoring** widget with color-coded usage bar
-- **Configuration presets** (Fast / Quality / Eco / Long Context) for one-click optimization
-- **Cross-platform**: Windows (Vulkan), Linux, macOS, Android (with external storage access)
+**Prompt Optimization (94% reduction)**
+- ~1K token system prompt for local models (vs ~16K for cloud)
+- Skeleton tool schemas (1-line signatures vs multi-KB prose)
+- 7-tool whitelist (bash, read, edit, write, glob, grep, question)
+- No skills section, minimal environment info
 
-This enables real-world coding workflows on 4B–7B local models without cloud dependency.
+**Inference Engine (llama.cpp b8731)**
+- Vulkan GPU backend, auto-downloaded on first model load
+- `--flash-attn on` — Flash Attention for memory efficiency
+- `--cache-type-k/v q4_0` — Hadamard rotation KV cache (72% memory savings)
+- `--fit on` — auto-adjusts context size and GPU layer placement to available VRAM
+- Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables if < 1.5 GB free)
+- Single slot (`-np 1`) to minimize memory footprint
+
+**Speech-to-Text (Parakeet TDT 0.6B v3 INT8)**
+- NVIDIA Parakeet via ONNX Runtime — ~300ms for 5s of audio (18x real-time)
+- 25 European languages (English, French, German, Spanish, etc.)
+- Zero VRAM: CPU-only (~700 MB RAM)
+- Auto-download model (~460 MB) on first mic press
+- Waveform animation during recording
+
+**Text-to-Speech (Kyutai Pocket TTS)**
+- French-native TTS created by Kyutai (Paris), 100M parameters
+- 8 built-in voices: Alba, Fantine, Cosette, Eponine, Azelma, Marius, Javert, Jean
+- Zero-shot voice cloning: upload WAV or record from mic
+- CPU-only, ~6x real-time, HTTP server on port 14100
+- Fallback: Kokoro TTS ONNX engine (54 voices, 9 languages, CMUDict G2P)
+
+**Model Management**
+- HuggingFace search with VRAM/RAM compatibility badges per model
+- Download, load, unload, delete GGUF models from the UI
+- Pre-curated catalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Dynamic output tokens based on model size
+- Draft model auto-detection (0.5B–0.8B) for speculative decoding
+
+**Configuration**
+- Presets: Fast / Quality / Eco / Long Context (one-click optimization)
+- VRAM monitoring widget with color-coded usage bar (green / yellow / red)
+- KV cache type: auto / q8_0 / q4_0 / f16
+- GPU offloading: auto / gpu-max / balanced
+- Memory mapping: auto / on / off
+- Web search toggle (globe icon in prompt toolbar)
+
+**Agent Reliability (local models)**
+- Pre-flight guards (code-level, 0 tokens): file-exists check before edit, old_string content verification, read-before-edit enforcement, write-on-existing prevention
+- Doom loop auto-break: 2x identical tool calls → error injected (code-level guard, not prompt-only)
+- Tool telemetry: per-session success/error rate with per-tool breakdown, logged automatically
+- Target: >85% tool success rate on 4B models
+
+**Cross-platform**: Windows (Vulkan), Linux, macOS, Android
 
 #### Background Tasks
 
@@ -206,6 +246,7 @@ To prevent confusion from AI-generated summaries of this project:
 
 ## Capabilities Matrix
 
+### Core Agent Features
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Background tasks | Implemented | `mode: "background"` on task tool |
@@ -223,19 +264,50 @@ To prevent confusion from AI-generated summaries of this project:
 | Cost tracking | Implemented | Per-message, per-team, per-model |
 | Context auto-compact | Implemented | AI summarization + pruning |
 | Git rollback/snapshots | Implemented | Revert/unrevert per message |
-| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Specialized agents | Implemented | critic, tester, documenter subagents |
+| Dry run / command preview | Implemented | `dry_run` param on bash/edit/write tools |
 | Auto-learn | Implemented | Post-session lesson extraction to `.opencode/learnings/` |
+| Web search | Implemented | Globe toggle in prompt toolbar |
+
+### Local AI (Desktop + Mobile)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
+| Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
+| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
+| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
+| Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
+| Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+
+### Security & Governance
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+
+### Knowledge & Memory
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
-| Collaborative mode | Implemented | JWT auth, presence, file locking, WebSocket broadcast |
-| Mobile app (Tauri) | Implemented | Android: embedded runtime (bun+git native), iOS: remote. Single APK, zero setup |
-| AnythingLLM bridge | Implemented | MCP adapter, context injection, vector store bridge |
+
+### Platform Extensions (Experimental)
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
+| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
@@ -266,9 +338,14 @@ graph TB
 
   subgraph Intelligence
     Cloud[25+ Cloud APIs<br/>Anthropic, OpenAI, Google,<br/>Azure, Bedrock, Vertex...]
-    Local[Local Models<br/>Ollama, LM Studio, vLLM]
+    Local[Local LLM<br/>llama.cpp b8731 Vulkan<br/>port 14097]
     MCP[MCP Servers<br/>stdio, HTTP/SSE, StreamableHTTP]
     LSP[15+ LSP Servers<br/>Auto-download + Symbol Index]
+  end
+
+  subgraph "Speech (ONNX Runtime)"
+    STT[Parakeet TDT 0.6B<br/>25 languages, ~300ms/5s]
+    TTS[Pocket TTS + Kokoro<br/>Voice Cloning, port 14100]
   end
 
   subgraph Storage
@@ -286,7 +363,16 @@ graph TB
   Session --> Context
   Context --> RAG & ALLM
   Hono --> DB
+  Desktop & Mobile --> STT & TTS
 ```
+
+### Service Ports
+
+| Service | Port | Protocol |
+|---------|------|----------|
+| OpenCode Server | 4096 | HTTP (REST + SSE + WebSocket) |
+| LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
+| TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
 ## Security & Governance
 
@@ -342,19 +428,33 @@ Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK,
 - **llama-server** — OpenAI-compatible HTTP API on port 14097 for provider integration
 - **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 9 pre-curated models
 - **Provider registration** — Local model appears as "Local AI" provider in model selector
+- **Flash Attention** — `--flash-attn on` for memory-efficient inference
+- **KV cache quantization** — `--cache-type-k/v q4_0` with Hadamard rotation (72% memory savings)
+- **Speculative decoding** — Auto-detects draft model (0.5B–0.8B) with RAM Guard via `/proc/meminfo`
+- **RAM monitoring** — Device memory widget (total/used/free) via `/proc/meminfo`
+- **Configuration presets** — Same Fast/Quality/Eco/Long Context presets as desktop
+- **Smart GPU selection** — Vulkan for Adreno 730+ (SD 8 Gen 1+), OpenCL for older SoCs, CPU fallback
+- **Big-core pinning** — Detects ARM big.LITTLE topology, pins inference to performance cores only
 
 **Layer 3 — Extended Environment (optional download, ~150MB):**
 - **proot + Alpine rootfs** — Full Linux with `apt install` for additional packages
 - **Bind-mounted Layer 1** — Bun/Git/rg still run at native speed inside proot
 - **On-demand** — Downloaded only when user enables "Extended Environment" in settings
 
+**Layer 4 — Speech & Media:**
+- **STT (Parakeet TDT 0.6B)** — Same ONNX Runtime engine as desktop, ~300ms/5s audio, 25 languages
+- **Waveform animation** — Visual feedback during recording
+- **Native file picker** — `tauri-plugin-dialog` for file/directory selection and attachments
+
 **Shared (Android + iOS):**
 - **Platform abstraction** — Extended `Platform` type with `"mobile"` + `"ios"/"android"` OS detection
 - **Remote connection** — Connect to desktop OpenCode server over network (iOS-only or Android fallback)
-- **Mobile UI** — Responsive sidebar, touch-optimized message input, mobile diff view, terminal with canvas fallback
+- **Interactive terminal** — Full PTY via custom musl `librust_pty.so` (forkpty wrapper), Ghostty WASM renderer with canvas fallback
+- **External storage** — Symlinks from server HOME to `/sdcard/` directories (Documents, Downloads, projects)
+- **Mobile UI** — Responsive sidebar, touch-optimized message input, mobile diff view, 44px touch targets, safe area support
 - **Push notifications** — SSE-to-native notification bridge for background task completion
 - **Mode selector** — Choose Local (Android) or Remote (iOS + Android) on first launch
-- **Mobile action menu** — Quick access to fork, search, and settings from session header
+- **Mobile action menu** — Quick access to terminal, fork, search, and settings from session header
 
 ### AnythingLLM Fusion (`dev_anything`)
 
