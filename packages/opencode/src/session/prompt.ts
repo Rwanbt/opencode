@@ -394,18 +394,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ): string | undefined {
         if (model.providerID !== "local-llm") return
 
-        if (toolId === "edit" && args.file_path) {
-          // Guard 3 — old_string empty
-          if (args.old_string !== undefined && (!args.old_string || !args.old_string.trim())) {
-            return "old_string cannot be empty. Read the file and copy the exact text to replace."
+        if (toolId === "edit" && args.filePath) {
+          // Guard 3 — oldString empty
+          if (args.oldString !== undefined && (!args.oldString || !args.oldString.trim())) {
+            return "oldString cannot be empty. Read the file and copy the exact text to replace."
           }
 
-          // Guard 4 (PRIORITY) — old_string must exist in file
-          if (args.old_string) {
+          // Guard 4 (PRIORITY) — oldString must exist in file
+          if (args.oldString) {
             try {
-              const content = fs.readFileSync(args.file_path, "utf-8")
-              if (!content.includes(args.old_string)) {
-                return "old_string not found in file. Read the file and copy exact text."
+              const resolved = path.resolve(args.filePath)
+              const content = fs.readFileSync(resolved, "utf-8")
+              if (!content.includes(args.oldString)) {
+                return "oldString not found in file. Read the file and copy exact text."
               }
             } catch {}
           }
@@ -417,21 +418,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 p.type === "tool" &&
                 p.tool === "read" &&
                 p.state.status === "completed" &&
-                (p.state as any).input?.file_path === args.file_path,
+                (p.state as any).input?.filePath === args.filePath,
             ),
           )
           if (!hasRead) {
-            return "You must read this file before editing it: " + args.file_path
+            return "You must read this file before editing it: " + args.filePath
           }
         }
 
-        // Guard 2 — write on existing file
-        if (toolId === "write" && args.file_path) {
-          try {
-            if (fs.existsSync(args.file_path)) {
-              return "File already exists. Use edit instead."
-            }
-          } catch {}
+        // Guard 2 — write on existing file (backup check, primary is in write.ts)
+        if (toolId === "write" && args.filePath) {
+          const resolved = path.resolve(args.filePath)
+          if (fs.existsSync(resolved)) {
+            return "File already exists. Use edit instead of write."
+          }
         }
       }
 
