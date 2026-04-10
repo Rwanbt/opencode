@@ -16,6 +16,21 @@ const KOKORO_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/release
 const KOKORO_VOICES_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/voices-v1.0.bin";
 const TTS_PORT: u16 = 14100;
 
+/// Monotonic counter for chunk WAV filenames. Using only Date.now()-style
+/// timestamps causes collisions when parallel tts_speak calls land in the
+/// same millisecond — the second write overwrites the first and the
+/// frontend ends up replaying the same audio.
+static CHUNK_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn next_chunk_filename() -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let n = CHUNK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("chunk_{}_{}.wav", ts, n)
+}
+
 fn data_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
@@ -117,8 +132,8 @@ pub struct SpeechState {
     #[cfg(feature = "onnx")]
     stt_loaded: Mutex<bool>,
     tts_child: Mutex<Option<tokio::process::Child>>,
-    tts_client: reqwest::Client,
     tts_ready: Mutex<bool>,
+    tts_client: reqwest::Client,
     #[cfg(feature = "onnx")]
     kokoro_engine: Mutex<KokoroEngine>,
     #[cfg(feature = "onnx")]
@@ -133,13 +148,15 @@ impl SpeechState {
             #[cfg(feature = "onnx")]
             stt_loaded: Mutex::new(false),
             tts_child: Mutex::new(None),
+            tts_ready: Mutex::new(false),
             tts_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
-                .pool_max_idle_per_host(1)
+                // Allow up to 4 idle connections per host so reqwest can run
+                // multiple parallel POSTs to the same TTS server without queuing.
+                .pool_max_idle_per_host(4)
                 .tcp_nodelay(true)
                 .build()
                 .expect("Failed to create HTTP client"),
-            tts_ready: Mutex::new(false),
             #[cfg(feature = "onnx")]
             kokoro_engine: Mutex::new(KokoroEngine::new()),
             #[cfg(feature = "onnx")]
@@ -309,28 +326,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         }
     }
 
-    // Check if child exists but not confirmed ready yet
-    let has_child = {
-        let state = app.state::<SpeechState>();
-        state.tts_child.lock().unwrap().is_some()
-    };
-
-    if has_child {
-        let state = app.state::<SpeechState>();
-        if let Ok(resp) = state.tts_client
-            .get(format!("http://127.0.0.1:{}/health", TTS_PORT))
-            .timeout(std::time::Duration::from_secs(1))
-            .send()
-            .await
-        {
-            if resp.status().is_success() {
-                *state.tts_ready.lock().unwrap() = true;
-                return Ok(TTS_PORT);
-            }
-        }
-    }
-
-    // Kill existing
+    // Kill any existing child that may be in a bad state
     {
         let state = app.state::<SpeechState>();
         if let Some(mut c) = state.tts_child.lock().unwrap().take() {
@@ -340,7 +336,6 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     }
 
     let pocket_tts = find_pocket_tts().ok_or("pocket-tts not found. Run: pip install pocket-tts")?;
-
     tracing::info!("[TTS] Starting Pocket TTS server on port {}", TTS_PORT);
 
     let mut cmd = tokio::process::Command::new(&pocket_tts);
@@ -369,31 +364,40 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         *state.tts_child.lock().unwrap() = Some(child);
     }
 
-    // Wait for server ready (shared client = connection reuse on subsequent calls)
-    let state = app.state::<SpeechState>();
+    // Clone client so we don't hold the State across await points
+    let client = {
+        let state = app.state::<SpeechState>();
+        state.tts_client.clone()
+    };
+
+    // Wait for server ready
     let start = std::time::Instant::now();
     loop {
         if start.elapsed().as_secs() > 60 {
+            let state = app.state::<SpeechState>();
             if let Some(mut c) = state.tts_child.lock().unwrap().take() {
                 let _ = c.start_kill();
             }
             return Err("TTS server failed to start".to_string());
         }
-        if let Ok(resp) = state.tts_client
+        if let Ok(resp) = client
             .get(format!("http://127.0.0.1:{}/health", TTS_PORT))
             .timeout(std::time::Duration::from_secs(1))
             .send()
             .await
         {
             if resp.status().is_success() {
-                *state.tts_ready.lock().unwrap() = true;
+                {
+                    let state = app.state::<SpeechState>();
+                    *state.tts_ready.lock().unwrap() = true;
+                }
                 tracing::info!("[TTS] Pocket TTS ready after {:?}", start.elapsed());
 
-                // Warmup: force model load + GPU init with a tiny synthesis
+                // Warmup: force model load with a tiny synthesis
                 let warmup = reqwest::multipart::Form::new()
                     .text("text", ".")
                     .text("voice_url", "alba");
-                let _ = state.tts_client
+                let _ = client
                     .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
                     .multipart(warmup)
                     .send()
@@ -433,9 +437,11 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
+    // Ensure server is running
     {
         let state = app.state::<SpeechState>();
-        if !*state.tts_ready.lock().unwrap() {
+        let ready = *state.tts_ready.lock().unwrap();
+        if !ready {
             drop(state);
             tts_start(app.clone()).await?;
         }
@@ -447,8 +453,14 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     let start = std::time::Instant::now();
 
     let form = build_tts_form(&app, &text, &voice_name)?;
-    let state = app.state::<SpeechState>();
-    let resp = state.tts_client
+
+    // Clone client so we don't hold the State across await
+    let client = {
+        let state = app.state::<SpeechState>();
+        state.tts_client.clone()
+    };
+
+    let resp = client
         .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
         .multipart(form)
         .send()
@@ -457,17 +469,19 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     let resp = match resp {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
+            let state = app.state::<SpeechState>();
             *state.tts_ready.lock().unwrap() = false;
             return Err(format!("TTS HTTP {}", r.status()));
         }
         Err(e) => {
             tracing::warn!("[TTS] Request failed, retrying: {}", e);
-            *state.tts_ready.lock().unwrap() = false;
-            drop(state);
+            {
+                let state = app.state::<SpeechState>();
+                *state.tts_ready.lock().unwrap() = false;
+            }
             tts_start(app.clone()).await?;
             let retry_form = build_tts_form(&app, &text, &voice_name)?;
-            let state = app.state::<SpeechState>();
-            state.tts_client
+            client
                 .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
                 .multipart(retry_form)
                 .send()
@@ -482,11 +496,7 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     // handles latency for long texts.
     let out_dir = speech_dir(&app).join("tts_chunks");
     let _ = fs::create_dir_all(&out_dir);
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let out_path = out_dir.join(format!("chunk_{}.wav", ts));
+    let out_path = out_dir.join(next_chunk_filename());
 
     let wav_bytes = resp.bytes().await.map_err(|e| format!("Read response: {}", e))?;
     fs::write(&out_path, &wav_bytes).map_err(|e| format!("Write WAV: {}", e))?;
@@ -500,10 +510,9 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
 #[specta::specta]
 pub async fn tts_stop(app: AppHandle) -> Result<(), String> {
     let state = app.state::<SpeechState>();
+    tracing::info!("[TTS] Stopping Pocket TTS");
     *state.tts_ready.lock().unwrap() = false;
-    let child_opt = state.tts_child.lock().unwrap().take();
-    if let Some(mut child) = child_opt {
-        tracing::info!("[TTS] Stopping Pocket TTS");
+    if let Some(mut child) = state.tts_child.lock().unwrap().take() {
         let _ = child.start_kill();
     }
     Ok(())
@@ -734,11 +743,7 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
     // Encode to WAV and write to unique temp file
     let out_dir = speech_dir(&app).join("tts_chunks");
     let _ = fs::create_dir_all(&out_dir);
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let out_path = out_dir.join(format!("chunk_{}.wav", ts));
+    let out_path = out_dir.join(next_chunk_filename());
 
     let spec = hound::WavSpec {
         channels: 1,
