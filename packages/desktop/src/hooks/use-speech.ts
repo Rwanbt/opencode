@@ -143,31 +143,177 @@ function getAudioSettings() {
 }
 
 /**
- * Split text into TTS chunks.
- * First chunk = first sentence only (short → fast time-to-audio).
- * Subsequent chunks are grouped up to ~300 chars (pre-fetched during playback).
+ * Extract a tiny first chunk (~10-15 chars) for minimal time-to-first-audio.
+ * Rules:
+ *  - If text < 15 chars → whole text as single chunk
+ *  - Prefer a punctuation break (, : ;) in positions [8..15]
+ *  - Else cut at first space at position >= 8
+ *  - No valid break point (single long word) → whole text as single chunk
+ * Returns [firstTiny, rest].
  */
-function splitIntoChunks(text: string): string[] {
-  // Split at sentence boundaries (.!?\n), keep delimiters with preceding text
-  const sentences = text.split(/(?<=[.!?\n])\s+/).filter(s => s.trim().length > 0)
-  if (sentences.length === 0) return []
+function splitFirstTinyChunk(text: string): [string, string] {
+  const t = text.trim()
+  if (t.length < 15) return [t, ""]
 
-  // First chunk: just the first sentence (minimize time-to-first-audio)
-  const chunks: string[] = [sentences[0].trim()]
+  const MIN = 8
+  const MAX = 15
 
-  // Remaining sentences: group into ~300 char chunks (they'll be pre-fetched)
-  let current = ""
-  for (let i = 1; i < sentences.length; i++) {
-    const s = sentences[i]
-    if (current.length + s.length > 300 && current.length > 0) {
-      chunks.push(current.trim())
-      current = s
-    } else {
-      current += (current ? " " : "") + s
+  // Prefer punctuation break in [MIN..MAX]
+  for (let i = MIN; i <= MAX && i < t.length; i++) {
+    const c = t[i]
+    if (c === "," || c === ":" || c === ";") {
+      return [t.slice(0, i + 1).trim(), t.slice(i + 1).trim()]
     }
   }
-  if (current.trim()) chunks.push(current.trim())
-  return chunks
+
+  // Else first space at position >= MIN
+  for (let i = MIN; i < t.length; i++) {
+    if (t[i] === " ") {
+      return [t.slice(0, i).trim(), t.slice(i + 1).trim()]
+    }
+  }
+
+  // No break point (single long word) → whole text
+  return [t, ""]
+}
+
+/** Hard upper bound per chunk (Pocket TTS ≈ 27ms/char → 100c ≈ 2.7s synth) */
+const CHUNK_HARD_MAX = 100
+/** Minimum position for a secondary cut inside a long sentence */
+const CHUNK_MIN_CUT = 50
+
+/**
+ * Split a sentence longer than CHUNK_HARD_MAX at secondary punctuation
+ * (, : ;) or a word boundary. Balances parts when the sentence is just
+ * slightly over the limit (avoids leaving a tiny 5-10c tail).
+ */
+function splitLongSentence(s: string): string[] {
+  if (s.length <= CHUNK_HARD_MAX) return [s.trim()].filter(p => p.length > 0)
+
+  const parts: string[] = []
+  let start = 0
+
+  while (start < s.length) {
+    const remaining = s.length - start
+    if (remaining <= CHUNK_HARD_MAX) {
+      const tail = s.slice(start).trim()
+      if (tail.length > 0) parts.push(tail)
+      break
+    }
+
+    const minCut = start + CHUNK_MIN_CUT
+    const maxCut = Math.min(start + CHUNK_HARD_MAX, s.length - 1)
+
+    // If the remaining text is only slightly over HARD_MAX (< 2x), aim for
+    // the MIDDLE so both parts are balanced. Otherwise use greedy max-cut.
+    const targetCut = remaining < CHUNK_HARD_MAX * 2
+      ? start + Math.floor(remaining / 2)
+      : start + CHUNK_HARD_MAX
+
+    // 1. Prefer secondary punctuation in [minCut..maxCut]
+    let cut = -1
+    for (let i = minCut; i <= maxCut; i++) {
+      const c = s[i]
+      if (c === "," || c === ":" || c === ";") {
+        cut = i + 1
+        break
+      }
+    }
+
+    // 2. Else find the space CLOSEST to targetCut within [minCut..maxCut]
+    if (cut === -1) {
+      let bestDist = Infinity
+      let bestPos = -1
+      for (let i = minCut; i <= maxCut; i++) {
+        if (s[i] === " ") {
+          const dist = Math.abs(i - targetCut)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestPos = i
+          }
+        }
+      }
+      if (bestPos !== -1) cut = bestPos
+    }
+
+    // 3. Last resort: hard cut at maxCut (single very long word, rare)
+    if (cut === -1) cut = maxCut
+
+    const part = s.slice(start, cut).trim()
+    if (part.length > 0) parts.push(part)
+    start = cut
+    while (start < s.length && s[start] === " ") start++
+  }
+
+  return parts
+}
+
+/** Target size after merging short chunks (leaves headroom below CHUNK_HARD_MAX) */
+const CHUNK_MERGE_TARGET = 80
+
+/**
+ * Merge consecutive short chunks as long as the combined length stays
+ * within maxLen. Avoids wasting the ~500ms fixed synthesis overhead on
+ * micro-fragments like "system." (7c).
+ */
+function mergeShortChunks(chunks: string[], maxLen: number): string[] {
+  if (chunks.length <= 1) return chunks
+
+  const merged: string[] = []
+  let current = chunks[0]
+
+  for (let i = 1; i < chunks.length; i++) {
+    const next = chunks[i]
+    const combined = current + " " + next
+    if (combined.length <= maxLen) {
+      current = combined
+    } else {
+      merged.push(current)
+      current = next
+    }
+  }
+  merged.push(current)
+  return merged
+}
+
+/**
+ * Split text into TTS chunks optimized for chunked streaming.
+ * Rules:
+ *  1. First chunk is ultra-short (~10-15 chars) via splitFirstTinyChunk
+ *     for minimum time-to-first-audio.
+ *  2. Subsequent chunks follow sentence boundaries.
+ *  3. Any sentence longer than CHUNK_HARD_MAX (100c) is split at
+ *     secondary punctuation or word boundaries.
+ *  4. Consecutive short chunks are merged up to CHUNK_MERGE_TARGET (80c)
+ *     to avoid wasting the fixed synthesis overhead on micro-fragments.
+ *  5. No chunk ever exceeds CHUNK_HARD_MAX.
+ */
+function splitIntoChunks(text: string): string[] {
+  const [firstTiny, rest] = splitFirstTinyChunk(text)
+  if (!firstTiny) return []
+  if (!rest) return [firstTiny]
+
+  // Split rest by sentence boundaries (. ! ? \n + whitespace)
+  const sentences = rest.split(/(?<=[.!?\n])\s+/).filter(s => s.trim().length > 0)
+
+  // Build the body chunks (everything after firstTiny)
+  const bodyChunks: string[] = []
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim()
+    if (trimmed.length === 0) continue
+    if (trimmed.length <= CHUNK_HARD_MAX) {
+      bodyChunks.push(trimmed)
+    } else {
+      for (const part of splitLongSentence(trimmed)) {
+        bodyChunks.push(part)
+      }
+    }
+  }
+
+  // Merge short consecutive chunks to avoid micro-fragments
+  const mergedBody = mergeShortChunks(bodyChunks, CHUNK_MERGE_TARGET)
+
+  return [firstTiny, ...mergedBody]
 }
 
 function synthesizeChunk(text: string, provider: string, voice: string, speed: number): Promise<string> {
@@ -217,11 +363,12 @@ async function playNextChunk(provider: string, voice: string, speed: number) {
 
   playedPaths.push(wavPath)
 
-  // Start pre-fetching the next chunk while this one plays
-  if (chunkQueue.length > 0) {
+  // Start pre-fetching the next chunk while this one plays.
+  // Guard: skip if a prefetch is already in flight or ready (e.g. C1 was
+  // pre-launched in parallel with C0 from handleTtsToggle).
+  if (chunkQueue.length > 0 && !prefetchPromise && !prefetchedPath) {
     const nextText = chunkQueue.shift()!
     prefetchPromise = synthesizeChunk(nextText, provider, voice, speed)
-    // Resolve to path as soon as ready (don't await — runs in parallel with playback)
     prefetchPromise.then(path => {
       prefetchedPath = path
       prefetchPromise = null
@@ -240,7 +387,6 @@ async function playNextChunk(provider: string, voice: string, speed: number) {
   audio.onended = () => {
     currentAudio = null
     if (ttsAborted) { stopPlayback(); return }
-    // More chunks? Play next. Otherwise done.
     if (chunkQueue.length > 0 || prefetchedPath || prefetchPromise) {
       playNextChunk(provider, voice, speed)
     } else {
@@ -299,21 +445,54 @@ async function handleTtsToggle(e: CustomEvent) {
   ttsState = "loading"
   const t0 = performance.now()
 
-  // Always chunk by sentence. If the text is a single sentence, chunks.length === 1
-  // and the behavior is identical to a single call — no overhead.
-  // For longer texts, the first sentence plays while the rest is prefetched.
+  // Split into sentence chunks. First chunk is ultra-short for fast TTFA.
+  // For multi-chunk texts, C0 and C1 are launched in parallel so C1 is
+  // ready when C0 audio finishes playing (zero gap between chunks).
   const chunks = splitIntoChunks(text)
   if (chunks.length === 0) return
 
   console.log(`[TTS] ${chunks.length} chunk(s) (${provider}), voice: ${voice}, ${text.length} chars`)
+
+  // Shift C0 AND C1 out, launch their synth in parallel. C2+ stays in chunkQueue.
   const firstText = chunks.shift()!
+  const secondText = chunks.shift()
   chunkQueue = chunks
 
   try {
-    const firstPath = await synthesizeChunk(firstText, provider, voice, speed)
+    const synth1Promise = synthesizeChunk(firstText, provider, voice, speed)
+
+    // Launch C1 synth in PARALLEL with C0 (the server handles concurrent requests).
+    // This eliminates the gap between C0 playback end and C1 ready.
+    let synth2Promise: Promise<string> | null = null
+    if (secondText) {
+      synth2Promise = synthesizeChunk(secondText, provider, voice, speed)
+      // Attach a no-op catch immediately so a failure doesn't become an unhandled
+      // rejection if synth1 throws before we wire up the real handlers below.
+      synth2Promise.catch(() => {})
+    }
+
+    const firstPath = await synth1Promise
     console.log(`[TTS] First chunk in ${Math.round(performance.now() - t0)}ms (${firstText.length} chars)`)
     if (ttsAborted) return
     prefetchedPath = firstPath
+
+    // Wire C1 synth as the next prefetch so playNextChunk consumes it after C0.
+    if (synth2Promise) {
+      const s2 = synth2Promise
+      prefetchPromise = s2
+      s2.then(path => {
+        if (prefetchPromise === s2) {
+          prefetchedPath = path
+          prefetchPromise = null
+        }
+      }).catch(() => {
+        if (prefetchPromise === s2) {
+          prefetchedPath = null
+          prefetchPromise = null
+        }
+      })
+    }
+
     await playNextChunk(provider, voice, speed)
     console.log(`[TTS] Time-to-first-audio: ${Math.round(performance.now() - t0)}ms`)
   } catch (e) {
