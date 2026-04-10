@@ -49,13 +49,26 @@ else
 fi
 
 # Set ORT_LIB_LOCATION for cargo build if not already set
-if [ -z "${ORT_LIB_LOCATION:-}" ] && [ -f "$ORT_SO" ]; then
-  export ORT_LIB_LOCATION="$JNILIBS"
+if [ -z "${ORT_LIB_LOCATION:-}" ]; then
+  # Check multiple possible locations
+  ORT_EXTRACTED="$SCRIPT_DIR/../src-tauri/ort-android/extracted/jni/arm64-v8a"
+  if [ -f "$ORT_EXTRACTED/libonnxruntime.so" ]; then
+    export ORT_LIB_LOCATION="$ORT_EXTRACTED"
+    echo "Using ORT from ort-android/extracted/"
+  elif [ -f "$ORT_SO" ]; then
+    export ORT_LIB_LOCATION="$JNILIBS"
+    echo "Using ORT from jniLibs/"
+  fi
   export ORT_PREFER_DYNAMIC_LINK=1
 fi
 
 echo ""
 cd "$SCRIPT_DIR/../src-tauri"
-cargo tauri android build "$@"
+# Build only aarch64 by default (ORT only has arm64-v8a binaries)
+if echo "$@" | grep -q -- "--target"; then
+  cargo tauri android build "$@"
+else
+  cargo tauri android build --target aarch64 "$@"
+fi
 
 echo "Build complete. APK at src-tauri/gen/android/app/build/outputs/apk/"
