@@ -31,6 +31,10 @@ export const WriteTool = Tool.define("write", {
     await assertExternalDirectory(ctx, filepath)
 
     const exists = await Filesystem.exists(filepath)
+    // Guard: local-llm must use edit for existing files
+    if (exists && ctx.extra?.model?.providerID === "local-llm") {
+      throw new Error("File already exists. Use edit instead of write.")
+    }
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 

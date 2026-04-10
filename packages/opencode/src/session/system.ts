@@ -36,9 +36,10 @@ export namespace SystemPrompt {
   }
 
   export async function environment(model: Provider.Model) {
-    // Minimal environment for local models (saves ~150 tokens)
+    // Changed a comment here slightly
     if (model.providerID === "local-llm") {
-      return [`Working directory: ${Instance.directory}, Platform: ${process.platform}`]
+      const shell = process.platform === "win32" ? "PowerShell" : "bash"
+      return [`Working directory: ${Instance.directory}, Platform: ${process.platform}, Shell: ${shell}`]
     }
 
     const project = Instance.project
