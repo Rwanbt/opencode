@@ -10,7 +10,7 @@
     "dev:android": "tauri android dev",
     "dev:ios": "tauri ios dev",
     "build": "vite build",
-    "build:android": "tauri android build",
+    "build:android": "tauri android build --target aarch64",
     "build:ios": "tauri ios build",
     "tauri": "tauri"
   },
