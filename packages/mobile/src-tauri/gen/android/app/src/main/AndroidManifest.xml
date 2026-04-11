@@ -39,12 +39,19 @@
                 <data android:scheme="https" />
                 <data android:scheme="http" />
                 <data android:host="opencode.ai" />
-                
-                
+
+
                 <data android:pathPrefix="/mobile" />
-                
+
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+            <!-- Custom scheme for QR-based pairing from desktop Settings → Remote Access -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="opencode" />
+            </intent-filter>
         </activity>
 
         <provider

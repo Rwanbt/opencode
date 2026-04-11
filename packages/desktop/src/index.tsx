@@ -355,6 +355,18 @@ const createPlatform = (): Platform => {
       await commands.setWslConfig({ enabled })
     },
 
+    getRemoteAccess: async () => {
+      return commands.getRemoteConfig()
+    },
+
+    setRemoteAccessEnabled: async (enabled) => {
+      return commands.setRemoteEnabled(enabled)
+    },
+
+    resetRemoteAccessPassword: async () => {
+      return commands.resetRemotePassword()
+    },
+
     getDefaultServer: async () => {
       const url = await commands.getDefaultServerUrl().catch(() => null)
       if (!url) return null
