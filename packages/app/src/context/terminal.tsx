@@ -185,6 +185,54 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
   })
   onCleanup(unsub)
 
+  // Sweep stale PTY sessions left over from a previous sidecar lifecycle.
+  // The CLI sidecar is spawned fresh on every app launch with a new port and
+  // password, so any persisted PTY IDs from a previous run no longer exist in
+  // the server's memory and must be removed before the Terminal component
+  // tries to reconnect their WebSockets.
+  void (async () => {
+    try {
+      if (ready.promise) await ready.promise
+    } catch {
+      return
+    }
+    const ids = store.all.map((pty) => pty.id)
+    if (ids.length === 0) return
+    // Only remove sessions the server explicitly reports as gone. Any other
+    // failure (network error, auth not yet ready, server still booting)
+    // must NOT mark the PTY dead — otherwise a sweep racing the sidecar
+    // health check would wipe every still-valid session.
+    const statuses = await Promise.all(
+      ids.map((id) =>
+        sdk.client.pty
+          .get({ ptyID: id })
+          .then(() => "alive" as const)
+          .catch((err: unknown) => {
+            const name =
+              err && typeof err === "object" && "name" in err && typeof err.name === "string"
+                ? err.name
+                : undefined
+            return name === "NotFoundError" ? ("gone" as const) : ("unknown" as const)
+          }),
+      ),
+    )
+    const dead = new Set(ids.filter((_, index) => statuses[index] === "gone"))
+    if (dead.size === 0) return
+    batch(() => {
+      setStore(
+        "all",
+        produce((draft) => {
+          for (let index = draft.length - 1; index >= 0; index--) {
+            if (dead.has(draft[index].id)) draft.splice(index, 1)
+          }
+        }),
+      )
+      if (store.active && dead.has(store.active)) {
+        setStore("active", store.all[0]?.id)
+      }
+    })
+  })()
+
   const update = (client: ReturnType<typeof useSDK>["client"], pty: Partial<LocalPTY> & { id: string }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
