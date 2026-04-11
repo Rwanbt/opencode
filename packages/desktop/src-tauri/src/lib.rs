@@ -23,7 +23,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
@@ -397,6 +397,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::set_default_server_url,
             server::get_wsl_config,
             server::set_wsl_config,
+            server::get_remote_config,
+            server::set_remote_enabled,
+            server::reset_remote_password,
             get_display_backend,
             set_display_backend,
             markdown::parse_markdown_command,
@@ -465,11 +468,25 @@ async fn initialize(app: AppHandle) {
     setup_app(&app, init_rx);
     spawn_cli_sync_task(app.clone());
 
-    // Spawn sidecar immediately - credentials are known before health check
+    // Spawn sidecar immediately - credentials are known before health check.
+    // The hostname and password come from the persisted remote-access config
+    // so a paired client (e.g. a smartphone on the LAN) keeps working across
+    // app launches. Toggling remote access requires a relaunch to take
+    // effect — we never restart the sidecar at runtime because that would
+    // kill every open PTY WebSocket and SSE stream.
+    let remote_config = server::load_remote_config(&app);
     let port = get_sidecar_port();
-    let hostname = "127.0.0.1";
-    let url = format!("http://{hostname}:{port}");
-    let password = uuid::Uuid::new_v4().to_string();
+    let _ = SIDECAR_PORT.set(port);
+    let hostname = if remote_config.enabled {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
+    // The self-reported URL always uses loopback so the app's own SDK
+    // connects locally regardless of whether the sidecar is bound to
+    // 0.0.0.0 for LAN access.
+    let url = format!("http://127.0.0.1:{port}");
+    let password = remote_config.password.clone();
 
     tracing::info!("Spawning sidecar on {url}");
     let (child, health_check) =
@@ -589,6 +606,15 @@ fn spawn_cli_sync_task(app: AppHandle) {
     });
 }
 
+
+/// Port the sidecar is currently listening on. Populated once during
+/// `initialize()` and read by the remote-access commands so they can
+/// report the active port to the frontend without an extra round-trip.
+static SIDECAR_PORT: OnceLock<u32> = OnceLock::new();
+
+pub fn runtime_sidecar_port() -> u32 {
+    SIDECAR_PORT.get().copied().unwrap_or(0)
+}
 
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")

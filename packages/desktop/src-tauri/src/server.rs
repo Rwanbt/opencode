@@ -1,3 +1,4 @@
+use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
@@ -7,12 +8,146 @@ use tokio::task::JoinHandle;
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{DEFAULT_SERVER_URL_KEY, REMOTE_CONFIG_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
 pub struct WslConfig {
     pub enabled: bool,
+}
+
+/// Persisted configuration for exposing the local sidecar server outside
+/// of loopback. The password is generated once and kept stable across app
+/// launches so a paired client (e.g. a smartphone browser) keeps working.
+///
+/// TLS fields are intentionally commented out: they're part of the planned
+/// Internet-mode upgrade and can be enabled without a struct refactor.
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+pub struct RemoteConfig {
+    /// When true, the sidecar binds to 0.0.0.0 and is reachable on the LAN.
+    pub enabled: bool,
+    /// Stable UUID used for HTTP basic auth. Reset via `reset_remote_password`.
+    pub password: String,
+    // --- Reserved for the Internet/TLS upgrade ---
+    // pub tls_enabled: bool,
+    // pub tls_cert_path: Option<String>,
+    // pub tls_key_path: Option<String>,
+}
+
+impl Default for RemoteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            password: uuid::Uuid::new_v4().to_string(),
+        }
+    }
+}
+
+/// Information the frontend needs to display connection instructions for
+/// a paired client (QR code, banner, etc.).
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteConnectionInfo {
+    pub enabled: bool,
+    pub password: String,
+    pub port: u32,
+    /// Best-effort detected LAN address. None if no non-loopback interface is
+    /// reachable (offline, all interfaces down, etc.).
+    pub lan_ip: Option<String>,
+}
+
+pub fn load_remote_config(app: &AppHandle) -> RemoteConfig {
+    let Ok(store) = app.store(SETTINGS_STORE) else {
+        return RemoteConfig::default();
+    };
+
+    let existing = store
+        .get(REMOTE_CONFIG_KEY)
+        .and_then(|v| serde_json::from_value::<RemoteConfig>(v).ok());
+
+    if let Some(config) = existing {
+        return config;
+    }
+
+    // First launch — generate and persist a fresh default so the password
+    // stays stable on subsequent runs.
+    let config = RemoteConfig::default();
+    if let Ok(value) = serde_json::to_value(&config) {
+        store.set(REMOTE_CONFIG_KEY, value);
+        let _ = store.save();
+    }
+    config
+}
+
+fn save_remote_config(app: &AppHandle, config: &RemoteConfig) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {e}"))?;
+    let value = serde_json::to_value(config)
+        .map_err(|e| format!("Failed to serialize remote config: {e}"))?;
+    store.set(REMOTE_CONFIG_KEY, value);
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {e}"))?;
+    Ok(())
+}
+
+/// Best-effort LAN IP discovery. We open a UDP socket and ask the OS which
+/// local address it would use to reach a public IP — this resolves the
+/// routing table without actually sending any packet, so it works offline
+/// on a private LAN as long as there's a default route.
+fn detect_lan_ip() -> Option<IpAddr> {
+    let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    sock.connect(("8.8.8.8", 80)).ok()?;
+    let addr = sock.local_addr().ok()?.ip();
+    if addr.is_unspecified() || addr.is_loopback() {
+        return None;
+    }
+    Some(addr)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_remote_config(app: AppHandle) -> RemoteConnectionInfo {
+    let config = load_remote_config(&app);
+    RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+    }
+}
+
+/// Toggles remote access. The change is persisted immediately but only
+/// takes effect on the next app launch — restarting the sidecar at runtime
+/// would invalidate every open PTY WebSocket and SSE stream, which is a
+/// worse UX than asking the user to relaunch once.
+#[tauri::command]
+#[specta::specta]
+pub fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteConnectionInfo, String> {
+    let mut config = load_remote_config(&app);
+    config.enabled = enabled;
+    save_remote_config(&app, &config)?;
+    Ok(RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn reset_remote_password(app: AppHandle) -> Result<RemoteConnectionInfo, String> {
+    let mut config = load_remote_config(&app);
+    config.password = uuid::Uuid::new_v4().to_string();
+    save_remote_config(&app, &config)?;
+    Ok(RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+    })
 }
 
 #[tauri::command]

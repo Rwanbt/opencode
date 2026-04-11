@@ -70,6 +70,15 @@ export type Platform = {
   /** Set the configured WSL integration (desktop only) */
   setWslEnabled?(config: boolean): Promise<void> | void
 
+  /** Read the persisted remote-access config (desktop only) */
+  getRemoteAccess?(): Promise<RemoteAccessInfo>
+
+  /** Enable or disable LAN remote access; takes effect on next launch (desktop only) */
+  setRemoteAccessEnabled?(enabled: boolean): Promise<RemoteAccessInfo>
+
+  /** Regenerate the remote-access password; takes effect on next launch (desktop only) */
+  resetRemoteAccessPassword?(): Promise<RemoteAccessInfo>
+
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
 
@@ -99,6 +108,13 @@ export type Platform = {
 }
 
 export type DisplayBackend = "auto" | "wayland"
+
+export type RemoteAccessInfo = {
+  enabled: boolean
+  password: string
+  port: number
+  lanIp: string | null
+}
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",

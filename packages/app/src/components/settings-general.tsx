@@ -1,5 +1,6 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import QRCode from "qrcode"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
@@ -444,6 +445,265 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const RemoteAccessSection = () => {
+    const [info, setInfo] = createSignal<{
+      enabled: boolean
+      password: string
+      port: number
+      lanIp: string | null
+    }>()
+    const [reveal, setReveal] = createSignal(false)
+    const [busy, setBusy] = createSignal(false)
+    const [dirty, setDirty] = createSignal(false)
+
+    void platform.getRemoteAccess?.().then(setInfo)
+
+    const mode = () => {
+      const data = info()
+      if (!data) return "local"
+      return data.enabled ? "lan" : "local"
+    }
+
+    const modeOptions = () => [
+      {
+        value: "local" as const,
+        label: language.t("settings.desktop.remote.mode.local"),
+      },
+      {
+        value: "lan" as const,
+        label: language.t("settings.desktop.remote.mode.lan"),
+      },
+      {
+        value: "internet" as const,
+        // Internet mode is reserved for the TLS upgrade — surface it so
+        // users know it's on the roadmap, but reject the selection below.
+        label: `${language.t("settings.desktop.remote.mode.internet")} (soon)`,
+      },
+    ]
+
+    const onModeSelect = (next: "local" | "lan" | "internet") => {
+      if (next === "internet") return
+      if (busy()) return
+      const data = info()
+      if (!data) return
+      const wantEnabled = next === "lan"
+      if (wantEnabled === data.enabled) return
+
+      setBusy(true)
+      platform
+        .setRemoteAccessEnabled?.(wantEnabled)
+        .then((updated) => {
+          if (updated) setInfo(updated)
+          setDirty(true)
+        })
+        .catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            icon: "circle-x",
+            title: "Failed to update remote access",
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+        .finally(() => setBusy(false))
+    }
+
+    const onResetPassword = () => {
+      if (busy()) return
+      setBusy(true)
+      platform
+        .resetRemoteAccessPassword?.()
+        .then((updated) => {
+          if (updated) setInfo(updated)
+          setDirty(true)
+        })
+        .catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            icon: "circle-x",
+            title: "Failed to reset remote password",
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+        .finally(() => setBusy(false))
+    }
+
+    const connectionUrl = () => {
+      const data = info()
+      if (!data || !data.enabled || !data.lanIp) return undefined
+      return `http://${data.lanIp}:${data.port}`
+    }
+
+    const maskedPassword = (pw: string) => "•".repeat(Math.min(pw.length, 24))
+
+    // The host to embed in the pairing QR:
+    //   - LAN mode with a detected IP  → that IP (works over Wi-Fi)
+    //   - Local mode (or LAN w/o IP)   → loopback (works over USB via `adb reverse`)
+    // The mobile side just stuffs this into its Remote URL field, so localhost
+    // is the right answer any time we can't advertise a reachable LAN address.
+    const pairingHost = () => {
+      const data = info()
+      if (!data) return undefined
+      if (data.enabled && data.lanIp) return data.lanIp
+      return "localhost"
+    }
+
+    const pairingDeepLink = createMemo(() => {
+      const data = info()
+      const host = pairingHost()
+      if (!data || !host || !data.password) return undefined
+      const url = `http://${host}:${data.port}`
+      const params = new URLSearchParams({
+        url,
+        user: "opencode",
+        pwd: data.password,
+      })
+      return `opencode://connect?${params.toString()}`
+    })
+
+    const [qrSvg] = createResource(pairingDeepLink, async (link) => {
+      if (!link) return undefined
+      try {
+        return await QRCode.toString(link, {
+          type: "svg",
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 192,
+          color: { dark: "#ffffff", light: "#00000000" },
+        })
+      } catch {
+        return undefined
+      }
+    })
+
+    return (
+      <Show when={platform.getRemoteAccess}>
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">
+            {language.t("settings.desktop.section.remote")}
+          </h3>
+
+          <SettingsList>
+            <SettingsRow
+              title={language.t("settings.desktop.remote.mode.title")}
+              description={language.t("settings.desktop.remote.mode.description")}
+            >
+              <Select
+                data-action="settings-remote-mode"
+                options={modeOptions()}
+                current={modeOptions().find((o) => o.value === mode())}
+                value={(o) => o.value}
+                label={(o) => o.label}
+                onSelect={(option) => {
+                  if (!option) return
+                  if (option.value === "internet") {
+                    showToast({
+                      variant: "default",
+                      icon: "help",
+                      title: language.t("settings.desktop.remote.mode.internet"),
+                      description: language.t("settings.desktop.remote.mode.internetTooltip"),
+                    })
+                    return
+                  }
+                  onModeSelect(option.value)
+                }}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.desktop.remote.password.title")}
+              description={language.t("settings.desktop.remote.password.description")}
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-12-regular text-text-weak font-mono select-all">
+                  {info() ? (reveal() ? info()!.password : maskedPassword(info()!.password)) : "…"}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setReveal(!reveal())}
+                  disabled={!info()}
+                >
+                  {reveal()
+                    ? language.t("settings.desktop.remote.password.hide")
+                    : language.t("settings.desktop.remote.password.reveal")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={onResetPassword}
+                  disabled={busy() || !info()}
+                >
+                  {language.t("settings.desktop.remote.password.reset")}
+                </Button>
+              </div>
+            </SettingsRow>
+
+            <Show when={info()?.enabled}>
+              <SettingsRow
+                title={language.t("settings.desktop.remote.connection.title")}
+                description={language.t("settings.desktop.remote.connection.description")}
+              >
+                <Show
+                  when={connectionUrl()}
+                  fallback={
+                    <span class="text-12-regular text-text-weak">
+                      {language.t("settings.desktop.remote.connection.noLan")}
+                    </span>
+                  }
+                >
+                  <span class="text-12-regular font-mono text-text-strong select-all">
+                    {connectionUrl()}
+                  </span>
+                </Show>
+              </SettingsRow>
+            </Show>
+
+            <SettingsRow
+              title={language.t("settings.desktop.remote.pair.title")}
+              description={
+                info()?.enabled
+                  ? language.t("settings.desktop.remote.pair.descriptionLan")
+                  : language.t("settings.desktop.remote.pair.descriptionLocal")
+              }
+            >
+              <Show
+                when={qrSvg()}
+                fallback={
+                  <span class="text-12-regular text-text-weak">
+                    {language.t("settings.desktop.remote.pair.unavailable")}
+                  </span>
+                }
+              >
+                <div
+                  class="rounded-md bg-background-elevated p-2"
+                  style={{ width: "208px", height: "208px" }}
+                  // qrcode returns a self-contained <svg> string, safe to inject.
+                  innerHTML={qrSvg()!}
+                />
+              </Show>
+            </SettingsRow>
+          </SettingsList>
+
+          <div class="flex flex-col gap-1 pt-2">
+            <Show when={dirty()}>
+              <span class="text-12-regular text-text-accent">
+                {language.t("settings.desktop.remote.restartRequired")}
+              </span>
+            </Show>
+            <Show when={info()?.enabled}>
+              <span class="text-11-regular text-text-weak">
+                {language.t("settings.desktop.remote.warning")}
+              </span>
+            </Show>
+          </div>
+        </div>
+      </Show>
+    )
+  }
+
   const UpdatesSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
@@ -532,6 +792,8 @@ export const SettingsGeneral: Component = () => {
             )
           }}
         </Show>*/}
+
+        <RemoteAccessSection />
 
         <UpdatesSection />
 

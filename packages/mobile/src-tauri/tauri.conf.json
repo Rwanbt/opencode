@@ -40,5 +40,13 @@
       "minSdkVersion": 24
     }
   },
-  "plugins": {}
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["opencode"]
+        }
+      ]
+    }
+  }
 }

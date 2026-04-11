@@ -12,6 +12,9 @@ export const commands = {
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
 	getWslConfig: () => __TAURI_INVOKE<WslConfig>("get_wsl_config"),
 	setWslConfig: (config: WslConfig) => __TAURI_INVOKE<null>("set_wsl_config", { config }),
+	getRemoteConfig: () => __TAURI_INVOKE<RemoteConnectionInfo>("get_remote_config"),
+	setRemoteEnabled: (enabled: boolean) => __TAURI_INVOKE<RemoteConnectionInfo>("set_remote_enabled", { enabled }),
+	resetRemotePassword: () => __TAURI_INVOKE<RemoteConnectionInfo>("reset_remote_password"),
 	getDisplayBackend: () => __TAURI_INVOKE<"wayland" | "auto" | null>("get_display_backend"),
 	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
@@ -44,6 +47,13 @@ export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { 
 
 export type WslConfig = {
 		enabled: boolean,
+	};
+
+export type RemoteConnectionInfo = {
+		enabled: boolean,
+		password: string,
+		port: number,
+		lanIp: string | null,
 	};
 
 export type WslPathMode = "windows" | "linux";
