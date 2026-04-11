@@ -395,7 +395,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()
-    const tools = input.webSearch?.() ? { websearch: true } : undefined
+    const tools = { websearch: input.webSearch?.() ?? false }
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
