@@ -179,10 +179,19 @@ export const Terminal = (props: TerminalProps) => {
   const server = useServer()
   const directory = sdk.directory
   const client = sdk.client
-  const url = sdk.url
-  const auth = server.current?.http
-  const username = auth?.username ?? "opencode"
-  const password = auth?.password ?? ""
+  // Read credentials reactively from the current server connection — if the
+  // sidecar is restarted (e.g. when remote access is toggled) we must pick
+  // up the fresh url/password instead of a stale snapshot taken at mount.
+  const currentAuth = () => {
+    const http = server.current?.http
+    if (!http) return undefined
+    return {
+      url: http.url,
+      username: http.username ?? "opencode",
+      password: http.password ?? "",
+    }
+  }
+  const MAX_CONNECT_TRIES = 5
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -505,6 +514,11 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         if (reconn !== undefined) return
 
+        if (tries >= MAX_CONNECT_TRIES) {
+          fail(err)
+          return
+        }
+
         const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
         reconn = setTimeout(async () => {
           reconn = undefined
@@ -524,12 +538,20 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const next = new URL(url + `/pty/${id}/connect`)
+        const auth = currentAuth()
+        if (!auth || !auth.url || !auth.password) {
+          // Server credentials not yet available — bail without retrying so we
+          // don't spam the server with unauthenticated connection attempts.
+          fail(new Error(language.t("terminal.connectionLost.abnormalClose", { code: 401 })))
+          return
+        }
+
+        const next = new URL(auth.url + `/pty/${id}/connect`)
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
+        next.username = auth.username
+        next.password = auth.password
 
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"
