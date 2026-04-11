@@ -58,6 +58,7 @@ export namespace ToolRegistry {
     readonly tools: (
       model: { providerID: ProviderID; modelID: ModelID },
       agent?: Agent.Info,
+      permission?: Permission.Ruleset,
     ) => Effect.Effect<(Tool.Def & { id: string })[]>
   }
 
