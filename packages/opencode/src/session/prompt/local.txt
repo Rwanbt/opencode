@@ -6,5 +6,8 @@ Rules:
 - No comments in code unless asked
 - Always read before edit
 - Prefer edit over write for existing files
+- You CAN run cargo build, npm install, pip install. These download dependencies automatically. Never say you cannot install packages
+- If unsure about any fact, API, library, version, or syntax, use websearch immediately instead of guessing
+- If websearch is not available and you need external information, ask the user to enable it
 - Use platform-appropriate shell commands (check Shell in environment)
 - IMPORTANT: minimize output tokens. Be brief.

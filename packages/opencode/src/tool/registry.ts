@@ -13,6 +13,7 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
+import { Permission } from "../permission"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import path from "path"
@@ -193,11 +194,22 @@ export namespace ToolRegistry {
       const tools = Effect.fn("ToolRegistry.tools")(function* (
         model: { providerID: ProviderID; modelID: ModelID },
         agent?: Agent.Info,
+        permission?: Permission.Ruleset,
       ) {
         const s = yield* InstanceState.get(state)
         const allTools = yield* all(s.custom)
         // Local-llm: minimal tool set with skeleton descriptions (saves ~12K tokens)
-        const LOCAL_TOOLS = new Set(["bash", "read", "edit", "write", "glob", "grep", "question"])
+        const LOCAL_TOOLS = new Set([
+          "bash",
+          "read",
+          "edit",
+          "write",
+          "glob",
+          "grep",
+          "question",
+          "websearch",
+          "webfetch",
+        ])
         const LOCAL_SKELETONS: Record<string, string> = {
           bash: "Execute shell command. Args: {command: string}. Returns stdout.",
           read: "Read file content. Args: {filePath: string, offset?: number, limit?: number}. Returns file text.",
@@ -206,15 +218,30 @@ export namespace ToolRegistry {
           glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
           grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
           question: "Ask user a question. Args: {question: string}. Use when you need clarification.",
+          websearch: "Search the web. Args: {query: string}. Use when unsure about a dependency source, API, library name, or version.",
+          webfetch: "Fetch a URL as text. Args: {url: string}. Use to read docs, READMEs, or pages found via websearch.",
         }
         const isLocal = model.providerID === ("local-llm" as ProviderID)
 
         const filtered = allTools.filter((tool) => {
-          // Local-llm: only essential tools
-          if (isLocal) return LOCAL_TOOLS.has(tool.id)
+          // Local-llm: only essential tools. websearch/webfetch gated by the UI web button
+          // (explicit "allow" permission) — privacy: local models must never reach the network
+          // unless the user explicitly opts in for this session.
+          if (isLocal) {
+            if (!LOCAL_TOOLS.has(tool.id)) return false
+            if (tool.id === "websearch" || tool.id === "webfetch") {
+              // Privacy strict: require an explicit rule named after the tool.
+              // Do NOT trust wildcard "*": "allow" from the build agent defaults.
+              return (permission ?? []).some(
+                (r) => r.permission === tool.id && r.action === "allow",
+              )
+            }
+            return true
+          }
 
-          if (tool.id === "codesearch" || tool.id === "websearch") {
-            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+          if (tool.id === "codesearch" || tool.id === "websearch" || tool.id === "webfetch") {
+            const exaAllowed = model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            if (!exaAllowed) return false
           }
 
           const usePatch =
@@ -282,7 +309,8 @@ export namespace ToolRegistry {
       modelID: ModelID
     },
     agent?: Agent.Info,
+    permission?: Permission.Ruleset,
   ): Promise<(Tool.Def & { id: string })[]> {
-    return runPromise((svc) => svc.tools(model, agent))
+    return runPromise((svc) => svc.tools(model, agent, permission))
   }
 }
