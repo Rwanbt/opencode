@@ -5,6 +5,13 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Foreground Service to host llama-server child processes.
+         Without this, Android 12+ kills spawned llama-server as a phantom process
+         ~20s after startup, cascading the kill to the parent Activity. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
@@ -63,5 +70,18 @@
             android:name="android.support.FILE_PROVIDER_PATHS"
             android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Foreground Service hosting llama-server child processes.
+             foregroundServiceType="specialUse" is required because LLM inference
+             does not fit any predefined type (mediaPlayback, dataSync, etc.).
+             The PROPERTY_SPECIAL_USE_FGS_SUBTYPE is mandatory since API 34. -->
+        <service
+            android:name=".LlamaService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="On-device LLM inference host for llama-server child process" />
+        </service>
     </application>
 </manifest>
