@@ -223,26 +223,37 @@ object LlamaEngine {
 
     private var serverProcess: Process? = null
 
-    /** Load a GGUF model — always uses external server process for best performance.
-     *  Vulkan GPU is only beneficial for large models (>2B params).
-     *  For small models, CPU with NEON/dotprod is faster due to GPU transfer overhead. */
+    /** GPU backend selection result.
+     *  OpenCL intentionally omitted: the _opencl.so variant is an unvalidated
+     *  orphan artifact (no build script, no test). Older SoCs fall back to CPU. */
+    private enum class Backend { CPU, VULKAN }
+
+    /** Load a GGUF model via external llama-server process.
+     *  Backend selection (empirically validated on mobile):
+     *  - Small models (<1.5GB quantized, ~<2B params): CPU NEON/dotprod
+     *    is faster than GPU due to transfer overhead and kernel launch cost.
+     *  - Large models (≥1.5GB) on modern SoCs (Vulkan 1.3+ / Adreno 730+):
+     *    Vulkan via libllama_server.so (built with -DGGML_VULKAN=ON).
+     *  - Large models on older SoCs: CPU NEON/dotprod (slower but functional). */
     fun load(modelPath: String, contextSize: Int = 4096, threads: Int = 4): Boolean {
         init()
         stopServer()
 
-        // Check model size to decide GPU vs CPU
         val modelFile = java.io.File(modelPath)
         val modelSizeMB = modelFile.length() / (1024 * 1024)
         val isLargeModel = modelSizeMB > 1500  // >1.5GB ~ >2B params quantized
         val vulkanCapable = detectVulkanCapable()
-        val useVulkan = vulkanCapable && isLargeModel
 
-        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), vulkan=$vulkanCapable, useGPU=$useVulkan")
+        val backend = when {
+            !isLargeModel -> Backend.CPU
+            vulkanCapable -> Backend.VULKAN
+            else -> Backend.CPU  // older SoC: CPU fallback (no OpenCL)
+        }
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), vulkanCapable=$vulkanCapable, backend=$backend")
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
-        startServer(modelPath, contextSize, useVulkan, config)
-        return true
+        return startServer(modelPath, contextSize, backend, config)
     }
 
     /** Configuration for llama-server, read from IPC config file */
@@ -305,7 +316,7 @@ object LlamaEngine {
         Log.i(TAG, "Model unloaded")
     }
 
-    private fun startServer(modelPath: String, ctxSize: Int, useVulkan: Boolean = false, config: LlmConfig = LlmConfig()) {
+    private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig()): Boolean {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -325,36 +336,51 @@ object LlamaEngine {
 
             if (libDir == null) {
                 Log.w(TAG, "Cannot find nativeLibraryDir, skipping HTTP server")
-                return
+                return false
             }
             val nativeLibDir = libDir
 
-            val serverName = "libllama_server.so"
-            val serverBin = java.io.File(nativeLibDir, serverName)
+            // Only libllama_server.so is produced by the build scripts
+            // (packages/mobile/scripts/build-llama-server.sh with -DGGML_VULKAN=ON).
+            // The _vulkan / _opencl / _modern variants are unvalidated orphan artifacts.
+            val serverBin = java.io.File(nativeLibDir, "libllama_server.so")
             if (!serverBin.exists()) {
-                Log.w(TAG, "No llama-server binary found")
-                return
+                Log.w(TAG, "No llama-server binary found at ${serverBin.absolutePath}")
+                return false
             }
+            Log.i(TAG, "Selected server binary: ${serverBin.name} (backend=$backend)")
 
             val homeDir = java.io.File(modelPath).parentFile?.parentFile?.let { java.io.File(it, "home") }
             homeDir?.mkdirs()
 
-            // GPU layers: use config or auto-detect
-            val ngl = if (useVulkan) config.nGpuLayers.coerceAtLeast(99).toString() else "0"
+            // GPU layer offload — only when using a GPU backend.
+            // CPU backend must use ngl=0 (no GPU transfer overhead).
+            val useGpu = backend != Backend.CPU
+            val ngl = if (useGpu) "99" else "0"
 
-            // Detect big-core topology for CPU affinity pinning
-            val cpuMask = detectBigCoreMask()
-            val nBigCores = Integer.bitCount(cpuMask)
-            val nThreads = nBigCores.coerceIn(2, 4)
-            Log.i(TAG, "CPU topology: mask=0x${Integer.toHexString(cpuMask).uppercase()}, bigCores=$nBigCores, threads=$nThreads")
+            // Offload mode → -fitt value (MiB free headroom, GPU only)
+            val fittHeadroom = when (config.offloadMode) {
+                "gpu-max" -> "256"
+                "balanced" -> "1024"
+                else -> "512"  // auto
+            }
+
+            // Thread count: follow PocketPal AI heuristic (proven on Android for
+            // Gemma/Qwen inference). Use floor(cores * 0.8) for devices >4 cores,
+            // else use all cores. llama.cpp's internal threadpool handles scheduling.
+            // We deliberately do NOT pin threads to big cores via --cpu-mask: Android
+            // sandbox (cgroup v2, SELinux) can silently reject sched_setaffinity calls,
+            // and PocketPal — which works — does no pinning at all.
+            val nCores = Runtime.getRuntime().availableProcessors()
+            val nThreads = if (nCores <= 4) nCores else (nCores * 8 / 10).coerceAtLeast(2)
+            Log.i(TAG, "CPU topology: nCores=$nCores, nThreads=$nThreads (PocketPal heuristic)")
 
             val args = mutableListOf(
                 serverBin.absolutePath,
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "14097",
-                "-ngl", ngl,
-                "--ctx-size", ctxSize.toString(),
+                "--n-gpu-layers", ngl,
                 "--threads", nThreads.toString(),
                 "--threads-batch", nThreads.toString(),
                 "--batch-size", "512",
@@ -363,33 +389,77 @@ object LlamaEngine {
                 "-np", "1"
             )
 
-            // Flash Attention — significant memory savings on mobile
-            if (config.flashAttn) {
-                args.addAll(listOf("--flash-attn", "on"))
-                Log.i(TAG, "Flash Attention enabled")
+            // Context size strategy:
+            // - GPU backend: --fit on -fitc 16384 auto-scales to VRAM (floor 16K)
+            // - CPU backend: fixed 4096. Prompt eval on mobile CPU NEON for a 7B
+            //   model is ~50-100 tok/s, so 4K ctx = ~40-80s worst case prefill.
+            //   Larger ctx would blow prompt eval latency past acceptable.
+            //   Manual test proved 2048 ctx generates at ~1.5 tok/s on SM8250
+            //   (see session logs); 4096 is the compromise sweet spot.
+            if (useGpu) {
+                args.addAll(listOf(
+                    "--fit", "on",
+                    "-fitt", fittHeadroom,
+                    "-fitc", "16384"
+                ))
+            } else {
+                args.addAll(listOf("--ctx-size", "4096"))
             }
 
-            // KV cache quantization — q4_0 with Hadamard rotation saves ~72% KV memory
+            // KV cache quantization — q4_0 saves ~72% KV memory but llama.cpp
+            // HARD REQUIRES flash_attn=on when V cache is quantized. If we disable
+            // FA with quantized V, llama_init_from_model returns NULL and the next
+            // llama_n_ctx() call segfaults with a null pointer deref.
+            // → Rule: quantized KV ⇒ flash-attn on (regardless of CPU/GPU).
             val kvType = config.kvCacheType
-            if (kvType != "f16") {
+            val kvQuantized = kvType != "f16"
+            if (kvQuantized) {
                 args.addAll(listOf("--cache-type-k", kvType, "--cache-type-v", kvType))
-                Log.i(TAG, "KV cache quantization: $kvType")
+                Log.i(TAG, "KV cache quantization: $kvType (forces --flash-attn on)")
             }
 
-            // Memory mapping control
+            // Flash Attention:
+            // - Forced ON if KV is quantized (llama.cpp hard requirement)
+            // - Otherwise: on in GPU, off in CPU (batch=1 decode overhead)
+            val flashAttnOn = kvQuantized || (useGpu && config.flashAttn)
+            if (flashAttnOn) {
+                args.addAll(listOf("--flash-attn", "on"))
+                Log.i(TAG, "Flash Attention enabled (kvQuantized=$kvQuantized, useGpu=$useGpu)")
+            } else {
+                args.addAll(listOf("--flash-attn", "off"))
+                Log.i(TAG, "Flash Attention disabled")
+            }
+
+            // Memory mapping: the device (8 GB RAM on SM8250 with ~3 GB system
+            // overhead) cannot fit a 4.9 GB model + 1.25 GB KV cache as anonymous
+            // pages — it triggers OOM cascade that kills launcher, keyboard,
+            // Google Play Services, and our app in the process.
+            //
+            // With mmap=ON, the model weights are clean file-backed pages that
+            // the kernel can page out when memory pressure rises, then re-read
+            // on demand from storage. On UFS 3.0 (SM8250) this is ~1-2 GB/s
+            // read bandwidth — slower per-token than pure RAM, but physically
+            // possible unlike --no-mmap which OOMs the entire system.
+            //
+            // PocketPal AI recommends mmap=OFF, but their default model is
+            // Gemma-2-2B (2 GB) which fits anonymous-page-style. For 7B+ models
+            // on 8 GB devices, mmap=ON is the only viable path.
             when (config.mmapMode) {
-                "off" -> { args.add("--no-mmap"); Log.i(TAG, "mmap disabled") }
+                "off" -> { args.add("--no-mmap"); Log.i(TAG, "mmap disabled (user override)") }
                 "on" -> Log.i(TAG, "mmap enabled (default)")
-                else -> Log.i(TAG, "mmap auto")
+                else -> Log.i(TAG, "mmap auto (llama.cpp default = ON)")
             }
 
-            // Speculative decoding with draft model
-            if (config.draftModelPath != null) {
+            // Speculative decoding with draft model — GPU-only feature.
+            // On CPU, running two models concurrently on the same cores is
+            // net-negative: the draft model steals compute that the main model
+            // needs, and the validation batch is bound by the same CPU anyway.
+            // Only enable speculative decoding when we're actually offloading to GPU.
+            if (useGpu && config.draftModelPath != null) {
                 val draftFile = java.io.File(config.draftModelPath)
                 if (draftFile.exists()) {
-                    // RAM guard: check available memory before enabling draft model
                     val freeRamMB = getAvailableRamMB()
-                    if (freeRamMB > 1000) {  // Need at least 1GB free for draft model
+                    if (freeRamMB > 1000) {
                         args.addAll(listOf(
                             "--model-draft", config.draftModelPath,
                             "--draft", "16",
@@ -402,20 +472,73 @@ object LlamaEngine {
                 } else {
                     Log.w(TAG, "Draft model not found: ${config.draftModelPath}")
                 }
+            } else if (config.draftModelPath != null) {
+                Log.i(TAG, "Speculative decoding skipped (CPU backend — GPU only feature)")
             }
 
-            Log.i(TAG, "Starting server: ${serverBin.name} ngl=$ngl kv=${config.kvCacheType} flash=${config.flashAttn}")
+            Log.i(TAG, "Starting server: ${serverBin.name} backend=$backend ngl=$ngl kv=${config.kvCacheType} flash=${config.flashAttn}")
 
-            val pb = ProcessBuilder(args)
-            pb.environment()["HOME"] = homeDir?.absolutePath ?: "/tmp"
-            pb.environment()["TMPDIR"] = homeDir?.absolutePath ?: "/tmp"
-            pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:/vendor/lib64:/system/vendor/lib64"
-            pb.redirectErrorStream(true)
+            // Delegate spawn to LlamaService (Foreground Service).
+            // The child process inherits foreground priority and is exempt from
+            // Android PhantomProcessKiller + MIUI SmartPower + Doze kill.
+            val service = LlamaService.waitForInstance(5_000)
+            if (service == null) {
+                Log.e(TAG, "LlamaService not available — cannot spawn llama-server safely")
+                return false
+            }
+            service.updateNotification("OpenCode", "Loading ${java.io.File(modelPath).name}…")
+            val envOverrides = mapOf(
+                "HOME" to (homeDir?.absolutePath ?: "/tmp"),
+                "TMPDIR" to (homeDir?.absolutePath ?: "/tmp"),
+                "LD_LIBRARY_PATH" to "$nativeLibDir:/vendor/lib64:/system/vendor/lib64"
+            )
+            val spawned = service.spawnServer(args, envOverrides)
+            if (spawned == null) {
+                Log.e(TAG, "LlamaService.spawnServer returned null")
+                return false
+            }
+            serverProcess = spawned
+            Log.i(TAG, "llama-server spawned via LlamaService on port 14097 (backend=$backend), waiting for readiness...")
 
-            serverProcess = pb.start()
-            Log.i(TAG, "llama-server started on port 14097 (${if (useVulkan) "Vulkan GPU" else "CPU-only"}, args=${args.size})")
+            // Readiness loop: poll /v1/models until 200 OK, up to 180s.
+            // /health returns 200 as soon as the HTTP listener binds (even while the
+            // model is still loading in b8683). /v1/models only returns 200 once the
+            // model is actually loaded and ready to serve inference — the signal we need.
+            val startTime = System.currentTimeMillis()
+            val timeoutMs = 180_000L
+            var ready = false
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                // Bail out early if the child process died
+                val proc = serverProcess
+                if (proc != null && !proc.isAlive) {
+                    Log.e(TAG, "llama-server died during startup (exit=${proc.exitValue()})")
+                    return false
+                }
+                try {
+                    val conn = java.net.URL("http://127.0.0.1:14097/v1/models").openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 500
+                    conn.readTimeout = 500
+                    val code = conn.responseCode
+                    conn.disconnect()
+                    if (code == 200) {
+                        ready = true
+                        break
+                    }
+                } catch (_: Exception) {
+                    // Not ready yet, keep polling
+                }
+                Thread.sleep(500)
+            }
+            val elapsed = System.currentTimeMillis() - startTime
+            if (!ready) {
+                Log.e(TAG, "llama-server readiness timeout after ${elapsed}ms")
+                return false
+            }
+            Log.i(TAG, "llama-server ready after ${elapsed}ms (backend=$backend)")
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start llama-server: ${e.message}")
+            return false
         }
     }
 
@@ -436,16 +559,10 @@ object LlamaEngine {
     }
 
     private fun stopServer() {
-        serverProcess?.let {
-            try {
-                it.destroyForcibly()
-                it.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-                Log.i(TAG, "llama-server stopped")
-            } catch (e: Exception) {
-                Log.w(TAG, "Error stopping server: ${e.message}")
-            }
-        }
+        // Delegate kill to LlamaService so its internal reference is cleared too.
+        LlamaService.get()?.stopChildProcess()
         serverProcess = null
+        LlamaService.get()?.updateNotification("OpenCode", "Local AI idle")
     }
 
     /** Check if a model is currently loaded */

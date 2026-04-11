@@ -148,8 +148,10 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
         runtime_dir(app).join("models").join(&d).to_string_lossy().to_string()
     }).unwrap_or_default();
 
+    // n_gpu_layers: overridden by Kotlin LlamaEngine based on empirical backend choice
+    // (CPU for small models, Vulkan/OpenCL for large models on capable SoCs).
     let config = format!(
-        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\nn_gpu_layers=0\n",
+        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n",
         kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path
     );
 
@@ -175,8 +177,11 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
     // Write config for Kotlin to read before loading
     write_llm_config(&app, draft_model);
 
-    // Send load command to Kotlin — timeout 120s for large models
-    llm_command(&app, &format!("load|{}", path_str), 120)?;
+    // Send load command to Kotlin — timeout 240s.
+    // Kotlin startServer() now includes a 180s readiness loop polling /v1/models,
+    // so the load command only returns once the model is actually ready to infer.
+    // The extra 60s is safety margin over the Kotlin readiness timeout.
+    llm_command(&app, &format!("load|{}", path_str), 240)?;
     Ok(())
 }
 

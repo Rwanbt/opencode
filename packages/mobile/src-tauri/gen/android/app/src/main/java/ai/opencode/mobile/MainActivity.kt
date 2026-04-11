@@ -19,6 +19,35 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
 
+    // Start LlamaService (Foreground Service) FIRST so it's alive before any
+    // llama-server spawn. LlamaService keeps the whole process tree at adj=0
+    // (foreground), exempt from Android PhantomProcessKiller and MIUI
+    // SmartPower kill. Without this, llama-server child processes die ~5-20s
+    // after spawn regardless of llama.cpp flags or kernel settings.
+    try {
+      val serviceIntent = Intent(this, LlamaService::class.java)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        startForegroundService(serviceIntent)
+      } else {
+        startService(serviceIntent)
+      }
+      android.util.Log.i("OpenCode", "LlamaService start requested")
+    } catch (e: Exception) {
+      android.util.Log.w("OpenCode", "LlamaService start failed: ${e.message}")
+    }
+
+    // Request notification permission (Android 13+) for the FGS notification.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+          != PackageManager.PERMISSION_GRANTED) {
+        ActivityCompat.requestPermissions(
+          this,
+          arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+          101
+        )
+      }
+    }
+
     // Request storage permissions
     requestStoragePermission()
 
