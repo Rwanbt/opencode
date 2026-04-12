@@ -435,10 +435,10 @@ a:active,
     height: 40px !important;
   }
 
-  /* Prompt area — less padding in landscape */
+  /* Prompt area — reserve space for absolutely-positioned buttons */
   [data-dock-surface="shell"] [contenteditable="true"] {
     min-height: 40px !important;
-    padding: 10px 12px !important;
+    padding: 10px 200px 10px 52px !important;
   }
 }
 
