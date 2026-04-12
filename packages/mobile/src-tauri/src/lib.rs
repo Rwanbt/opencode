@@ -34,6 +34,7 @@ pub fn run() {
             runtime::stop_local_server,
             runtime::install_extended_env,
             runtime::read_server_logs,
+            runtime::list_storage_roots,
             llm::list_models,
             llm::download_model,
             llm::delete_model,

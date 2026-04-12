@@ -40,6 +40,15 @@ export type Platform = {
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
 
+  /**
+   * List navigable storage roots (Android only).
+   * Returns an array of {path, label} entries the user can browse from
+   * (internal storage, SD cards, OTG drives, app home). Used by
+   * DialogSelectDirectory to bootstrap navigation when /storage/ itself
+   * cannot be enumerated due to Android sandbox restrictions.
+   */
+  listStorageRoots?(): Promise<Array<{ path: string; label: string }>>
+
   /** Open native file picker dialog (Tauri only) */
   openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
 

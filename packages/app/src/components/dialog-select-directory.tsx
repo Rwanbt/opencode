@@ -10,6 +10,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -20,7 +21,8 @@ interface DialogSelectDirectoryProps {
 type Row = {
   absolute: string
   search: string
-  group: "recent" | "folders"
+  group: "recent" | "storage" | "folders"
+  label?: string
 }
 
 function cleanInput(value: string) {
@@ -210,17 +212,30 @@ function useDirectorySearch(args: {
     const cap = 12
     const branch = 4
     let paths = [scopedInput.directory]
+    let consumed: string[] = []
     for (const part of head) {
       if (!active()) return []
       if (part === "..") {
         paths = paths.map(parentOf)
+        consumed.pop()
         continue
       }
 
       const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
       if (!active()) return []
       paths = Array.from(new Set(next)).slice(0, cap)
-      if (paths.length === 0) return [] as string[]
+      if (paths.length === 0) {
+        // Parent listing returned empty (e.g. Android sandbox blocks /storage
+        // enumeration, but /storage/emulated/0 is readable). Bypass the failed
+        // traversal by reconstructing the absolute path directly.
+        const reconstructed =
+          (rootOf(raw) || "/") + [...consumed, part].filter(Boolean).join("/")
+        const directChildren = await dirs(reconstructed)
+        if (!active()) return []
+        if (directChildren.length === 0) return [] as string[]
+        paths = [reconstructed]
+      }
+      consumed.push(part)
     }
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
@@ -251,6 +266,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const layout = useLayout()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
 
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
@@ -276,6 +292,33 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     sdk,
     home,
     start,
+  })
+
+  // Mobile-only: probe storage roots (internal storage, SD cards, OTG drives,
+  // app home) since /storage/ itself can't be enumerated due to Android sandbox.
+  // On desktop/web platform.listStorageRoots is undefined → empty list.
+  const [storageRoots] = createResource(
+    async () => {
+      if (!platform.listStorageRoots) return [] as Array<{ path: string; label: string }>
+      try {
+        return await platform.listStorageRoots()
+      } catch {
+        return []
+      }
+    },
+    { initialValue: [] },
+  )
+
+  const storageRows = createMemo<Row[]>(() => {
+    const roots = storageRoots() ?? []
+    return roots.map((r) => {
+      const row = toRow(r.path, home(), "storage")
+      return {
+        ...row,
+        label: r.label,
+        search: `${row.search}\n${r.label}`,
+      }
+    })
   })
 
   const recentProjects = createMemo(() => {
@@ -313,7 +356,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const items = async (value: string) => {
     const results = await directories(value)
     const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
-    return uniqueRows([...recentProjects(), ...directoryRows])
+    return uniqueRows([...recentProjects(), ...storageRows(), ...directoryRows])
   }
 
   function resolve(absolute: string) {
@@ -332,12 +375,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         filterKeys={["search"]}
         groupBy={(item) => item.group}
         sortGroupsBy={(a, b) => {
-          if (a.category === b.category) return 0
-          return a.category === "recent" ? -1 : 1
+          const order: Record<string, number> = { recent: 0, storage: 1, folders: 2 }
+          return (order[a.category] ?? 99) - (order[b.category] ?? 99)
         }}
-        groupHeader={(group) =>
-          group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
-        }
+        groupHeader={(group) => {
+          if (group.category === "recent") return language.t("home.recentProjects")
+          if (group.category === "storage") return "Device storage"
+          return language.t("command.project.open")
+        }}
         ref={(r) => (list = r)}
         onFilter={(value) => setFilter(cleanInput(value))}
         onKeyEvent={(e, item) => {
@@ -358,6 +403,22 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       >
         {(item) => {
           const path = displayPath(item.absolute, filter(), home())
+          // Storage roots: show their human label prominently with the path subtitle
+          if (item.group === "storage" && item.label) {
+            return (
+              <div class="w-full flex items-center justify-between rounded-md">
+                <div class="flex items-center gap-x-3 grow min-w-0">
+                  <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                  <div class="flex flex-col text-14-regular min-w-0">
+                    <span class="text-text-strong whitespace-nowrap">{item.label}</span>
+                    <span class="text-12-regular text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                      {item.absolute}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
           if (path === "~") {
             return (
               <div class="w-full flex items-center justify-between rounded-md">
