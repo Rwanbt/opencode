@@ -61,10 +61,26 @@ export namespace AppFileSystem {
         return yield* Effect.tryPromise({
           try: async () => {
             const entries = await NFS.readdir(dirPath, { withFileTypes: true })
-            return entries.map(
-              (e): DirEntry => ({
-                name: e.name,
-                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
+            return await Promise.all(
+              entries.map(async (e): Promise<DirEntry> => {
+                if (e.isDirectory()) return { name: e.name, type: "directory" }
+                if (e.isFile()) return { name: e.name, type: "file" }
+                if (e.isSymbolicLink()) {
+                  // Resolve symlink target via stat (follows the link).
+                  // Critical on mobile where /home/Documents -> /sdcard/Documents
+                  // would otherwise be classified as "symlink" and filtered out.
+                  try {
+                    const target = await (await import("node:fs/promises")).stat(
+                      (await import("node:path")).join(dirPath, e.name),
+                    )
+                    if (target.isDirectory()) return { name: e.name, type: "directory" }
+                    if (target.isFile()) return { name: e.name, type: "file" }
+                  } catch {
+                    // dangling symlink — fall through to "symlink"
+                  }
+                  return { name: e.name, type: "symlink" }
+                }
+                return { name: e.name, type: "other" }
               }),
             )
           },

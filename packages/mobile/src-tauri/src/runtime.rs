@@ -699,3 +699,109 @@ async fn check_health(port: u32, password: Option<&str>) -> bool {
         Err(_) => false,
     }
 }
+
+#[derive(Clone, Serialize, Debug)]
+pub struct StorageRoot {
+    /// Filesystem path the user can navigate into.
+    pub path: String,
+    /// Human-friendly label shown in the picker.
+    pub label: String,
+}
+
+/// Probe the Android device for navigable storage roots.
+///
+/// On Android, /storage/ itself is not listable for non-system apps even
+/// with MANAGE_EXTERNAL_STORAGE — so we cannot enumerate volumes by walking
+/// the directory. Instead we probe each well-known and discovered candidate:
+///
+///  1. /storage/emulated/0     — primary internal storage (every device)
+///  2. /sdcard                  — symlink to /storage/emulated/0 (kept for clarity)
+///  3. /storage/<UUID>          — physical SD cards / OTG drives, discovered
+///                                via getExternalFilesDirs() then walked back
+///                                to the volume root
+///  4. The runtime home dir     — opencode's own working directory (always)
+///
+/// A path is included only if it can actually be opened and read from this
+/// process. The label is derived from the path (Internal storage / SD card N).
+#[tauri::command]
+pub async fn list_storage_roots(app: AppHandle) -> Vec<StorageRoot> {
+    let mut roots: Vec<StorageRoot> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let try_add = |path: &str, label: &str, roots: &mut Vec<StorageRoot>, seen: &mut std::collections::HashSet<String>| {
+        // Canonicalize so /sdcard and /storage/emulated/0 dedupe correctly.
+        let canonical = std::fs::canonicalize(path)
+            .ok()
+            .and_then(|p| p.to_str().map(String::from))
+            .unwrap_or_else(|| path.to_string());
+        if seen.contains(&canonical) {
+            return;
+        }
+        // Probe: must be a directory and readable.
+        if let Ok(meta) = std::fs::metadata(&canonical) {
+            if meta.is_dir() && std::fs::read_dir(&canonical).is_ok() {
+                seen.insert(canonical.clone());
+                roots.push(StorageRoot {
+                    path: canonical,
+                    label: label.to_string(),
+                });
+            }
+        }
+    };
+
+    // 1. Internal storage (primary, every Android device)
+    try_add("/storage/emulated/0", "Internal storage", &mut roots, &mut seen);
+    try_add("/sdcard", "Internal storage", &mut roots, &mut seen);
+
+    // 2. Physical SD cards / OTG drives.
+    // /storage/ cannot be listed directly, so we probe well-known mount points.
+    // Most Android devices expose physical volumes under /storage/<UUID> where
+    // UUID matches XXXX-XXXX (FAT32) or a longer hex string. We can't enumerate
+    // them without /storage/ access, so we read /proc/mounts which IS readable
+    // and shows all mounted filesystems.
+    if let Ok(mounts) = std::fs::read_to_string("/proc/mounts") {
+        let mut sdcard_idx = 1;
+        for line in mounts.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 3 {
+                continue;
+            }
+            let mount_point = parts[1];
+            let fs_type = parts[2];
+            // Only mounts under /storage/ that look like external volumes
+            if !mount_point.starts_with("/storage/") {
+                continue;
+            }
+            if mount_point == "/storage/emulated"
+                || mount_point == "/storage/self"
+                || mount_point.starts_with("/storage/emulated/")
+            {
+                continue;
+            }
+            // Whitelist common removable filesystems
+            if !matches!(
+                fs_type,
+                "vfat" | "exfat" | "ntfs" | "fuseblk" | "sdcardfs" | "ext4" | "ext3" | "ext2" | "f2fs"
+            ) {
+                continue;
+            }
+            let label = if sdcard_idx == 1 {
+                "SD card".to_string()
+            } else {
+                format!("SD card {}", sdcard_idx)
+            };
+            sdcard_idx += 1;
+            try_add(mount_point, &label, &mut roots, &mut seen);
+        }
+    }
+
+    // 3. opencode runtime home (always available, contains symlinks to Documents/storage)
+    if let Some(runtime_dir) = app.path().app_data_dir().ok().map(|p| p.join(RUNTIME_SUBDIR)) {
+        let home = runtime_dir.join("home");
+        if let Some(home_str) = home.to_str() {
+            try_add(home_str, "OpenCode home", &mut roots, &mut seen);
+        }
+    }
+
+    roots
+}

@@ -122,22 +122,25 @@ export async function createPlatform(): Promise<Platform> {
       }
     },
 
-    // File pickers — use Tauri dialog plugin for native Android picker
-    async openDirectoryPickerDialog(opts) {
+    // openDirectoryPickerDialog is intentionally NOT defined on mobile.
+    // The Tauri Android dialog plugin does not actually support directory
+    // selection — it returns null silently. Leaving this property undefined
+    // makes the frontend (home.tsx / layout.tsx) fall through to the in-app
+    // DialogSelectDirectory, which uses the opencode-cli /file API.
+
+    // List navigable storage roots on Android (internal storage, SD cards,
+    // OTG drives, opencode home). The dialog uses these as starting points
+    // since Android sandboxes /storage/ from direct enumeration.
+    async listStorageRoots() {
       try {
-        const { open } = await import("@tauri-apps/plugin-dialog")
-        const result = await open({
-          directory: true,
-          multiple: opts?.multiple ?? false,
-          title: opts?.title ?? "Choose folder",
-        })
-        if (!result) return null
-        return result
+        const { invoke } = await import("@tauri-apps/api/core")
+        return await invoke<Array<{ path: string; label: string }>>("list_storage_roots")
       } catch {
-        return null
+        return []
       }
     },
 
+    // File pickers — Tauri Android supports files (not directories)
     async openFilePickerDialog(opts) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog")
