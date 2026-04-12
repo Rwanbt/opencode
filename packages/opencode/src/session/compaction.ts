@@ -32,8 +32,19 @@ export namespace SessionCompaction {
     ),
   }
 
+  // Defaults for large-context models (128K+). Dynamically scaled for smaller models via getPruneThresholds().
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
+
+  /** Scale prune thresholds proportionally to the model's context size.
+   *  Small models (16K) get smaller thresholds; large models (128K+) keep defaults. */
+  export function getPruneThresholds(model: Provider.Model) {
+    const contextSize = model.limit?.context ?? 128_000
+    return {
+      pruneMinimum: Math.min(PRUNE_MINIMUM, Math.floor(contextSize * 0.3)),
+      pruneProtect: Math.min(PRUNE_PROTECT, Math.floor(contextSize * 0.6)),
+    }
+  }
   const PRUNE_PROTECTED_TOOLS = ["skill"]
 
   export interface Interface {
@@ -41,7 +52,7 @@ export namespace SessionCompaction {
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
     }) => Effect.Effect<boolean>
-    readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
+    readonly prune: (input: { sessionID: SessionID; model?: Provider.Model }) => Effect.Effect<void>
     readonly process: (input: {
       parentID: MessageID
       messages: MessageV2.WithParts[]
@@ -90,10 +101,15 @@ export namespace SessionCompaction {
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
       // calls, then erases output of older tool calls to free context space
-      const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
+      const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID; model?: Provider.Model }) {
         const cfg = yield* config.get()
         if (cfg.compaction?.prune === false) return
-        log.info("pruning")
+
+        // Use dynamic thresholds scaled to model context size
+        const { pruneMinimum, pruneProtect } = input.model
+          ? getPruneThresholds(input.model)
+          : { pruneMinimum: PRUNE_MINIMUM, pruneProtect: PRUNE_PROTECT }
+        log.info("pruning", { pruneProtect, pruneMinimum })
 
         const msgs = yield* session
           .messages({ sessionID: input.sessionID })
@@ -118,7 +134,7 @@ export namespace SessionCompaction {
                 if (part.state.time.compacted) break loop
                 const estimate = Token.estimate(part.state.output)
                 total += estimate
-                if (total > PRUNE_PROTECT) {
+                if (total > pruneProtect) {
                   pruned += estimate
                   toPrune.push(part)
                 }
@@ -127,7 +143,7 @@ export namespace SessionCompaction {
         }
 
         log.info("found", { pruned, total })
-        if (pruned > PRUNE_MINIMUM) {
+        if (pruned > pruneMinimum) {
           for (const part of toPrune) {
             if (part.state.status === "completed") {
               part.state.time.compacted = Date.now()
@@ -400,7 +416,7 @@ When constructing the summary, try to stick to this template:
     return runPromise((svc) => svc.isOverflow(input))
   }
 
-  export async function prune(input: { sessionID: SessionID }) {
+  export async function prune(input: { sessionID: SessionID; model?: Provider.Model }) {
     return runPromise((svc) => svc.prune(input))
   }
 

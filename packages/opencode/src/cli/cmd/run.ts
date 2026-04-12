@@ -302,6 +302,11 @@ export const RunCommand = cmd({
         describe: "show thinking blocks",
         default: false,
       })
+      .option("web", {
+        type: "boolean",
+        describe: "enable websearch and webfetch tools",
+        default: false,
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -371,6 +376,10 @@ export const RunCommand = cmd({
         pattern: "*",
       },
     ]
+    if (args.web) {
+      rules.push({ permission: "websearch", action: "allow", pattern: "*" })
+      rules.push({ permission: "webfetch", action: "allow", pattern: "*" })
+    }
 
     function title() {
       if (args.title === undefined) return

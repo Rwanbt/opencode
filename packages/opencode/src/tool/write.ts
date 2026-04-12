@@ -33,7 +33,7 @@ export const WriteTool = Tool.define("write", {
     const exists = await Filesystem.exists(filepath)
     // Guard: local-llm must use edit for existing files
     if (exists && ctx.extra?.model?.providerID === "local-llm") {
-      throw new Error("File already exists. Use edit instead of write.")
+      throw new Error("File already exists. Read the file first with the read tool, then use edit with a small unique oldString snippet to modify it.")
     }
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)

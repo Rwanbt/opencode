@@ -197,29 +197,49 @@ export namespace SessionProcessor {
               const parts = MessageV2.parts(ctx.assistantMessage.id)
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
-              if (
-                recentParts.length !== DOOM_LOOP_THRESHOLD ||
-                !recentParts.every(
+              // Check 1: identical consecutive calls (original doom loop)
+              const identicalLoop =
+                recentParts.length === DOOM_LOOP_THRESHOLD &&
+                recentParts.every(
                   (part) =>
                     part.type === "tool" &&
                     part.tool === value.toolName &&
                     part.state.status !== "pending" &&
                     JSON.stringify(part.state.input) === JSON.stringify(value.input),
                 )
-              ) {
+
+              // Check 2: repeated failed edits on the same file (catches alternating read→edit(fail) loops)
+              const recentWindow = parts.slice(-6)
+              const failedEdits = recentWindow.filter(
+                (part): part is MessageV2.ToolPart =>
+                  part.type === "tool" &&
+                  part.tool === "edit" &&
+                  part.state.status === "error",
+              )
+              const editFileLoop =
+                failedEdits.length >= DOOM_LOOP_THRESHOLD &&
+                failedEdits.every(
+                  (part) =>
+                    (part.state.input as any)?.filePath ===
+                    (failedEdits[0].state.input as any)?.filePath,
+                )
+
+              if (!identicalLoop && !editFileLoop) {
                 return
               }
 
+              const loopType = identicalLoop ? "identical args" : "repeated failed edits on same file"
+
               // Local models: auto-break instead of asking permission (4B models can't recover from loops)
               if (ctx.model.providerID === "local-llm") {
-                log.warn("doom loop detected for local model, injecting error", { tool: value.toolName })
+                log.warn("doom loop detected for local model", { tool: value.toolName, loopType })
                 ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                   ...match,
                   tool: value.toolName,
                   state: {
                     status: "error",
                     input: value.input,
-                    error: `STOP: You called ${value.toolName} twice with identical args. Change your parameters or use a different tool.`,
+                    error: `STOP: ${loopType}. Do not retry. Explain what you were trying to do and ask the user for help.`,
                     time: { start: Date.now(), end: Date.now() },
                   },
                 } satisfies MessageV2.ToolPart)

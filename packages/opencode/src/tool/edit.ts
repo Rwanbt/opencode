@@ -672,6 +672,26 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
+/** Check if oldString can match content using the full replacer chain (exact + fuzzy).
+ *  Used by the preflight guard to avoid rejecting edits that fuzzy replacers can handle. */
+export function canFuzzyMatch(content: string, oldString: string): boolean {
+  for (const replacer of [
+    SimpleReplacer,
+    LineTrimmedReplacer,
+    BlockAnchorReplacer,
+    WhitespaceNormalizedReplacer,
+    IndentationFlexibleReplacer,
+    EscapeNormalizedReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+  ]) {
+    for (const search of replacer(content, oldString)) {
+      if (content.indexOf(search) !== -1) return true
+    }
+  }
+  return false
+}
+
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
     throw new Error("No changes to apply: oldString and newString are identical.")
