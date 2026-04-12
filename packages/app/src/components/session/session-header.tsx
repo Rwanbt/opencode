@@ -201,6 +201,7 @@ export function SessionHeader() {
     const next = !view().terminal.opened()
     view().terminal.toggle()
     if (!next) return
+    if (platform.platform === "mobile") return
 
     const id = terminal.active()
     if (!id) return

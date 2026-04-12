@@ -191,6 +191,7 @@ export function TerminalPanel() {
       () => [opened(), terminal.active()] as const,
       ([next, id]) => {
         if (!next || !id) return
+        if (isMobile()) return
         const stop = focus(id)
         onCleanup(stop)
       },
