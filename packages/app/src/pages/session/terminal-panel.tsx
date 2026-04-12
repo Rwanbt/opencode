@@ -369,7 +369,7 @@ export function TerminalPanel() {
                           <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
                             <Terminal
                               pty={pty()}
-                              autoFocus={opened()}
+                              autoFocus={opened() && !isMobile()}
                               onConnect={() => ops.trim(id)}
                               onCleanup={ops.update}
                               onConnectError={() => ops.clone(id)}

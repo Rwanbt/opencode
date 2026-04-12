@@ -490,18 +490,6 @@ export function SessionHeader() {
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
-                        <DropdownMenu.Item onSelect={() => view().reviewPanel.toggle()}>
-                          <Icon name={view().reviewPanel.opened() ? "review-active" : "review"} size="small" />
-                          <DropdownMenu.ItemLabel>{language.t("command.review.toggle")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => layout.fileTree.toggle()}>
-                          <Icon name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"} size="small" />
-                          <DropdownMenu.ItemLabel>{language.t("command.fileTree.toggle")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={toggleTerminal}>
-                          <Icon name={view().terminal.opened() ? "terminal-active" : "terminal"} size="small" />
-                          <DropdownMenu.ItemLabel>{language.t("command.terminal.toggle")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
                         <DropdownMenu.Item onSelect={() => command.trigger("session.fork")}>
                           <Icon name="fork" size="small" />
                           <DropdownMenu.ItemLabel>{language.t("command.session.fork")}</DropdownMenu.ItemLabel>
