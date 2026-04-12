@@ -3,9 +3,10 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
+import { Button } from "@opencode-ai/ui/button"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
-import { createMemo, createResource, createSignal } from "solid-js"
+import { createMemo, createResource, createSignal, Show } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
@@ -213,11 +214,14 @@ function useDirectorySearch(args: {
     const branch = 4
     let paths = [scopedInput.directory]
     let consumed: string[] = []
-    for (const part of head) {
+    let headIdx = 0
+    while (headIdx < head.length) {
+      const part = head[headIdx]
       if (!active()) return []
       if (part === "..") {
         paths = paths.map(parentOf)
         consumed.pop()
+        headIdx++
         continue
       }
 
@@ -226,16 +230,27 @@ function useDirectorySearch(args: {
       paths = Array.from(new Set(next)).slice(0, cap)
       if (paths.length === 0) {
         // Parent listing returned empty (e.g. Android sandbox blocks /storage
-        // enumeration, but /storage/emulated/0 is readable). Bypass the failed
-        // traversal by reconstructing the absolute path directly.
-        const reconstructed =
-          (rootOf(raw) || "/") + [...consumed, part].filter(Boolean).join("/")
-        const directChildren = await dirs(reconstructed)
-        if (!active()) return []
-        if (directChildren.length === 0) return [] as string[]
-        paths = [reconstructed]
+        // AND /storage/emulated but allows /storage/emulated/0). Skip forward
+        // through remaining head segments until we find one that's listable.
+        let built = (rootOf(raw) || "/") + consumed.filter(Boolean).join("/")
+        let found = false
+        for (let j = headIdx; j < head.length; j++) {
+          built = built.endsWith("/") ? built + head[j] : built + "/" + head[j]
+          const probe = await dirs(built)
+          if (!active()) return []
+          if (probe.length > 0) {
+            paths = [built]
+            consumed.push(...head.slice(headIdx, j + 1))
+            headIdx = j + 1
+            found = true
+            break
+          }
+        }
+        if (!found) return [] as string[]
+        continue
       }
       consumed.push(part)
+      headIdx++
     }
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
@@ -267,6 +282,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
+  const isMobile = platform.platform === "mobile"
 
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
@@ -364,10 +380,147 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     dialog.close()
   }
 
+  /** The "current" directory the user is browsing. Derived from the search bar
+   *  if it parses as a path, otherwise the start directory. Used by mobile
+   *  "Open here" and "New folder" actions. */
+  function currentDir(): string | null {
+    const v = cleanInput(filter())
+    if (v) {
+      const trimmed = trimTrailing(normalizeDriveRoot(v))
+      // Only treat as a path if it looks like one
+      if (trimmed.startsWith("/") || trimmed.startsWith("~")) {
+        if (trimmed.startsWith("~")) {
+          const h = home()
+          if (h) return h + trimmed.slice(1)
+        }
+        return trimmed
+      }
+    }
+    return start() ?? null
+  }
+
+  /** Mobile: tap on a folder navigates into it instead of opening as project. */
+  function navigateInto(absolute: string) {
+    const withSlash = absolute.endsWith("/") ? absolute : absolute + "/"
+    list?.setFilter(withSlash)
+    setFilter(withSlash)
+  }
+
+  const [creatingFolder, setCreatingFolder] = createSignal(false)
+  const [newFolderName, setNewFolderName] = createSignal("")
+  const [createError, setCreateError] = createSignal<string | null>(null)
+  const [creating, setCreating] = createSignal(false)
+
+  async function handleCreateFolder() {
+    const name = newFolderName().trim()
+    if (!name) {
+      setCreateError("Folder name is required")
+      return
+    }
+    if (/[\\/]/.test(name)) {
+      setCreateError("Folder name cannot contain slashes")
+      return
+    }
+    const base = currentDir()
+    if (!base) {
+      setCreateError("No current directory")
+      return
+    }
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const target = base.endsWith("/") ? base + name : base + "/" + name
+      // Call POST /file/mkdir directly via the server URL since the typed SDK
+      // hasn't been regenerated yet for this new endpoint.
+      const baseUrl = sdk.url.replace(/\/+$/, "")
+      const resp = await (platform.fetch ?? fetch)(baseUrl + "/file/mkdir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: target }),
+      })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "")
+        throw new Error(text || `HTTP ${resp.status}`)
+      }
+      const data = (await resp.json().catch(() => null)) as { absolute?: string } | null
+      const absolute = data?.absolute ?? target
+      // Open the newly created folder as a project
+      resolve(absolute)
+    } catch (e: any) {
+      setCreateError(e?.message ?? String(e))
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
+      {/* Mobile action bar: back + "Open here" + "New folder" buttons */}
+      <Show when={isMobile && currentDir()}>
+        <div class="flex gap-2 px-3 pb-2">
+          <Show when={filter()}>
+            <Button
+              size="small"
+              variant="ghost"
+              onClick={() => {
+                const cur = currentDir()
+                if (!cur) return
+                const parent = parentOf(cur)
+                if (parent === cur) {
+                  list?.setFilter("")
+                  setFilter("")
+                } else {
+                  navigateInto(parent)
+                }
+              }}
+            >
+              &#8592; Back
+            </Button>
+            <Button size="small" variant="secondary" onClick={() => { const d = currentDir(); if (d) resolve(d) }}>
+              Open here
+            </Button>
+          </Show>
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => { setCreatingFolder(true); setNewFolderName(""); setCreateError(null) }}
+          >
+            New folder
+          </Button>
+        </div>
+      </Show>
+
+      {/* New folder inline form */}
+      <Show when={creatingFolder()}>
+        <div class="flex flex-col gap-2 px-3 pb-3">
+          <div class="text-12-regular text-text-weak">
+            Create in: {currentDir() ?? "?"}
+          </div>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              class="flex-1 rounded border border-border-base bg-background-base px-2 py-1 text-14-regular text-text-strong outline-none focus:border-border-focus"
+              placeholder="Folder name"
+              value={newFolderName()}
+              onInput={(e) => setNewFolderName(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") setCreatingFolder(false) }}
+              autofocus
+            />
+            <Button size="small" disabled={creating()} onClick={handleCreateFolder}>
+              {creating() ? "..." : "Create"}
+            </Button>
+            <Button size="small" variant="ghost" onClick={() => setCreatingFolder(false)}>
+              Cancel
+            </Button>
+          </div>
+          <Show when={createError()}>
+            <div class="text-12-regular text-icon-critical-base">{createError()}</div>
+          </Show>
+        </div>
+      </Show>
+
       <List
-        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
+        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: !creatingFolder() }}
         emptyMessage={language.t("dialog.directory.empty")}
         loadingMessage={language.t("common.loading")}
         items={items}
@@ -398,7 +551,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         }}
         onSelect={(path) => {
           if (!path) return
-          resolve(path.absolute)
+          if (isMobile && (path.group === "storage" || path.group === "folders")) {
+            // Mobile: tap navigates into the folder instead of opening as project
+            navigateInto(path.absolute)
+          } else {
+            resolve(path.absolute)
+          }
         }}
       >
         {(item) => {

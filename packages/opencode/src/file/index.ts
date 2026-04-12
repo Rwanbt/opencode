@@ -330,6 +330,7 @@ export namespace File {
     readonly status: () => Effect.Effect<File.Info[]>
     readonly read: (file: string) => Effect.Effect<File.Content>
     readonly list: (dir?: string) => Effect.Effect<File.Node[]>
+    readonly mkdir: (dir: string) => Effect.Effect<{ absolute: string }>
     readonly search: (input: {
       query: string
       limit?: number
@@ -655,8 +656,17 @@ export namespace File {
         return output
       })
 
+      const mkdir = Effect.fn("File.mkdir")(function* (dir: string) {
+        const resolved = path.isAbsolute(dir) ? dir : path.join(Instance.directory, dir)
+        if (!Instance.containsPath(resolved)) {
+          throw new Error("Access denied: path escapes project directory")
+        }
+        yield* appFs.ensureDir(resolved).pipe(Effect.catch(() => Effect.void))
+        return { absolute: resolved }
+      })
+
       log.info("init")
-      return Service.of({ init, status, read, list, search })
+      return Service.of({ init, status, read, list, mkdir, search })
     }),
   )
 
@@ -678,6 +688,10 @@ export namespace File {
 
   export async function list(dir?: string) {
     return runPromise((svc) => svc.list(dir))
+  }
+
+  export async function mkdir(dir: string) {
+    return runPromise((svc) => svc.mkdir(dir))
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
