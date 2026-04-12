@@ -683,17 +683,30 @@ a,
     border-left: none !important;
   }
 
-  /* Ensure the inner content fills properly */
+  /* Inner container — side-by-side when both panels open */
   #review-panel.mobile-side-panel > div {
-    flex-direction: column !important;
+    flex-direction: row !important;
     width: 100% !important;
     height: 100% !important;
   }
 
-  /* File tree inside the panel — full width */
-  #file-tree-panel {
-    width: 100% !important;
+  /* Review content — flex:1 when visible, hidden when closed */
+  #review-panel.mobile-side-panel > div > div:first-child:not([aria-hidden="true"]) {
+    flex: 1 1 0% !important;
     min-width: 0 !important;
+  }
+  #review-panel.mobile-side-panel > div > div:first-child[aria-hidden="true"] {
+    display: none !important;
+  }
+
+  /* File tree — flex:1 when visible, hidden when closed */
+  #file-tree-panel:not([aria-hidden="true"]) {
+    flex: 1 1 0% !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  #file-tree-panel[aria-hidden="true"] {
+    display: none !important;
   }
 }
 
