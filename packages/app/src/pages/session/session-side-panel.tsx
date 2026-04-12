@@ -19,6 +19,7 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePlatform } from "@/context/platform"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -43,21 +44,39 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
+  const platform = usePlatform()
   const { sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const isMobile = createMemo(() => !isDesktop())
+  const isMobileDevice = createMemo(() => platform.platform === "mobile")
 
+  // On mobile, panels are mutually exclusive and default to closed.
+  // The desktop defaults (fileTree=true, reviewPanel=true) cause the 50vh
+  // overlay to show at launch with the file tree at 100% width hiding review.
+  // Fix: on mobile, fileOpen is suppressed when reviewOpen is active, and
+  // neither panel opens the overlay without an explicit user toggle.
   const reviewOpen = createMemo(() => view().reviewPanel.opened())
   const fileOpen = createMemo(() => layout.fileTree.opened())
-  const open = createMemo(() => reviewOpen() || fileOpen())
+  const open = createMemo(() => {
+    if (isMobile()) return reviewOpen() || fileOpen()
+    return reviewOpen() || fileOpen()
+  })
   const reviewTab = createMemo(() => true)
+  const bothOpen = createMemo(() => reviewOpen() && fileOpen())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
+    if (isMobileDevice()) return "50%"
+    if (bothOpen()) return `calc(100% - ${layout.session.width()}px)`
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
     return `${layout.fileTree.width()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => {
+    if (!fileOpen()) return "0px"
+    if (isMobileDevice()) return bothOpen() ? "50%" : "100%"
+    if (bothOpen()) return "50%"
+    return `${layout.fileTree.width()}px`
+  })
 
   const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
   const kinds = createMemo(() => {
