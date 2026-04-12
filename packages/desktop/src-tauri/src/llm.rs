@@ -289,7 +289,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         return Err(format!("Model not found: {}", filename));
     }
 
-    // Unload any existing model first
+    // Unload any existing model managed by this app
     {
         let state = app.state::<LlmServerState>();
         let mut child_guard = state.child.lock().unwrap();
@@ -298,6 +298,44 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
         }
         *child_guard = None;
         *state.active_model.lock().unwrap() = None;
+    }
+
+    // Check for orphaned llama-server on our port (e.g. from a crash or external launch)
+    let client = reqwest::Client::new();
+    if let Ok(resp) = client
+        .get(format!("http://127.0.0.1:{}/props", LLM_PORT))
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+    {
+        if resp.status().is_success() {
+            // A server is already running — check if it has the right model
+            let body = resp.text().await.unwrap_or_default();
+            if body.contains(&filename) {
+                tracing::info!("[LLM] Reusing existing llama-server with {}", filename);
+                let state = app.state::<LlmServerState>();
+                *state.active_model.lock().unwrap() = Some(filename.clone());
+                return Ok(());
+            }
+            // Wrong model — kill the orphan via OS
+            tracing::warn!("[LLM] Killing orphaned llama-server (wrong model) on port {}", LLM_PORT);
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", &format!(
+                        "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr \"0.0.0.0:{}\" ^| findstr LISTENING') do taskkill /PID %a /F",
+                        LLM_PORT
+                    )])
+                    .output();
+            }
+            #[cfg(unix)]
+            {
+                let _ = std::process::Command::new("sh")
+                    .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
+                    .output();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }
     }
 
     // Ensure llama-server runtime is available

@@ -212,14 +212,14 @@ export namespace ToolRegistry {
           "webfetch",
         ])
         const LOCAL_SKELETONS: Record<string, string> = {
-          bash: "Execute shell command. Args: {command: string}. Returns stdout.",
-          read: "Read file content. Args: {filePath: string, offset?: number, limit?: number}. Returns file text.",
-          edit: "Replace exact text in file. Args: {filePath: string, oldString: string, newString: string}. oldString must be copied EXACTLY from file (whitespace matters). Read file first.",
-          write: "Create or overwrite file. Args: {filePath: string, content: string}. Use edit for partial changes.",
+          bash: "Execute shell command. Args: {command: string}. Returns stdout. Use for: cargo check, cargo build, cargo test, mkdir, ls.",
+          read: "Read file content. Args: {filePath: string, offset?: number, limit?: number}. Returns file text. ALWAYS read before edit.",
+          edit: "Replace exact text in file. Args: {filePath: string, oldString: string, newString: string}. oldString must be copied EXACTLY from file (whitespace matters). Use a short unique snippet (2-5 lines), never the whole file. Read file first.",
+          write: "Create NEW file. Args: {filePath: string, content: string}. ONLY works on files that don't exist yet. For existing files, use read then edit.",
           glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
           grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
           question: "Ask user a question. Args: {question: string}. Use when you need clarification.",
-          websearch: "Search the web. Args: {query: string}. Use when unsure about a dependency source, API, library name, or version.",
+          websearch: "Search the web. Args: {query: string}. Search BEFORE coding when unsure about any library API, crate name, or version.",
           webfetch: "Fetch a URL as text. Args: {url: string}. Use to read docs, READMEs, or pages found via websearch.",
         }
         const isLocal = model.providerID === ("local-llm" as ProviderID)

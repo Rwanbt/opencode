@@ -22,6 +22,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "../tool/registry"
+import { canFuzzyMatch } from "../tool/edit"
 import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -400,13 +401,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             return "oldString cannot be empty. Read the file and copy the exact text to replace."
           }
 
-          // Guard 4 (PRIORITY) — oldString must exist in file
+          // Guard 4 — oldString must be matchable (exact or fuzzy)
           if (args.oldString) {
             try {
               const resolved = path.resolve(args.filePath)
               const content = fs.readFileSync(resolved, "utf-8")
-              if (!content.includes(args.oldString)) {
-                return "oldString not found in file. Read the file and copy exact text."
+              if (!canFuzzyMatch(content, args.oldString)) {
+                return "oldString not found in file (even with whitespace tolerance). Re-read the file with the read tool first, then copy a short unique snippet (2-5 lines) exactly as it appears."
               }
             } catch {}
           }
@@ -430,7 +431,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         if (toolId === "write" && args.filePath) {
           const resolved = path.resolve(args.filePath)
           if (fs.existsSync(resolved)) {
-            return "File already exists. Use edit instead of write."
+            return "File already exists. Read the file first with the read tool, then use edit with a small unique oldString snippet to modify it."
           }
         }
       }
