@@ -361,26 +361,31 @@ export function TerminalPanel() {
                 <TerminalMobileToolbar activeId={() => terminal.active()} />
               </Show>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
-                  {(id) => {
-                    const ops = terminal.bind()
-                    return (
-                      <Show when={all().find((pty) => pty.id === id)}>
-                        {(pty) => (
-                          <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                            <Terminal
-                              pty={pty()}
-                              autoFocus={opened() && !isMobile()}
-                              onConnect={() => ops.trim(id)}
-                              onCleanup={ops.update}
-                              onConnectError={() => ops.clone(id)}
-                            />
-                          </div>
-                        )}
-                      </Show>
-                    )
-                  }}
-                </Show>
+                {(() => {
+                  const ops = terminal.bind()
+                  return (
+                    <For each={all()}>
+                      {(pty) => (
+                        <div
+                          id={`terminal-wrapper-${pty.id}`}
+                          class="absolute inset-0"
+                          style={{
+                            visibility: terminal.active() === pty.id ? "visible" : "hidden",
+                            "z-index": terminal.active() === pty.id ? 1 : 0,
+                          }}
+                        >
+                          <Terminal
+                            pty={pty}
+                            autoFocus={opened() && !isMobile() && terminal.active() === pty.id}
+                            onConnect={() => ops.trim(pty.id)}
+                            onCleanup={ops.update}
+                            onConnectError={() => ops.clone(pty.id)}
+                          />
+                        </div>
+                      )}
+                    </For>
+                  )
+                })()}
               </div>
             </div>
             <DragOverlay>
