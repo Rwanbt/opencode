@@ -25,21 +25,6 @@ const DECLARATION_PATTERNS: Record<string, RegExp> = {
 
 const SOURCE_EXTENSIONS = new Set(Object.keys(DECLARATION_PATTERNS))
 
-// Additional source extensions we list but don't extract declarations from
-const EXTRA_SOURCE_EXTENSIONS = new Set([
-  ".json",
-  ".toml",
-  ".yaml",
-  ".yml",
-  ".md",
-  ".css",
-  ".scss",
-  ".html",
-  ".sql",
-  ".sh",
-  ".bash",
-])
-
 interface FileInfo {
   relativePath: string
   absolutePath: string
@@ -113,18 +98,17 @@ export namespace ProjectContext {
       return []
     }
 
-    // Filter: source files, not ignored, < 500 lines
+    // Filter: indexable source/config files, not ignored
     const results: FileInfo[] = []
     for (const rel of allFiles) {
-      const ext = path.extname(rel).toLowerCase()
-      if (!SOURCE_EXTENSIONS.has(ext) && !EXTRA_SOURCE_EXTENSIONS.has(ext)) continue
       if (FileIgnore.match(rel)) continue
 
       const abs = path.join(dir, rel)
       try {
+        const stat = fs.statSync(abs)
         const content = fs.readFileSync(abs, "utf-8")
         const lineCount = content.split("\n").length
-        if (lineCount > 500) continue
+        if (!FileIgnore.isIndexable(rel, lineCount, stat.size)) continue
         results.push({ relativePath: rel, absolutePath: abs, lines: lineCount })
       } catch {
         continue
