@@ -163,7 +163,7 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
 
 /// Load a GGUF model via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
-pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), String> {
+pub async fn load_llm_model(app: AppHandle, filename: String, _draft_model: Option<String>) -> Result<(), String> {
     let model_path = runtime_dir(&app).join("models").join(&filename);
     if !model_path.exists() {
         return Err(format!("Model not found: {}", filename));

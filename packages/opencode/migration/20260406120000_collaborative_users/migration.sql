@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS "collab_user" (
   "time_created" integer NOT NULL DEFAULT (unixepoch() * 1000),
   "time_updated" integer NOT NULL DEFAULT (unixepoch() * 1000)
 );
-
+--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "collab_user_username_idx" ON "collab_user" ("username");
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "collab_user_token" (
   "id" text PRIMARY KEY NOT NULL,
   "user_id" text NOT NULL REFERENCES "collab_user"("id") ON DELETE CASCADE,
@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS "collab_user_token" (
   "expires_at" integer NOT NULL,
   "time_created" integer NOT NULL DEFAULT (unixepoch() * 1000)
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "collab_user_token_user_idx" ON "collab_user_token" ("user_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "collab_user_token_hash_idx" ON "collab_user_token" ("token_hash");
-
--- session.user_id column and index added in migration 20260406120001

@@ -21,13 +21,14 @@ export type ModelConfiguration = {
   kvCacheType: "auto" | "q8_0" | "q4_0" | "f16"
   offloadMode: "auto" | "gpu-max" | "balanced"
   mmapMode: "auto" | "on" | "off"
+  draftModel: string
 }
 
 const PRESETS: Record<string, Omit<ModelConfiguration, "preset">> = {
-  fast: { outputTokensMode: "auto", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 8192, kvCacheType: "q4_0", offloadMode: "gpu-max", mmapMode: "auto" },
-  quality: { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q8_0", offloadMode: "auto", mmapMode: "auto" },
-  eco: { outputTokensMode: "manual", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 16384, kvCacheType: "q4_0", offloadMode: "balanced", mmapMode: "on" },
-  "long-context": { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q4_0", offloadMode: "auto", mmapMode: "auto" },
+  fast: { outputTokensMode: "auto", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 8192, kvCacheType: "q4_0", offloadMode: "gpu-max", mmapMode: "auto", draftModel: "" },
+  quality: { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q8_0", offloadMode: "auto", mmapMode: "auto", draftModel: "" },
+  eco: { outputTokensMode: "manual", outputTokensManual: 4096, temperature: 0.5, topP: 0.9, contextMode: "manual", contextManual: 16384, kvCacheType: "q4_0", offloadMode: "balanced", mmapMode: "on", draftModel: "" },
+  "long-context": { outputTokensMode: "auto", outputTokensManual: 8192, temperature: 0.7, topP: 0.95, contextMode: "auto", contextManual: 131072, kvCacheType: "q4_0", offloadMode: "auto", mmapMode: "auto", draftModel: "" },
 }
 
 const DEFAULT_CONFIG: ModelConfiguration = {
@@ -41,6 +42,7 @@ const DEFAULT_CONFIG: ModelConfiguration = {
   kvCacheType: "auto",
   offloadMode: "auto",
   mmapMode: "auto",
+  draftModel: "",
 }
 
 const STORAGE_KEY = "opencode-model-config"
@@ -303,8 +305,58 @@ export const SettingsConfiguration: Component = () => {
             mmap lets the OS page model weights from SSD on demand. Useful for large models that exceed RAM. Disable for maximum speed if the model fits in RAM.
           </div>
         </div>
+
+        {/* Speculative Decoding */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">Speculative Decoding (Local AI)</h3>
+          <SettingsList>
+            <SettingsRow
+              title="Draft model"
+              description="Small model for speculative decoding (2-3x speedup)"
+            >
+              <DraftModelSelect
+                current={config.draftModel}
+                onSelect={(v) => update("draftModel", v)}
+              />
+            </SettingsRow>
+          </SettingsList>
+          <div class="text-11-regular text-text-weak mt-1 px-1">
+            Uses a small model to draft tokens, verified by the main model. Requires extra VRAM. Active after next server restart.
+          </div>
+        </div>
       </div>
     </div>
+  )
+}
+
+function DraftModelSelect(props: { current: string; onSelect: (v: string) => void }) {
+  const [models] = createResource(async () => {
+    try {
+      const all: { filename: string; size: number }[] = await invokeTauri("list_models")
+      // Only show small models suitable as drafts (< 2 GB)
+      return all.filter((m) => m.size < 2_000_000_000)
+    } catch {
+      return []
+    }
+  })
+
+  const formatSize = (bytes: number) => `${Math.round(bytes / 1_000_000)} MB`
+
+  return (
+    <Select
+      size="normal"
+      options={["", ...(models() ?? []).map((m) => m.filename)]}
+      current={props.current}
+      label={(x) => {
+        if (x === "") return "None (disabled)"
+        const m = models()?.find((m) => m.filename === x)
+        const name = x.replace(/\.gguf$/i, "")
+        return m ? `${name} (${formatSize(m.size)})` : name
+      }}
+      onSelect={(v) => {
+        if (v !== undefined) props.onSelect(v)
+      }}
+    />
   )
 }
 

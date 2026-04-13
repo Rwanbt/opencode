@@ -102,7 +102,7 @@ export namespace ProjectContext {
    * Scan project directory for source files.
    * Returns files sorted by modification time (most recent first), limited to 50.
    */
-  async function scanFiles(dir: string): Promise<FileInfo[]> {
+  export async function scanFiles(dir: string): Promise<FileInfo[]> {
     let allFiles: string[]
     try {
       allFiles = await Glob.scan("**/*", {

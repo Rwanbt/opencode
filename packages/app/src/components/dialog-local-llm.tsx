@@ -242,7 +242,8 @@ export function DialogLocalLLM() {
     setError("")
     setLoading(filename)
     try {
-      await invokeTauri("load_llm_model", { filename })
+      const draftModel = (() => { try { const c = JSON.parse(localStorage.getItem("opencode-model-config") ?? "{}"); return c.draftModel || null } catch { return null } })()
+      await invokeTauri("load_llm_model", { filename, draftModel })
       setActiveModel(filename)
       setHealthy(true)
       // Register local-llm as a provider and remove from disabled list
