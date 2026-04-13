@@ -1,4 +1,4 @@
-import { Component, createSignal, createResource, JSX, Show } from "solid-js"
+import { Component, createSignal, createResource, JSX, Show, onCleanup } from "solid-js"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
 import { Button } from "@opencode-ai/ui/button"
@@ -330,7 +330,8 @@ export const SettingsConfiguration: Component = () => {
 }
 
 function DraftModelSelect(props: { current: string; onSelect: (v: string) => void }) {
-  const [models] = createResource(async () => {
+  const [tick, setTick] = createSignal(0)
+  const [models, { refetch }] = createResource(tick, async () => {
     try {
       const all: { filename: string; size: number }[] = await invokeTauri("list_models")
       // Only show small models suitable as drafts (< 4 GB)
@@ -339,6 +340,13 @@ function DraftModelSelect(props: { current: string; onSelect: (v: string) => voi
       return []
     }
   })
+  // Re-scan models directory when window regains focus
+  // (covers: new file added while settings open, alt-tabbed back)
+  const onVisible = () => {
+    if (document.visibilityState === "visible") setTick((t) => t + 1)
+  }
+  document.addEventListener("visibilitychange", onVisible)
+  onCleanup(() => document.removeEventListener("visibilitychange", onVisible))
 
   const formatSize = (bytes: number) => `${Math.round(bytes / 1_000_000)} MB`
 
