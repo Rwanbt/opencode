@@ -420,8 +420,12 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     if let Some(ref draft) = draft_model {
         let draft_path = models_dir(&app).join(draft);
         if draft_path.exists() {
-            // VRAM Guard: check if enough free VRAM for the draft model
-            if check_vram_free(1500) {
+            // VRAM Guard: need draft file size + 500 MB margin for KV cache
+            let required_mib = std::fs::metadata(&draft_path)
+                .ok()
+                .map(|m| m.len() / (1024 * 1024) + 500)
+                .unwrap_or(1500);
+            if check_vram_free(required_mib) {
                 cmd.arg("--model-draft")
                     .arg(draft_path.to_string_lossy().to_string())
                     .arg("--draft")
@@ -430,9 +434,9 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
                     .arg("0.75")
                     .arg("--gpu-layers-draft")
                     .arg("99");
-                tracing::info!("[LLM] Speculative decoding enabled with {}", draft);
+                tracing::info!("[LLM] Speculative decoding enabled with {} (need {} MiB VRAM)", draft, required_mib);
             } else {
-                tracing::info!("[LLM] Speculative decoding skipped (insufficient VRAM)");
+                tracing::info!("[LLM] Speculative decoding skipped (need {} MiB free VRAM)", required_mib);
             }
         }
     }

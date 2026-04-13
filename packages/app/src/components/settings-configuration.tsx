@@ -333,8 +333,8 @@ function DraftModelSelect(props: { current: string; onSelect: (v: string) => voi
   const [models] = createResource(async () => {
     try {
       const all: { filename: string; size: number }[] = await invokeTauri("list_models")
-      // Only show small models suitable as drafts (< 2 GB)
-      return all.filter((m) => m.size < 2_000_000_000)
+      // Only show small models suitable as drafts (< 4 GB)
+      return all.filter((m) => m.size < 4_000_000_000)
     } catch {
       return []
     }
