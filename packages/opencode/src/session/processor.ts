@@ -18,6 +18,7 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
@@ -55,6 +56,7 @@ export namespace SessionProcessor {
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
     telemetry: ToolTelemetry
+    adaptiveHintInjected: boolean
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
@@ -103,6 +105,7 @@ export namespace SessionProcessor {
           model: input.model,
           toolcalls: {},
           telemetry: { calls: 0, success: 0, errors: 0, byTool: {} },
+          adaptiveHintInjected: false,
           shouldBreak: false,
           snapshot: initialSnapshot,
           blocked: false,
@@ -286,21 +289,45 @@ export namespace SessionProcessor {
 
             case "tool-error": {
               const match = ctx.toolcalls[value.toolCallId]
+              const toolName = match?.tool ?? value.toolName
+
+              // Telemetry: track error (even for guard rejections where match is undefined)
+              if (toolName) {
+                ctx.telemetry.calls++
+                ctx.telemetry.errors++
+                if (!ctx.telemetry.byTool[toolName]) ctx.telemetry.byTool[toolName] = { calls: 0, errors: 0 }
+                ctx.telemetry.byTool[toolName].calls++
+                ctx.telemetry.byTool[toolName].errors++
+              }
+
+              // Adaptive hint: suggest write over edit when edit fails too often
+              let errorMsg = value.error instanceof Error ? value.error.message : String(value.error)
+              if (toolName === "edit" && !ctx.adaptiveHintInjected) {
+                const editStats = ctx.telemetry.byTool["edit"]
+                const writeStats = ctx.telemetry.byTool["write"]
+                if (editStats && editStats.calls >= 4) {
+                  const editSuccessRate = (editStats.calls - editStats.errors) / editStats.calls
+                  const writeSuccessRate = writeStats
+                    ? (writeStats.calls - writeStats.errors) / Math.max(writeStats.calls, 1)
+                    : 0.5
+                  if (editSuccessRate < 0.5 && (writeSuccessRate > editSuccessRate || (!writeStats?.calls && editSuccessRate < 0.3))) {
+                    const maxOutputTokens = ProviderTransform.maxOutputTokens(ctx.model)
+                    const maxWriteLines = Math.floor(maxOutputTokens / 8)
+                    errorMsg += ` Edit success rate is ${Math.round(editSuccessRate * 100)}% this session. Prefer write tool to rewrite entire file for files under ${maxWriteLines} lines.`
+                    ctx.adaptiveHintInjected = true
+                    log.info("adaptive hint injected", { editSuccessRate, maxWriteLines })
+                  }
+                }
+              }
+
               if (!match || match.state.status !== "running") return
-              // Telemetry: track error
-              ctx.telemetry.calls++
-              ctx.telemetry.errors++
-              const toolName = match.tool
-              if (!ctx.telemetry.byTool[toolName]) ctx.telemetry.byTool[toolName] = { calls: 0, errors: 0 }
-              ctx.telemetry.byTool[toolName].calls++
-              ctx.telemetry.byTool[toolName].errors++
 
               yield* session.updatePart({
                 ...match,
                 state: {
                   status: "error",
                   input: value.input ?? match.state.input,
-                  error: value.error instanceof Error ? value.error.message : String(value.error),
+                  error: errorMsg,
                   time: { start: match.state.time.start, end: Date.now() },
                 },
               })
