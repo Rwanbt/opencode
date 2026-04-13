@@ -407,7 +407,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const resolved = path.resolve(args.filePath)
               const content = fs.readFileSync(resolved, "utf-8")
               if (!canFuzzyMatch(content, args.oldString)) {
-                return "oldString not found in file (even with whitespace tolerance). Re-read the file with the read tool first, then copy a short unique snippet (2-5 lines) exactly as it appears."
+                let msg = "oldString not found in file (even with whitespace tolerance). Re-read the file with the read tool first, then copy a short unique snippet (2-5 lines) exactly as it appears."
+                const toolParts = messages.flatMap((m) => m.parts).filter((p): p is MessageV2.ToolPart => p.type === "tool")
+                const editParts = toolParts.filter((p) => p.tool === "edit")
+                const editErrors = editParts.filter((p) => p.state.status === "error").length
+                const editSuccesses = editParts.filter((p) => p.state.status === "completed").length
+                const editTotal = editErrors + editSuccesses
+                if (editTotal >= 4) {
+                  const editRate = editSuccesses / editTotal
+                  const writeParts = toolParts.filter((p) => p.tool === "write")
+                  const writeErrors = writeParts.filter((p) => p.state.status === "error").length
+                  const writeRate = writeParts.length > 0 ? (writeParts.length - writeErrors) / writeParts.length : 0.5
+                  if (editRate < 0.5 && (writeRate > editRate || (writeParts.length === 0 && editRate < 0.3))) {
+                    const maxWriteLines = Math.floor(ProviderTransform.maxOutputTokens(model) / 8)
+                    msg += ` Prefer write tool for files under ${maxWriteLines} lines.`
+                  }
+                }
+                return msg
               }
             } catch {}
           }
