@@ -19,6 +19,8 @@ import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import type { ProjectID } from "../project/schema"
 import path from "path"
+import fs from "fs"
+import { FileIgnore } from "../file/ignore"
 
 const log = Log.create({ service: "rag" })
 const MAX_BATCH_SIZE = 50
@@ -75,10 +77,17 @@ export namespace RAG {
   export async function indexFile(projectID: ProjectID, filePath: string): Promise<number> {
     if (!(await isEnabled())) return 0
     const provider = await getActiveProvider()
-    const content = await Filesystem.readText(filePath)
-    if (!content.trim()) return 0
 
     const relativePath = path.relative(Instance.worktree, filePath)
+
+    // Skip files that don't pass the indexability filter
+    if (FileIgnore.match(relativePath)) return 0
+    let byteSize: number | undefined
+    try { byteSize = fs.statSync(filePath).size } catch {}
+    const content = await Filesystem.readText(filePath)
+    if (!content.trim()) return 0
+    const lineCount = content.split("\n").length
+    if (!FileIgnore.isIndexable(relativePath, lineCount, byteSize)) return 0
     const chunks = chunkCode(content, relativePath)
     if (chunks.length === 0) return 0
 
@@ -109,17 +118,45 @@ export namespace RAG {
     return indexVectorChunks(projectID, "learning", filePath, chunks, config)
   }
 
-  /** Index multiple files in batch. */
+  /** Index multiple files in batch. Removes stale entries for files no longer in the set. */
   export async function indexFiles(projectID: ProjectID, filePaths: string[]): Promise<number> {
     if (!(await isEnabled())) return 0
+
+    // Build set of relative paths for all files that pass indexability checks
+    const validRelPaths = new Set<string>()
     let total = 0
     for (const fp of filePaths) {
       try {
+        const rel = path.relative(Instance.worktree, fp)
+        validRelPaths.add(rel)
         total += await indexFile(projectID, fp)
       } catch (e) {
         log.warn("failed to index file", { file: fp, error: e })
       }
     }
+
+    // Remove stale BM25 docs for files that are no longer in the valid set
+    try {
+      const db = Database.Client()
+      const existingDocs = db
+        .select({ source_id: BM25DocTable.source_id })
+        .from(BM25DocTable)
+        .where(and(eq(BM25DocTable.project_id, projectID), eq(BM25DocTable.source_type, "file")))
+        .all()
+      const existingSources = new Set(existingDocs.map((r) => r.source_id))
+
+      for (const sourceId of existingSources) {
+        if (!validRelPaths.has(sourceId)) {
+          db.delete(BM25DocTable)
+            .where(and(eq(BM25DocTable.project_id, projectID), eq(BM25DocTable.source_type, "file"), eq(BM25DocTable.source_id, sourceId)))
+            .run()
+          log.info("removed stale bm25 docs", { sourceId })
+        }
+      }
+    } catch (e) {
+      log.warn("failed to clean stale bm25 docs", { error: e })
+    }
+
     return total
   }
 
