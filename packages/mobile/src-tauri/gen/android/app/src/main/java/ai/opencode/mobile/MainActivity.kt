@@ -86,6 +86,23 @@ class MainActivity : TauriActivity() {
       android.util.Log.w("OpenCode", "LlamaEngine init failed: ${e.message}")
     }
 
+    // Start PTY server (must be spawned from Java context = Seccomp: 0)
+    // bun/musl has Seccomp: 2 which blocks fork()/clone() from forkpty children.
+    // pty_server runs as a standalone binary and manages PTY sessions over TCP.
+    Thread {
+      try {
+        val svc = LlamaService.waitForInstance(5000)
+        if (svc != null) {
+          svc.spawnPtyServer(nativeLibDir, runtimeDir.absolutePath)
+          android.util.Log.i("OpenCode", "PTY server spawn requested")
+        } else {
+          android.util.Log.w("OpenCode", "LlamaService not ready, PTY server not started")
+        }
+      } catch (e: Exception) {
+        android.util.Log.w("OpenCode", "PTY server spawn failed: ${e.message}")
+      }
+    }.start()
+
     // Auto-load last used local model if available
     Thread {
       try {

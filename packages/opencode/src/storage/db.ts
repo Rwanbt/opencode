@@ -95,14 +95,18 @@ export namespace Database {
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
+    // OPENCODE_MIGRATIONS can be inlined via --define (compile-time) or set
+    // on globalThis by a wrapper module (runtime, used on Android mobile).
     const entries =
       typeof OPENCODE_MIGRATIONS !== "undefined"
         ? OPENCODE_MIGRATIONS
-        : migrations(path.join(import.meta.dirname, "../../migration"))
+        : (globalThis as any).OPENCODE_MIGRATIONS
+          ? (globalThis as any).OPENCODE_MIGRATIONS
+          : migrations(path.join(import.meta.dirname, "../../migration"))
     if (entries.length > 0) {
       log.info("applying migrations", {
         count: entries.length,
-        mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
+        mode: typeof OPENCODE_MIGRATIONS !== "undefined" || (globalThis as any).OPENCODE_MIGRATIONS ? "bundled" : "dev",
       })
       if (Flag.OPENCODE_SKIP_MIGRATIONS) {
         for (const item of entries) {

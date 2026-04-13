@@ -247,6 +247,7 @@ pub async fn start_embedded_server(
         ("libbash_exec.so", "sh"),
         ("librg_exec.so", "rg"),
         ("libbun_exec.so", "bun"),
+        ("libtoybox_exec.so", "toybox"),
     ];
     for (src_name, link_name) in &bin_links {
         let src = nlib_dir.join(src_name);
@@ -260,6 +261,94 @@ pub async fn start_embedded_server(
             let _ = std::os::unix::fs::symlink(&src, &link);
         }
     }
+
+    // Toybox applet symlinks — provides standard Unix commands (ls, cat, grep, etc.)
+    // Android SELinux blocks exec of /system/bin/* from app sandbox, but binaries
+    // in nativeLibraryDir are allowed. Toybox multi-call binary detects the command
+    // name from argv[0] (the symlink name).
+    let toybox_src = nlib_dir.join("libtoybox_exec.so");
+    if toybox_src.exists() {
+        let toybox_cmds = [
+            // Core file operations
+            "ls", "cat", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch",
+            "chmod", "chown", "chgrp", "stat", "file", "readlink", "realpath",
+            // Text processing
+            "grep", "egrep", "fgrep", "sed", "head", "tail", "wc", "sort",
+            "uniq", "tr", "cut", "tee", "xargs", "diff", "paste", "fold",
+            "expand", "fmt", "nl", "od", "strings", "rev",
+            // Search & navigation
+            "find", "which", "dirname", "basename",
+            // Editors & viewers
+            "vi", "hexedit",
+            // Archives
+            "tar", "gzip", "gunzip", "zcat", "bunzip2", "bzcat", "cpio",
+            // System info
+            "ps", "kill", "killall", "df", "du", "free", "uptime", "uname",
+            "hostname", "id", "whoami", "env", "printenv", "date", "cal",
+            "dmesg", "top", "w", "nproc", "pgrep", "pkill",
+            // Network
+            "ping", "wget", "nc", "netcat", "netstat", "ifconfig", "host",
+            // Misc utilities
+            "printf", "echo", "test", "true", "false", "sleep", "yes",
+            "md5sum", "sha1sum", "sha256sum", "seq", "dd", "clear",
+            "reset", "time", "timeout", "watch", "tee",
+            "base64", "xxd", "cmp", "patch", "split", "truncate",
+            "nohup", "nice", "xargs", "install",
+        ];
+        for cmd in &toybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            // Always verify target matches — symlinks become dangling after APK updates
+            // because nativeLibraryDir path changes with each install.
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != toybox_src,
+                Err(_) => true,
+            };
+            if needs {
+                let _ = fs::remove_file(&link);
+                let _ = std::os::unix::fs::symlink(&toybox_src, &link);
+            }
+        }
+    }
+
+    // Create shell init file (.mkshrc) for /system/bin/sh (mksh) with colors,
+    // aliases, and a useful prompt.  Also sourced via ENV variable.
+    let mkshrc_path = home_dir.join(".mkshrc");
+    let mkshrc_content = format!(r#"# OpenCode mobile shell init
+export TERM=xterm-256color
+export PATH="{bin}:{nlib}:$PATH"
+export HOME="{home}"
+export ENV="{home}/.mkshrc"
+
+# Colored prompt: green user@host, blue cwd
+PS1=$'\033[1;32m\\u@opencode\033[0m:\033[1;34m\\w\033[0m$ '
+
+# Aliases with colors
+alias ls='ls --color=auto'
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias grep='grep --color=auto'
+alias egrep='egrep --color=auto'
+alias fgrep='fgrep --color=auto'
+
+# Useful aliases
+alias ..='cd ..'
+alias ...='cd ../..'
+alias cls='clear'
+"#,
+        bin = bin_link_dir.display(),
+        nlib = nlib_dir.display(),
+        home = home_dir.display(),
+    );
+    let _ = fs::write(&mkshrc_path, &mkshrc_content);
+
+    // Also create .profile for login shells
+    let profile_path = home_dir.join(".profile");
+    let profile_content = format!(
+        "export ENV=\"{home}/.mkshrc\"\n. \"$ENV\"\n",
+        home = home_dir.display(),
+    );
+    let _ = fs::write(&profile_path, &profile_content);
 
     // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
     let resolv_path = dir.join("resolv.conf");
@@ -296,7 +385,10 @@ pub async fn start_embedded_server(
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
 
-    // Build PATH with bin links and nativeLibraryDir first
+    // Build PATH with bin links and nativeLibraryDir.
+    // NOTE: /system/bin is intentionally excluded — Android SELinux blocks exec()
+    // of system binaries from the untrusted_app domain, causing silent failures
+    // and terminal freezes. All needed commands are provided via toybox symlinks.
     let sys_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path);
 
@@ -306,11 +398,15 @@ pub async fn start_embedded_server(
     // mobile-entry.ts reads this file and applies env vars at startup.
     let env_file = dir.join(".env_vars");
     let env_content = format!(
-        "HOME={home}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
         home = home_dir.display(),
         cert = ca_bundle_path.display(),
         resolv = resolv_path.display(),
-        shell = bin_link_dir.join("bash").display(),
+        // Use /system/bin/sh (Android's mksh, bionic-compiled) instead of the
+        // statically-linked bash binary. Static bash uses its own libc fork()
+        // which triggers Android's seccomp filter (SIGSYS/exitCode=159).
+        // /system/bin/sh uses bionic's clone() which is whitelisted.
+        shell = "/system/bin/sh",
         pty = nlib_dir.join("librust_pty.so").display(),
         pw = password,
         xdg_data = home_dir.join(".local/share").display(),

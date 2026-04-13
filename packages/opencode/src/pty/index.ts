@@ -51,6 +51,16 @@ export namespace Pty {
   }
 
   const pty = lazy(async () => {
+    // On Android, bun runs with Seccomp: 2 (musl) which blocks fork()/clone()
+    // from forkpty children (SIGSYS / exitCode=159). Use pty_server instead ---
+    // a native binary spawned from Java context (Seccomp: 0) that relays PTY
+    // data over TCP.
+    if (process.env.OPENCODE_PTY_PORT) {
+      log.info("using android-pty via TCP", { port: process.env.OPENCODE_PTY_PORT })
+      const { androidSpawn } = await import("./android-pty")
+      return androidSpawn
+    }
+    log.info("using bun-pty FFI")
     const { spawn } = await import("bun-pty")
     return spawn
   })
@@ -181,7 +191,13 @@ export namespace Pty {
           args.push("-l")
         }
 
-        const cwd = input.cwd || s.dir
+        let cwd = input.cwd || s.dir
+        // On Android, the project dir may be "/" which is unreadable from
+        // the app sandbox.  Fall back to $HOME so the terminal opens in a
+        // usable directory.
+        if (cwd === "/" && process.env.HOME) {
+          cwd = process.env.HOME
+        }
         const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
         const env = {
           ...process.env,
