@@ -37,6 +37,7 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { ProjectContext } from "./project-context"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -1579,6 +1580,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
                 ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
+                // Inject project context — budget is calculated from actual system tokens used
+                const systemTokensUsed = Math.ceil(system.join("\n").length / 4)
+                const projectCtx = yield* Effect.promise(() => ProjectContext.build(Instance.directory, model, systemTokensUsed))
+                if (projectCtx) system.push(projectCtx)
                 const format = currentUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({

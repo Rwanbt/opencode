@@ -146,8 +146,10 @@ for i in {0..6}; do
   fi
   echo "  Patterns: $PAT_RESULT (logic +$LOGIC_PTS)"
 
-  # Websearch usage
+  # Tool usage counts
+  READS=$(grep -o '"tool":"read"' "$OUTFILE" 2>/dev/null | wc -l)
   WS=$(grep -o '"tool":"websearch"' "$OUTFILE" 2>/dev/null | wc -l)
+  echo "  Reads: $READS calls"
   [ "$WS" -gt 0 ] && echo "  Websearch: $WS calls"
 
   SCORE=$((COMPILE_PTS + LOGIC_PTS))
@@ -166,6 +168,7 @@ patterns: $PAT_RESULT
 logic_pts: $LOGIC_PTS
 compile_pts: $COMPILE_PTS
 score: $SCORE
+reads: $READS
 websearch: $WS
 PEOF
 done
