@@ -33,7 +33,7 @@ export async function deleteModel(filename: string): Promise<void> {
 
 /** Load a GGUF model into memory for inference (JNI/FFI). */
 export async function loadModel(filename: string, nCtx?: number, nThreads?: number): Promise<void> {
-  return invoke("load_llm_model", { filename, nCtx: nCtx ?? null, nThreads: nThreads ?? null })
+  return invoke("load_llm_model", { filename, nCtx: nCtx ?? null, nThreads: nThreads ?? null, draftModel: null })
 }
 
 /** Unload the current model from memory. */

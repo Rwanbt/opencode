@@ -38,6 +38,10 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { ProjectContext } from "./project-context"
+import { RAG } from "../rag"
+import { SessionLearn } from "./learn"
+import { readRecentLearnings } from "./learnings-context"
+import type { ProjectID } from "../project/schema"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -66,6 +70,20 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+
+// RAG indexing guard: index project files once per directory per process
+const ragIndexedDirs = new Set<string>()
+async function ensureRagIndexed() {
+  const dir = Instance.directory
+  if (ragIndexedDirs.has(dir)) return
+  ragIndexedDirs.add(dir)
+  if (!(await RAG.isEnabled())) return
+  try {
+    const files = await ProjectContext.scanFiles(dir)
+    if (files.length === 0) return
+    await RAG.indexFiles(Instance.project.id as ProjectID, files.map((f) => f.absolutePath))
+  } catch {}
+}
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -125,6 +143,26 @@ export namespace SessionPrompt {
           onIdle: Effect.gen(function* () {
             runners.delete(sessionID)
             yield* status.set(sessionID, { type: "idle" })
+            // Fire-and-forget learning extraction after session goes idle
+            yield* Effect.gen(function* () {
+              const msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+              if (msgs.length < 6) return
+              const lastAssistantMsg = [...msgs].reverse().find((m) => m.info.role === "assistant")
+              if (!lastAssistantMsg) return
+              const info = lastAssistantMsg.info as MessageV2.Assistant
+              if (!info.providerID || !info.modelID) return
+              yield* SessionLearn.extract({
+                sessionID,
+                providerID: info.providerID,
+                modelID: info.modelID,
+                projectID: Instance.project.id as ProjectID,
+              })
+            }).pipe(
+              Effect.provide(Agent.defaultLayer),
+              Effect.provide(Provider.defaultLayer),
+              Effect.ignore,
+              Effect.forkIn(scope),
+            )
           }),
           onBusy: status.set(sessionID, { type: "busy" }),
           onInterrupt: lastAssistant(sessionID),
@@ -1584,6 +1622,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const systemTokensUsed = Math.ceil(system.join("\n").length / 4)
                 const projectCtx = yield* Effect.promise(() => ProjectContext.build(Instance.directory, model, systemTokensUsed))
                 if (projectCtx) system.push(projectCtx)
+                // Inject RAG context (semantic search based on user's message)
+                const ragCtx = yield* Effect.promise(async () => {
+                  await ensureRagIndexed()
+                  if (!(await RAG.isEnabled())) return undefined
+                  const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+                  const userText = lastUserMsg?.parts
+                    .filter((p): p is MessageV2.TextPart => p.type === "text")
+                    .map((p) => p.text)
+                    .join(" ")
+                  if (!userText?.trim()) return undefined
+                  try {
+                    const results = await RAG.search(Instance.project.id as ProjectID, userText, { topK: 3 })
+                    return results.length > 0 ? RAG.formatContext(results) : undefined
+                  } catch { return undefined }
+                })
+                if (ragCtx) system.push(ragCtx)
+                // Learnings fallback: inject from disk if RAG didn't already include them
+                if (!ragCtx) {
+                  const learningsBudget = Math.max(0, Math.min(Math.floor(model.limit.context * 0.05), 500))
+                  const learningsCtx = readRecentLearnings(Instance.worktree, learningsBudget)
+                  if (learningsCtx) system.push(learningsCtx)
+                }
                 const format = currentUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({

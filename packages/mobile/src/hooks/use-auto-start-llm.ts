@@ -43,7 +43,7 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
     })
 
     console.log("[AutoLLM] Loading model:", filename)
-    await invoke("load_llm_model", { filename })
+    await invoke("load_llm_model", { filename, draftModel: null })
     currentlyLoaded = filename
     console.log("[AutoLLM] Model loaded successfully")
   } catch (e) {

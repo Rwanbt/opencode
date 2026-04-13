@@ -1058,7 +1058,7 @@ export namespace Config {
           rag: z
             .object({
               enabled: z.boolean().default(false).describe("Enable RAG (Retrieval-Augmented Generation) for semantic code search"),
-              provider: z.enum(["openai", "google"]).default("openai").describe("Embedding model provider"),
+              provider: z.enum(["openai", "google", "local", "bm25"]).default("bm25").describe("Embedding/search provider (bm25 works offline with zero config)"),
               model: z.string().default("text-embedding-3-small").describe("Embedding model name"),
               dimensions: z.number().int().default(1536).describe("Embedding vector dimensions"),
               api_key: z.string().optional().describe("API key for embedding provider (falls back to provider's default key)"),

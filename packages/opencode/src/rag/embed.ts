@@ -10,7 +10,7 @@ import { Config } from "../config/config"
 
 const log = Log.create({ service: "rag.embed" })
 
-export type EmbeddingProvider = "openai" | "google"
+export type EmbeddingProvider = "openai" | "google" | "local" | "bm25"
 export type EmbeddingModelConfig = {
   provider: EmbeddingProvider
   model: string
@@ -41,6 +41,16 @@ async function getEmbeddingModel(config?: EmbeddingModelConfig) {
       })
       return google.textEmbeddingModel(cfg.model)
     }
+    case "local": {
+      // llama-server exposes /v1/embeddings compatible with OpenAI SDK
+      const local = createOpenAI({
+        baseURL: "http://127.0.0.1:14097/v1",
+        apiKey: "not-needed",
+      })
+      return local.embeddingModel(cfg.model || "local")
+    }
+    case "bm25":
+      throw new Error("BM25 provider does not use neural embeddings")
     default:
       throw new Error(`Unsupported embedding provider: ${cfg.provider}`)
   }

@@ -283,7 +283,7 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 
 #[tauri::command]
 #[specta::specta]
-pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), String> {
+pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Option<String>) -> Result<(), String> {
     let model_path = models_dir(&app).join(&filename);
     if !model_path.exists() {
         return Err(format!("Model not found: {}", filename));
@@ -413,7 +413,10 @@ pub async fn load_llm_model(app: AppHandle, filename: String) -> Result<(), Stri
     }
 
     // Speculative decoding: use a small draft model for 2-3x speedup
-    let draft_model = std::env::var("OPENCODE_DRAFT_MODEL").ok();
+    // Prefer the argument from frontend UI, fallback to env var for CLI usage
+    let draft_model = draft_model
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("OPENCODE_DRAFT_MODEL").ok());
     if let Some(ref draft) = draft_model {
         let draft_path = models_dir(&app).join(draft);
         if draft_path.exists() {

@@ -28,6 +28,16 @@ function pushConfigToEnv() {
   } catch { /* ignore */ }
 }
 
+/** Read the draft model filename from localStorage config */
+function getDraftModel(): string | null {
+  try {
+    const raw = localStorage.getItem("opencode-model-config")
+    if (!raw) return null
+    const c = JSON.parse(raw)
+    return c.draftModel || null
+  } catch { return null }
+}
+
 export async function ensureLocalLLMLoaded(providerID: string | undefined, modelID: string | undefined) {
   if (providerID !== "local-llm" || !modelID || loading) return
 
@@ -38,8 +48,9 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
   loading = true
   try {
     pushConfigToEnv()
-    console.log("[AutoLLM] Loading model:", filename)
-    await invokeTauri("load_llm_model", { filename })
+    const draftModel = getDraftModel()
+    console.log("[AutoLLM] Loading model:", filename, draftModel ? `(draft: ${draftModel})` : "")
+    await invokeTauri("load_llm_model", { filename, draftModel })
     currentlyLoaded = filename
     console.log("[AutoLLM] Model loaded successfully")
   } catch (e) {
@@ -67,9 +78,10 @@ export async function autoStartLocalLLM() {
 
     // Load the first available model
     const filename = models[0].filename
-    console.log("[AutoLLM] Auto-starting model on launch:", filename)
+    const draftModel = getDraftModel()
+    console.log("[AutoLLM] Auto-starting model on launch:", filename, draftModel ? `(draft: ${draftModel})` : "")
     loading = true
-    await invokeTauri("load_llm_model", { filename })
+    await invokeTauri("load_llm_model", { filename, draftModel })
     currentlyLoaded = filename
     console.log("[AutoLLM] Model auto-started successfully")
   } catch (e) {
