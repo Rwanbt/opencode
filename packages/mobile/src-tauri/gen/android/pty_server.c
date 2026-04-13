@@ -294,7 +294,7 @@ relay_done:
 static void handle_spawn(int client_fd, const char *json) {
     char cmdline[4096]   = "bash";
     char cwd[4096]       = "/";
-    char env_str[32768]  = "";
+    char env_str[131072] = "";
     int cols = 80, rows = 24;
 
     json_extract_string(json, "cmdline", cmdline, sizeof(cmdline));
@@ -503,7 +503,7 @@ static void handle_status(int client_fd, const char *json) {
 static void *connection_handler(void *arg) {
     int client_fd = (int)(intptr_t)arg;
 
-    char line[32768];
+    char line[131072];
     int len = read_line(client_fd, line, sizeof(line));
     if (len <= 0) {
         close(client_fd);

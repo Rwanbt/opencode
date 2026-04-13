@@ -310,45 +310,26 @@ pub async fn start_embedded_server(
         }
     }
 
-    // Create shell init file (.mkshrc) for /system/bin/sh (mksh) with colors,
-    // aliases, and a useful prompt.  Also sourced via ENV variable.
+    // Create shell init file (.mkshrc) for /system/bin/sh (mksh).
+    // Sourced via ENV variable (set in .env_vars, passed to PTY spawn env).
+    // Keep it minimal — TERM, PATH, HOME are already set via PTY env vars.
+    // Do NOT re-export ENV here (causes infinite source loop in mksh).
     let mkshrc_path = home_dir.join(".mkshrc");
-    let mkshrc_content = format!(r#"# OpenCode mobile shell init
-export TERM=xterm-256color
-export PATH="{bin}:{nlib}:$PATH"
-export HOME="{home}"
-export ENV="{home}/.mkshrc"
-
-# Colored prompt: green user@host, blue cwd
-PS1=$'\033[1;32m\\u@opencode\033[0m:\033[1;34m\\w\033[0m$ '
-
-# Aliases with colors
+    // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
+    let mkshrc_content = "# OpenCode mobile shell init
+PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"
 alias ls='ls --color=auto'
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias egrep='egrep --color=auto'
-alias fgrep='fgrep --color=auto'
-
-# Useful aliases
 alias ..='cd ..'
-alias ...='cd ../..'
 alias cls='clear'
-"#,
-        bin = bin_link_dir.display(),
-        nlib = nlib_dir.display(),
-        home = home_dir.display(),
-    );
-    let _ = fs::write(&mkshrc_path, &mkshrc_content);
+";
+    let _ = fs::write(&mkshrc_path, mkshrc_content);
 
-    // Also create .profile for login shells
+    // .profile for login shells — just source .mkshrc
     let profile_path = home_dir.join(".profile");
-    let profile_content = format!(
-        "export ENV=\"{home}/.mkshrc\"\n. \"$ENV\"\n",
-        home = home_dir.display(),
-    );
-    let _ = fs::write(&profile_path, &profile_content);
+    let _ = fs::write(&profile_path, ". \"$HOME/.mkshrc\"\n");
 
     // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
     let resolv_path = dir.join("resolv.conf");

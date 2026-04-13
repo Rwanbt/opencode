@@ -82,7 +82,22 @@ export class AndroidTerminal implements IPty {
 
     const cmdline = [file, ...args].join(" ")
     const cwd = opts.cwd ?? process.cwd()
-    const env = opts.env ? Object.entries(opts.env).map(([k, v]) => `${k}=${v}`).join("\n") : ""
+    // Only pass shell-relevant env vars to pty_server.  The full process.env
+    // can exceed the pty_server JSON buffer (128KB) and includes many vars
+    // (OPENCODE_*, HTTP_PROXY, etc.) that are useless inside an interactive shell.
+    const SHELL_ENV_KEYS = new Set([
+      "HOME", "PATH", "TERM", "SHELL", "ENV", "USER", "LOGNAME",
+      "LANG", "LC_ALL", "LC_CTYPE", "HOSTNAME", "PWD", "OLDPWD",
+      "COLORTERM", "TERM_PROGRAM", "XDG_DATA_HOME", "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME", "XDG_STATE_HOME", "LD_LIBRARY_PATH",
+      "OPENCODE_TERMINAL",
+    ])
+    const env = opts.env
+      ? Object.entries(opts.env)
+          .filter(([k]) => SHELL_ENV_KEYS.has(k))
+          .map(([k, v]) => `${k}=${v}`)
+          .join("\n")
+      : ""
 
     this._spawn(cmdline, cwd, env)
   }
