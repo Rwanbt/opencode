@@ -692,8 +692,8 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      // build is disabled, so it should return chat (next primary non-hidden agent in insertion order)
+      expect(agent).toBe("chat")
     },
   })
 })
@@ -703,6 +703,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     config: {
       agent: {
         build: { disable: true },
+        chat: { disable: true },
         plan: { disable: true },
       },
     },

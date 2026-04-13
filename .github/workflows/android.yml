@@ -94,6 +94,23 @@ jobs:
           tar -xzf /tmp/rg.tar.gz -C /tmp
           find /tmp -name "rg" -type f | head -1 | xargs -I{} cp {} "$JNIDIR/librg_exec.so"
 
+          # Toybox — provides standard Unix commands (ls, cat, grep, etc.)
+          # Android SELinux blocks /system/bin exec from app sandbox, so we bundle
+          # our own multi-call binary. Symlinks are created at runtime by runtime.rs.
+          echo "Downloading Toybox..."
+          curl -fsSL "https://landley.net/toybox/bin/toybox-aarch64" -o "$JNIDIR/libtoybox_exec.so"
+
+          # PTY Server — TCP relay for PTY sessions, compiled with NDK (bionic).
+          # Spawned from Java Foreground Service (Seccomp: 0) so bash children
+          # can fork+exec external commands. Bun connects via TCP instead of FFI.
+          echo "Compiling PTY server..."
+          NDK=$ANDROID_HOME/ndk/27.0.12077973
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang \
+            -o "$JNIDIR/libpty_server.so" \
+            packages/mobile/src-tauri/gen/android/pty_server.c \
+            -O2 -Wall -Wextra -Wno-unused-parameter
+          echo "PTY server compiled: $(ls -lh "$JNIDIR/libpty_server.so")"
+
           chmod 755 "$JNIDIR"/*
 
           echo "JNI libs:"
@@ -164,29 +181,10 @@ jobs:
           ASSETS="packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime"
           mkdir -p "$RUNTIME/node_modules/@parcel/watcher" "$ASSETS/node_modules/@parcel/watcher"
 
-          # Bundle CLI JS
-          if [ -f "packages/opencode/src/mobile-entry.ts" ]; then
-            bun build packages/opencode/src/mobile-entry.ts \
-              --target=bun \
-              --outdir="$RUNTIME" \
-              --external "@parcel/watcher" \
-              --external "@parcel/watcher/wrapper" \
-              --external "@opentui/core" \
-              --external "@opentui/solid"
-            [ -f "$RUNTIME/mobile-entry.js" ] && mv "$RUNTIME/mobile-entry.js" "$RUNTIME/opencode-cli.js"
-          else
-            echo "mobile-entry.ts not found, trying index.ts..."
-            OPENCODE_MIGRATIONS=$(cat packages/opencode/drizzle/migrations.json) \
-            bun build packages/opencode/src/index.ts \
-              --target=bun \
-              --outdir="$RUNTIME" \
-              --define "OPENCODE_MIGRATIONS='$(cat packages/opencode/drizzle/migrations.json)'" \
-              --external "@parcel/watcher" \
-              --external "@parcel/watcher/wrapper" \
-              --external "@opentui/core" \
-              --external "@opentui/solid"
-            [ -f "$RUNTIME/index.js" ] && mv "$RUNTIME/index.js" "$RUNTIME/opencode-cli.js"
-          fi
+          # Bundle CLI JS with inlined SQL migrations.
+          # Uses scripts/bundle-mobile.mjs to avoid shell escaping issues
+          # (SQL contains backticks, tabs, newlines that corrupt --define).
+          node scripts/bundle-mobile.mjs --outdir "$RUNTIME"
 
           # Parcel watcher shim
           echo 'export function createWrapper() { return undefined }' > "$RUNTIME/node_modules/@parcel/watcher/wrapper.js"

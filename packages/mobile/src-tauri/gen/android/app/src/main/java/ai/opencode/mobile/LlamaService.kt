@@ -64,6 +64,9 @@ class LlamaService : Service() {
     @Volatile
     private var child: Process? = null
 
+    @Volatile
+    private var ptyServerProcess: Process? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -185,5 +188,66 @@ class LlamaService : Service() {
             Log.w(TAG, "Error stopping child process: ${e.message}")
         }
         child = null
+    }
+
+    // ── PTY Server ─────────────────────────────────────────────────
+    //
+    // pty_server is a native binary (compiled with NDK/bionic) that
+    // manages PTY sessions over TCP.  Because it's spawned from this
+    // Foreground Service (Java context, Seccomp: 0), its children
+    // (bash via forkpty) can freely fork+exec external commands.
+    //
+    // bun connects to it via TCP instead of using the FFI-based
+    // bun-pty library (which runs under musl's Seccomp: 2).
+
+    /**
+     * Spawn the PTY server binary.
+     * @param nativeLibDir  Path to nativeLibraryDir (contains libpty_server.so)
+     * @param runtimeDir    Path to the runtime directory (for port file)
+     * @param port          TCP port for the PTY server
+     */
+    fun spawnPtyServer(nativeLibDir: String, runtimeDir: String, port: Int = 14098) {
+        stopPtyServer()
+        val binary = "$nativeLibDir/libpty_server.so"
+        val portFile = "$runtimeDir/.pty_server_port"
+
+        val file = java.io.File(binary)
+        if (!file.exists()) {
+            Log.w(TAG, "PTY server binary not found: $binary")
+            return
+        }
+
+        try {
+            val pb = ProcessBuilder(listOf(binary, port.toString(), portFile))
+            pb.redirectErrorStream(true)
+            val proc = pb.start()
+            ptyServerProcess = proc
+            Log.i(TAG, "PTY server spawned on port $port (binary=$binary)")
+
+            // Stream PTY server logs to logcat in background
+            Thread {
+                try {
+                    proc.inputStream.bufferedReader().forEachLine { line ->
+                        Log.d("PTY-Server", line)
+                    }
+                } catch (_: Exception) {}
+                Log.i(TAG, "PTY server process ended")
+            }.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to spawn PTY server: ${e.message}")
+        }
+    }
+
+    /** Stop the PTY server process. */
+    fun stopPtyServer() {
+        val proc = ptyServerProcess ?: return
+        try {
+            proc.destroyForcibly()
+            proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            Log.i(TAG, "PTY server stopped")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping PTY server: ${e.message}")
+        }
+        ptyServerProcess = null
     }
 }
