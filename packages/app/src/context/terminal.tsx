@@ -1,11 +1,12 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { showToast } from "@opencode-ai/ui/toast"
 
 export type LocalPTY = {
   id: string
@@ -146,6 +147,10 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     }),
   )
 
+  // Tracks whether the stale-PTY sweep (below) has finished.
+  // UI should wait for this before auto-closing or auto-creating terminals.
+  const [sweepDone, setSweepDone] = createSignal(false)
+
   const pickNextTerminalNumber = () => {
     const existingTitleNumbers = new Set(
       store.all.flatMap((pty) => {
@@ -194,10 +199,14 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     try {
       if (ready.promise) await ready.promise
     } catch {
+      setSweepDone(true)
       return
     }
     const ids = store.all.map((pty) => pty.id)
-    if (ids.length === 0) return
+    if (ids.length === 0) {
+      setSweepDone(true)
+      return
+    }
     // Only remove sessions the server explicitly reports as gone. Any other
     // failure (network error, auth not yet ready, server still booting)
     // must NOT mark the PTY dead — otherwise a sweep racing the sidecar
@@ -217,7 +226,10 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       ),
     )
     const dead = new Set(ids.filter((_, index) => statuses[index] === "gone"))
-    if (dead.size === 0) return
+    if (dead.size === 0) {
+      setSweepDone(true)
+      return
+    }
     batch(() => {
       setStore(
         "all",
@@ -231,6 +243,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         setStore("active", store.all[0]?.id)
       }
     })
+    setSweepDone(true)
   })()
 
   const update = (client: ReturnType<typeof useSDK>["client"], pty: Partial<LocalPTY> & { id: string }) => {
@@ -289,6 +302,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
 
   return {
     ready,
+    sweepDone,
     all: createMemo(() => store.all),
     active: createMemo(() => store.active),
     clear() {
@@ -315,6 +329,11 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         })
         .catch((error: unknown) => {
           console.error("Failed to create terminal", error)
+          showToast({
+            variant: "error",
+            title: "Terminal",
+            description: error instanceof Error ? error.message : "Failed to create terminal session",
+          })
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -467,6 +486,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     return {
       ready: () => workspace().ready(),
+      sweepDone: () => workspace().sweepDone(),
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),

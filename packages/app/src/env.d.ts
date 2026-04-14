@@ -16,3 +16,13 @@ declare module "solid-js" {
     }
   }
 }
+
+declare module "*.wasm?url" {
+  const url: string
+  export default url
+}
+
+declare module "ghostty-web/ghostty-vt.wasm?url" {
+  const url: string
+  export default url
+}

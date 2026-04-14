@@ -14,7 +14,8 @@
     "windows": [
       {
         "label": "main",
-        "create": false
+        "create": false,
+        "devtools": true
       }
     ],
     "withGlobalTauri": true,

@@ -142,7 +142,10 @@ export function TerminalPanel() {
       return
     }
 
-    if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated) return
+    // Wait for the stale-PTY sweep to finish before deciding there are "no terminals".
+    // During sweep, old sessions are being checked and removed — creating a new
+    // terminal before that completes would race with the sweep.
+    if (!terminal.ready() || !terminal.sweepDone() || terminal.all().length !== 0 || store.autoCreated) return
     terminal.new()
     setStore("autoCreated", true)
   })
@@ -153,6 +156,10 @@ export function TerminalPanel() {
       (count, prevCount) => {
         if (prevCount === undefined || prevCount <= 0 || count !== 0) return
         if (!opened()) return
+        // Don't auto-close while the stale-PTY sweep is still running —
+        // the sweep removes old sessions which would trigger this effect
+        // and cause the panel to flash-close at startup.
+        if (!terminal.sweepDone()) return
         close()
       },
     ),

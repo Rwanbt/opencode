@@ -4,6 +4,7 @@ import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { HexColor } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
+import ghosttyWasmUrl from "ghostty-web/ghostty-vt.wasm?url"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
@@ -32,18 +33,21 @@ let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty | unde
 
 const loadGhostty = () => {
   if (shared) return shared
+  console.info("[terminal] loading ghostty-web module, wasm url:", ghosttyWasmUrl)
   shared = import("ghostty-web")
     .then(async (mod) => {
       // Try loading WASM backend; fall back to canvas-only rendering on mobile/unsupported environments
       let ghostty: Ghostty | undefined
       try {
-        ghostty = await mod.Ghostty.load()
+        ghostty = await mod.Ghostty.load(ghosttyWasmUrl)
+        console.info("[terminal] ghostty WASM loaded successfully")
       } catch (err) {
         console.warn("[terminal] Ghostty WASM unavailable, using canvas renderer:", err)
       }
       return { mod, ghostty }
     })
     .catch((err) => {
+      console.error("[terminal] failed to import ghostty-web module:", err)
       shared = undefined
       throw err
     })
@@ -54,7 +58,25 @@ type TerminalColors = {
   background: string
   foreground: string
   cursor: string
+  cursorAccent: string
   selectionBackground: string
+  selectionForeground: string
+  black: string
+  red: string
+  green: string
+  yellow: string
+  blue: string
+  magenta: string
+  cyan: string
+  white: string
+  brightBlack: string
+  brightRed: string
+  brightGreen: string
+  brightYellow: string
+  brightBlue: string
+  brightMagenta: string
+  brightCyan: string
+  brightWhite: string
 }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
@@ -62,13 +84,49 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
     background: "#fcfcfc",
     foreground: "#211e1e",
     cursor: "#211e1e",
+    cursorAccent: "#fcfcfc",
     selectionBackground: withAlpha("#211e1e", 0.2),
+    selectionForeground: "#211e1e",
+    black: "#000000",
+    red: "#cd3131",
+    green: "#00bc7c",
+    yellow: "#c09b00",
+    blue: "#2472c8",
+    magenta: "#bc3fbc",
+    cyan: "#0fa8cd",
+    white: "#555555",
+    brightBlack: "#666666",
+    brightRed: "#e45649",
+    brightGreen: "#50a14f",
+    brightYellow: "#c18401",
+    brightBlue: "#4078f2",
+    brightMagenta: "#a626a4",
+    brightCyan: "#0184bc",
+    brightWhite: "#211e1e",
   },
   dark: {
     background: "#191515",
     foreground: "#d4d4d4",
     cursor: "#d4d4d4",
+    cursorAccent: "#191515",
     selectionBackground: withAlpha("#d4d4d4", 0.25),
+    selectionForeground: "#ffffff",
+    black: "#1e1e1e",
+    red: "#f44747",
+    green: "#6a9955",
+    yellow: "#d7ba7d",
+    blue: "#569cd6",
+    magenta: "#c586c0",
+    cyan: "#4ec9b0",
+    white: "#d4d4d4",
+    brightBlack: "#808080",
+    brightRed: "#f14c4c",
+    brightGreen: "#73c991",
+    brightYellow: "#e2c08d",
+    brightBlue: "#6cb6ff",
+    brightMagenta: "#d670d6",
+    brightCyan: "#29b8db",
+    brightWhite: "#ffffff",
   },
 }
 
@@ -192,6 +250,9 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
   const MAX_CONNECT_TRIES = 5
+  const addDebug = (msg: string) => {
+    if (import.meta.env.DEV) console.info("[terminal-debug]", msg)
+  }
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -266,9 +327,11 @@ export const Terminal = (props: TerminalProps) => {
     const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
     const selectionBackground = withAlpha(base, alpha)
     return {
+      ...fallback,
       background,
       foreground: text,
       cursor: text,
+      cursorAccent: background,
       selectionBackground,
     }
   }
@@ -370,25 +433,45 @@ export const Terminal = (props: TerminalProps) => {
     cleanups.push(() => probe.drop())
 
     const run = async () => {
-      const loaded = await loadGhostty()
+      addDebug("run() started")
+      let loaded: Awaited<ReturnType<typeof loadGhostty>>
+      try {
+        loaded = await loadGhostty()
+      } catch (err) {
+        addDebug(`FATAL loadGhostty: ${err instanceof Error ? err.message : String(err)}`)
+        throw err
+      }
       if (disposed) return
 
       const mod = loaded.mod
-      const g = loaded.ghostty // undefined when WASM is unavailable (e.g. mobile)
+      const g = loaded.ghostty
+      addDebug(`ghostty WASM: ${g ? "loaded OK" : "UNDEFINED"}`)
 
-      const t = new mod.Terminal({
-        cursorBlink: true,
-        cursorStyle: "bar",
-        cols: restoreSize?.cols,
-        rows: restoreSize?.rows,
-        fontSize: 14,
-        fontFamily: monoFontFamily(settings.appearance.font()),
-        allowTransparency: false,
-        convertEol: false,
-        theme: terminalColors(),
-        scrollback: 10_000,
-        ...(g ? { ghostty: g } : {}),
-      })
+      if (!g) {
+        addDebug("FATAL: ghostty-vt.wasm failed to load")
+        throw new Error("[terminal] ghostty-vt.wasm failed to load — cannot render terminal")
+      }
+
+      let t: Term
+      try {
+        t = new mod.Terminal({
+          cursorBlink: true,
+          cursorStyle: "bar",
+          cols: restoreSize?.cols,
+          rows: restoreSize?.rows,
+          fontSize: 14,
+          fontFamily: monoFontFamily(settings.appearance.font()),
+          allowTransparency: false,
+          convertEol: false,
+          theme: terminalColors(),
+          scrollback: 10_000,
+          ...(g ? { ghostty: g } : {}),
+        })
+        addDebug("Terminal instance created OK")
+      } catch (err) {
+        addDebug(`FATAL new Terminal(): ${err instanceof Error ? err.message : String(err)}`)
+        throw err
+      }
       cleanups.push(() => t.dispose())
       if (disposed) {
         cleanup()
@@ -427,7 +510,14 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
-      t.open(container)
+      try {
+        t.open(container)
+        const rect = container.getBoundingClientRect()
+        addDebug(`t.open() OK — container: ${Math.round(rect.width)}x${Math.round(rect.height)} inDOM:${document.contains(container)}`)
+      } catch (err) {
+        addDebug(`FATAL t.open(): ${err instanceof Error ? err.message : String(err)}`)
+        throw err
+      }
       useTerminalUiBindings({
         container,
         term: t,
@@ -540,8 +630,7 @@ export const Terminal = (props: TerminalProps) => {
 
         const auth = currentAuth()
         if (!auth || !auth.url || !auth.password) {
-          // Server credentials not yet available — bail without retrying so we
-          // don't spam the server with unauthenticated connection attempts.
+          addDebug(`WS auth missing: url=${!!auth?.url} pass=${!!auth?.password}`)
           fail(new Error(language.t("terminal.connectionLost.abnormalClose", { code: 401 })))
           return
         }
@@ -550,23 +639,35 @@ export const Terminal = (props: TerminalProps) => {
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = auth.username
-        next.password = auth.password
+        // Browsers strip userinfo from WebSocket URLs — Chromium/WebView2
+        // silently drops url.username/url.password so the Authorization
+        // header is never sent. Pass credentials as a query parameter instead.
+        const basicToken = btoa(`${auth.username}:${auth.password}`)
+        next.searchParams.set("authorization", `Basic ${basicToken}`)
 
+        const redactedParams = next.searchParams.toString().replace(/authorization=[^&]+/, "authorization=REDACTED")
+        addDebug(`WS url: ${next.protocol}//${next.hostname}:${next.port}${next.pathname} params=${redactedParams}`)
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"
         ws = socket
 
         const handleOpen = () => {
           if (disposed) return
+          addDebug("WS OPEN")
           tries = 0
           probe.connect()
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
         }
 
+        let firstMessage = true
         const handleMessage = (event: MessageEvent) => {
           if (disposed) return
+          if (firstMessage) {
+            firstMessage = false
+            const type = event.data instanceof ArrayBuffer ? `binary(${(event.data as ArrayBuffer).byteLength}B)` : `text(${String(event.data).length}ch)`
+            addDebug(`WS first msg: ${type}`)
+          }
           if (event.data instanceof ArrayBuffer) {
             const bytes = new Uint8Array(event.data)
             if (bytes[0] !== 0) return
@@ -593,7 +694,7 @@ export const Terminal = (props: TerminalProps) => {
 
         const handleError = (error: Event) => {
           if (disposed) return
-          debugTerminal("websocket error", error)
+          addDebug(`WS ERROR: ${String(error)}`)
         }
 
         const stop = () => {
@@ -607,6 +708,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         const handleClose = (event: CloseEvent) => {
+          addDebug(`WS CLOSE code=${event.code} reason=${event.reason || "(none)"}`)
           if (ws === socket) ws = undefined
           if (drop === stop) drop = undefined
           socket.removeEventListener("open", handleOpen)
@@ -636,13 +738,18 @@ export const Terminal = (props: TerminalProps) => {
     }
 
     void run().catch((err) => {
+      const msg = err instanceof Error ? `${err.message}\n${err.stack?.split("\n")[1] ?? ""}` : String(err)
+      addDebug(`FATAL run(): ${msg}`)
       if (disposed) return
       showToast({
         variant: "error",
         title: language.t("terminal.connectionLost.title"),
         description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
       })
-      local.onConnectError?.(err)
+      // Don't trigger clone/reconnect for WASM loading failures — every new
+      // terminal instance would fail the same way, creating an infinite loop.
+      const isWasmError = err instanceof Error && err.message.includes("ghostty-vt.wasm")
+      if (!isWasmError) local.onConnectError?.(err)
     })
   })
 
