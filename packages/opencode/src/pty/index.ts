@@ -190,6 +190,7 @@ export namespace Pty {
         if (Shell.login(command)) {
           args.push("-l")
         }
+        const shellName = Shell.name(command)
 
         let cwd = input.cwd || s.dir
         // On Android, the project dir may be "/" which is unreadable from
@@ -211,7 +212,16 @@ export namespace Pty {
           env.LC_ALL = "C.UTF-8"
           env.LC_CTYPE = "C.UTF-8"
           env.LANG = "C.UTF-8"
+          // Git Bash: login shells get plain "$ " because /etc/profile exports
+          // PS1 before bash.bashrc can set a colored one. MSYS2_PS1 is checked
+          // first by bash.bashrc and overrides the plain prompt.
+          env.MSYS2_PS1 =
+            "\\[\\e]0;\\w\\a\\]\\n\\[\\e[32m\\]\\u@\\h \\[\\e[35m\\]MINGW64\\[\\e[0m\\] \\[\\e[33m\\]\\w\\[\\e[0m\\]\\n\\$ "
         }
+        // Enable colored output for bash/zsh on all platforms
+        env.force_color_prompt = "yes"
+        env.CLICOLOR = "1"
+        env.CLICOLOR_FORCE = "1"
         log.info("creating session", { id, cmd: command, args, cwd })
 
         const spawn = yield* Effect.promise(() => pty())
@@ -277,6 +287,18 @@ export namespace Pty {
             Effect.runFork(remove(id))
           }),
         )
+        // Inject colored prompt by writing init commands directly into the PTY.
+        // CLI args like -Command are unreliable in compiled Bun binaries.
+        if (shellName === "pwsh" || shellName === "powershell") {
+          // Wait for PowerShell to be ready, then define a colored prompt
+          // function and clear the screen so the user sees a clean start.
+          setTimeout(() => {
+            proc.write(
+              'function prompt { $e=[char]27; "${e}[32mPS${e}[0m ${e}[34m$($PWD.Path)${e}[0m${e}[33m>${e}[0m " }\r\ncls\r\n',
+            )
+          }, 800)
+        }
+
         yield* bus.publish(Event.Created, { info })
         return info
       })

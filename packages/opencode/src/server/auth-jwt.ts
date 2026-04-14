@@ -105,7 +105,9 @@ export namespace JwtAuth {
       // Allow CORS preflight
       if (c.req.method === "OPTIONS") return next()
 
-      const authHeader = c.req.header("Authorization")
+      // WebSocket connections from browsers cannot send custom HTTP headers.
+      // Fall back to ?authorization= query parameter for WS upgrade requests.
+      const authHeader = c.req.header("Authorization") || c.req.query("authorization")
 
       // Try JWT Bearer token first
       if (authHeader?.startsWith("Bearer ")) {
