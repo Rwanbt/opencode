@@ -554,15 +554,26 @@ pub fn serve(
     hostname: &str,
     port: u32,
     password: &str,
+    tls_enabled: bool,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
-    tracing::info!(port, "Spawning sidecar");
+    tracing::info!(port, tls_enabled, "Spawning sidecar");
 
-    let envs = [
+    let mut envs = vec![
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
+
+    // Pass TLS cert/key paths to the sidecar when Internet mode is active.
+    if tls_enabled {
+        if let Ok(certs) = crate::tls::ensure_cert(app) {
+            envs.push(("OPENCODE_TLS_CERT_PATH", certs.cert_path.to_string_lossy().into_owned()));
+            envs.push(("OPENCODE_TLS_KEY_PATH", certs.key_path.to_string_lossy().into_owned()));
+        } else {
+            tracing::warn!("TLS enabled but failed to load/generate certificate; falling back to plain HTTP");
+        }
+    }
 
     let (events, child) = spawn_command(
         app,

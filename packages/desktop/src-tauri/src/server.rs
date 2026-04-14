@@ -19,19 +19,15 @@ pub struct WslConfig {
 /// Persisted configuration for exposing the local sidecar server outside
 /// of loopback. The password is generated once and kept stable across app
 /// launches so a paired client (e.g. a smartphone browser) keeps working.
-///
-/// TLS fields are intentionally commented out: they're part of the planned
-/// Internet-mode upgrade and can be enabled without a struct refactor.
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
 pub struct RemoteConfig {
     /// When true, the sidecar binds to 0.0.0.0 and is reachable on the LAN.
     pub enabled: bool,
     /// Stable UUID used for HTTP basic auth. Reset via `reset_remote_password`.
     pub password: String,
-    // --- Reserved for the Internet/TLS upgrade ---
-    // pub tls_enabled: bool,
-    // pub tls_cert_path: Option<String>,
-    // pub tls_key_path: Option<String>,
+    /// When true, the sidecar serves HTTPS/WSS (Internet mode). Requires enabled=true.
+    #[serde(default)]
+    pub tls_enabled: bool,
 }
 
 impl Default for RemoteConfig {
@@ -39,6 +35,7 @@ impl Default for RemoteConfig {
         Self {
             enabled: false,
             password: uuid::Uuid::new_v4().to_string(),
+            tls_enabled: false,
         }
     }
 }
@@ -54,6 +51,11 @@ pub struct RemoteConnectionInfo {
     /// Best-effort detected LAN address. None if no non-loopback interface is
     /// reachable (offline, all interfaces down, etc.).
     pub lan_ip: Option<String>,
+    /// Whether TLS (Internet mode) is active.
+    pub tls_enabled: bool,
+    /// SHA-256 fingerprint of the self-signed cert (colon-separated hex).
+    /// Only present when tls_enabled is true.
+    pub tls_fingerprint: Option<String>,
 }
 
 pub fn load_remote_config(app: &AppHandle) -> RemoteConfig {
@@ -110,11 +112,18 @@ fn detect_lan_ip() -> Option<IpAddr> {
 #[specta::specta]
 pub fn get_remote_config(app: AppHandle) -> RemoteConnectionInfo {
     let config = load_remote_config(&app);
+    let tls_fingerprint = if config.tls_enabled {
+        crate::tls::ensure_cert(&app).ok().map(|c| c.fingerprint)
+    } else {
+        None
+    };
     RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint,
     }
 }
 
@@ -127,12 +136,88 @@ pub fn get_remote_config(app: AppHandle) -> RemoteConnectionInfo {
 pub fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteConnectionInfo, String> {
     let mut config = load_remote_config(&app);
     config.enabled = enabled;
+    // Disabling remote access also disables TLS mode.
+    if !enabled {
+        config.tls_enabled = false;
+    }
     save_remote_config(&app, &config)?;
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint: None,
+    })
+}
+
+/// Enables or disables Internet (TLS) mode.
+/// When enabling, ensures the self-signed certificate exists (generating it if needed).
+/// When disabling, falls back to plain LAN mode (remote access stays enabled).
+/// Change takes effect on next app launch.
+#[tauri::command]
+#[specta::specta]
+pub fn set_internet_mode(app: AppHandle, enabled: bool) -> Result<RemoteConnectionInfo, String> {
+    let mut config = load_remote_config(&app);
+    config.tls_enabled = enabled;
+    if enabled {
+        // Internet mode implies remote access is on.
+        config.enabled = true;
+    }
+    save_remote_config(&app, &config)?;
+
+    let tls_fingerprint = if config.tls_enabled {
+        Some(
+            crate::tls::ensure_cert(&app)
+                .map_err(|e| format!("Failed to generate TLS certificate: {e}"))?
+                .fingerprint,
+        )
+    } else {
+        None
+    };
+
+    Ok(RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint,
+    })
+}
+
+/// Exports the TLS certificate PEM to the user's Downloads folder.
+/// Returns the full path to the exported file.
+#[tauri::command]
+#[specta::specta]
+pub fn export_tls_cert(app: AppHandle) -> Result<String, String> {
+    let pem = crate::tls::get_cert_pem(&app)?;
+
+    let downloads = dirs::download_dir()
+        .ok_or_else(|| "Could not locate Downloads folder".to_string())?;
+    let dest = downloads.join("opencode-cert.pem");
+
+    std::fs::write(&dest, pem).map_err(|e| format!("Failed to export certificate: {e}"))?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Rotates (regenerates) the TLS certificate.
+/// Returns updated connection info with the new fingerprint.
+/// Change takes effect on next app launch.
+#[tauri::command]
+#[specta::specta]
+pub fn rotate_tls_cert(app: AppHandle) -> Result<RemoteConnectionInfo, String> {
+    let certs = crate::tls::regenerate_cert(&app)
+        .map_err(|e| format!("Failed to regenerate TLS certificate: {e}"))?;
+    let config = load_remote_config(&app);
+    Ok(RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint: Some(certs.fingerprint),
     })
 }
 
@@ -142,11 +227,18 @@ pub fn reset_remote_password(app: AppHandle) -> Result<RemoteConnectionInfo, Str
     let mut config = load_remote_config(&app);
     config.password = uuid::Uuid::new_v4().to_string();
     save_remote_config(&app, &config)?;
+    let tls_fingerprint = if config.tls_enabled {
+        crate::tls::ensure_cert(&app).ok().map(|c| c.fingerprint)
+    } else {
+        None
+    };
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint,
     })
 }
 
@@ -224,11 +316,13 @@ pub fn spawn_local_server(
     hostname: String,
     port: u32,
     password: String,
+    tls_enabled: bool,
 ) -> (CommandChild, HealthCheck) {
-    let (child, exit) = cli::serve(&app, &hostname, port, &password);
+    let (child, exit) = cli::serve(&app, &hostname, port, &password, tls_enabled);
 
     let health_check = HealthCheck(tokio::spawn(async move {
-        let url = format!("http://127.0.0.1:{port}");
+        let scheme = if tls_enabled { "https" } else { "http" };
+        let url = format!("{scheme}://127.0.0.1:{port}");
         let timestamp = Instant::now();
 
         let ready = async {
@@ -268,21 +362,26 @@ async fn check_health(url: &str, password: Option<&str>) -> bool {
         return false;
     };
 
+    let is_loopback = url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    });
+
     let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
 
-    if url
-        .host_str()
-        .is_some_and(|host| {
-            host.eq_ignore_ascii_case("localhost")
-                || host
-                    .parse::<std::net::IpAddr>()
-                    .is_ok_and(|ip| ip.is_loopback())
-        })
-    {
+    if is_loopback {
         // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
         // excluding loopback. reqwest respects these by default, which can prevent the desktop
         // app from reaching its own local sidecar server.
         builder = builder.no_proxy();
+    }
+
+    if url.scheme() == "https" && is_loopback {
+        // SAFE: this is always loopback (127.0.0.1). The self-signed cert is generated
+        // locally; no interception is possible on the loopback interface.
+        builder = builder.danger_accept_invalid_certs(true);
     }
 
     let Ok(client) = builder.build() else {
