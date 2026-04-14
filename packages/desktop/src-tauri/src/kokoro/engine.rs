@@ -33,16 +33,21 @@ impl KokoroEngine {
     pub fn load(&mut self, model_path: &Path, voices_path: &Path) -> Result<(), String> {
         tracing::info!("[Kokoro] Loading model...");
 
-        self.session = Some(
-            Session::builder()
-                .map_err(|e| e.to_string())?
-                .with_optimization_level(GraphOptimizationLevel::Level3)
-                .map_err(|e| e.to_string())?
-                .with_execution_providers([CPUExecutionProvider::default().build()])
-                .map_err(|e| e.to_string())?
-                .commit_from_file(model_path)
-                .map_err(|e| format!("Load model: {}", e))?,
-        );
+        let session = Session::builder()
+            .map_err(|e| e.to_string())?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| e.to_string())?
+            .with_execution_providers([CPUExecutionProvider::default().build()])
+            .map_err(|e| e.to_string())?
+            .commit_from_file(model_path)
+            .map_err(|e| format!("Load model: {}", e))?;
+
+        // FIX: Log model I/O names for debugging model version mismatches
+        let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
+        let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
+        tracing::info!("[Kokoro] Model inputs: {:?}, outputs: {:?}", input_names, output_names);
+
+        self.session = Some(session);
 
         // Load voices (ZIP of .npy files from kokoro-onnx)
         let voices_data = std::fs::read(voices_path)
@@ -110,18 +115,26 @@ impl KokoroEngine {
 
         // 1. Text → IPA phonemes
         let phonemes = g2p::text_to_phonemes(text);
+        let preview: String = text.chars().take(20).collect();
+        tracing::info!("[Kokoro] Phonemes: {} chars from '{}...'", phonemes.len(), preview);
         if phonemes.is_empty() {
             return Err("No phonemes generated".to_string());
         }
 
         // 2. Phonemes → token IDs
         let tokens = tokenizer::phonemes_to_tokens(&phonemes);
+        tracing::info!("[Kokoro] Tokens: {} ids", tokens.len());
         if tokens.len() <= 2 {
             return Err("No tokens generated".to_string());
         }
 
         // 3. Get voice style embedding [1, 256]
-        let style = self.get_style(voice)?;
+        // Style is indexed by phoneme CHAR count (kokoro-onnx convention: Python len(ps) = char count)
+        // phonemes.len() would give UTF-8 byte count — wrong for multi-byte IPA chars (ˈ=3B, ː=3B, ə=2B...)
+        let phoneme_chars = phonemes.chars().count();
+        let total_styles = self.voices.get(voice).map(|v| v.len() / STYLE_DIM).unwrap_or(0);
+        let style = self.get_style(voice, phoneme_chars)?;
+        tracing::info!("[Kokoro] Style: {} floats (style_idx={}, total_styles={})", style.len(), phoneme_chars, total_styles);
 
         // 4. Run ONNX inference
         let session = self.session.as_mut().ok_or("No session")?;
@@ -133,6 +146,7 @@ impl KokoroEngine {
             .map_err(|e| format!("Style shape: {}", e))?;
         let speed_arr = Array1::from_vec(vec![speed]);
 
+        tracing::info!("[Kokoro] Running ONNX inference (tokens={}, style=[1,{}], speed={})...", n, STYLE_DIM, speed);
         let outputs = session
             .run(ort::inputs![
                 "tokens" => TensorRef::from_array_view(tokens_2d.view()).map_err(|e| e.to_string())?,
@@ -140,8 +154,10 @@ impl KokoroEngine {
                 "speed" => TensorRef::from_array_view(speed_arr.view()).map_err(|e| e.to_string())?,
             ])
             .map_err(|e| format!("Inference: {}", e))?;
+        tracing::info!("[Kokoro] Inference done in {:?}", start.elapsed());
 
-        let (_, audio) = outputs["audio"]
+        // FIX: Access output by index — the output tensor name varies by model version
+        let (_, audio) = outputs[0]
             .try_extract_tensor::<f32>()
             .map_err(|e| format!("Extract audio: {}", e))?;
 
@@ -154,15 +170,61 @@ impl KokoroEngine {
         Ok(audio.to_vec())
     }
 
-    fn get_style(&self, voice: &str) -> Result<Vec<f32>, String> {
+    fn get_style(&self, voice: &str, phoneme_len: usize) -> Result<Vec<f32>, String> {
         let voice_data = self.voices.get(voice)
             .ok_or_else(|| format!("Voice '{}' not found", voice))?;
 
-        // Style is [1, 256] — just the first 256 floats from the voice embedding
-        if voice_data.len() < STYLE_DIM {
+        // Voices are stored as [num_styles, 256] flat arrays.
+        // Style is selected by phoneme string length (kokoro-onnx convention).
+        let total_styles = voice_data.len() / STYLE_DIM;
+        if total_styles == 0 {
             return Err(format!("Voice data too small: {} (need {})", voice_data.len(), STYLE_DIM));
         }
+        let style_idx = phoneme_len.min(total_styles - 1);
+        let start = style_idx * STYLE_DIM;
+        let end = start + STYLE_DIM;
 
-        Ok(voice_data[..STYLE_DIM].to_vec())
+        Ok(voice_data[start..end].to_vec())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn model_dir() -> PathBuf {
+        PathBuf::from(r"C:\Users\barat\AppData\Roaming\ai.opencode.desktop.dev\speech\kokoro")
+    }
+
+    #[test]
+    fn test_kokoro_load() {
+        let mut engine = KokoroEngine::new();
+        let dir = model_dir();
+        let model = dir.join("kokoro-v1.0.onnx");
+        let voices = dir.join("voices-v1.0.bin");
+        println!("Model exists: {}", model.exists());
+        println!("Voices exists: {}", voices.exists());
+        engine.load(&model, &voices).unwrap();
+        assert!(engine.is_loaded());
+        let names = engine.voice_names();
+        println!("Loaded {} voices", names.len());
+        assert!(names.len() > 0);
+    }
+
+    #[test]
+    fn test_kokoro_synthesize_hello() {
+        let mut engine = KokoroEngine::new();
+        let dir = model_dir();
+        engine.load(&dir.join("kokoro-v1.0.onnx"), &dir.join("voices-v1.0.bin")).unwrap();
+
+        println!("Synthesizing 'Hello world'...");
+        let result = engine.synthesize("Hello world", "af_heart", 1.0);
+        match &result {
+            Ok(samples) => println!("OK: {} samples ({:.1}s at 24kHz)", samples.len(), samples.len() as f64 / 24000.0),
+            Err(e) => println!("ERROR: {}", e),
+        }
+        let samples = result.unwrap();
+        assert!(samples.len() > 0);
     }
 }
