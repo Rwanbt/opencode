@@ -36,7 +36,11 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { commands, type InitStep } from "./bindings"
+import { commands, type InitStep, type RemoteConnectionInfo } from "./bindings"
+
+function toRemoteAccessInfo(info: RemoteConnectionInfo) {
+  return { ...info, tlsFingerprint: info.tlsFingerprint ?? undefined }
+}
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -356,19 +360,19 @@ const createPlatform = (): Platform => {
     },
 
     getRemoteAccess: async () => {
-      return commands.getRemoteConfig()
+      return toRemoteAccessInfo(await commands.getRemoteConfig())
     },
 
     setRemoteAccessEnabled: async (enabled) => {
-      return commands.setRemoteEnabled(enabled)
+      return toRemoteAccessInfo(await commands.setRemoteEnabled(enabled))
     },
 
     resetRemoteAccessPassword: async () => {
-      return commands.resetRemotePassword()
+      return toRemoteAccessInfo(await commands.resetRemotePassword())
     },
 
     setInternetModeEnabled: async (enabled) => {
-      return commands.setInternetMode(enabled)
+      return toRemoteAccessInfo(await commands.setInternetMode(enabled))
     },
 
     exportTlsCert: async () => {
@@ -376,7 +380,7 @@ const createPlatform = (): Platform => {
     },
 
     rotateTlsCert: async () => {
-      return commands.rotateTlsCert()
+      return toRemoteAccessInfo(await commands.rotateTlsCert())
     },
 
     getDefaultServer: async () => {
