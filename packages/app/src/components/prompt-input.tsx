@@ -539,7 +539,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [composing, setComposing] = createSignal(false)
-  const [webSearch, setWebSearch] = createSignal(false)
+  const [webSearchPrefs, setWebSearchPrefs] = persisted(
+    Persist.global("prompt-input", ["prompt-input.v1"]),
+    createStore({ webSearch: false }),
+  )
+  const webSearch = () => webSearchPrefs.webSearch
+  const setWebSearch = (value: boolean) => setWebSearchPrefs("webSearch", value)
   const [recording, setRecording] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
@@ -1491,7 +1496,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               >
                 <IconButton
                   data-action="prompt-web-search-toggle"
-                  icon="globe"
+                  icon={webSearch() ? "globe" : "globe-off"}
                   variant={webSearch() ? "primary" : "ghost"}
                   class="size-8"
                   style={buttons()}
