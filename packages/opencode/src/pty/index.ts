@@ -287,18 +287,6 @@ export namespace Pty {
             Effect.runFork(remove(id))
           }),
         )
-        // Inject colored prompt by writing init commands directly into the PTY.
-        // CLI args like -Command are unreliable in compiled Bun binaries.
-        if (shellName === "pwsh" || shellName === "powershell") {
-          // Wait for PowerShell to be ready, then define a colored prompt
-          // function and clear the screen so the user sees a clean start.
-          setTimeout(() => {
-            proc.write(
-              'function prompt { $e=[char]27; "${e}[32mPS${e}[0m ${e}[34m$($PWD.Path)${e}[0m${e}[33m>${e}[0m " }\r\ncls\r\n',
-            )
-          }, 800)
-        }
-
         yield* bus.publish(Event.Created, { info })
         return info
       })
