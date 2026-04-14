@@ -64,6 +64,11 @@ export namespace Shell {
   function select(file: string | undefined, opts?: { acceptable?: boolean }) {
     if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
     if (process.platform === "win32") {
+      // Prefer Git Bash on Windows: it has a colored prompt, full
+      // Unix command set (ls, grep, cat), and git integration out of
+      // the box. Falls back to PowerShell if Git isn't installed.
+      const gb = gitbash()
+      if (gb) return gb
       const shell = pick()
       if (shell) return shell
     }
