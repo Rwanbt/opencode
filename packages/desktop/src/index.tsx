@@ -367,6 +367,18 @@ const createPlatform = (): Platform => {
       return commands.resetRemotePassword()
     },
 
+    setInternetModeEnabled: async (enabled) => {
+      return commands.setInternetMode(enabled)
+    },
+
+    exportTlsCert: async () => {
+      return commands.exportTlsCert()
+    },
+
+    rotateTlsCert: async () => {
+      return commands.rotateTlsCert()
+    },
+
     getDefaultServer: async () => {
       const url = await commands.getDefaultServerUrl().catch(() => null)
       if (!url) return null

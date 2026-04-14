@@ -266,13 +266,24 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
-    url = new URL(`http://${opts.hostname}:${opts.port}`)
+    // TLS (Internet mode): cert and key paths are passed via env vars by the Tauri sidecar.
+    const tlsCertPath = process.env.OPENCODE_TLS_CERT_PATH
+    const tlsKeyPath = process.env.OPENCODE_TLS_KEY_PATH
+    const tls =
+      tlsCertPath && tlsKeyPath
+        ? { cert: Bun.file(tlsCertPath), key: Bun.file(tlsKeyPath) }
+        : undefined
+
+    const scheme = tls ? "https" : "http"
+    url = new URL(`${scheme}://${opts.hostname}:${opts.port}`)
+
     const app = ControlPlaneRoutes({ cors: opts.cors })
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: app.fetch,
       websocket: websocket,
+      ...(tls ? { tls } : {}),
     } as const
     const tryServe = (port: number) => {
       try {

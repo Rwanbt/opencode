@@ -13,6 +13,7 @@ mod logging;
 mod markdown;
 mod os;
 mod server;
+mod tls;
 mod window_customizer;
 mod windows;
 
@@ -430,6 +431,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::get_remote_config,
             server::set_remote_enabled,
             server::reset_remote_password,
+            server::set_internet_mode,
+            server::export_tls_cert,
+            server::rotate_tls_cert,
             get_display_backend,
             set_display_backend,
             markdown::parse_markdown_command,
@@ -515,12 +519,20 @@ async fn initialize(app: AppHandle) {
     // The self-reported URL always uses loopback so the app's own SDK
     // connects locally regardless of whether the sidecar is bound to
     // 0.0.0.0 for LAN access.
-    let url = format!("http://127.0.0.1:{port}");
+    // In TLS/Internet mode the sidecar serves HTTPS, so we use https:// here.
+    let scheme = if remote_config.tls_enabled { "https" } else { "http" };
+    let url = format!("{scheme}://127.0.0.1:{port}");
     let password = remote_config.password.clone();
+    let tls_enabled = remote_config.tls_enabled;
 
     tracing::info!("Spawning sidecar on {url}");
-    let (child, health_check) =
-        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+    let (child, health_check) = server::spawn_local_server(
+        app.clone(),
+        hostname.to_string(),
+        port,
+        password.clone(),
+        tls_enabled,
+    );
 
     // Make sidecar credentials available immediately (before health check completes)
     let (ready_tx, ready_rx) = oneshot::channel();

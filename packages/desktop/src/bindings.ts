@@ -15,6 +15,9 @@ export const commands = {
 	getRemoteConfig: () => __TAURI_INVOKE<RemoteConnectionInfo>("get_remote_config"),
 	setRemoteEnabled: (enabled: boolean) => __TAURI_INVOKE<RemoteConnectionInfo>("set_remote_enabled", { enabled }),
 	resetRemotePassword: () => __TAURI_INVOKE<RemoteConnectionInfo>("reset_remote_password"),
+	setInternetMode: (enabled: boolean) => __TAURI_INVOKE<RemoteConnectionInfo>("set_internet_mode", { enabled }),
+	exportTlsCert: () => __TAURI_INVOKE<string>("export_tls_cert"),
+	rotateTlsCert: () => __TAURI_INVOKE<RemoteConnectionInfo>("rotate_tls_cert"),
 	getDisplayBackend: () => __TAURI_INVOKE<"wayland" | "auto" | null>("get_display_backend"),
 	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
@@ -54,6 +57,8 @@ export type RemoteConnectionInfo = {
 		password: string,
 		port: number,
 		lanIp: string | null,
+		tlsEnabled: boolean,
+		tlsFingerprint: string | null,
 	};
 
 export type WslPathMode = "windows" | "linux";

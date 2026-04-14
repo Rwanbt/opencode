@@ -16,7 +16,8 @@ export const ServeCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
-    console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    const scheme = process.env.OPENCODE_TLS_CERT_PATH ? "https" : "http"
+    console.log(`opencode server listening on ${scheme}://${server.hostname}:${server.port}`)
 
     await new Promise(() => {})
     await server.stop()
