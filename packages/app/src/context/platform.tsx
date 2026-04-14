@@ -133,7 +133,7 @@ export type RemoteAccessInfo = {
   port: number
   lanIp: string | null
   tlsEnabled: boolean
-  tlsFingerprint?: string
+  tlsFingerprint?: string | null
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
