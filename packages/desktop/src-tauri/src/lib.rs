@@ -1,7 +1,8 @@
 mod cli;
 mod constants;
 mod llm;
-mod kokoro;
+// pub for examples/test_kokoro.rs — revert to `mod` if examples are removed
+pub mod kokoro;
 mod parakeet;
 mod speech;
 #[cfg(target_os = "linux")]
@@ -309,10 +310,21 @@ pub fn run() {
     #[cfg(debug_assertions)] // <- Only export on non-release builds
     export_types(&builder);
 
+    // FIX: Kill orphaned sidecar from a previous session on all desktop platforms.
+    // macOS: killall by name. Windows: taskkill by image name.
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
         .arg("opencode-cli")
         .output();
+
+    #[cfg(all(windows, not(debug_assertions)))]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "opencode-cli.exe"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+    }
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -380,7 +392,25 @@ pub fn run() {
                     }
                 }
 
+                // FIX: kill_sidecar() sends a message to an async channel, but
+                // the tokio runtime may shut down before the background task can
+                // call start_kill(). Use a synchronous OS-level kill as fallback.
                 kill_sidecar(app.clone());
+
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/F", "/IM", "opencode-cli.exe"])
+                        .creation_flags(0x08000000)
+                        .output();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = std::process::Command::new("killall")
+                        .arg("opencode-cli")
+                        .output();
+                }
             }
         });
 }
