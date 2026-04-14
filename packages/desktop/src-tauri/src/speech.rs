@@ -11,9 +11,10 @@ use crate::parakeet::ParakeetEngine;
 #[cfg(feature = "onnx")]
 const STT_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip";
 #[cfg(feature = "onnx")]
-const KOKORO_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/kokoro-v1.0.onnx";
+// FIX: Previous URLs pointed to Kieirra/murmure-model which 404'd — use upstream kokoro-onnx releases
+const KOKORO_MODEL_URL: &str = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx";
 #[cfg(feature = "onnx")]
-const KOKORO_VOICES_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/voices-v1.0.bin";
+const KOKORO_VOICES_URL: &str = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin";
 const TTS_PORT: u16 = 14100;
 
 /// Monotonic counter for chunk WAV filenames. Using only Date.now()-style
@@ -730,13 +731,33 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
     let app_clone = app.clone();
     let voice_clone = voice.clone();
     let samples = tokio::task::spawn_blocking(move || {
-        let state = app_clone.state::<SpeechState>();
-        let mut engine = state.kokoro_engine.lock().unwrap();
-        engine.synthesize(&text, &voice_clone, speed)
+        // Wrap in catch_unwind to convert any ORT/native panic into a logged error
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tracing::info!("[Kokoro] spawn_blocking: acquiring lock");
+            let state = app_clone.state::<SpeechState>();
+            let mut engine = state.kokoro_engine.lock().map_err(|e| format!("Lock: {}", e))?;
+            tracing::info!("[Kokoro] spawn_blocking: running synthesize");
+            engine.synthesize(&text, &voice_clone, speed)
+        }))
+        .unwrap_or_else(|panic_val| {
+            let msg = panic_val
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| panic_val.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown panic payload");
+            tracing::error!("[Kokoro] PANIC in synthesis: {}", msg);
+            Err(format!("Panic: {}", msg))
+        })
     })
     .await
-    .map_err(|e| format!("Task: {}", e))?
-    .map_err(|e| format!("Synthesis: {}", e))?;
+    .map_err(|e| {
+        tracing::error!("[Kokoro] spawn_blocking JoinError: {}", e);
+        format!("Task: {}", e)
+    })?
+    .map_err(|e| {
+        tracing::error!("[Kokoro] Synthesis failed: {}", e);
+        format!("Synthesis: {}", e)
+    })?;
 
     tracing::info!("[Kokoro] Synthesized {} samples in {:?}", samples.len(), start.elapsed());
 
