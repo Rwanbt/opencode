@@ -37,3 +37,10 @@ packages/mobile/src-tauri/.cargo/config.toml
 
 # Local LLM eval results
 packages/opencode/test/tool/eval-results/
+
+# Claude Code / OpenCode agent workspace
+.claudeignore
+.opencode/
+
+# Dev scratch files (Rust examples, test snippets)
+packages/desktop/src-tauri/examples/
