@@ -29,8 +29,10 @@ export namespace ProviderTransform {
         return "azure"
       case "@ai-sdk/openai":
         return "openai"
-      case "@ai-sdk/openai-compatible":
-        return "openaiCompatible"
+      // NOTE: @ai-sdk/openai-compatible is intentionally omitted.
+      // createOpenAICompatible() uses `name` (= model.providerID) as providerOptionsName,
+      // so the key must stay as model.providerID (undefined here → falls back to model.providerID)
+      // to match the passthrough in the AI SDK: providerOptions[providerOptionsName].
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":

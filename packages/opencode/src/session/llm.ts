@@ -354,11 +354,19 @@ export namespace LLM {
         const base = ProviderTransform.providerOptions(input.model, params.options)
         // For local-llm: inject the adaptive reasoning_budget per-request so llama-server
         // limits thinking tokens proportionally to available context (nothing hardcoded).
+        //
+        // IMPORTANT: The openai-compatible AI SDK provider uses `name` (= model.providerID)
+        // as providerOptionsName. Unknown keys in providerOptions[providerOptionsName] are
+        // forwarded as-is to the request body. So reasoning_budget must go under
+        // model.providerID ("local-llm"), NOT under "openaiCompatible".
+        // ProviderTransform.providerOptions() already returns { [model.providerID]: options }
+        // for local-llm (sdkKey intentionally returns undefined for @ai-sdk/openai-compatible).
         if (localLLMLimits && input.model.providerID === "local-llm") {
+          const key = input.model.providerID
           return {
             ...base,
-            openaiCompatible: {
-              ...(base.openaiCompatible ?? {}),
+            [key]: {
+              ...(base[key] ?? {}),
               reasoning_budget: localLLMLimits.reasoningBudget,
             },
           }
