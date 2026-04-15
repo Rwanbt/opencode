@@ -553,6 +553,7 @@ pub fn serve(
     app: &AppHandle,
     hostname: &str,
     port: u32,
+    username: &str,
     password: &str,
     tls_enabled: bool,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
@@ -561,7 +562,7 @@ pub fn serve(
     tracing::info!(port, tls_enabled, "Spawning sidecar");
 
     let mut envs = vec![
-        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+        ("OPENCODE_SERVER_USERNAME", username.to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
 

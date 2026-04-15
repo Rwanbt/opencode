@@ -2,6 +2,14 @@ import { usePlatform } from "@/context/platform"
 import type { ServerConnection } from "@/context/server"
 import { createSdkForServer } from "./server"
 
+// Persistent debug logging for mobile (writes to file via Tauri invoke)
+function debugLog(msg: string) {
+  try {
+    const inv = (window as any).__TAURI_INTERNALS__?.invoke
+    if (inv) inv("write_debug_log", { message: msg }).catch(() => {})
+  } catch {}
+}
+
 export type ServerHealth = { healthy: boolean; version?: string }
 
 interface CheckServerHealthOptions {
@@ -87,8 +95,18 @@ export async function checkServerHealth(
       signal,
     })
       .global.health()
-      .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
-      .catch((error) => next(count, error))
+      .then((x) => {
+        const msg = "[health] url=" + server.url + " user=" + (server.username ?? "-") + " hasPass=" + !!server.password + " error=" + JSON.stringify(x.error) + " data=" + JSON.stringify(x.data)
+        console.log(msg)
+        debugLog(msg)
+        return x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }
+      })
+      .catch((error) => {
+        const msg = "[health] CATCH url=" + server.url + " user=" + (server.username ?? "-") + " hasPass=" + !!server.password + " error=" + String(error)
+        console.log(msg)
+        debugLog(msg)
+        return next(count, error)
+      })
   return attempt(0).finally(() => timeout?.clear?.())
 }
 

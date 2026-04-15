@@ -431,6 +431,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::get_remote_config,
             server::set_remote_enabled,
             server::reset_remote_password,
+            server::set_remote_credentials,
             server::set_internet_mode,
             server::export_tls_cert,
             server::rotate_tls_cert,
@@ -522,6 +523,7 @@ async fn initialize(app: AppHandle) {
     // In TLS/Internet mode the sidecar serves HTTPS, so we use https:// here.
     let scheme = if remote_config.tls_enabled { "https" } else { "http" };
     let url = format!("{scheme}://127.0.0.1:{port}");
+    let username = remote_config.username.clone();
     let password = remote_config.password.clone();
     let tls_enabled = remote_config.tls_enabled;
 
@@ -530,6 +532,7 @@ async fn initialize(app: AppHandle) {
         app.clone(),
         hostname.to_string(),
         port,
+        username.clone(),
         password.clone(),
         tls_enabled,
     );
@@ -538,7 +541,7 @@ async fn initialize(app: AppHandle) {
     let (ready_tx, ready_rx) = oneshot::channel();
     let _ = ready_tx.send(ServerReadyData {
         url: url.clone(),
-        username: Some("opencode".to_string()),
+        username: Some(username),
         password: Some(password),
     });
     app.manage(SidecarReady(ready_rx.shared()));

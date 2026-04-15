@@ -1,5 +1,14 @@
 import type { Platform } from "@opencode-ai/app"
-import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal } from "./runtime"
+import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal, writeDebugLog } from "./runtime"
+
+// Fingerprint du serveur privé (reçu via QR en mode Internet).
+// Quand défini, les requêtes HTTPS passent par la commande Rust
+// fetch_private_server qui accepte les certs self-signed.
+let _privateFp: string | null = null
+
+export function setPrivateServerFp(fp: string | null) {
+  _privateFp = fp
+}
 
 const pkg = { version: "0.1.0" }
 
@@ -61,6 +70,10 @@ export async function createPlatform(): Promise<Platform> {
   }
 
   const settings = makeStorage(settingsStore)
+
+  // Capture la référence fetch une seule fois, exactement comme l'original.
+  // Cela préserve le binding et le contexte du plugin Tauri HTTP.
+  const _baseFetch = (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window)
 
   return {
     platform: "mobile" as any,
@@ -177,7 +190,36 @@ export async function createPlatform(): Promise<Platform> {
       return makeStorage(name ? createStore(name) : settingsStore)
     },
 
-    fetch: (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window),
+    fetch: (input, init) => {
+      // Quand un fingerprint de serveur privé est connu et que l'URL est HTTPS,
+      // on utilise la commande Rust fetch_private_server qui accepte les certs
+      // self-signed (mode Internet avec cert rcgen auto-signé).
+      if (_privateFp) {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : (input as Request).url
+        if (/^https:\/\//.test(url)) {
+          return import("@tauri-apps/api/core").then(({ invoke }) =>
+            invoke<{ status: number; body: string }>("fetch_private_server", {
+              url,
+              method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+              headers: Object.fromEntries(
+                new Headers(
+                  init?.headers ?? (input instanceof Request ? input.headers : {}),
+                ).entries(),
+              ),
+              body: typeof init?.body === "string" ? init.body : undefined,
+            }).then(({ status, body }) => new Response(body, { status })),
+          )
+        }
+      }
+      // Chemin normal : utilise la référence _baseFetch capturée à la création
+      // du platform (identique au code original avant les modifications C1).
+      return _baseFetch(input as any, init)
+    },
 
     async getDefaultServer() {
       return ((await settings.getItem("defaultServerUrl")) ?? null) as any
@@ -201,14 +243,14 @@ export async function createPlatform(): Promise<Platform> {
 
     async startLocalServer() {
       if (os !== "android") return null
-      console.log("[OpenCode] startLocalServer: checking runtime...")
+      await writeDebugLog("startLocalServer: checking runtime...")
       const info = await checkRuntime()
-      console.log("[OpenCode] runtime info:", JSON.stringify(info))
+      await writeDebugLog(`checkRuntime: ready=${info.ready} server_running=${info.server_running} port=${info.port}`)
 
       if (!info.ready) {
-        console.log("[OpenCode] runtime not ready, extracting...")
+        await writeDebugLog("runtime not ready, extracting...")
         try { await extractRuntime() } catch (e) {
-          console.error("[OpenCode] extract failed:", e)
+          await writeDebugLog(`extract failed: ${e}`)
           throw new Error(`Extract failed: ${e}`)
         }
       }
@@ -217,37 +259,40 @@ export async function createPlatform(): Promise<Platform> {
 
       if (info.server_running) {
         const savedPw = await settings.getItem("localServerPassword")
+        await writeDebugLog(`server_running=true savedPw=${savedPw ? savedPw.slice(0,8)+"..." : "null"}`)
         if (savedPw) {
-          console.log("[OpenCode] server already running, reusing saved password")
+          await writeDebugLog(`returning cached: url=http://127.0.0.1:${port} pw=${savedPw.slice(0,8)}...`)
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw }
         }
-        // Server running but no saved password — stop and restart with a fresh one
-        console.log("[OpenCode] server running but no saved password, restarting...")
+        await writeDebugLog("server running but no saved password, restarting...")
         try { await stopLocal(port) } catch {}
       }
 
       const password = crypto.randomUUID()
+      await writeDebugLog(`fresh start: port=${port} pw=${password.slice(0,8)}...`)
       // Save password BEFORE starting server to avoid race conditions
       await settings.setItem("localServerPassword", password)
       await settings.setItem("localServerPort", String(port))
 
-      console.log("[OpenCode] starting embedded server on port", port)
       try {
         await startEmbeddedServer(port, password)
+        await writeDebugLog("startEmbeddedServer OK")
       } catch (e) {
-        console.error("[OpenCode] startEmbeddedServer failed:", e)
+        await writeDebugLog(`startEmbeddedServer FAILED: ${e}`)
         throw new Error(`Server start failed: ${e}`)
       }
 
-      console.log("[OpenCode] waiting for health check...")
+      await writeDebugLog("waiting for health check (30s)...")
       for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 1000))
-        if (await checkLocalHealth(port, password)) {
-          console.log("[OpenCode] server healthy!")
+        const healthy = await checkLocalHealth(port, password)
+        await writeDebugLog(`checkLocalHealth(${i+1}): ${healthy}`)
+        if (healthy) {
+          await writeDebugLog(`returning: url=http://127.0.0.1:${port} pw=${password.slice(0,8)}...`)
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
         }
       }
-      console.error("[OpenCode] health check timed out after 30s")
+      await writeDebugLog("health check timed out after 30s")
       return null
     },
 
