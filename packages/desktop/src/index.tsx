@@ -342,10 +342,14 @@ const createPlatform = (): Platform => {
     },
 
     fetch: (input, init) => {
+      // Accept self-signed certs for loopback HTTPS (local sidecar in TLS/Internet mode).
+      // The sidecar cert is generated locally; no MITM is possible on 127.0.0.1.
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url
+      const isLoopbackHttps = /^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?($|\/)/i.test(url)
       if (input instanceof Request) {
-        return tauriFetch(input)
+        return tauriFetch(input, isLoopbackHttps ? ({ danger: { acceptInvalidCerts: true } } as any) : undefined)
       } else {
-        return tauriFetch(input, init)
+        return tauriFetch(input, isLoopbackHttps ? { ...init, danger: { acceptInvalidCerts: true } } as any : init)
       }
     },
 
@@ -369,6 +373,10 @@ const createPlatform = (): Platform => {
 
     resetRemoteAccessPassword: async () => {
       return toRemoteAccessInfo(await commands.resetRemotePassword())
+    },
+
+    setRemoteCredentials: async (username: string, password: string) => {
+      return toRemoteAccessInfo(await commands.setRemoteCredentials(username, password))
     },
 
     setInternetModeEnabled: async (enabled) => {
