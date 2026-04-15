@@ -401,16 +401,20 @@ pub fn run() {
                 #[cfg(windows)]
                 {
                     use std::os::windows::process::CommandExt;
-                    let _ = std::process::Command::new("taskkill")
-                        .args(["/F", "/IM", "opencode-cli.exe"])
-                        .creation_flags(0x08000000)
-                        .output();
+                    for process in ["opencode-cli.exe", "llama-server.exe"] {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/F", "/IM", process])
+                            .creation_flags(0x08000000)
+                            .output();
+                    }
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = std::process::Command::new("killall")
-                        .arg("opencode-cli")
-                        .output();
+                    for process in ["opencode-cli", "llama-server"] {
+                        let _ = std::process::Command::new("killall")
+                            .arg(process)
+                            .output();
+                    }
                 }
             }
         });
