@@ -347,9 +347,9 @@ const createPlatform = (): Platform => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url
       const isLoopbackHttps = /^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?($|\/)/i.test(url)
       if (input instanceof Request) {
-        return tauriFetch(input, isLoopbackHttps ? ({ danger: { acceptInvalidCerts: true } } as any) : undefined)
+        return tauriFetch(input, isLoopbackHttps ? ({ danger: { acceptInvalidCerts: true, acceptInvalidHostnames: false } } as any) : undefined)
       } else {
-        return tauriFetch(input, isLoopbackHttps ? { ...init, danger: { acceptInvalidCerts: true } } as any : init)
+        return tauriFetch(input, isLoopbackHttps ? { ...init, danger: { acceptInvalidCerts: true, acceptInvalidHostnames: false } } as any : init)
       }
     },
 

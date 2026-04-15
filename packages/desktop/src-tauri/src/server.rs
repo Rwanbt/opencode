@@ -25,9 +25,16 @@ pub struct RemoteConfig {
     pub enabled: bool,
     /// Stable UUID used for HTTP basic auth. Reset via `reset_remote_password`.
     pub password: String,
+    /// Username for HTTP basic auth. Customisable via `set_remote_credentials`.
+    #[serde(default = "default_username")]
+    pub username: String,
     /// When true, the sidecar serves HTTPS/WSS (Internet mode). Requires enabled=true.
     #[serde(default)]
     pub tls_enabled: bool,
+}
+
+fn default_username() -> String {
+    "opencode".to_string()
 }
 
 impl Default for RemoteConfig {
@@ -35,6 +42,7 @@ impl Default for RemoteConfig {
         Self {
             enabled: false,
             password: uuid::Uuid::new_v4().to_string(),
+            username: default_username(),
             tls_enabled: false,
         }
     }
@@ -47,6 +55,7 @@ impl Default for RemoteConfig {
 pub struct RemoteConnectionInfo {
     pub enabled: bool,
     pub password: String,
+    pub username: String,
     pub port: u32,
     /// Best-effort detected LAN address. None if no non-loopback interface is
     /// reachable (offline, all interfaces down, etc.).
@@ -120,6 +129,7 @@ pub fn get_remote_config(app: AppHandle) -> RemoteConnectionInfo {
     RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
+        username: config.username,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
         tls_enabled: config.tls_enabled,
@@ -144,6 +154,7 @@ pub fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteConnect
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
+        username: config.username,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
         tls_enabled: config.tls_enabled,
@@ -179,6 +190,7 @@ pub fn set_internet_mode(app: AppHandle, enabled: bool) -> Result<RemoteConnecti
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
+        username: config.username,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
         tls_enabled: config.tls_enabled,
@@ -214,6 +226,7 @@ pub fn rotate_tls_cert(app: AppHandle) -> Result<RemoteConnectionInfo, String> {
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
+        username: config.username,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
         tls_enabled: config.tls_enabled,
@@ -235,6 +248,40 @@ pub fn reset_remote_password(app: AppHandle) -> Result<RemoteConnectionInfo, Str
     Ok(RemoteConnectionInfo {
         enabled: config.enabled,
         password: config.password,
+        username: config.username,
+        port: crate::runtime_sidecar_port(),
+        lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
+        tls_enabled: config.tls_enabled,
+        tls_fingerprint,
+    })
+}
+
+/// Updates the username and/or password used for HTTP basic auth.
+/// Change takes effect on next app launch.
+#[tauri::command]
+#[specta::specta]
+pub fn set_remote_credentials(
+    app: AppHandle,
+    username: String,
+    password: String,
+) -> Result<RemoteConnectionInfo, String> {
+    let mut config = load_remote_config(&app);
+    if !username.is_empty() {
+        config.username = username;
+    }
+    if !password.is_empty() {
+        config.password = password;
+    }
+    save_remote_config(&app, &config)?;
+    let tls_fingerprint = if config.tls_enabled {
+        crate::tls::ensure_cert(&app).ok().map(|c| c.fingerprint)
+    } else {
+        None
+    };
+    Ok(RemoteConnectionInfo {
+        enabled: config.enabled,
+        password: config.password,
+        username: config.username,
         port: crate::runtime_sidecar_port(),
         lan_ip: detect_lan_ip().map(|ip| ip.to_string()),
         tls_enabled: config.tls_enabled,
@@ -315,10 +362,11 @@ pub fn spawn_local_server(
     app: AppHandle,
     hostname: String,
     port: u32,
+    username: String,
     password: String,
     tls_enabled: bool,
 ) -> (CommandChild, HealthCheck) {
-    let (child, exit) = cli::serve(&app, &hostname, port, &password, tls_enabled);
+    let (child, exit) = cli::serve(&app, &hostname, port, &username, &password, tls_enabled);
 
     let health_check = HealthCheck(tokio::spawn(async move {
         let scheme = if tls_enabled { "https" } else { "http" };

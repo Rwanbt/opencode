@@ -15,6 +15,7 @@ export const commands = {
 	getRemoteConfig: () => __TAURI_INVOKE<RemoteConnectionInfo>("get_remote_config"),
 	setRemoteEnabled: (enabled: boolean) => __TAURI_INVOKE<RemoteConnectionInfo>("set_remote_enabled", { enabled }),
 	resetRemotePassword: () => __TAURI_INVOKE<RemoteConnectionInfo>("reset_remote_password"),
+	setRemoteCredentials: (username: string, password: string) => __TAURI_INVOKE<RemoteConnectionInfo>("set_remote_credentials", { username, password }),
 	setInternetMode: (enabled: boolean) => __TAURI_INVOKE<RemoteConnectionInfo>("set_internet_mode", { enabled }),
 	exportTlsCert: () => __TAURI_INVOKE<string>("export_tls_cert"),
 	rotateTlsCert: () => __TAURI_INVOKE<RemoteConnectionInfo>("rotate_tls_cert"),
@@ -55,6 +56,7 @@ export type WslConfig = {
 export type RemoteConnectionInfo = {
 		enabled: boolean,
 		password: string,
+		username: string,
 		port: number,
 		lanIp: string | null,
 		tlsEnabled: boolean,

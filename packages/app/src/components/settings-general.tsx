@@ -449,6 +449,7 @@ export const SettingsGeneral: Component = () => {
     const [info, setInfo] = createSignal<{
       enabled: boolean
       password: string
+      username: string
       port: number
       lanIp: string | null
       tlsEnabled: boolean
@@ -457,6 +458,9 @@ export const SettingsGeneral: Component = () => {
     const [reveal, setReveal] = createSignal(false)
     const [busy, setBusy] = createSignal(false)
     const [dirty, setDirty] = createSignal(false)
+    const [editUsername, setEditUsername] = createSignal("")
+    const [editPassword, setEditPassword] = createSignal("")
+    const [editingCredentials, setEditingCredentials] = createSignal(false)
 
     void platform.getRemoteAccess?.().then(setInfo)
 
@@ -541,6 +545,32 @@ export const SettingsGeneral: Component = () => {
         .finally(() => setBusy(false))
     }
 
+    const onSaveCredentials = () => {
+      if (busy()) return
+      const u = editUsername().trim()
+      const p = editPassword().trim()
+      if (!u && !p) return
+      setBusy(true)
+      platform
+        .setRemoteCredentials?.(u, p)
+        .then((updated) => {
+          if (updated) setInfo(updated)
+          setEditUsername("")
+          setEditPassword("")
+          setEditingCredentials(false)
+          setDirty(true)
+        })
+        .catch((err: unknown) => {
+          showToast({
+            variant: "error",
+            icon: "circle-x",
+            title: "Failed to save credentials",
+            description: err instanceof Error ? err.message : String(err),
+          })
+        })
+        .finally(() => setBusy(false))
+    }
+
     const onExportCert = () => {
       if (busy()) return
       setBusy(true)
@@ -618,7 +648,7 @@ export const SettingsGeneral: Component = () => {
       const url = `${scheme}://${host}:${data.port}`
       const params = new URLSearchParams({
         url,
-        user: "opencode",
+        user: data.username,
         pwd: data.password,
       })
       // Include TLS fingerprint so the client can pin the cert.
@@ -684,28 +714,87 @@ export const SettingsGeneral: Component = () => {
               title={language.t("settings.desktop.remote.password.title")}
               description={language.t("settings.desktop.remote.password.description")}
             >
-              <div class="flex items-center gap-2">
-                <span class="text-12-regular text-text-weak font-mono select-all">
-                  {info() ? (reveal() ? info()!.password : maskedPassword(info()!.password)) : "…"}
-                </span>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => setReveal(!reveal())}
-                  disabled={!info()}
-                >
-                  {reveal()
-                    ? language.t("settings.desktop.remote.password.hide")
-                    : language.t("settings.desktop.remote.password.reveal")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={onResetPassword}
-                  disabled={busy() || !info()}
-                >
-                  {language.t("settings.desktop.remote.password.reset")}
-                </Button>
+              <div class="flex flex-col gap-2">
+                {/* Current credentials display */}
+                <div class="flex items-center gap-2">
+                  <span class="text-12-regular text-text-weak font-mono">
+                    {info() ? info()!.username : "…"}
+                    {" / "}
+                  </span>
+                  <span class="text-12-regular text-text-weak font-mono select-all">
+                    {info() ? (reveal() ? info()!.password : maskedPassword(info()!.password)) : "…"}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={() => setReveal(!reveal())}
+                    disabled={!info()}
+                  >
+                    {reveal()
+                      ? language.t("settings.desktop.remote.password.hide")
+                      : language.t("settings.desktop.remote.password.reveal")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={onResetPassword}
+                    disabled={busy() || !info()}
+                  >
+                    {language.t("settings.desktop.remote.password.reset")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={() => {
+                      setEditUsername(info()?.username ?? "")
+                      setEditPassword("")
+                      setEditingCredentials(!editingCredentials())
+                    }}
+                    disabled={!info()}
+                  >
+                    Personnaliser
+                  </Button>
+                </div>
+                {/* Inline editor */}
+                <Show when={editingCredentials()}>
+                  <div class="flex flex-col gap-1.5 rounded-md border border-border-weak-base bg-surface-panel p-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-11-regular text-text-weak w-20 shrink-0">Username</span>
+                      <input
+                        class="flex-1 text-12-regular bg-transparent border border-border-weak-base rounded px-2 py-1 text-text-strong font-mono outline-none focus:border-border-base"
+                        value={editUsername()}
+                        onInput={(e) => setEditUsername(e.currentTarget.value)}
+                        placeholder={info()?.username ?? "opencode"}
+                        autocomplete="off"
+                        spellcheck={false}
+                      />
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-11-regular text-text-weak w-20 shrink-0">Password</span>
+                      <input
+                        class="flex-1 text-12-regular bg-transparent border border-border-weak-base rounded px-2 py-1 text-text-strong font-mono outline-none focus:border-border-base"
+                        value={editPassword()}
+                        onInput={(e) => setEditPassword(e.currentTarget.value)}
+                        placeholder="Nouveau mot de passe…"
+                        type="password"
+                        autocomplete="new-password"
+                      />
+                    </div>
+                    <div class="flex gap-2 justify-end">
+                      <Button variant="secondary" size="small" onClick={() => setEditingCredentials(false)}>
+                        Annuler
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="small"
+                        onClick={onSaveCredentials}
+                        disabled={busy() || (!editUsername().trim() && !editPassword().trim())}
+                      >
+                        Sauvegarder
+                      </Button>
+                    </div>
+                  </div>
+                </Show>
               </div>
             </SettingsRow>
 
@@ -728,6 +817,7 @@ export const SettingsGeneral: Component = () => {
                 </Show>
               </SettingsRow>
             </Show>
+
 
             {/* Internet (TLS) mode — certificate management */}
             <Show when={mode() === "internet"}>
@@ -810,7 +900,7 @@ export const SettingsGeneral: Component = () => {
               >
                 <div class="flex flex-col items-center gap-1">
                   <div
-                    class={`rounded-lg border-2 bg-background-elevated p-2 ${qrBorderClass()}`}
+                    class={`rounded-lg border-2 bg-background-elevated p-2 flex items-center justify-center [&_svg]:block ${qrBorderClass()}`}
                     style={{ width: "176px", height: "176px" }}
                     // qrcode returns a self-contained <svg> string, safe to inject.
                     innerHTML={qrSvg()!}

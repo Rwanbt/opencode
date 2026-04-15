@@ -13,7 +13,7 @@ import "./mobile.css"
 import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
 import { ModelManager } from "./components/model-manager"
-import { createPlatform } from "./platform"
+import { createPlatform, setPrivateServerFp } from "./platform"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 
 const root = document.getElementById("root")
@@ -115,6 +115,9 @@ function App() {
     if (!url) return false
     const user = parsed.searchParams.get("user") ?? "opencode"
     const pwd = parsed.searchParams.get("pwd") ?? ""
+    // Fingerprint TLS : active le mode self-signed pour ce serveur privé
+    const fp = parsed.searchParams.get("fp")
+    setPrivateServerFp(fp)
 
     setRemoteUrl(url)
     setRemoteUsername(user)
