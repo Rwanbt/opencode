@@ -14,8 +14,11 @@ const LLAMA_RELEASE_TAG: &str = "b8731";
 
 fn llama_asset_name() -> String {
     let tag = LLAMA_RELEASE_TAG;
+    // CUDA 12.4 instead of Vulkan: fixes Gemma 4 <unused> token infinite loop
+    // on Vulkan backend (llama.cpp issue #21516, still open). CUDA build has
+    // partial fix for the same issue (PR #21506, issue #21321 closed).
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    { format!("llama-{tag}-bin-win-vulkan-x64.zip") }
+    { format!("llama-{tag}-bin-win-cuda-12.4-x64.zip") }
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     { format!("llama-{tag}-bin-ubuntu-x64.tar.gz") }
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
@@ -24,6 +27,16 @@ fn llama_asset_name() -> String {
     { format!("llama-{tag}-bin-macos-arm64.tar.gz") }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     { format!("llama-{tag}-bin-macos-x64.tar.gz") }
+}
+
+/// Backend identifier stored in runtime_dir/backend.txt.
+/// If it changes (e.g. vulkan → cuda), the runtime is purged and re-downloaded
+/// to avoid mixing DLLs from different backends.
+fn backend_marker() -> &'static str {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    { "cuda-12.4" }
+    #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+    { "default" }
 }
 
 fn llama_server_exe() -> &'static str {
@@ -157,43 +170,19 @@ async fn download_file(
     Ok(())
 }
 
-async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
-    let server = llama_server_path(app);
-    if server.exists() {
-        return Ok(server);
-    }
-
-    tracing::info!("[LLM] Downloading llama.cpp runtime...");
-
-    let rt_dir = runtime_dir(app);
-    let _ = fs::create_dir_all(&rt_dir);
-
-    let zip_url = format!(
-        "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-        LLAMA_RELEASE_TAG, llama_asset_name()
-    );
-    let zip_path = rt_dir.join("llama-runtime.zip");
-
-    download_file(app, &zip_url, &zip_path, None).await?;
-
-    // Extract zip
-    tracing::info!("[LLM] Extracting runtime...");
-    let zip_path_clone = zip_path.clone();
-    let rt_dir_clone = rt_dir.clone();
+/// Extract a zip archive, flattening all entries into `target_dir`.
+async fn extract_zip_to_dir(zip_path: &PathBuf, target_dir: &PathBuf) -> Result<(), String> {
+    let zip_path = zip_path.clone();
+    let target_dir = target_dir.clone();
     tokio::task::spawn_blocking(move || {
-        let file = fs::File::open(&zip_path_clone).map_err(|e| format!("Open zip: {}", e))?;
-        let mut archive =
-            zip::ZipArchive::new(file).map_err(|e| format!("Read zip: {}", e))?;
+        let file = fs::File::open(&zip_path).map_err(|e| format!("Open zip: {}", e))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Read zip: {}", e))?;
         for i in 0..archive.len() {
-            let mut entry = archive
-                .by_index(i)
-                .map_err(|e| format!("Zip entry: {}", e))?;
-            let name = entry.name().to_string();
+            let mut entry = archive.by_index(i).map_err(|e| format!("Zip entry: {}", e))?;
             if entry.is_dir() {
                 continue;
             }
-            // Extract just the filename (flatten directory structure)
-            let fname = std::path::Path::new(&name)
+            let fname = std::path::Path::new(entry.name())
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
@@ -201,7 +190,7 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
             if fname.is_empty() {
                 continue;
             }
-            let out_path = rt_dir_clone.join(&fname);
+            let out_path = target_dir.join(&fname);
             let mut out = fs::File::create(&out_path)
                 .map_err(|e| format!("Create {}: {}", fname, e))?;
             std::io::copy(&mut entry, &mut out)
@@ -211,10 +200,67 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     })
     .await
     .map_err(|e| format!("Extract task: {}", e))?
-    .map_err(|e| format!("Extract: {}", e))?;
+    .map_err(|e| format!("Extract: {}", e))
+}
 
-    // Clean up zip
+async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    let server = llama_server_path(app);
+    let rt_dir = runtime_dir(app);
+    let marker_path = rt_dir.join("backend.txt");
+    let expected_backend = backend_marker();
+
+    // Return early only if binary exists AND backend marker matches.
+    // If the backend changed (e.g. vulkan → cuda), purge the old runtime to
+    // avoid mixing DLLs from different backends.
+    if server.exists() {
+        let current = fs::read_to_string(&marker_path).unwrap_or_default();
+        if current.trim() == expected_backend {
+            return Ok(server);
+        }
+        tracing::info!(
+            "[LLM] Backend changed ({} → {}), clearing runtime dir...",
+            current.trim(), expected_backend
+        );
+        let _ = fs::remove_dir_all(&rt_dir);
+    }
+
+    tracing::info!("[LLM] Downloading llama.cpp runtime ({})...", expected_backend);
+    let _ = fs::create_dir_all(&rt_dir);
+
+    let zip_url = format!(
+        "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
+        LLAMA_RELEASE_TAG, llama_asset_name()
+    );
+    let zip_path = rt_dir.join("llama-runtime.zip");
+
+    download_file(app, &zip_url, &zip_path, None).await?;
+    tracing::info!("[LLM] Extracting runtime...");
+    extract_zip_to_dir(&zip_path, &rt_dir).await?;
     let _ = fs::remove_file(&zip_path);
+
+    // On Windows CUDA builds: also download the CUDA runtime DLLs (cudart) so
+    // llama-server.exe starts without requiring the full CUDA Toolkit installed.
+    // Failure is non-fatal: modern NVIDIA drivers already bundle cudart 12.x.
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    if expected_backend.starts_with("cuda") {
+        let cudart_url = format!(
+            "https://github.com/ggml-org/llama.cpp/releases/download/{}/cudart-llama-bin-win-cuda-12.4-x64.zip",
+            LLAMA_RELEASE_TAG
+        );
+        let cudart_path = rt_dir.join("cudart.zip");
+        tracing::info!("[LLM] Downloading CUDA runtime DLLs...");
+        match download_file(app, &cudart_url, &cudart_path, None).await {
+            Ok(_) => {
+                if let Err(e) = extract_zip_to_dir(&cudart_path, &rt_dir).await {
+                    tracing::warn!("[LLM] cudart extraction failed (driver-bundled cudart may be used): {}", e);
+                }
+                let _ = fs::remove_file(&cudart_path);
+            }
+            Err(e) => {
+                tracing::warn!("[LLM] cudart download failed (driver-bundled cudart may be used): {}", e);
+            }
+        }
+    }
 
     if !server.exists() {
         return Err(format!("{} not found after extraction", llama_server_exe()));
@@ -226,6 +272,9 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&server, fs::Permissions::from_mode(0o755));
     }
+
+    // Stamp the backend marker so future runs skip re-download
+    let _ = fs::write(&marker_path, expected_backend);
 
     tracing::info!("[LLM] Runtime ready at {}", server.display());
     Ok(server)
@@ -300,8 +349,11 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         *state.active_model.lock().unwrap() = None;
     }
 
-    // Check for orphaned llama-server on our port (e.g. from a crash or external launch)
+    // Check for orphaned llama-server on our port (e.g. from a crash or force-kill).
+    // Reuse it only if: same model AND slot is idle (not stuck in an infinite generation).
+    // Any other state (wrong model, slot processing) → kill the orphan and restart.
     let client = reqwest::Client::new();
+    let mut need_kill = false;
     if let Ok(resp) = client
         .get(format!("http://127.0.0.1:{}/props", LLM_PORT))
         .timeout(std::time::Duration::from_secs(2))
@@ -309,33 +361,51 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .await
     {
         if resp.status().is_success() {
-            // A server is already running — check if it has the right model
             let body = resp.text().await.unwrap_or_default();
             if body.contains(&filename) {
-                tracing::info!("[LLM] Reusing existing llama-server with {}", filename);
-                let state = app.state::<LlmServerState>();
-                *state.active_model.lock().unwrap() = Some(filename.clone());
-                return Ok(());
+                // Same model — check whether the slot is idle or stuck processing
+                let slot_idle = match client
+                    .get(format!("http://127.0.0.1:{}/slots", LLM_PORT))
+                    .timeout(std::time::Duration::from_secs(2))
+                    .send()
+                    .await
+                {
+                    Ok(r) => match r.text().await {
+                        Ok(t) => !t.contains("\"is_processing\":true"),
+                        Err(_) => false,
+                    },
+                    Err(_) => false,
+                };
+
+                if slot_idle {
+                    tracing::info!("[LLM] Reusing existing llama-server (idle slot) with {}", filename);
+                    let state = app.state::<LlmServerState>();
+                    *state.active_model.lock().unwrap() = Some(filename.clone());
+                    return Ok(());
+                }
+                tracing::warn!("[LLM] Orphaned llama-server is stuck (slot processing) — killing it");
+            } else {
+                tracing::warn!("[LLM] Killing orphaned llama-server (wrong model) on port {}", LLM_PORT);
             }
-            // Wrong model — kill the orphan via OS
-            tracing::warn!("[LLM] Killing orphaned llama-server (wrong model) on port {}", LLM_PORT);
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", &format!(
-                        "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr \"0.0.0.0:{}\" ^| findstr LISTENING') do taskkill /PID %a /F",
-                        LLM_PORT
-                    )])
-                    .output();
-            }
-            #[cfg(unix)]
-            {
-                let _ = std::process::Command::new("sh")
-                    .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
-                    .output();
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            need_kill = true;
         }
+    }
+    if need_kill {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", "llama-server.exe"])
+                .creation_flags(0x08000000)
+                .output();
+        }
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("sh")
+                .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
+                .output();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     }
 
     // Ensure llama-server runtime is available

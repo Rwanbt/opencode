@@ -29,6 +29,8 @@ export namespace ProviderTransform {
         return "azure"
       case "@ai-sdk/openai":
         return "openai"
+      case "@ai-sdk/openai-compatible":
+        return "openaiCompatible"
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
@@ -793,7 +795,7 @@ export namespace ProviderTransform {
 
     // Disable thinking for local LLM models (llama.cpp Qwen etc. generate <think> tags otherwise)
     if (input.model.providerID === "local-llm" && !input.model.capabilities.reasoning) {
-      result["chat_template_args"] = { enable_thinking: false }
+      result["chat_template_kwargs"] = { enable_thinking: false }
     }
 
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
@@ -809,7 +811,7 @@ export namespace ProviderTransform {
       input.model.providerID === "baseten" ||
       (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
     ) {
-      result["chat_template_args"] = { enable_thinking: true }
+      result["chat_template_kwargs"] = { enable_thinking: true }
     }
 
     if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {

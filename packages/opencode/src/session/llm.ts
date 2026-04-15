@@ -23,6 +23,50 @@ export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+  /**
+   * Queries the running llama-server /props endpoint to compute adaptive token limits.
+   *
+   * All values are derived from the ACTUAL n_ctx reported by llama-server after it
+   * applied --fit (VRAM-aware auto-adjustment). No model-specific or device-specific
+   * constants — everything scales with the real context window.
+   *
+   *   n_ctx          = real context after VRAM fit (e.g. 16 384, 32 768, 131 072…)
+   *   max_tokens     = 40 % of n_ctx  → total tokens allowed for output (thinking + reply)
+   *                    capped by model.limit.output so user config is always respected
+   *   reasoning_budget = 10 % of max_tokens, clamped to [128, 1024]
+   *                    → thinking gets at most 10 % of the output budget
+   *                    → remaining ≥ 90 % is guaranteed for the actual reply
+   *
+   * Falls back to (null) on any error — callers use model defaults in that case.
+   */
+  async function getLocalLLMAdaptiveLimits(
+    baseURL: string,
+    model: Provider.Model,
+  ): Promise<{ maxTokens: number; reasoningBudget: number } | null> {
+    try {
+      // Derive props URL from baseURL (strip trailing /v1 or /v1/)
+      const propsUrl = baseURL.replace(/\/v1\/?$/, "") + "/props"
+      const resp = await fetch(propsUrl, { signal: AbortSignal.timeout(1500) })
+      if (!resp.ok) return null
+      const data = await resp.json() as { default_generation_settings?: { n_ctx?: number } }
+      const nCtx = data.default_generation_settings?.n_ctx ?? 0
+      if (!nCtx) return null
+
+      // 40 % of context for output, bounded by model's declared output limit
+      const modelOutputMax = ProviderTransform.maxOutputTokens(model)
+      const maxTokens = Math.min(Math.floor(nCtx * 0.4), modelOutputMax)
+
+      // 10 % of output budget for thinking, clamped to [128, 1024]
+      // — enough for meaningful reasoning without starving the response
+      const reasoningBudget = Math.min(Math.max(128, Math.floor(maxTokens * 0.1)), 1024)
+
+      log.info("local-llm adaptive limits", { nCtx, maxTokens, reasoningBudget })
+      return { maxTokens, reasoningBudget }
+    } catch {
+      return null
+    }
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -205,12 +249,17 @@ export namespace LLM {
       },
     )
 
+    // Adaptive limits for local-llm: derived from actual n_ctx reported by llama-server.
+    // For all other providers: standard model output limit.
+    const localLLMLimits =
+      input.model.providerID === "local-llm"
+        ? await getLocalLLMAdaptiveLimits(provider.options?.baseURL ?? "http://127.0.0.1:14097/v1", input.model)
+        : null
+
     const maxOutputTokens =
       isOpenaiOauth || provider.id.includes("github-copilot")
         ? undefined
-        : input.model.providerID === "local-llm"
-          ? Math.min(ProviderTransform.maxOutputTokens(input.model), 4096)
-          : ProviderTransform.maxOutputTokens(input.model)
+        : localLLMLimits?.maxTokens ?? ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -301,7 +350,21 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+      providerOptions: (() => {
+        const base = ProviderTransform.providerOptions(input.model, params.options)
+        // For local-llm: inject the adaptive reasoning_budget per-request so llama-server
+        // limits thinking tokens proportionally to available context (nothing hardcoded).
+        if (localLLMLimits && input.model.providerID === "local-llm") {
+          return {
+            ...base,
+            openaiCompatible: {
+              ...(base.openaiCompatible ?? {}),
+              reasoning_budget: localLLMLimits.reasoningBudget,
+            },
+          }
+        }
+        return base
+      })(),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
