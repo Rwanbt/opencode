@@ -90,6 +90,50 @@ export async function autoStartLocalLLM() {
   loading = false
 }
 
+/**
+ * Set up idle-unload: when all sessions become idle (session.all_idle event),
+ * wait 30 seconds and then unload the model to free VRAM.
+ * The timer is cancelled if a new session starts (session.status → busy).
+ * Call this once from the desktop app's root component (requires GlobalSDK context).
+ */
+export function setupLLMIdleUnload(
+  eventListen: (handler: (e: { details: { type: string } }) => void) => () => void,
+): () => void {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  const unsub = eventListen((e) => {
+    const type = e.details.type
+
+    if (type === "session.all_idle") {
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(async () => {
+        idleTimer = undefined
+        try {
+          await invokeTauri("unload_llm_model")
+          currentlyLoaded = null
+          console.log("[AutoLLM] Model unloaded after idle timeout")
+        } catch (err) {
+          console.error("[AutoLLM] Failed to unload model on idle:", err)
+        }
+      }, 30_000)
+    }
+
+    // Cancel the timer if inference resumes (session becomes busy again)
+    if (type === "session.status" && idleTimer) {
+      const detail = e.details as any
+      if (detail.properties?.status?.type === "busy") {
+        clearTimeout(idleTimer)
+        idleTimer = undefined
+      }
+    }
+  })
+
+  return () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    unsub()
+  }
+}
+
 async function findGGUFFile(modelName: string): Promise<string | null> {
   try {
     const models: Array<{ filename: string; size: number }> = await invokeTauri("list_models")

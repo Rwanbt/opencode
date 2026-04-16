@@ -553,15 +553,40 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
-            )
-            await sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-            })
+
+            if (process.stdout.isTTY) {
+              UI.println(
+                UI.Style.TEXT_WARNING_BOLD + "!",
+                UI.Style.TEXT_NORMAL +
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")})`,
+              )
+              // await import() must be outside the Promise constructor (executor is not async)
+              const readline = await import("node:readline")
+              const answer = await new Promise<string>((resolve) => {
+                const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+                rl.question(
+                  UI.Style.TEXT_WARNING + "  Allow? [y]es / [n]o / [a]lways: " + UI.Style.TEXT_NORMAL,
+                  (ans) => {
+                    rl.close()
+                    resolve(ans.trim().toLowerCase())
+                  },
+                )
+              })
+              const reply =
+                answer === "a" || answer === "always"
+                  ? "always"
+                  : answer === "y" || answer === "yes"
+                    ? "once"
+                    : "reject"
+              await sdk.permission.reply({ requestID: permission.id, reply: reply as any })
+            } else {
+              UI.println(
+                UI.Style.TEXT_WARNING_BOLD + "!",
+                UI.Style.TEXT_NORMAL +
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting (non-TTY)`,
+              )
+              await sdk.permission.reply({ requestID: permission.id, reply: "reject" })
+            }
           }
         }
       }
