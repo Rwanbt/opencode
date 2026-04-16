@@ -154,6 +154,8 @@ export namespace SessionStatus {
         totalCost: z.number(),
       }),
     ),
+    // Fired when all tracked sessions have become idle — used to trigger LLM unload.
+    AllIdle: BusEvent.define("session.all_idle", z.object({})),
   }
 
   /** Persist status to DB for states that should survive restarts. */
@@ -235,6 +237,10 @@ export namespace SessionStatus {
         if (status.type === "idle") {
           yield* bus.publish(Event.Idle, { sessionID })
           data.delete(sessionID)
+          // When all sessions are done, signal that the LLM can be released.
+          if (data.size === 0) {
+            yield* bus.publish(Event.AllIdle, {})
+          }
           return
         }
         data.set(sessionID, status)

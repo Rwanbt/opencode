@@ -62,7 +62,8 @@ export namespace LLM {
 
       log.info("local-llm adaptive limits", { nCtx, maxTokens, reasoningBudget })
       return { maxTokens, reasoningBudget }
-    } catch {
+    } catch (e) {
+      log.error("getLocalLLMAdaptiveLimits failed", { error: String(e) })
       return null
     }
   }
@@ -361,7 +362,10 @@ export namespace LLM {
         // model.providerID ("local-llm"), NOT under "openaiCompatible".
         // ProviderTransform.providerOptions() already returns { [model.providerID]: options }
         // for local-llm (sdkKey intentionally returns undefined for @ai-sdk/openai-compatible).
-        if (localLLMLimits && input.model.providerID === "local-llm") {
+        // Only inject reasoning_budget when thinking is active — it's meaningless
+        // (and potentially confusing to llama-server) for Qwen models in /no_think mode.
+        const thinkingActive = !ProviderTransform.shouldSuppressThinking(input.model)
+        if (localLLMLimits && input.model.providerID === "local-llm" && thinkingActive) {
           const key = input.model.providerID
           return {
             ...base,

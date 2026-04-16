@@ -13,6 +13,7 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
+  useGlobalSDK,
 } from "@opencode-ai/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -27,7 +28,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
 import { createResource, onCleanup, onMount, Show } from "solid-js"
-import { ensureLocalLLMLoaded, autoStartLocalLLM } from "./hooks/use-auto-start-llm"
+import { ensureLocalLLMLoaded, autoStartLocalLLM, setupLLMIdleUnload } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
@@ -506,6 +507,7 @@ render(() => {
   function Inner() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
+    const globalSDK = useGlobalSDK()
 
     // Auto-start local LLM on model selection events
     onMount(() => {
@@ -520,6 +522,12 @@ render(() => {
     // Auto-start on launch: if models exist, preload the first one
     onMount(() => {
       autoStartLocalLLM()
+    })
+
+    // Auto-unload: release VRAM 30s after all sessions go idle
+    onMount(() => {
+      const cleanup = setupLLMIdleUnload(globalSDK.event.listen)
+      onCleanup(cleanup)
     })
 
     // Initialize speech listeners (STT/TTS)
