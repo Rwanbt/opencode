@@ -8,6 +8,7 @@ mod llm;
 mod validate;
 #[cfg(target_os = "android")]
 mod proxy;
+#[allow(dead_code)]
 mod kokoro;
 mod parakeet;
 mod speech;

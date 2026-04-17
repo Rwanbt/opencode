@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::runtime::runtime_dir;
 
@@ -258,8 +258,7 @@ pub async fn check_llm_health(app: AppHandle) -> bool {
 
 #[tauri::command]
 pub async fn llm_idle_tick() -> Result<(), String> {
-    // No-op placeholder — hook for foreground-service keepalive in A.4-part2.
-    log::debug!("llm_idle_tick: app went background");
+    eprintln!("[LLM] llm_idle_tick: app went background");
     Ok(())
 }
 
