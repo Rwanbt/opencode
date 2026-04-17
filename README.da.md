@@ -60,11 +60,13 @@ OpenCode kører AI-modeller lokalt på forbrugerhardware (8 GB VRAM / 16 GB RAM)
 
 **Inferensmotor (llama.cpp b8731)**
 - Vulkan GPU-backend, auto-downloadet ved første modelindlæsning
+- **Adaptiv runtime-konfiguration** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, tråde, batch/ubatch-størrelse, KV-cache-kvantisering og kontekststørrelse udledes fra detekteret VRAM, ledig RAM, big.LITTLE CPU-opdeling, GPU-backend (CUDA/ROCm/Vulkan/Metal/OpenCL) og termisk tilstand. Erstatter den gamle hardkodede `--n-gpu-layers 99` — en 4 GB Android kører nu i CPU-fallback i stedet for at blive OOM-dræbt, flagskib-desktops får et tunet batch i stedet for standard 512.
 - `--flash-attn on` — Flash Attention for hukommelseseffektivitet
-- `--cache-type-k/v q4_0` — Hadamard-rotation KV-cache (72% hukommelsesbesparelse)
-- `--fit on` — auto-tilpasser kontekststørrelse og GPU-lagplacering til tilgængelig VRAM
+- `--cache-type-k/v` — KV-cache med Hadamard-rotation; adaptivt niveau (f16 / q8_0 / q4_0) baseret på VRAM-margen
+- `--fit on` — fork-kun sekundær VRAM-justering (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Spekulativ dekodning (`--model-draft`) med VRAM Guard (auto-deaktiverer hvis < 1,5 GB ledig)
 - Enkelt slot (`-np 1`) for at minimere hukommelsesfodaftryk
+- **Benchmark-harness** (`bun run bench:llm`): reproducerbar måling af FTL / TPS / peak RSS / vægtid pr. model, pr. kørsel, JSONL-output til CI-arkivering
 
 **Tale-til-tekst (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet via ONNX Runtime — ~300ms for 5s lyd (18x realtid)
@@ -274,6 +276,30 @@ For at undgå forvirring fra AI-genererede opsummeringer af dette projekt:
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
+
+### Lokal AI (Desktop + Mobil)
+| Kapacitet | Status | Noter |
+|-----------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Adaptiv runtime-konfiguration** | Implemented | `auto-config.ts`: n_gpu_layers / tråde / batch / KV-kvantisering udledes fra detekteret VRAM, RAM, big.LITTLE, GPU-backend, termisk tilstand |
+| **Benchmark-harness** | Implemented | `bun run bench:llm` måler FTL, TPS, peak RSS, vægtid pr. model; JSONL-output |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` til gpt-*/o1/o3/o4; empirisk 3,5 tegn/token til Llama/Qwen/Gemma |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| HuggingFace model search | Implemented | Zod-valideret respons, VRAM-badges, downloadmanager, 9 prækurerede modeller |
+| **Genoptagelige GGUF-downloads** | Implemented | HTTP `Range`-header — en 4G-afbrydelse genstarter ikke en 4 GB-overførsel fra nul |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Circuit breaker-genstart | Implemented | `ensureCorrectModel` afbryder efter 3 genstarter på 120 s for at undgå burn-cycle-løkker |
+
+### Sikkerhed og Governance
+| Kapacitet | Status | Noter |
+|-----------|--------|-------|
+| **Stram CSP (desktop + mobil)** | Implemented | `connect-src` begrænset til loopback + HuggingFace + HTTPS-udbydere; ingen `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Android-release-hærdning** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Validering af Tauri-kommandoinput** | Implemented | `download_model` / `load_llm_model` / `delete_model`-vagter: filnavn-charset, HTTPS-allowlist til `huggingface.co` / `hf.co` |
+| **Rust-logging-kæde** | Implemented | `log` + `android_logger` på mobil; ingen `eprintln!` i release → ingen path/URL-læk til logcat |
+
 ---
 
 ## Future Roadmap

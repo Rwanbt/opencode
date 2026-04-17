@@ -60,11 +60,13 @@
 
 **محرك الاستدلال (llama.cpp b8731)**
 - واجهة GPU خلفية Vulkan، تُحمَّل تلقائياً عند أول تحميل نموذج
+- **تكوين تكيُّفي أثناء التشغيل** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`، الخيوط، حجم batch/ubatch، تكميم ذاكرة KV المؤقتة وحجم السياق، كلها مُستنبطة من VRAM المكتشفة وRAM الحرة وتقسيم CPU big.LITTLE وواجهة GPU الخلفية (CUDA/ROCm/Vulkan/Metal/OpenCL) والحالة الحرارية. يحلّ محل `--n-gpu-layers 99` المُرمَّز سابقاً — جهاز Android بسعة 4 جيجابايت يعمل الآن بوضع CPU الاحتياطي بدلاً من قتله بسبب OOM، وأجهزة سطح المكتب الرائدة تحصل على batch مضبوط بدلاً من الافتراضي 512.
 - `--flash-attn on` — Flash Attention لكفاءة الذاكرة
-- `--cache-type-k/v q4_0` — ذاكرة KV المؤقتة مع دوران Hadamard (توفير 72% من الذاكرة)
-- `--fit on` — ضبط تلقائي لحجم السياق وتوزيع طبقات GPU حسب VRAM المتاحة
+- `--cache-type-k/v` — ذاكرة KV المؤقتة مع دوران Hadamard؛ مستوى تكيُّفي (f16 / q8_0 / q4_0) حسب هامش VRAM
+- `--fit on` — تعديل VRAM ثانوي خاص بالـfork (اختياري عبر `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - فك الترميز التخميني (`--model-draft`) مع حماية VRAM (تعطيل تلقائي عند < 1.5 جيجابايت حرة)
 - فتحة واحدة (`-np 1`) لتقليل استهلاك الذاكرة
+- **إطار قياس الأداء** (`bun run bench:llm`): قياس قابل للتكرار لـFTL / TPS / ذروة RSS / زمن الجدار لكل نموذج ولكل تشغيل، مع إخراج JSONL للأرشفة في CI
 
 **تحويل الكلام إلى نص (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet عبر ONNX Runtime — ~300 مللي ثانية لـ 5 ثوانٍ من الصوت (18x الوقت الفعلي)
@@ -273,12 +275,16 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **تكوين تكيُّفي أثناء التشغيل** | Implemented | `auto-config.ts`: n_gpu_layers / الخيوط / batch / تكميم KV مستنبطة من VRAM المكتشفة وRAM وbig.LITTLE وواجهة GPU الخلفية والحالة الحرارية |
+| **إطار قياس الأداء** | Implemented | `bun run bench:llm` يقيس FTL وTPS وذروة RSS وزمن الجدار لكل نموذج؛ إخراج JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` لـ gpt-*/o1/o3/o4؛ تقدير تجريبي 3.5 حرف/رمز لـLlama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| HuggingFace model search | Implemented | استجابة مُتحقَّق منها عبر Zod، شارات VRAM، مدير التنزيل، 9 نماذج مُنتقاة مسبقاً |
+| **تنزيلات GGUF قابلة للاستئناف** | Implemented | رأس HTTP `Range` — انقطاع 4G لا يُعيد تشغيل نقل 4 جيجابايت من الصفر |
 | STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
 | TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
 | TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
@@ -286,6 +292,7 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| إعادة تشغيل قاطع التيار | Implemented | `ensureCorrectModel` يتوقف بعد 3 إعادات تشغيل خلال 120 ثانية لتفادي حلقات الاحتراق |
 
 ### الأمان والحوكمة
 | Capability | Status | Notes |
@@ -294,6 +301,10 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **CSP صارمة (سطح المكتب + الجوال)** | Implemented | `connect-src` مقصورة على loopback + HuggingFace + مزوّدات HTTPS؛ بدون `unsafe-eval`، `object-src 'none'`، `frame-ancestors 'none'` |
+| **تقوية إصدار Android** | Implemented | `isDebuggable=false`، `allowBackup=false`، `isShrinkResources=true`، `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **التحقق من مدخلات أوامر Tauri** | Implemented | حُرّاس `download_model` / `load_llm_model` / `delete_model`: charset اسم الملف، قائمة سماح HTTPS لـ `huggingface.co` / `hf.co` |
+| **سلسلة تسجيل Rust** | Implemented | `log` + `android_logger` على الجوال؛ لا `eprintln!` في الإصدار → لا تسرّب مسار/URL إلى logcat |
 
 ### المعرفة والذاكرة
 | Capability | Status | Notes |

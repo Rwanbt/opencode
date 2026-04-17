@@ -60,11 +60,13 @@ OpenCode pokrece AI modele lokalno na potrosackom hardveru (8 GB VRAM / 16 GB RA
 
 **Motor za inferenciju (llama.cpp b8731)**
 - Vulkan GPU backend, automatski preuzet pri prvom ucitavanju modela
+- **Adaptivna runtime konfiguracija** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, niti, velicina batch/ubatch, kvantizacija KV cache-a i velicina konteksta izvedeni iz detektovanog VRAM-a, slobodnog RAM-a, big.LITTLE CPU podjele, GPU backend-a (CUDA/ROCm/Vulkan/Metal/OpenCL) i termalnog stanja. Zamjenjuje stari hardkodirani `--n-gpu-layers 99` — 4 GB Android sada radi u CPU fallback-u umjesto da bude ubijen OOM-om, vrhunski desktopi dobijaju podeseni batch umjesto podrazumijevanog 512.
 - `--flash-attn on` — Flash Attention za efikasnost memorije
-- `--cache-type-k/v q4_0` — Hadamard rotacija KV cache (72% ustede memorije)
-- `--fit on` — automatski prilagodava velicinu konteksta i raspodjelu GPU slojeva na dostupni VRAM
+- `--cache-type-k/v` — KV cache sa Hadamard rotacijom; adaptivni nivo (f16 / q8_0 / q4_0) na osnovu VRAM rezerve
+- `--fit on` — sekundarno VRAM podesavanje ekskluzivno za fork (opt-in preko `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Spekulativno dekodiranje (`--model-draft`) sa VRAM Guard (automatski deaktivira ako < 1,5 GB slobodno)
 - Jedan slot (`-np 1`) za minimiziranje memorijskog otiska
+- **Benchmark harness** (`bun run bench:llm`): ponovljivo mjerenje FTL / TPS / vrhunac RSS / zidno vrijeme po modelu, po pokretanju, JSONL izlaz za CI arhiviranje
 
 **Govor-u-tekst (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet putem ONNX Runtime — ~300ms za 5s zvuka (18x u realnom vremenu)
@@ -274,6 +276,30 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
+
+### Lokalna AI (Desktop + Mobilni)
+| Mogucnost | Status | Napomene |
+|-----------|--------|----------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Adaptivna runtime konfiguracija** | Implemented | `auto-config.ts`: n_gpu_layers / niti / batch / KV kvantizacija izvedeni iz detektovanog VRAM-a, RAM-a, big.LITTLE, GPU backend-a, termalnog stanja |
+| **Benchmark harness** | Implemented | `bun run bench:llm` mjeri FTL, TPS, vrhunac RSS, zidno vrijeme po modelu; JSONL izlaz |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` za gpt-*/o1/o3/o4; empirijski 3,5 znakova/token za Llama/Qwen/Gemma |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| HuggingFace model search | Implemented | Zod-validiran odgovor, VRAM znackice, menadzer preuzimanja, 9 predodabranih modela |
+| **Nastavljiva GGUF preuzimanja** | Implemented | HTTP `Range` header — prekid 4G ne restartuje prenos od 4 GB od nule |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Restart sa prekidacem kola | Implemented | `ensureCorrectModel` odustaje nakon 3 restarta u 120 s da izbjegne burn-cycle petlje |
+
+### Sigurnost i Upravljanje
+| Mogucnost | Status | Napomene |
+|-----------|--------|----------|
+| **Stroga CSP (desktop + mobilni)** | Implemented | `connect-src` ogranicen na loopback + HuggingFace + HTTPS provajdere; bez `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Ojacavanje Android release-a** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Validacija ulaza Tauri komandi** | Implemented | Straze `download_model` / `load_llm_model` / `delete_model`: charset imena fajla, HTTPS allowlist za `huggingface.co` / `hf.co` |
+| **Rust logging lanac** | Implemented | `log` + `android_logger` na mobilnom; bez `eprintln!` u release-u → bez curenja path/URL-a u logcat |
+
 ---
 
 ## Future Roadmap
