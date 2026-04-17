@@ -44,3 +44,28 @@ packages/opencode/test/tool/eval-results/
 
 # Dev scratch files (Rust examples, test snippets)
 packages/desktop/src-tauri/examples/
+
+# Secrets & signing (B.DOC from audit 2026-04-17)
+*.pem
+*.p8
+*.pfx
+*.jks
+*.p12
+.env.local
+.env.*.local
+.env.production
+gradle.properties
+local.properties
+keystore.properties
+**/secrets/**
+# Keep template files
+!keystore.properties.example
+!gradle.properties.template
+
+# Benchmark artefacts (audit §7)
+packages/opencode/bench/results/
+*.bench.json
+
+# OS / IDE
+Thumbs.db
+ehthumbs.db
