@@ -5,7 +5,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { persisted } from "@/utils/persist"
-import { DialogReleaseNotes, type Highlight } from "@/components/dialog-release-notes"
+import { type Highlight } from "@/components/dialog-release-notes"
+// DialogReleaseNotes rendered lazily — only shown when a new version has
+// release highlights, which is infrequent, so its markdown/KaTeX tree
+// shouldn't sit in the main chunk.
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
@@ -195,7 +198,9 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
           timer = setTimeout(() => {
             timer = undefined
             markSeen()
-            dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
+            void import("@/components/dialog-release-notes").then((m) => {
+              dialog.show(() => <m.DialogReleaseNotes highlights={highlights} />)
+            })
           }, 500)
         })
         .catch(() => undefined)
