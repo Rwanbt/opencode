@@ -61,14 +61,13 @@ pub fn resolve_windows_app_path(app_name: &str) -> Option<String> {
             return None;
         }
 
-        if let Some(rest) = value.strip_prefix('"') {
-            if let Some(end) = rest.find('"') {
+        if let Some(rest) = value.strip_prefix('"')
+            && let Some(end) = rest.find('"') {
                 let inner = rest[..end].trim();
                 if inner.to_ascii_lowercase().contains(".exe") {
                     return Some(inner.to_string());
                 }
             }
-        }
 
         let lower = value.to_ascii_lowercase();
         let end = lower.find(".exe")?;
@@ -337,26 +336,23 @@ pub fn resolve_windows_app_path(app_name: &str) -> Option<String> {
         }
 
         for path in &paths {
-            if has_ext(path, "cmd") || has_ext(path, "bat") {
-                if let Some(resolved) = resolve_cmd(path) {
+            if (has_ext(path, "cmd") || has_ext(path, "bat"))
+                && let Some(resolved) = resolve_cmd(path) {
                     return Some(resolved);
                 }
-            }
 
             if path.extension().is_none() {
                 let cmd = path.with_extension("cmd");
-                if cmd.exists() {
-                    if let Some(resolved) = resolve_cmd(&cmd) {
+                if cmd.exists()
+                    && let Some(resolved) = resolve_cmd(&cmd) {
                         return Some(resolved);
                     }
-                }
 
                 let bat = path.with_extension("bat");
-                if bat.exists() {
-                    if let Some(resolved) = resolve_cmd(&bat) {
+                if bat.exists()
+                    && let Some(resolved) = resolve_cmd(&bat) {
                         return Some(resolved);
                     }
-                }
             }
         }
 

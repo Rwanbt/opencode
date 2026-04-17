@@ -189,8 +189,8 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
             return os::windows::open_in_powershell(path);
         }
 
-        return tauri_plugin_opener::open_path(path, app_name.as_deref())
-            .map_err(|e| format!("Failed to open path: {e}"));
+        tauri_plugin_opener::open_path(path, app_name.as_deref())
+            .map_err(|e| format!("Failed to open path: {e}"))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -385,13 +385,11 @@ pub fn run() {
                 tracing::info!("Received Exit");
 
                 // Kill LLM server if running
-                if let Some(state) = app.try_state::<llm::LlmServerState>() {
-                    if let Ok(mut guard) = state.child.lock() {
-                        if let Some(ref mut child) = *guard {
+                if let Some(state) = app.try_state::<llm::LlmServerState>()
+                    && let Ok(mut guard) = state.child.lock()
+                        && let Some(ref mut child) = *guard {
                             let _ = child.start_kill();
                         }
-                    }
-                }
 
                 // FIX: kill_sidecar() sends a message to an async channel, but
                 // the tokio runtime may shut down before the background task can

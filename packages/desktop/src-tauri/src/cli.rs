@@ -44,12 +44,16 @@ const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
+// Config surface kept for future UI that surfaces the resolved CLI config.
+// Not wired yet; `#[allow(dead_code)]` prevents stale warnings on a stable API.
+#[allow(dead_code)]
 #[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
     pub hostname: Option<String>,
     pub port: Option<u32>,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
@@ -82,6 +86,7 @@ impl CommandChild {
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
     let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
 

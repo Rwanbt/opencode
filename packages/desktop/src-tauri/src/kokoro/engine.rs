@@ -2,7 +2,7 @@
 //! Model: kokoro-v1.0.onnx (~310MB) + voices-v1.0.bin (~26MB)
 //! License: Apache-2.0
 
-use ndarray::{Array1, Array2, Array3};
+use ndarray::{Array1, Array2};
 use ort::{
     execution_providers::CPUExecutionProvider,
     session::{Session, builder::GraphOptimizationLevel},
@@ -20,6 +20,12 @@ const STYLE_DIM: usize = 256;
 pub struct KokoroEngine {
     session: Option<Session>,
     voices: HashMap<String, Vec<f32>>,  // voice_name → flat f32 style data
+}
+
+impl Default for KokoroEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KokoroEngine {
@@ -209,7 +215,7 @@ mod tests {
         assert!(engine.is_loaded());
         let names = engine.voice_names();
         println!("Loaded {} voices", names.len());
-        assert!(names.len() > 0);
+        assert!(!names.is_empty());
     }
 
     #[test]
@@ -225,6 +231,6 @@ mod tests {
             Err(e) => println!("ERROR: {}", e),
         }
         let samples = result.unwrap();
-        assert!(samples.len() > 0);
+        assert!(!samples.is_empty());
     }
 }
