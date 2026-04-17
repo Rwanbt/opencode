@@ -197,10 +197,17 @@ export namespace LLM {
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
-    // Prompt profiler for local models
+    // Prompt profiler for local models. Log both identifiers because the
+    // tokenizer keys on model.id (internal routing id) while humans diagnose
+    // via model.api.id (wire id sent to the provider) — having both means the
+    // log line is actionable when they diverge.
     if (input.model.providerID === "local-llm") {
       const systemTokens = Token.count(system.join("\n"), input.model.id)
-      log.info("prompt profile", { systemTokens, model: input.model.api.id })
+      log.info("prompt profile", {
+        systemTokens,
+        modelID: input.model.id,
+        apiModelID: input.model.api.id,
+      })
     }
 
     // rejoin to maintain 2-part structure for caching if header unchanged
