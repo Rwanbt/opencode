@@ -51,11 +51,12 @@ interface HFSearchResult {
   ggufFiles: { filename: string; size: number; url: string }[]
 }
 
-async function searchHuggingFace(query: string): Promise<HFSearchResult[]> {
+async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<HFSearchResult[]> {
   if (!query.trim()) return []
   const q = encodeURIComponent(query)
   const res = await fetch(
     `https://huggingface.co/api/models?search=${q}&filter=gguf&sort=downloads&direction=-1&limit=15&expand[]=siblings`,
+    { signal },
   )
   if (!res.ok) throw new Error("HuggingFace search failed")
   const data: HFModel[] = await res.json()
@@ -132,22 +133,28 @@ export function DialogLocalLLM() {
   }
 
   let hfSearchTimeout: ReturnType<typeof setTimeout> | undefined
+  let hfSearchAbort: AbortController | undefined
 
   function handleHfSearch(value: string) {
     setHfQuery(value)
     setHfError("")
     if (hfSearchTimeout) clearTimeout(hfSearchTimeout)
+    if (hfSearchAbort) hfSearchAbort.abort()
     if (!value.trim()) { setHfResults([]); return }
+    const ctrl = new AbortController()
+    hfSearchAbort = ctrl
     hfSearchTimeout = setTimeout(async () => {
       setHfSearching(true)
       try {
-        const results = await searchHuggingFace(value)
-        setHfResults(results)
-      } catch (e) {
+        const results = await searchHuggingFace(value, ctrl.signal)
+        if (!ctrl.signal.aborted) setHfResults(results)
+      } catch (e: any) {
+        if (e?.name === "AbortError") return
         setHfError("Search failed. Check your connection.")
         setHfResults([])
+      } finally {
+        if (!ctrl.signal.aborted) setHfSearching(false)
       }
-      setHfSearching(false)
     }, 400)
   }
 
@@ -161,7 +168,11 @@ export function DialogLocalLLM() {
     // Register all downloaded models so they appear in the model picker
     await registerLocalModels()
   })
-  onCleanup(() => clearInterval(healthInterval))
+  onCleanup(() => {
+    clearInterval(healthInterval)
+    if (hfSearchTimeout) clearTimeout(hfSearchTimeout)
+    if (hfSearchAbort) hfSearchAbort.abort()
+  })
 
   // Listen for download progress
   onMount(async () => {
