@@ -447,6 +447,11 @@ export const dict = {
   "notification.session.responseReady.title": "Réponse prête",
   "notification.session.error.title": "Erreur de session",
   "notification.session.error.fallbackDescription": "Une erreur s'est produite",
+
+  "notification.vcs.branchBehind.title": "Branche en retard sur le remote",
+  "notification.vcs.branchBehind.description": "{{branch}} a {{behind}} commit(s) de retard sur {{upstream}}",
+  "notification.vcs.branchAhead.description": "{{branch}} a {{ahead}} commit(s) d'avance sur {{upstream}}",
+  "notification.vcs.branchDiverged.description": "{{branch}} : {{behind}} retard / {{ahead}} avance sur {{upstream}}",
   "home.recentProjects": "Projets récents",
   "home.empty.title": "Aucun projet récent",
   "home.empty.description": "Commencez par ouvrir un projet local",

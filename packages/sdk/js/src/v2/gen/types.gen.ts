@@ -4,6 +4,14 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
 export type Project = {
   id: string
   worktree: string
@@ -136,6 +144,28 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "queued"
+    }
+  | {
+      type: "blocked"
+      reason?: string
+    }
+  | {
+      type: "awaiting_input"
+      question?: string
+    }
+  | {
+      type: "completed"
+      result?: string
+    }
+  | {
+      type: "failed"
+      error?: string
+    }
+  | {
+      type: "cancelled"
+    }
 
 export type EventSessionStatus = {
   type: "session.status"
@@ -149,6 +179,79 @@ export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventTaskCreated = {
+  type: "task.created"
+  properties: {
+    sessionID: string
+    parentID: string
+    agent: string
+    description: string
+  }
+}
+
+export type EventTaskCompleted = {
+  type: "task.completed"
+  properties: {
+    sessionID: string
+    parentID: string
+    result?: string
+  }
+}
+
+export type EventTaskFailed = {
+  type: "task.failed"
+  properties: {
+    sessionID: string
+    parentID: string
+    error: string
+  }
+}
+
+export type EventTaskCancelled = {
+  type: "task.cancelled"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventTaskBlocked = {
+  type: "task.blocked"
+  properties: {
+    sessionID: string
+    reason?: string
+  }
+}
+
+export type EventTaskInputNeeded = {
+  type: "task.input_needed"
+  properties: {
+    sessionID: string
+    parentID: string
+    question: string
+  }
+}
+
+export type EventTeamCompleted = {
+  type: "team.completed"
+  properties: {
+    sessionID: string
+    tasks: Array<{
+      sessionID: string
+      status: string
+      description: string
+      result?: string
+    }>
+    totalCost: number
+  }
+}
+
+export type EventSessionAllIdle = {
+  type: "session.all_idle"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -242,6 +345,20 @@ export type EventFileWatcherUpdated = {
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
+  properties: {
+    message: string
   }
 }
 
@@ -447,17 +564,13 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventWorkspaceReady = {
-  type: "workspace.ready"
+export type EventVcsBranchBehind = {
+  type: "vcs.branch.behind"
   properties: {
-    name: string
-  }
-}
-
-export type EventWorkspaceFailed = {
-  type: "workspace.failed"
-  properties: {
-    message: string
+    branch: string
+    upstream: string
+    behind: number
+    ahead: number
   }
 }
 
@@ -913,6 +1026,7 @@ export type Session = {
   workspaceID?: string
   directory: string
   parentID?: string
+  status?: "idle" | "busy" | "retry" | "queued" | "blocked" | "awaiting_input" | "completed" | "failed" | "cancelled"
   summary?: {
     additions: number
     deletions: number
@@ -977,12 +1091,22 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
+  | EventTaskCreated
+  | EventTaskCompleted
+  | EventTaskFailed
+  | EventTaskCancelled
+  | EventTaskBlocked
+  | EventTaskInputNeeded
+  | EventTeamCompleted
+  | EventSessionAllIdle
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
   | EventFileEdited
   | EventFileWatcherUpdated
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
   | EventTodoUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
@@ -994,8 +1118,7 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
+  | EventVcsBranchBehind
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -1074,6 +1197,17 @@ export type SyncEventSessionUpdated = {
       workspaceID: string | null
       directory: string | null
       parentID: string | null
+      status:
+        | "idle"
+        | "busy"
+        | "retry"
+        | "queued"
+        | "blocked"
+        | "awaiting_input"
+        | "completed"
+        | "failed"
+        | "cancelled"
+        | null
       summary: {
         additions: number
         deletions: number
@@ -1218,6 +1352,19 @@ export type AgentConfig = {
    */
   maxSteps?: number
   permission?: PermissionConfig
+  /**
+   * MCP server access control for this agent
+   */
+  mcp?: {
+    /**
+     * MCP server names this agent may use
+     */
+    allow?: Array<string>
+    /**
+     * MCP server names this agent may NOT use
+     */
+    deny?: Array<string>
+  }
   [key: string]:
     | unknown
     | string
@@ -1242,6 +1389,16 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | {
+        /**
+         * MCP server names this agent may use
+         */
+        allow?: Array<string>
+        /**
+         * MCP server names this agent may NOT use
+         */
+        deny?: Array<string>
+      }
     | undefined
 }
 
@@ -1616,15 +1773,179 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Sandboxed execution environment for bash commands
+     */
+    sandbox?: {
+      /**
+       * Execution environment for bash commands
+       */
+      type?: "host" | "docker"
+      /**
+       * Docker image to use (default: node:lts-slim)
+       */
+      image?: string
+      /**
+       * Mount the project directory into the container
+       */
+      mount_workdir?: boolean
+    }
+    /**
+     * RAG system for semantic code search and cross-session memory
+     */
+    rag?: {
+      /**
+       * Enable RAG (Retrieval-Augmented Generation) for semantic code search
+       */
+      enabled?: boolean
+      /**
+       * Embedding/search provider (bm25 works offline with zero config)
+       */
+      provider?: "openai" | "google" | "local" | "bm25"
+      /**
+       * Embedding model name
+       */
+      model?: string
+      /**
+       * Embedding vector dimensions
+       */
+      dimensions?: number
+      /**
+       * API key for embedding provider (falls back to provider's default key)
+       */
+      api_key?: string
+      /**
+       * Number of results to inject into context
+       */
+      top_k?: number
+      /**
+       * Automatically index modified files
+       */
+      auto_index?: boolean
+    }
+    /**
+     * Data Loss Prevention - redacts secrets, keys, and tokens from content sent to LLM providers
+     */
+    dlp?: {
+      /**
+       * Enable DLP (Data Loss Prevention) to redact secrets before sending to LLM
+       */
+      enabled?: boolean
+    }
+    /**
+     * Policy engine for conditional permission rules beyond allow/deny/ask
+     */
+    policy?: {
+      /**
+       * Enable policy engine for conditional permission rules
+       */
+      enabled?: boolean
+      /**
+       * Paths that always require confirmation (e.g., ['/prod/', '/deploy/'])
+       */
+      protected_paths?: Array<string>
+      /**
+       * Warn when edits exceed this many lines (default: 500)
+       */
+      max_edit_lines?: number
+      /**
+       * Custom policy rules
+       */
+      rules?: Array<{
+        /**
+         * Policy rule name
+         */
+        name: string
+        /**
+         * Regex pattern to match against file paths or commands
+         */
+        match: string
+        /**
+         * Warning/block message
+         */
+        message: string
+        /**
+         * Action to take on match
+         */
+        action: "block" | "warn"
+      }>
+    }
+    /**
+     * Collaborative multi-user mode with JWT auth, presence, and session sharing
+     */
+    collaborative?: {
+      /**
+       * Enable collaborative multi-user mode
+       */
+      enabled?: boolean
+      /**
+       * Require authentication for all API requests
+       */
+      require_auth?: boolean
+      /**
+       * Maximum number of registered users
+       */
+      max_users?: number
+      /**
+       * Secret for JWT signing. Auto-generated if not set.
+       */
+      jwt_secret?: string
+      /**
+       * Allow self-registration (otherwise admin-only)
+       */
+      allow_registration?: boolean
+    }
+    /**
+     * Memory management for LSP servers (idle timeout, max concurrent, LRU eviction)
+     */
+    lsp_memory?: {
+      /**
+       * Shut down LSP servers after this many minutes of inactivity
+       */
+      idle_timeout_minutes?: number
+      /**
+       * Maximum number of LSP servers running simultaneously
+       */
+      max_concurrent?: number
+      /**
+       * Maximum RSS memory per LSP server in MB (restart if exceeded)
+       */
+      max_memory_mb?: number
+    }
+    /**
+     * AnythingLLM integration for document RAG and cross-platform AI
+     */
+    anythingllm?: {
+      /**
+       * Enable AnythingLLM integration
+       */
+      enabled?: boolean
+      /**
+       * AnythingLLM server URL (e.g., http://localhost:3001)
+       */
+      url: string
+      /**
+       * AnythingLLM API key
+       */
+      api_key: string
+      /**
+       * Workspace slugs to search. Searches all workspaces if omitted.
+       */
+      workspaces?: Array<string>
+      /**
+       * Auto-inject relevant documents from AnythingLLM into system prompt
+       */
+      inject_context?: boolean
+      /**
+       * Expose OpenCode tools as AnythingLLM Agent Skills via HTTP API
+       */
+      expose_tools?: boolean
+      /**
+       * Use AnythingLLM as an additional vector store for RAG search
+       */
+      vector_bridge?: boolean
+    }
   }
-}
-
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
 }
 
 export type OAuth = {
@@ -1796,6 +2117,7 @@ export type GlobalSession = {
   workspaceID?: string
   directory: string
   parentID?: string
+  status?: "idle" | "busy" | "retry" | "queued" | "blocked" | "awaiting_input" | "completed" | "failed" | "cancelled"
   summary?: {
     additions: number
     deletions: number
@@ -1877,6 +2199,17 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+}
+
+export type TaskInfo = {
+  session: Session
+  status: SessionStatus
+  childCount?: number
+  worktree?: {
+    id: string
+    directory: string | null
+    branch: string | null
+  }
 }
 
 export type ProviderAuthMethod = {
@@ -2037,6 +2370,10 @@ export type Agent = {
     [key: string]: unknown
   }
   steps?: number
+  mcp?: {
+    allow?: Array<string>
+    deny?: Array<string>
+  }
 }
 
 export type LspStatus = {
@@ -2051,6 +2388,160 @@ export type FormatterStatus = {
   extensions: Array<string>
   enabled: boolean
 }
+
+export type CollabRegisterData = {
+  body?: {
+    username: string
+    password: string
+    email?: string
+    displayName?: string
+    role?: "admin" | "member" | "viewer"
+  }
+  path?: never
+  query?: never
+  url: "/collab/register"
+}
+
+export type CollabRegisterErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CollabRegisterError = CollabRegisterErrors[keyof CollabRegisterErrors]
+
+export type CollabRegisterResponses = {
+  /**
+   * User registered successfully
+   */
+  200: {
+    accessToken: string
+    refreshToken: string
+    user: {
+      id: string
+      username: string
+      role: "admin" | "member" | "viewer"
+    }
+  }
+}
+
+export type CollabRegisterResponse = CollabRegisterResponses[keyof CollabRegisterResponses]
+
+export type CollabLoginData = {
+  body?: {
+    username: string
+    password: string
+  }
+  path?: never
+  query?: never
+  url: "/collab/login"
+}
+
+export type CollabLoginResponses = {
+  /**
+   * Login successful
+   */
+  200: {
+    accessToken: string
+    refreshToken: string
+    user: {
+      id: string
+      username: string
+      role: "admin" | "member" | "viewer"
+    }
+  }
+}
+
+export type CollabLoginResponse = CollabLoginResponses[keyof CollabLoginResponses]
+
+export type CollabRefreshData = {
+  body?: {
+    refreshToken: string
+  }
+  path?: never
+  query?: never
+  url: "/collab/refresh"
+}
+
+export type CollabRefreshResponses = {
+  /**
+   * Tokens refreshed
+   */
+  200: {
+    accessToken: string
+    refreshToken: string
+    user: {
+      id: string
+      username: string
+      role: "admin" | "member" | "viewer"
+    }
+  }
+}
+
+export type CollabRefreshResponse = CollabRefreshResponses[keyof CollabRefreshResponses]
+
+export type CollabLogoutData = {
+  body?: {
+    refreshToken: string
+  }
+  path?: never
+  query?: never
+  url: "/collab/logout"
+}
+
+export type CollabLogoutResponses = {
+  /**
+   * Logged out
+   */
+  200: boolean
+}
+
+export type CollabLogoutResponse = CollabLogoutResponses[keyof CollabLogoutResponses]
+
+export type CollabMeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/collab/me"
+}
+
+export type CollabMeResponses = {
+  /**
+   * Current user info
+   */
+  200: {
+    id: string
+    username: string
+    role: "admin" | "member" | "viewer"
+    email?: string | null
+    displayName?: string | null
+  }
+}
+
+export type CollabMeResponse = CollabMeResponses[keyof CollabMeResponses]
+
+export type CollabListUsersData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/collab/users"
+}
+
+export type CollabListUsersResponses = {
+  /**
+   * User list
+   */
+  200: Array<{
+    id: string
+    username: string
+    role: "admin" | "member" | "viewer"
+    email?: string | null
+    displayName?: string | null
+  }>
+}
+
+export type CollabListUsersResponse = CollabListUsersResponses[keyof CollabListUsersResponses]
 
 export type GlobalHealthData = {
   body?: never
@@ -4039,6 +4530,388 @@ export type PermissionRespondResponses = {
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
 
+export type TaskListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    /**
+     * Filter by parent session ID
+     */
+    parentID?: string
+    /**
+     * Filter by task status
+     */
+    status?: "idle" | "busy" | "retry" | "queued" | "blocked" | "awaiting_input" | "completed" | "failed" | "cancelled"
+    /**
+     * Maximum number of tasks to return
+     */
+    limit?: number
+  }
+  url: "/task"
+}
+
+export type TaskListResponses = {
+  /**
+   * List of tasks
+   */
+  200: Array<TaskInfo>
+}
+
+export type TaskListResponse = TaskListResponses[keyof TaskListResponses]
+
+export type TaskGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}"
+}
+
+export type TaskGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskGetError = TaskGetErrors[keyof TaskGetErrors]
+
+export type TaskGetResponses = {
+  /**
+   * Task details
+   */
+  200: TaskInfo
+}
+
+export type TaskGetResponse = TaskGetResponses[keyof TaskGetResponses]
+
+export type TaskMessagesData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    /**
+     * Maximum number of messages to return
+     */
+    limit?: number
+  }
+  url: "/task/{id}/messages"
+}
+
+export type TaskMessagesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskMessagesError = TaskMessagesErrors[keyof TaskMessagesErrors]
+
+export type TaskMessagesResponses = {
+  /**
+   * List of messages
+   */
+  200: Array<{
+    info: Message
+    parts: Array<Part>
+  }>
+}
+
+export type TaskMessagesResponse = TaskMessagesResponses[keyof TaskMessagesResponses]
+
+export type TaskCancelData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}/cancel"
+}
+
+export type TaskCancelErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskCancelError = TaskCancelErrors[keyof TaskCancelErrors]
+
+export type TaskCancelResponses = {
+  /**
+   * Task cancelled
+   */
+  200: boolean
+}
+
+export type TaskCancelResponse = TaskCancelResponses[keyof TaskCancelResponses]
+
+export type TaskResumeData = {
+  body?: {
+    /**
+     * Follow-up prompt to send to the task
+     */
+    prompt?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}/resume"
+}
+
+export type TaskResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskResumeError = TaskResumeErrors[keyof TaskResumeErrors]
+
+export type TaskResumeResponses = {
+  /**
+   * Task resumed
+   */
+  200: boolean
+}
+
+export type TaskResumeResponse = TaskResumeResponses[keyof TaskResumeResponses]
+
+export type TaskFollowupData = {
+  body?: {
+    /**
+     * The follow-up message to send to the task
+     */
+    prompt: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}/followup"
+}
+
+export type TaskFollowupErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskFollowupError = TaskFollowupErrors[keyof TaskFollowupErrors]
+
+export type TaskFollowupResponses = {
+  /**
+   * Follow-up accepted
+   */
+  200: boolean
+}
+
+export type TaskFollowupResponse = TaskFollowupResponses[keyof TaskFollowupResponses]
+
+export type TaskPromoteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}/promote"
+}
+
+export type TaskPromoteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskPromoteError = TaskPromoteErrors[keyof TaskPromoteErrors]
+
+export type TaskPromoteResponses = {
+  /**
+   * Task output stream
+   */
+  200: {
+    session: Session
+    status: SessionStatus
+    messages: Array<{
+      info: Message
+      parts: Array<Part>
+    }>
+  }
+}
+
+export type TaskPromoteResponse = TaskPromoteResponses[keyof TaskPromoteResponses]
+
+export type TaskTeamData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/task/{id}/team"
+}
+
+export type TaskTeamErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TaskTeamError = TaskTeamErrors[keyof TaskTeamErrors]
+
+export type TaskTeamResponses = {
+  /**
+   * Team view
+   */
+  200: {
+    session: Session
+    members: Array<{
+      session: Session
+      status: SessionStatus
+      cost: number
+      worktree?: {
+        id: string
+        directory: string | null
+        branch: string | null
+      }
+    }>
+    totalCost: number
+    totalAdditions: number
+    totalDeletions: number
+    totalFiles: number
+  }
+}
+
+export type TaskTeamResponse = TaskTeamResponses[keyof TaskTeamResponses]
+
+export type AgentSkillsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/agent-skills"
+}
+
+export type AgentSkillsListResponses = {
+  /**
+   * Available skills
+   */
+  200: Array<{
+    id: string
+    name: string
+    description: string
+    parameters: {
+      [key: string]: unknown
+    }
+  }>
+}
+
+export type AgentSkillsListResponse = AgentSkillsListResponses[keyof AgentSkillsListResponses]
+
+export type AgentSkillsExecuteData = {
+  body?: {
+    args: {
+      [key: string]: unknown
+    }
+    sessionID?: string
+  }
+  path: {
+    toolId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/agent-skills/{toolId}/execute"
+}
+
+export type AgentSkillsExecuteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AgentSkillsExecuteError = AgentSkillsExecuteErrors[keyof AgentSkillsExecuteErrors]
+
+export type AgentSkillsExecuteResponses = {
+  /**
+   * Execution result
+   */
+  200: {
+    success: boolean
+    output: string
+    title?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+    error?: string
+  }
+}
+
+export type AgentSkillsExecuteResponse = AgentSkillsExecuteResponses[keyof AgentSkillsExecuteResponses]
+
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
@@ -4380,6 +5253,33 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type CollabPresenceData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/presence"
+}
+
+export type CollabPresenceResponses = {
+  /**
+   * Online users
+   */
+  200: Array<{
+    userID: string
+    username: string
+    status: "online" | "idle" | "away"
+    activeSessionID?: string
+    directory?: string
+    lastSeen: number
+    connectedAt: number
+  }>
+}
+
+export type CollabPresenceResponse = CollabPresenceResponses[keyof CollabPresenceResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
@@ -4517,6 +5417,29 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type FileMkdirData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file/mkdir"
+}
+
+export type FileMkdirResponses = {
+  /**
+   * Created directory
+   */
+  200: {
+    absolute: string
+  }
+}
+
+export type FileMkdirResponse = FileMkdirResponses[keyof FileMkdirResponses]
 
 export type EventSubscribeData = {
   body?: never
