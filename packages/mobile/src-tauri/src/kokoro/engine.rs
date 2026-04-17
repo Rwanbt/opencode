@@ -2,7 +2,7 @@
 //! Model: kokoro-v1.0.onnx (~310MB) + voices-v1.0.bin (~26MB)
 //! License: Apache-2.0
 
-use ndarray::{Array1, Array2, Array3};
+use ndarray::{Array1, Array2};
 use ort::{
     execution_providers::CPUExecutionProvider,
     session::{Session, builder::GraphOptimizationLevel},

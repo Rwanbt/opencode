@@ -991,14 +991,14 @@ describe("session.compaction.process", () => {
 })
 
 describe("util.token.estimate", () => {
-  test("estimates tokens from text (4 chars per token)", () => {
+  test("estimates tokens from text (3.5 chars per token)", () => {
     const text = "x".repeat(4000)
-    expect(Token.estimate(text)).toBe(1000)
+    expect(Token.estimate(text)).toBe(Math.ceil(4000 / 3.5))
   })
 
   test("estimates tokens from larger text", () => {
     const text = "y".repeat(20_000)
-    expect(Token.estimate(text)).toBe(5000)
+    expect(Token.estimate(text)).toBe(Math.ceil(20_000 / 3.5))
   })
 
   test("returns 0 for empty string", () => {
