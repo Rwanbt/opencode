@@ -5,6 +5,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 const MAX_LOG_AGE_DAYS: u64 = 7;
+#[allow(dead_code)]
 const TAIL_LINES: usize = 1000;
 
 static LOG_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
@@ -42,6 +43,7 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
     guard
 }
 
+#[allow(dead_code)]
 pub fn tail() -> String {
     let Some(path) = LOG_PATH.get() else {
         return String::new();

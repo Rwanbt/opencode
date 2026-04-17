@@ -68,13 +68,12 @@ impl ParakeetEngine {
 
         for line in content.lines() {
             let parts: Vec<&str> = line.trim().split(' ').collect();
-            if parts.len() >= 2 {
-                if let Ok(id) = parts[1].parse::<usize>() {
+            if parts.len() >= 2
+                && let Ok(id) = parts[1].parse::<usize>() {
                     if parts[0] == "<blk>" { blank_idx = Some(id); }
                     max_id = max_id.max(id);
                     entries.push((parts[0].to_string(), id));
                 }
-            }
         }
 
         let mut vocab = vec![String::new(); max_id + 1];

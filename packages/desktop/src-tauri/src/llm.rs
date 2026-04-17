@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
@@ -181,8 +181,8 @@ async fn download_file(
             .map_err(|e| format!("Write: {}", e))?;
         downloaded += chunk.len() as u64;
 
-        if let Some(fname) = event_filename {
-            if last_emit.elapsed().as_millis() > 200 {
+        if let Some(fname) = event_filename
+            && last_emit.elapsed().as_millis() > 200 {
                 let _ = app.emit(
                     "model-download-progress",
                     ModelDownloadProgress {
@@ -198,7 +198,6 @@ async fn download_file(
                 );
                 last_emit = std::time::Instant::now();
             }
-        }
     }
 
     file.flush().await.map_err(|e| format!("Flush: {}", e))?;
@@ -224,9 +223,9 @@ async fn download_file(
 }
 
 /// Extract a zip archive, flattening all entries into `target_dir`.
-async fn extract_zip_to_dir(zip_path: &PathBuf, target_dir: &PathBuf) -> Result<(), String> {
-    let zip_path = zip_path.clone();
-    let target_dir = target_dir.clone();
+async fn extract_zip_to_dir(zip_path: &Path, target_dir: &Path) -> Result<(), String> {
+    let zip_path = zip_path.to_path_buf();
+    let target_dir = target_dir.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let file = fs::File::open(&zip_path).map_err(|e| format!("Open zip: {}", e))?;
         let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Read zip: {}", e))?;
@@ -343,14 +342,13 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map(|e| e == "gguf").unwrap_or(false) {
-                if let Ok(meta) = fs::metadata(&path) {
+            if path.extension().map(|e| e == "gguf").unwrap_or(false)
+                && let Ok(meta) = fs::metadata(&path) {
                     models.push(ModelInfo {
                         filename: path.file_name().unwrap().to_string_lossy().to_string(),
                         size: meta.len(),
                     });
                 }
-            }
         }
     }
     models
@@ -412,8 +410,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await
-    {
-        if resp.status().is_success() {
+        && resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();
             if body.contains(&filename) {
                 // Same model — check whether the slot is idle or stuck processing
@@ -442,7 +439,6 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
             }
             need_kill = true;
         }
-    }
     if need_kill {
         #[cfg(windows)]
         {
@@ -687,8 +683,7 @@ fn check_vram_free(min_mib: u64) -> bool {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let free: u64 = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .lines()
@@ -698,7 +693,6 @@ fn check_vram_free(min_mib: u64) -> bool {
                 .unwrap_or(0);
             return free >= min_mib;
         }
-    }
     // Fallback: if can't detect, enable anyway (OOM rare with --fit on)
     true
 }
@@ -719,8 +713,7 @@ pub async fn get_vram_info() -> Result<VramInfo, String> {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total,memory.used,memory.free,name", "--format=csv,noheader,nounits"])
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some(line) = stdout.lines().next() {
                 let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
@@ -734,7 +727,6 @@ pub async fn get_vram_info() -> Result<VramInfo, String> {
                 }
             }
         }
-    }
     Err("GPU not detected (nvidia-smi not available)".to_string())
 }
 

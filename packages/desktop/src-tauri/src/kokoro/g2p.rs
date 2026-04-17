@@ -52,7 +52,7 @@ fn load_cmudict() -> &'static HashMap<String, String> {
                 // Convert ARPABET to IPA
                 let ipa: String = parts[1]
                     .split_whitespace()
-                    .map(|p| arpa_to_ipa(p))
+                    .map(arpa_to_ipa)
                     .collect();
                 dict.insert(word, ipa);
             }

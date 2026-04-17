@@ -85,14 +85,12 @@ fn find_pocket_tts() -> Option<PathBuf> {
 
     // Fallback: which/where
     let which = if cfg!(windows) { "where" } else { "which" };
-    if let Ok(output) = std::process::Command::new(which).arg("pocket-tts").output() {
-        if output.status.success() {
-            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
+    if let Ok(output) = std::process::Command::new(which).arg("pocket-tts").output()
+        && output.status.success()
+            && let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
                 let p = PathBuf::from(line.trim());
                 if p.exists() { return Some(p); }
             }
-        }
-    }
     None
 }
 
@@ -113,15 +111,12 @@ fn find_python_dir() -> Option<String> {
         }
     }
 
-    if let Ok(output) = std::process::Command::new(which).arg(python).output() {
-        if output.status.success() {
-            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
-                if let Some(parent) = std::path::Path::new(line.trim()).parent() {
+    if let Ok(output) = std::process::Command::new(which).arg(python).output()
+        && output.status.success()
+            && let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next()
+                && let Some(parent) = std::path::Path::new(line.trim()).parent() {
                     return Some(parent.to_string_lossy().to_string());
                 }
-            }
-        }
-    }
     None
 }
 
@@ -269,8 +264,8 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
     {
         let state = app.state::<SpeechState>();
-        if !*state.stt_loaded.lock().unwrap() {
-            drop(state);
+        let loaded = *state.stt_loaded.lock().unwrap();
+        if !loaded {
             stt_load_model(app.clone()).await?;
         }
     }
@@ -386,8 +381,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
             .timeout(std::time::Duration::from_secs(1))
             .send()
             .await
-        {
-            if resp.status().is_success() {
+            && resp.status().is_success() {
                 {
                     let state = app.state::<SpeechState>();
                     *state.tts_ready.lock().unwrap() = true;
@@ -407,7 +401,6 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
 
                 return Ok(TTS_PORT);
             }
-        }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
@@ -440,10 +433,11 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
 pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
     // Ensure server is running
     {
-        let state = app.state::<SpeechState>();
-        let ready = *state.tts_ready.lock().unwrap();
+        let ready = {
+            let state = app.state::<SpeechState>();
+            *state.tts_ready.lock().unwrap()
+        };
         if !ready {
-            drop(state);
             tts_start(app.clone()).await?;
         }
     }
@@ -543,11 +537,10 @@ pub async fn tts_list_voice_clones(app: AppHandle) -> Vec<String> {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map(|e| e == "wav").unwrap_or(false) {
-                if let Some(stem) = path.file_stem() {
+            if path.extension().map(|e| e == "wav").unwrap_or(false)
+                && let Some(stem) = path.file_stem() {
                     clones.push(stem.to_string_lossy().to_string());
                 }
-            }
         }
     }
     clones
@@ -573,13 +566,12 @@ pub async fn tts_available() -> bool {
 #[specta::specta]
 pub async fn tts_cleanup_chunks(app: AppHandle) -> Result<(), String> {
     let dir = speech_dir(&app).join("tts_chunks");
-    if dir.exists() {
-        if let Ok(entries) = fs::read_dir(&dir) {
+    if dir.exists()
+        && let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let _ = fs::remove_file(entry.path());
             }
         }
-    }
     Ok(())
 }
 
@@ -719,8 +711,8 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
     // Ensure loaded
     {
         let state = app.state::<SpeechState>();
-        if !*state.kokoro_loaded.lock().unwrap() {
-            drop(state);
+        let loaded = *state.kokoro_loaded.lock().unwrap();
+        if !loaded {
             kokoro_load(app.clone()).await?;
         }
     }
@@ -775,7 +767,7 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
     let mut writer = hound::WavWriter::create(&out_path, spec)
         .map_err(|e| format!("WAV writer: {}", e))?;
     for &s in &samples {
-        let clamped = s.max(-1.0).min(1.0);
+        let clamped = s.clamp(-1.0, 1.0);
         let i16_val = if clamped < 0.0 { (clamped * 32768.0) as i16 } else { (clamped * 32767.0) as i16 };
         writer.write_sample(i16_val).map_err(|e| format!("WAV write: {}", e))?;
     }
