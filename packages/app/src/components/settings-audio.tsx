@@ -1,4 +1,4 @@
-import { Component, createSignal, For, JSX, Show } from "solid-js"
+import { Component, createSignal, For, JSX, onMount, Show } from "solid-js"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
 import { Button } from "@opencode-ai/ui/button"
@@ -6,6 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { SettingsList } from "./settings-list"
 import { createStore } from "solid-js/store"
+import { usePlatform } from "@/context/platform"
 
 export type AudioSettings = {
   sttEnabled: boolean
@@ -62,11 +63,25 @@ function saveSettings(s: AudioSettings) {
 }
 
 export const SettingsAudio: Component = () => {
+  const platform = usePlatform()
+  // Mobile has no Pocket TTS (no Python sidecar), so the only TTS engine is
+  // Kokoro. Voice cloning (Pocket-only feature) is also hidden. We still
+  // show the Provider row on desktop so the user can switch engines.
+  const isMobile = () => platform.platform === "mobile"
+
   const [settings, setSettings] = createStore<AudioSettings>(loadAudioSettings())
   const [kokoroVoices, setKokoroVoices] = createSignal<string[]>([])
   const [kokoroAvailable, setKokoroAvailable] = createSignal(false)
   const [kokoroDownloading, setKokoroDownloading] = createSignal(false)
   const [downloadProgress, setDownloadProgress] = createSignal(0)
+
+  // On mobile, force provider to kokoro (Pocket is not available).
+  onMount(() => {
+    if (isMobile() && settings.ttsProvider !== "kokoro") {
+      update("ttsProvider", "kokoro")
+      update("ttsVoice", "af_heart")
+    }
+  })
 
   // Check Kokoro availability on mount
   ;(async () => {
@@ -159,15 +174,25 @@ export const SettingsAudio: Component = () => {
             <SettingsRow title="Enable TTS" description="Show speaker button under AI responses">
               <Switch checked={settings.ttsEnabled} onChange={(v) => update("ttsEnabled", v)} />
             </SettingsRow>
-            <SettingsRow title="Provider" description="TTS engine to use for speech synthesis">
+            <SettingsRow
+              title="Provider"
+              description={isMobile()
+                ? "Kokoro (built-in ONNX). Pocket TTS is desktop-only."
+                : "TTS engine to use for speech synthesis"}
+            >
               <div class="flex items-center gap-2">
-                <Select
-                  size="normal"
-                  options={["pocket", "kokoro"]}
-                  current={settings.ttsProvider || "pocket"}
-                  label={(id) => id === "kokoro" ? "Kokoro (ONNX, GPU)" : "Pocket TTS (Kyutai)"}
-                  onSelect={(v) => { if (v) handleProviderChange(v as "pocket" | "kokoro") }}
-                />
+                <Show
+                  when={!isMobile()}
+                  fallback={<span class="text-12-regular text-text-weak">Kokoro (ONNX)</span>}
+                >
+                  <Select
+                    size="normal"
+                    options={["pocket", "kokoro"]}
+                    current={settings.ttsProvider || "pocket"}
+                    label={(id) => id === "kokoro" ? "Kokoro (ONNX, GPU)" : "Pocket TTS (Kyutai)"}
+                    onSelect={(v) => { if (v) handleProviderChange(v as "pocket" | "kokoro") }}
+                  />
+                </Show>
                 <Show when={settings.ttsProvider === "kokoro" && !kokoroAvailable()}>
                   <Button
                     size="small"
@@ -227,8 +252,10 @@ export const SettingsAudio: Component = () => {
           </div>
         </div>
 
-        {/* Voice Cloning Section — Pocket TTS only */}
-        <Show when={settings.ttsProvider !== "kokoro"}>
+        {/* Voice Cloning Section — Pocket TTS desktop only.
+            Kokoro does not support speaker cloning (fixed [1,256] style
+            embeddings, no voice encoder) and mobile has no Pocket TTS. */}
+        <Show when={!isMobile() && settings.ttsProvider !== "kokoro"}>
           <VoiceCloneSection
             currentVoice={settings.ttsVoice}
             onSelectClone={(name) => update("ttsVoice", name)}
