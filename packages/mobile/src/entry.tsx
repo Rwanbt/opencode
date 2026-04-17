@@ -1,6 +1,7 @@
 /* @refresh reload */
 import { createSignal, Show, Switch, Match, onMount, onCleanup } from "solid-js"
 import { render } from "solid-js/web"
+import { invoke } from "@tauri-apps/api/core"
 import { getCurrent as getCurrentDeepLink, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import {
   AppBaseProviders,
@@ -127,6 +128,29 @@ function App() {
     void handleRemoteConnect()
     return true
   }
+
+  onMount(() => {
+    // A.4-part1: pause/resume detection via visibilitychange.
+    // On background: notify Rust (placeholder for foreground-service keepalive).
+    // On resume: health-check and emit reload event if server died.
+    let wasHidden = false
+    const visibilityHandler = async () => {
+      if (document.hidden) {
+        wasHidden = true
+        try { await invoke("llm_idle_tick") } catch {}
+      } else if (wasHidden) {
+        wasHidden = false
+        try {
+          const ok = await invoke<boolean>("check_llm_health", { port: null })
+          if (!ok) {
+            window.dispatchEvent(new CustomEvent("llm-needs-reload"))
+          }
+        } catch {}
+      }
+    }
+    document.addEventListener("visibilitychange", visibilityHandler)
+    onCleanup(() => document.removeEventListener("visibilitychange", visibilityHandler))
+  })
 
   onMount(() => {
     // Cold-start: the app may have been launched *by* a deep link intent.

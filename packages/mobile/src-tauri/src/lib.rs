@@ -101,6 +101,7 @@ pub fn run() {
             llm::abort_llm,
             llm::generate_llm,
             llm::check_llm_health,
+            llm::llm_idle_tick,
             llm::set_llm_config,
             llm::get_memory_info,
             speech::stt_download_model,
