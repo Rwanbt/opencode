@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   collectNewSessionDeepLinks,
+  collectOAuthCallbackDeepLinks,
   collectOpenProjectDeepLinks,
   drainPendingDeepLinks,
   parseDeepLink,
   parseNewSessionDeepLink,
+  parseOAuthCallbackDeepLink,
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
@@ -87,6 +89,35 @@ describe("layout deep links", () => {
       "opencode://new-session?directory=/c&prompt=ship%20it",
     ])
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+  })
+
+  test("parses oauth callback deep links", () => {
+    expect(
+      parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=anthropic&code=abc123"),
+    ).toEqual({ providerID: "anthropic", code: "abc123", state: undefined })
+    expect(
+      parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=openai&code=xyz&state=st"),
+    ).toEqual({ providerID: "openai", code: "xyz", state: "st" })
+  })
+
+  test("ignores malformed oauth callback deep links", () => {
+    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback?code=abc")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=anthropic")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("opencode://oauth/other?providerID=x&code=y")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("https://example.com")).toBeUndefined()
+  })
+
+  test("collects only valid oauth callback deep links", () => {
+    const result = collectOAuthCallbackDeepLinks([
+      "opencode://oauth/callback?providerID=a&code=1",
+      "opencode://open-project?directory=/b",
+      "opencode://oauth/callback?providerID=b&code=2&state=s",
+    ])
+    expect(result).toEqual([
+      { providerID: "a", code: "1", state: undefined },
+      { providerID: "b", code: "2", state: "s" },
+    ])
   })
 
   test("drains global deep links once", () => {
