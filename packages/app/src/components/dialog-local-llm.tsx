@@ -1,4 +1,5 @@
 import { createSignal, createResource, For, Show, onMount, onCleanup } from "solid-js"
+import z from "zod"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -36,12 +37,24 @@ function formatBytes(bytes: number): string {
   return (bytes / 1_000_000_000).toFixed(2) + " GB"
 }
 
-interface HFModel {
-  id: string
-  author: string
-  downloads: number
-  siblings?: { rfilename: string; size?: number }[]
-}
+// Restrict rfilename to a safe character set ending in a supported extension.
+// This rejects path-traversal tokens, shell metacharacters, and anything that
+// isn't a model weights file — cheap defense-in-depth for the download URL.
+const HF_RFILENAME = /^[A-Za-z0-9._/-]+\.(gguf|onnx)$/
+
+const HFSiblingSchema = z.object({
+  rfilename: z.string().min(1).max(256).regex(HF_RFILENAME),
+  size: z.number().nonnegative().optional(),
+})
+
+const HFModelSchema = z.object({
+  id: z.string().min(1).max(256),
+  author: z.string().optional(),
+  downloads: z.number().nonnegative().optional(),
+  siblings: z.array(HFSiblingSchema).optional(),
+})
+
+type HFModel = z.infer<typeof HFModelSchema>
 
 interface HFSearchResult {
   id: string
@@ -59,14 +72,22 @@ async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<H
     { signal },
   )
   if (!res.ok) throw new Error("HuggingFace search failed")
-  const data: HFModel[] = await res.json()
+  const raw = await res.json()
+  // Parse permissively: drop malformed entries rather than failing the whole
+  // search on a single bad row. Logging surfaces API drift without UX noise.
+  const parsed = z.array(HFModelSchema.passthrough().catch(() => null as unknown as HFModel)).safeParse(raw)
+  if (!parsed.success) {
+    console.warn("HF search: top-level shape mismatch", parsed.error.issues.slice(0, 3))
+    return []
+  }
+  const data: HFModel[] = (parsed.data as (HFModel | null)[]).filter((m): m is HFModel => m !== null)
   return data
     .map((m) => {
       const author = m.id.split("/")[0] ?? ""
       const ggufFiles = (m.siblings ?? [])
         .filter((s) => s.rfilename.endsWith(".gguf") && !s.rfilename.includes("mmproj") && !s.rfilename.includes("imatrix"))
         .map((s) => ({
-          filename: s.rfilename.includes("/") ? s.rfilename.split("/").pop()! : s.rfilename,
+          filename: s.rfilename.includes("/") ? (s.rfilename.split("/").pop() ?? s.rfilename) : s.rfilename,
           size: s.size ?? 0,
           url: `https://huggingface.co/${m.id}/resolve/main/${s.rfilename}`,
         }))
@@ -74,7 +95,7 @@ async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<H
         id: m.id,
         author,
         name: m.id.split("/").pop() ?? m.id,
-        downloads: m.downloads,
+        downloads: m.downloads ?? 0,
         ggufFiles,
       }
     })
