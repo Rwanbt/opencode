@@ -30,8 +30,11 @@ tokio = { version = "1", features = ["time", "rt", "net", "io-util", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 futures-util = "0.3"
 
+log = "0.4"
+
 [target.'cfg(target_os = "android")'.dependencies]
 url = "2"
+android_logger = "0.14"
 
 # STT/TTS engines (cross-platform ONNX Runtime)
 # Android: set ORT_LIB_LOCATION to ONNX Runtime AAR extracted .so directory before building.
