@@ -16,6 +16,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
+import { oauthCallbackEvent, type OAuthCallbackDeepLink } from "@/pages/layout/deep-links"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
@@ -329,6 +330,41 @@ export function DialogConnectProvider(props: { provider: string }) {
       auto = true
       selectMethod(0)
     }
+  })
+
+  // Auto-finalisation on OAuth callback deep link. When the user authorises
+  // the provider in their browser, the provider redirects to
+  // `opencode://oauth/callback?providerID=...&code=...&state=...`. The
+  // layout dispatches a CustomEvent on `window`; if the dialog is still
+  // open and the providerID matches, we finish the token exchange without
+  // the user copy-pasting a code.
+  onMount(() => {
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<OAuthCallbackDeepLink>).detail
+      if (!detail) return
+      if (detail.providerID !== props.provider) return
+      if (store.methodIndex === undefined) return
+      if (store.state === "complete") return
+
+      dispatch({ type: "auth.pending" })
+      const result = await globalSDK.client.provider.oauth
+        .callback({
+          providerID: props.provider,
+          method: store.methodIndex,
+          code: detail.code,
+        })
+        .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
+        .catch((error) => ({ ok: false as const, error }))
+
+      if (!alive.value) return
+      if (!result.ok) {
+        dispatch({ type: "auth.error", error: formatError(result.error, language.t("common.requestFailed")) })
+        return
+      }
+      await complete()
+    }
+    window.addEventListener(oauthCallbackEvent, handler as EventListener)
+    onCleanup(() => window.removeEventListener(oauthCallbackEvent, handler as EventListener))
   })
 
   async function complete() {

@@ -74,9 +74,11 @@ import {
 } from "./layout/helpers"
 import {
   collectNewSessionDeepLinks,
+  collectOAuthCallbackDeepLinks,
   collectOpenProjectDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
+  oauthCallbackEvent,
 } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
@@ -1362,6 +1364,14 @@ export default function Layout(props: ParentProps) {
   }
 
   const handleDeepLinks = (urls: string[]) => {
+    // OAuth callbacks are routed even in non-local mode (e.g. an admin using
+    // a remote server still needs to finish auth when redirected back to the
+    // desktop app by the provider). Handle them first, then the local-only
+    // project links.
+    for (const callback of collectOAuthCallbackDeepLinks(urls)) {
+      window.dispatchEvent(new CustomEvent(oauthCallbackEvent, { detail: callback }))
+    }
+
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {
