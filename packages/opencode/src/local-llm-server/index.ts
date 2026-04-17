@@ -44,6 +44,25 @@ const ALLOWED_KV_CACHE_TYPES = new Set([
 
 // ─── Module state ─────────────────────────────────────────────────────────────
 
+// Circuit breaker for model-mismatch restart loops.
+// If more than MAX_RESTARTS happen within RESTART_WINDOW_MS, we stop
+// and throw — preferable to burning cycles forever.
+const RESTART_WINDOW_MS = 120_000
+const MAX_RESTARTS = 3
+let _restartTimestamps: number[] = []
+
+function recordRestart(): void {
+  const now = Date.now()
+  _restartTimestamps = _restartTimestamps.filter((t) => now - t < RESTART_WINDOW_MS)
+  _restartTimestamps.push(now)
+}
+
+function hasExceededRestartBudget(): boolean {
+  const now = Date.now()
+  _restartTimestamps = _restartTimestamps.filter((t) => now - t < RESTART_WINDOW_MS)
+  return _restartTimestamps.length >= MAX_RESTARTS
+}
+
 let _ownedChildPid: number | null = null
 let _startPromise: Promise<void> | null = null
 let _cleanupRegistered = false
@@ -519,7 +538,19 @@ export namespace LocalLLMServer {
 
     if (loaded.toLowerCase() === expected.modelFile.toLowerCase()) return true
 
-    log.warn("Loaded model mismatch — restarting", { loaded, expected: expected.modelFile })
+    if (hasExceededRestartBudget()) {
+      throw new Error(
+        `llama-server restart loop detected (${MAX_RESTARTS} restarts in ${RESTART_WINDOW_MS}ms). ` +
+        `Loaded="${loaded}" Expected="${expected.modelFile}". ` +
+        `Check model file integrity or path resolution.`,
+      )
+    }
+    recordRestart()
+    log.warn("Loaded model mismatch — restarting", {
+      loaded,
+      expected: expected.modelFile,
+      restartsInWindow: _restartTimestamps.length,
+    })
 
     const release = await acquireStartLock(signal)
     try {
