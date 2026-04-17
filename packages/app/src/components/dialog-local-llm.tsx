@@ -158,18 +158,22 @@ export function DialogLocalLLM() {
     }, 400)
   }
 
-  // Poll health + auto-register models on mount
-  let healthInterval: ReturnType<typeof setInterval>
+  // Poll health with exponential backoff — fast when unhealthy, slows to 60s when stable
+  let healthDelay = 5000
+  let healthTimeoutId: ReturnType<typeof setTimeout> | undefined
+  const pollHealth = async () => {
+    const ok: boolean = await invokeTauri("check_llm_health", { port: null }).catch(() => false)
+    setHealthy(ok)
+    healthDelay = ok ? Math.min(healthDelay * 2, 60000) : 5000
+    healthTimeoutId = setTimeout(pollHealth, healthDelay)
+  }
   onMount(async () => {
-    healthInterval = setInterval(async () => {
-      const ok: boolean = await invokeTauri("check_llm_health", { port: null }).catch(() => false)
-      setHealthy(ok)
-    }, 5000)
+    pollHealth()
     // Register all downloaded models so they appear in the model picker
     await registerLocalModels()
   })
   onCleanup(() => {
-    clearInterval(healthInterval)
+    if (healthTimeoutId) clearTimeout(healthTimeoutId)
     if (hfSearchTimeout) clearTimeout(hfSearchTimeout)
     if (hfSearchAbort) hfSearchAbort.abort()
   })
