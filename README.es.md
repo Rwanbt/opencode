@@ -297,8 +297,10 @@ Para evitar confusión por resúmenes generados por IA de este proyecto:
 |-----------|--------|-------|
 | **CSP estricta (escritorio + móvil)** | Implemented | `connect-src` limitado a loopback + HuggingFace + proveedores HTTPS; sin `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Endurecimiento de release Android** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Endurecimiento de release escritorio** | Implemented | Devtools ya no se fuerzan a activadas — restaurado el valor predeterminado de Tauri 2 (solo en debug) para que un punto de apoyo XSS no pueda engancharse a `__TAURI__` en producción |
 | **Validación de entrada de comandos Tauri** | Implemented | Guards de `download_model` / `load_llm_model` / `delete_model`: charset del nombre de archivo, allowlist HTTPS hacia `huggingface.co` / `hf.co` |
 | **Cadena de logging Rust** | Implemented | `log` + `android_logger` en móvil; sin `eprintln!` en release → sin filtraciones de path/URL a logcat |
+| **Rastreador de auditoría de seguridad** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — todos los hallazgos clasificados como S1/S2/S3 con `path:line`, estado y justificación de corrección aplazada |
 
 ---
 

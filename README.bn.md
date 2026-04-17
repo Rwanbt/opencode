@@ -295,8 +295,10 @@ Hook আর্কিটেকচার সহ সম্পূর্ণ SDK (`@op
 |--------|----------|-----|
 | **কঠোর CSP (ডেস্কটপ + মোবাইল)** | Implemented | `connect-src` loopback + HuggingFace + HTTPS প্রদানকারীদের মধ্যে সীমাবদ্ধ; `unsafe-eval` নেই, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Android রিলিজ হার্ডেনিং** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **ডেস্কটপ রিলিজ হার্ডেনিং** | Implemented | Devtools আর জোরপূর্বক সক্ষম নয় — Tauri 2 ডিফল্ট (শুধু ডিবাগ মোডে) পুনরুদ্ধার করা হয়েছে যাতে একটি XSS ফুটহোল্ড প্রোডাকশনে `__TAURI__`-তে সংযুক্ত হতে না পারে |
 | **Tauri কমান্ড ইনপুট যাচাইকরণ** | Implemented | `download_model` / `load_llm_model` / `delete_model` গার্ড: ফাইল নামের charset, `huggingface.co` / `hf.co` এর জন্য HTTPS অ্যালোলিস্ট |
 | **Rust লগিং চেইন** | Implemented | মোবাইলে `log` + `android_logger`; রিলিজে `eprintln!` নেই → logcat-এ পাথ/URL ফাঁস নেই |
+| **নিরাপত্তা অডিট ট্র্যাকার** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — সমস্ত অনুসন্ধান S1/S2/S3 হিসাবে শ্রেণীবদ্ধ, `path:line`, স্ট্যাটাস এবং স্থগিত ফিক্সের যুক্তি সহ |
 
 ---
 

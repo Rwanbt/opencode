@@ -285,9 +285,9 @@ Para evitar confusão a partir de resumos gerados por IA deste projeto:
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
 | HuggingFace model search | Implemented | Resposta validada com Zod, badges de VRAM, gerenciador de download, 9 modelos pré-selecionados |
 | **Downloads GGUF retomáveis** | Implemented | Cabeçalho HTTP `Range` — uma interrupção 4G não reinicia uma transferência de 4 GB do zero |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 idiomas, desktop + mobile (listener do microfone ligado dos dois lados) |
+| TTS (Pocket TTS) | Implemented | 8 vozes, clonagem de voz zero-shot, nativo em francês (apenas desktop — sem sidecar Python no Android) |
+| TTS (Kokoro) | Implemented | 54 vozes, 9 idiomas, ONNX em **desktop + Android** (6 comandos Tauri ligados em `speech.rs` mobile, CPUExecutionProvider) |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
@@ -303,8 +303,10 @@ Para evitar confusão a partir de resumos gerados por IA deste projeto:
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
 | **CSP estrita (desktop + mobile)** | Implemented | `connect-src` restrito a loopback + HuggingFace + provedores HTTPS; sem `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Hardening de release Android** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Hardening de release desktop** | Implemented | Devtools não mais forçadas — padrão do Tauri 2 (apenas em debug) restaurado para que uma brecha de XSS não possa se conectar a `__TAURI__` em produção |
 | **Validação de entrada dos comandos Tauri** | Implemented | Guards de `download_model` / `load_llm_model` / `delete_model`: charset do nome de arquivo, allowlist HTTPS para `huggingface.co` / `hf.co` |
 | **Cadeia de logging Rust** | Implemented | `log` + `android_logger` no mobile; sem `eprintln!` em release → sem vazamentos de path/URL para logcat |
+| **Rastreador de auditoria de segurança** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — todos os achados classificados S1/S2/S3 com `path:line`, status e justificativa de correção adiada |
 
 ### Conhecimento e Memória
 | Capability | Status | Notes |
@@ -316,7 +318,10 @@ Para evitar confusão a partir de resumos gerados por IA deste projeto:
 ### Extensões da Plataforma (Experimentais)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android: runtime embarcado, LLM no dispositivo, STT + TTS (Kokoro). iOS: modo remoto |
+| **Deep link de callback OAuth** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` finaliza automaticamente a troca de token; sem necessidade de copiar/colar o código de autenticação |
+| **Observador de branch upstream** | Implemented | `git fetch` periódico (aquecimento 30 s, intervalo 5 min) emite `vcs.branch.behind` quando o HEAD local diverge do upstream rastreado; exibido via `platform.notify()` no desktop e mobile |
+| **Spawn de PTY no tamanho do viewport** | Implemented | `Pty.create({cols, rows})` usa um estimador de `window.innerWidth/innerHeight` — os shells iniciam já com suas dimensões finais em vez de 80×24→36×11, corrige o bug do primeiro prompt invisível no Android em mksh/bash |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

@@ -297,8 +297,10 @@ For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
 |-----------|--------|-----------|
 | **Streng CSP (desktop + mobil)** | Implemented | `connect-src` begrenset til loopback + HuggingFace + HTTPS-leverandorer; ingen `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Android-release-herding** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Desktop-release-herding** | Implemented | Devtools er ikke lenger tvangsaktivert — Tauri 2-standarden (kun i debug) er gjenopprettet sa et XSS-fotfeste ikke kan koble seg til `__TAURI__` i produksjon |
 | **Validering av Tauri-kommandoinput** | Implemented | `download_model` / `load_llm_model` / `delete_model`-vakter: filnavn-charset, HTTPS-tillatelsesliste til `huggingface.co` / `hf.co` |
 | **Rust-loggingkjede** | Implemented | `log` + `android_logger` pa mobil; ingen `eprintln!` i release → ingen path/URL-lekkasjer til logcat |
+| **Sikkerhetsrevisjonssporer** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — alle funn klassifisert som S1/S2/S3 med `path:line`, status og begrunnelse for utsatt fiks |
 
 ---
 
