@@ -80,6 +80,8 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
 
 #[tauri::command]
 pub async fn download_model(app: AppHandle, url: String, filename: String) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
+    crate::validate::validate_url(&url).map_err(|e| e.to_string())?;
     let dir = runtime_dir(&app).join("models");
     let _ = fs::create_dir_all(&dir);
     let target = dir.join(&filename);
@@ -124,6 +126,7 @@ pub async fn download_model(app: AppHandle, url: String, filename: String) -> Re
 
 #[tauri::command]
 pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
     let path = runtime_dir(&app).join("models").join(&filename);
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
     let part = runtime_dir(&app).join("models").join(format!("{}.part", &filename));
@@ -164,6 +167,7 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
 /// Load a GGUF model via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
 pub async fn load_llm_model(app: AppHandle, filename: String, _draft_model: Option<String>) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
     let model_path = runtime_dir(&app).join("models").join(&filename);
     if !model_path.exists() {
         return Err(format!("Model not found: {}", filename));

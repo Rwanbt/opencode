@@ -5,6 +5,8 @@ mod runtime;
 #[cfg(target_os = "android")]
 mod llm;
 #[cfg(target_os = "android")]
+mod validate;
+#[cfg(target_os = "android")]
 mod proxy;
 mod kokoro;
 mod parakeet;
