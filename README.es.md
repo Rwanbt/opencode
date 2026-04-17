@@ -60,11 +60,13 @@ OpenCode ejecuta modelos de IA localmente en hardware de consumo (8 GB VRAM / 16
 
 **Motor de inferencia (llama.cpp b8731)**
 - Backend GPU Vulkan, descargado automáticamente en la primera carga de modelo
+- **Configuración adaptativa en tiempo de ejecución** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, hilos, tamaño de batch/ubatch, cuantización de caché KV y tamaño de contexto derivados de la VRAM detectada, RAM libre, partición CPU big.LITTLE, backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) y estado térmico. Reemplaza al antiguo `--n-gpu-layers 99` fijo — un Android de 4 GB ahora funciona en modo CPU de respaldo en lugar de ser terminado por OOM, los escritorios de gama alta reciben un batch ajustado en lugar del 512 por defecto.
 - `--flash-attn on` — Flash Attention para eficiencia de memoria
-- `--cache-type-k/v q4_0` — Caché KV con rotación de Hadamard (72% de ahorro de memoria)
-- `--fit on` — ajusta automáticamente el tamaño del contexto y la ubicación de capas GPU según la VRAM disponible
+- `--cache-type-k/v` — Caché KV con rotación de Hadamard; nivel adaptativo (f16 / q8_0 / q4_0) según margen de VRAM
+- `--fit on` — ajuste secundario de VRAM exclusivo del fork (opt-in vía `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Decodificación especulativa (`--model-draft`) con guardia de VRAM (desactivación automática si < 1.5 GB libre)
 - Slot único (`-np 1`) para minimizar la huella de memoria
+- **Arnés de benchmark** (`bun run bench:llm`): medición reproducible de FTL / TPS / RSS pico / tiempo total por modelo, por ejecución, salida JSONL para archivado en CI
 
 **Reconocimiento de voz (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet vía ONNX Runtime — ~300ms para 5s de audio (18x tiempo real)
@@ -274,6 +276,30 @@ Para evitar confusión por resúmenes generados por IA de este proyecto:
 | Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
 | Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
+
+### IA Local (Escritorio + Móvil)
+| Capacidad | Estado | Notas |
+|-----------|--------|-------|
+| Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Configuración adaptativa en tiempo de ejecución** | Implemented | `auto-config.ts`: n_gpu_layers / hilos / batch / cuant KV derivados de VRAM detectada, RAM, big.LITTLE, backend GPU, estado térmico |
+| **Arnés de benchmark** | Implemented | `bun run bench:llm` mide FTL, TPS, RSS pico, tiempo total por modelo; salida JSONL |
+| Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` para gpt-*/o1/o3/o4; empírico 3.5 caracteres/token para Llama/Qwen/Gemma |
+| Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
+| HuggingFace model search | Implemented | Respuesta validada con Zod, insignias VRAM, gestor de descargas, 9 modelos precurados |
+| **Descargas GGUF reanudables** | Implemented | Cabecera HTTP `Range` — una interrupción 4G no reinicia una transferencia de 4 GB desde cero |
+| Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Reinicio con disyuntor | Implemented | `ensureCorrectModel` se detiene tras 3 reinicios en 120 s para evitar bucles de burn-cycle |
+
+### Seguridad y Gobernanza
+| Capacidad | Estado | Notas |
+|-----------|--------|-------|
+| **CSP estricta (escritorio + móvil)** | Implemented | `connect-src` limitado a loopback + HuggingFace + proveedores HTTPS; sin `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Endurecimiento de release Android** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Validación de entrada de comandos Tauri** | Implemented | Guards de `download_model` / `load_llm_model` / `delete_model`: charset del nombre de archivo, allowlist HTTPS hacia `huggingface.co` / `hf.co` |
+| **Cadena de logging Rust** | Implemented | `log` + `android_logger` en móvil; sin `eprintln!` en release → sin filtraciones de path/URL a logcat |
+
 ---
 
 ## Future Roadmap

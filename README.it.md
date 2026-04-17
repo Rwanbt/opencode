@@ -60,11 +60,13 @@ OpenCode esegue modelli IA localmente su hardware consumer (8 GB VRAM / 16 GB RA
 
 **Motore di Inferenza (llama.cpp b8731)**
 - Backend GPU Vulkan, scaricato automaticamente al primo caricamento del modello
+- **Configurazione adattiva a runtime** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, thread, dimensione batch/ubatch, quantizzazione cache KV e dimensione del contesto derivate da VRAM rilevata, RAM libera, split CPU big.LITTLE, backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) e stato termico. Sostituisce il vecchio `--n-gpu-layers 99` hardcoded — un Android da 4 GB ora funziona in fallback CPU invece di essere ucciso per OOM, i desktop di punta ottengono un batch ottimizzato invece del default 512.
 - `--flash-attn on` — Flash Attention per efficienza di memoria
-- `--cache-type-k/v q4_0` — Cache KV con rotazione di Hadamard (risparmio di memoria del 72%)
-- `--fit on` — adatta automaticamente la dimensione del contesto e il posizionamento dei layer GPU alla VRAM disponibile
+- `--cache-type-k/v` — Cache KV con rotazione di Hadamard; tier adattivo (f16 / q8_0 / q4_0) in base al margine VRAM
+- `--fit on` — aggiustamento secondario VRAM esclusivo del fork (opt-in tramite `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Decodifica speculativa (`--model-draft`) con VRAM Guard (disattivazione automatica se < 1.5 GB liberi)
 - Slot singolo (`-np 1`) per minimizzare l'impronta di memoria
+- **Harness di benchmark** (`bun run bench:llm`): misurazione riproducibile di FTL / TPS / RSS di picco / tempo di esecuzione per modello, per run, output JSONL per archivio CI
 
 **Speech-to-Text (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet via ONNX Runtime — ~300ms per 5s di audio (18x tempo reale)
@@ -273,12 +275,16 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Configurazione adattiva a runtime** | Implemented | `auto-config.ts`: n_gpu_layers / thread / batch / quant KV derivati da VRAM rilevata, RAM, big.LITTLE, backend GPU, stato termico |
+| **Harness di benchmark** | Implemented | `bun run bench:llm` misura FTL, TPS, RSS di picco, tempo di esecuzione per modello; output JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` per gpt-*/o1/o3/o4; empirico 3.5 caratteri/token per Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| HuggingFace model search | Implemented | Risposta validata con Zod, badge VRAM, gestore di download, 9 modelli pre-curati |
+| **Download GGUF ripristinabili** | Implemented | Header HTTP `Range` — un'interruzione 4G non ricomincia un trasferimento da 4 GB da zero |
 | STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
 | TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
 | TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
@@ -286,6 +292,7 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Ripartenza con circuit breaker | Implemented | `ensureCorrectModel` si arresta dopo 3 riavvii in 120 s per evitare loop di burn-cycle |
 
 ### Sicurezza e Governance
 | Capability | Status | Notes |
@@ -294,6 +301,10 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **CSP stretta (desktop + mobile)** | Implemented | `connect-src` limitato a loopback + HuggingFace + provider HTTPS; nessun `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Hardening release Android** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Validazione input comandi Tauri** | Implemented | Guard di `download_model` / `load_llm_model` / `delete_model`: charset del nome file, allowlist HTTPS verso `huggingface.co` / `hf.co` |
+| **Catena di logging Rust** | Implemented | `log` + `android_logger` su mobile; nessun `eprintln!` in release → nessuna fuga di path/URL verso logcat |
 
 ### Conoscenza e Memoria
 | Capability | Status | Notes |
