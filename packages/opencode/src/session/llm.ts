@@ -19,10 +19,26 @@ import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { Token } from "@/util/token"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
+
+  /** Max reasoning/thinking tokens by model family.
+   *  Qwen-Thinking and DeepSeek-R1 can emit very long reasoning chains
+   *  on complex problems — capping too low silently truncates them.
+   *
+   *  Keep this list short and conservative. Add families here as we
+   *  observe truncation in production. */
+  function getThinkingCap(modelID: string): number {
+    const id = modelID.toLowerCase()
+    if (id.includes("qwen") && id.includes("thinking")) return 8192
+    if (id.includes("deepseek") && (id.includes("r1") || id.includes("thinking"))) return 8192
+    if (id.includes("gemma") && id.includes("thinking")) return 6144
+    if (id.includes("qwen") || id.includes("qwq")) return 4096
+    return 2048 // safe default — doubled from previous 1024
+  }
 
   /**
    * Queries the running llama-server /props endpoint to compute adaptive token limits.
@@ -34,9 +50,7 @@ export namespace LLM {
    *   n_ctx          = real context after VRAM fit (e.g. 16 384, 32 768, 131 072…)
    *   max_tokens     = 40 % of n_ctx  → total tokens allowed for output (thinking + reply)
    *                    capped by model.limit.output so user config is always respected
-   *   reasoning_budget = 10 % of max_tokens, clamped to [128, 1024]
-   *                    → thinking gets at most 10 % of the output budget
-   *                    → remaining ≥ 90 % is guaranteed for the actual reply
+   *   reasoning_budget = 15 % of max_tokens, clamped to [128, getThinkingCap(model)]
    *
    * Falls back to (null) on any error — callers use model defaults in that case.
    */
@@ -59,7 +73,8 @@ export namespace LLM {
 
       // 10 % of output budget for thinking, clamped to [128, 1024]
       // — enough for meaningful reasoning without starving the response
-      const reasoningBudget = Math.min(Math.max(128, Math.floor(maxTokens * 0.1)), 1024)
+      const cap = getThinkingCap(model.id)
+      const reasoningBudget = Math.min(Math.max(128, Math.floor(maxTokens * 0.15)), cap)
 
       log.info("local-llm adaptive limits", { nCtx, maxTokens, reasoningBudget })
       return { maxTokens, reasoningBudget }
@@ -168,8 +183,7 @@ export namespace LLM {
     )
     // Prompt profiler for local models
     if (input.model.providerID === "local-llm") {
-      const estimateTokens = (text: string) => Math.ceil(text.length / 4)
-      const systemTokens = estimateTokens(system.join("\n"))
+      const systemTokens = Token.count(system.join("\n"), input.model.id)
       log.info("prompt profile", { systemTokens, model: input.model.api.id })
     }
 
