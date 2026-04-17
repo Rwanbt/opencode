@@ -14,6 +14,7 @@ import os from "os"
 import fs from "fs"
 import net from "net"
 import { Log } from "@/util/log"
+import { detectProfile, deriveConfig } from "./auto-config"
 
 const log = Log.create({ service: "local-llm-server" })
 
@@ -410,15 +411,38 @@ export namespace LocalLLMServer {
   // ── Spawn helpers ─────────────────────────────────────────────────────────
 
   function buildArgs(modelPath: string): string[] {
-    const nThreads = Math.max(2, Math.floor(os.cpus().length / 2))
-    const kvCacheRaw = process.env.OPENCODE_KV_CACHE_TYPE ?? "q4_0"
-    const kvCache = ALLOWED_KV_CACHE_TYPES.has(kvCacheRaw) ? kvCacheRaw : "q4_0"
+    // deriveConfig picks GPU layers / threads / batch / KV quant based on
+    // the running device (see auto-config.ts). Env overrides remain available
+    // for advanced users who want to pin a specific value.
+    const profile = detectProfile()
+    const modelSizeMb = (() => {
+      try {
+        return Math.max(1, Math.floor(fs.statSync(modelPath).size / (1024 * 1024)))
+      } catch {
+        return 0
+      }
+    })()
+    const cfg = deriveConfig(profile, modelSizeMb)
+
+    // KV cache quant: env override first, else adaptive.
+    const kvCacheRaw = process.env.OPENCODE_KV_CACHE_TYPE ?? cfg.kvCacheType
+    const kvCache = ALLOWED_KV_CACHE_TYPES.has(kvCacheRaw) ? kvCacheRaw : cfg.kvCacheType
     if (kvCacheRaw !== kvCache)
-      log.warn("Invalid OPENCODE_KV_CACHE_TYPE, fallback to q4_0", { kvCacheRaw })
+      log.warn("Invalid OPENCODE_KV_CACHE_TYPE, fallback to adaptive", { kvCacheRaw, chosen: kvCache })
+
+    // n_gpu_layers: env override first, else adaptive. "99" remains the
+    // historic "offload everything" sentinel; users who want that opt in.
+    const ngl = process.env.OPENCODE_N_GPU_LAYERS ?? String(cfg.nGpuLayers)
 
     // NOTE: --fit / -fitt / -fitc sont spécifiques au fork llama.cpp intégré.
     // Opt-in via OPENCODE_LLAMA_ENABLE_FIT=1 pour éviter de crasher sur llama.cpp upstream.
     const useFit = process.env.OPENCODE_LLAMA_ENABLE_FIT === "1"
+
+    log.info("llama adaptive config", {
+      profile: { gpu: profile.gpuBackend, vramMb: profile.vramMb, totalRamMb: profile.totalRamMb, bigCores: profile.cpuCores.big },
+      chosen: { nGpuLayers: ngl, nThreads: cfg.nThreads, batchSize: cfg.batchSize, kvCache },
+      modelSizeMb,
+    })
 
     const args = [
       "--model",
@@ -428,7 +452,7 @@ export namespace LocalLLMServer {
       "--host",
       "127.0.0.1",
       "--n-gpu-layers",
-      "99",
+      ngl,
       "--flash-attn",
       "on",
       "--cache-type-k",
@@ -438,7 +462,11 @@ export namespace LocalLLMServer {
       "-np",
       "1",
       "--threads",
-      String(nThreads),
+      String(cfg.nThreads),
+      "--batch-size",
+      String(cfg.batchSize),
+      "--ubatch-size",
+      String(cfg.uBatchSize),
     ]
     if (useFit) args.push("--fit", "on", "-fitt", "512", "-fitc", "16384")
     return args
