@@ -7,6 +7,17 @@ use crate::parakeet::ParakeetEngine;
 
 const STT_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip";
 
+/// Acquire a Mutex guard tolerantly: if poisoned (a previous holder panicked),
+/// recover the guard rather than propagating. This trades the crash for a
+/// warning and continued operation — the STT engine state is idempotent across
+/// load/transcribe calls so a partial previous failure doesn't compromise it.
+fn lock_safe<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| {
+        log::warn!("[speech] recovering from poisoned mutex");
+        p.into_inner()
+    })
+}
+
 fn data_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
@@ -89,7 +100,7 @@ pub async fn stt_download_model(app: AppHandle) -> Result<(), String> {
 pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
     {
         let state = app.state::<SpeechState>();
-        if *state.stt_loaded.lock().unwrap() { return Ok(()); }
+        if *lock_safe(&state.stt_loaded) { return Ok(()); }
     }
 
     let dir = model_dir(&app);
@@ -111,8 +122,8 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
     let engine = result?;
     {
         let state = app.state::<SpeechState>();
-        *state.stt_engine.lock().unwrap() = engine;
-        *state.stt_loaded.lock().unwrap() = true;
+        *lock_safe(&state.stt_engine) = engine;
+        *lock_safe(&state.stt_loaded) = true;
     }
     tracing::info!("[STT] Model loaded in {:?}", start.elapsed());
     Ok(())
@@ -122,8 +133,9 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
     {
         let state = app.state::<SpeechState>();
-        if !*state.stt_loaded.lock().unwrap() {
-            drop(state);
+        let loaded = *lock_safe(&state.stt_loaded);
+        // Guard + state go out of scope here; safe to await stt_load_model below.
+        if !loaded {
             stt_load_model(app.clone()).await?;
         }
     }
@@ -137,7 +149,7 @@ pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<Stri
     let app_clone = app.clone();
     let text = tokio::task::spawn_blocking(move || {
         let state = app_clone.state::<SpeechState>();
-        let mut engine = state.stt_engine.lock().unwrap();
+        let mut engine = lock_safe(&state.stt_engine);
         engine.transcribe(&samples)
     })
     .await
@@ -155,7 +167,7 @@ pub async fn stt_available(app: AppHandle) -> bool {
 #[tauri::command]
 pub async fn stt_loaded(app: AppHandle) -> bool {
     let state = app.state::<SpeechState>();
-    let guard = state.stt_loaded.lock().unwrap();
+    let guard = lock_safe(&state.stt_loaded);
     let val = *guard;
     drop(guard);
     val
