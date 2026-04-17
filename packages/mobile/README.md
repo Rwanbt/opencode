@@ -47,6 +47,30 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 - 25 European languages supported
 - Auto-download model (~460 MB) on first use
 - Waveform animation during recording
+- **Mic listener wired** (`packages/mobile/src/hooks/use-speech.ts`): the
+  prompt-input mic button dispatches `stt-start`/`stt-stop`, the hook
+  records via `MediaRecorder` (webm/opus → 16 kHz WAV base64) and calls
+  `stt_transcribe`. Runtime permission flow is handled automatically by
+  the auto-generated `RustWebChromeClient` once `RECORD_AUDIO` +
+  `MODIFY_AUDIO_SETTINGS` are declared in the manifest.
+
+### Text-to-Speech (TTS) — Kokoro ONNX
+- **Kokoro v1.0 (Apache-2.0)** is the only on-device TTS engine on
+  Android (Pocket TTS needs a Python sidecar, not viable on mobile).
+  54+ pre-defined voices, 9 languages, ONNX CPUExecutionProvider.
+- Six Tauri commands exposed from `speech.rs`: `kokoro_available`,
+  `kokoro_download_model`, `kokoro_load`, `kokoro_loaded`,
+  `kokoro_voices`, `kokoro_synthesize`. The stubbed `tts_speak` /
+  `tts_available` now delegate to these.
+- ~336 MB download on first use (model + voices bundle from
+  `thewh1teagle/kokoro-onnx` v1.0 release).
+- Chunked streaming playback with parallel C0/C1 synth (same algorithm
+  as the desktop hook) for a fast time-to-first-audio.
+- `Mutex` access through the `lock_safe` helper (B.A5) — a poisoned
+  lock is recovered with a warning instead of panicking the TTS stack.
+- **No voice cloning on mobile**: Kokoro's fixed `[1,256]` style
+  embeddings cannot encode arbitrary speakers, and the VoiceClone
+  section of Settings is hidden on mobile via `usePlatform()`.
 
 ### External Storage Access
 - Symlinks from server HOME to `/sdcard/` directories (Documents, Downloads, projects, etc.)
@@ -59,6 +83,11 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 - Ghostty WASM terminal renderer with canvas fallback for unsupported WebViews
 - WebSocket connection to embedded server `/pty/{id}/connect` endpoint
 - Multiple terminal tabs with drag-to-reorder
+- **Viewport-sized spawn**: `Pty.create` now accepts `cols`/`rows`; the
+  frontend (`context/terminal.tsx::estimateTerminalSize`) derives them
+  from `window.innerWidth/innerHeight` before creating the session, so
+  the shell is born close to its final dimensions and mksh/bash don't
+  drop their first prompt in reaction to the post-spawn SIGWINCH.
 
 ### Native File Picker
 - Native Android file/directory picker via `tauri-plugin-dialog`

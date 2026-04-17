@@ -285,9 +285,9 @@ To prevent confusion from AI-generated summaries of this project:
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
 | HuggingFace model search | Implemented | Zod-validated response, VRAM badges, download manager, 9 pre-curated models |
 | **Resumable GGUF downloads** | Implemented | HTTP `Range` header — 4G interruption doesn't restart a 4 GB transfer from zero |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile (mic listener wired both sides) |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop only — no Python sidecar on Android) |
+| TTS (Kokoro) | Implemented | 54 voices, 9 languages, ONNX on **desktop + Android** (6 Tauri commands wired in `speech.rs` mobile, CPUExecutionProvider) |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
@@ -303,8 +303,10 @@ To prevent confusion from AI-generated summaries of this project:
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
 | **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; no `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Android release hardening** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Desktop release hardening** | Implemented | Devtools no longer force-enabled — Tauri 2 default (debug-only) restored so an XSS foothold cannot attach to `__TAURI__` in production |
 | **Tauri command input validation** | Implemented | `download_model` / `load_llm_model` / `delete_model` guards: filename charset, HTTPS allowlist to `huggingface.co` / `hf.co` |
 | **Rust logging chain** | Implemented | `log` + `android_logger` on mobile; no `eprintln!` in release → no path/URL leaks to logcat |
+| **Security audit tracker** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — all findings classified S1/S2/S3 with `path:line`, status, and deferred fix rationale |
 
 ### Knowledge & Memory
 | Capability | Status | Notes |
@@ -316,7 +318,10 @@ To prevent confusion from AI-generated summaries of this project:
 ### Platform Extensions (Experimental)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT + TTS (Kokoro). iOS: remote mode |
+| **OAuth callback deep link** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` auto-finalises the token exchange; no copy-paste of the auth code required |
+| **Upstream branch watcher** | Implemented | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind` when local HEAD diverges from tracked upstream; surfaced via `platform.notify()` on desktop and mobile |
+| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions instead of 80×24→36×11, fixes the Android first-prompt-invisible bug on mksh/bash |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

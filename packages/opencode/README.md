@@ -127,6 +127,8 @@ Variables d'environnement utiles :
 - **llama-server lifecycle** : atomic lock + single-flight, orphan recovery, **circuit breaker** (3 restarts max en 120 s) sur model mismatch.
 - **Configuration llama.cpp adaptative** : [`src/local-llm-server/auto-config.ts`](src/local-llm-server/auto-config.ts) dérive `n_gpu_layers`, `threads`, `batch`/`ubatch`, KV quant et context size selon VRAM/RAM/thermal. Tests dans [`test/local-llm-server/auto-config.test.ts`](test/local-llm-server/auto-config.test.ts). Env overrides : `OPENCODE_N_GPU_LAYERS`, `OPENCODE_KV_CACHE_TYPE`.
 - **Observabilité** : `SessionLearn` erreurs sont loggées via `Effect.catch` (plus de `Effect.ignore` silencieux). Coûts clampés à ≥ 0 quand `cacheTokens > inputTokens` (warn loggé).
+- **Git upstream watcher** : [`src/git/index.ts`](src/git/index.ts) expose `Git.fetch`, `Git.upstream` et `Git.revCount`. [`src/project/vcs.ts`](src/project/vcs.ts) lance un probe fork-scoped (30 s de warm-up puis `Schedule.spaced(5min)`) qui détecte la divergence avec le remote et publie `Event.BranchBehind` sur le bus ; l'UI (`context/notification.tsx`) déclenche alors `platform.notify()`. La loop swallow les erreurs transitoires (offline, detached HEAD) via `Effect.catchCause` sans tuer le service VCS.
+- **PTY cols/rows au spawn** : [`src/pty/index.ts`](src/pty/index.ts) — `CreateInput` accepte `cols`/`rows` optionnels, forwardés à `spawn()` (supporté par bun-pty et android-pty). Le frontend estime la taille avant le create pour éviter la resize storm 80×24→target qui faisait disparaître le premier prompt mksh/bash sur mobile.
 
 ---
 
