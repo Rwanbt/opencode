@@ -72,12 +72,32 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-// RAG indexing guard: index project files once per directory per process
-const ragIndexedDirs = new Set<string>()
+// RAG indexing guard: bounded LRU map so long-lived processes don't leak memory
+// as users switch between many workspaces. Map iteration preserves insertion
+// order, so keys().next() yields the least-recently-inserted entry.
+const RAG_INDEX_MAX = 64
+const RAG_INDEX_TTL_MS = 30 * 60 * 1000
+const ragIndexedDirs = new Map<string, number>()
+
 async function ensureRagIndexed() {
   const dir = Instance.directory
-  if (ragIndexedDirs.has(dir)) return
-  ragIndexedDirs.add(dir)
+  const now = Date.now()
+  // Drop stale entries so directories reachable after a TTL re-index freshly.
+  for (const [k, t] of ragIndexedDirs) {
+    if (now - t > RAG_INDEX_TTL_MS) ragIndexedDirs.delete(k)
+  }
+  if (ragIndexedDirs.has(dir)) {
+    // Refresh recency so active directories are kept over idle ones.
+    ragIndexedDirs.delete(dir)
+    ragIndexedDirs.set(dir, now)
+    return
+  }
+  while (ragIndexedDirs.size >= RAG_INDEX_MAX) {
+    const oldest = ragIndexedDirs.keys().next().value
+    if (oldest === undefined) break
+    ragIndexedDirs.delete(oldest)
+  }
+  ragIndexedDirs.set(dir, now)
   if (!(await RAG.isEnabled())) return
   try {
     const files = await ProjectContext.scanFiles(dir)
@@ -161,7 +181,9 @@ export namespace SessionPrompt {
             }).pipe(
               Effect.provide(Agent.defaultLayer),
               Effect.provide(Provider.defaultLayer),
-              Effect.ignore,
+              Effect.catch((err: unknown) =>
+                Effect.sync(() => log.warn("SessionLearn failed", { err: String(err) })),
+              ),
               Effect.forkIn(scope),
             )
           }),
