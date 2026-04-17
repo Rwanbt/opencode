@@ -373,6 +373,7 @@ pub fn spawn_command(
         .resolve("", BaseDirectory::AppLocalData)
         .expect("Failed to resolve app local data dir");
 
+    let app_data = app.path().app_data_dir().expect("app data dir");
     let mut envs = vec![
         (
             "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(),
@@ -386,6 +387,18 @@ pub fn spawn_command(
         (
             "XDG_STATE_HOME".to_string(),
             state_dir.to_string_lossy().to_string(),
+        ),
+        // Paths for the sidecar's LocalLLMServer to find the runtime and models
+        // without scanning candidate directories — the sidecar's candidateDirs() would
+        // pick the right app-data folder anyway, but explicit vars are faster and
+        // eliminate any ambiguity in multi-install scenarios (dev + stable installed).
+        (
+            "OPENCODE_LLAMA_RUNTIME_DIR".to_string(),
+            app_data.join("llama-runtime").to_string_lossy().to_string(),
+        ),
+        (
+            "OPENCODE_LLAMA_MODELS_DIR".to_string(),
+            app_data.join("models").to_string_lossy().to_string(),
         ),
     ];
     envs.extend(
