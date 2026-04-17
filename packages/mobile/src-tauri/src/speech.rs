@@ -1,11 +1,27 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::kokoro::KokoroEngine;
 use crate::parakeet::ParakeetEngine;
 
 const STT_MODEL_URL: &str = "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip";
+const KOKORO_MODEL_URL: &str = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx";
+const KOKORO_VOICES_URL: &str = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin";
+
+/// Monotonic counter for chunk WAV filenames — avoids collisions when parallel
+/// TTS calls land within the same millisecond timestamp.
+static CHUNK_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn next_chunk_filename() -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let n = CHUNK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("chunk_{}_{}.wav", ts, n)
+}
 
 /// Acquire a Mutex guard tolerantly: if poisoned (a previous holder panicked),
 /// recover the guard rather than propagating. This trades the crash for a
@@ -32,11 +48,17 @@ fn speech_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join("speech")
 }
 
+fn kokoro_dir(app: &AppHandle) -> PathBuf {
+    data_dir(app).join("speech").join("kokoro")
+}
+
 // ─── State ─────────────────────────────────────────────────────────────
 
 pub struct SpeechState {
     stt_engine: Mutex<ParakeetEngine>,
     stt_loaded: Mutex<bool>,
+    kokoro_engine: Mutex<KokoroEngine>,
+    kokoro_loaded: Mutex<bool>,
 }
 
 impl SpeechState {
@@ -44,6 +66,8 @@ impl SpeechState {
         Self {
             stt_engine: Mutex::new(ParakeetEngine::new()),
             stt_loaded: Mutex::new(false),
+            kokoro_engine: Mutex::new(KokoroEngine::new()),
+            kokoro_loaded: Mutex::new(false),
         }
     }
 }
@@ -173,24 +197,213 @@ pub async fn stt_loaded(app: AppHandle) -> bool {
     val
 }
 
-// ─── TTS (browser SpeechSynthesis fallback on mobile) ──────────────────
+// ─── TTS (Kokoro ONNX, built-in) ───────────────────────────────────────
+//
+// Mobile has no Pocket TTS (no Python). The only local TTS engine is Kokoro.
+// `tts_start`/`tts_speak`/`tts_stop`/`tts_available` delegate to the Kokoro
+// commands so the frontend keeps a uniform API (same as desktop Pocket path).
 
 #[tauri::command]
-pub async fn tts_start(_app: AppHandle) -> Result<u16, String> {
-    // TTS handled by browser SpeechSynthesis on mobile
-    Err("Use browser SpeechSynthesis on mobile".to_string())
+pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
+    // Returns a port for API parity with desktop. Kokoro is in-process so the
+    // port is only a sentinel (0 = "in-process, no HTTP server"). The frontend
+    // checks the return value but routes audio via kokoro_synthesize file path.
+    kokoro_load(app).await?;
+    Ok(0)
 }
 
 #[tauri::command]
-pub async fn tts_speak(_app: AppHandle, _text: String, _voice: Option<String>) -> Result<String, String> {
-    Err("Use browser SpeechSynthesis on mobile".to_string())
+pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
+    let voice_name = voice.unwrap_or_else(|| "af_heart".to_string());
+    kokoro_synthesize(app, text, voice_name, 1.0).await
 }
 
 #[tauri::command]
-pub async fn tts_stop(_app: AppHandle) -> Result<(), String> { Ok(()) }
+pub async fn tts_stop(_app: AppHandle) -> Result<(), String> {
+    // Kokoro runs synchronously per-request; nothing persistent to stop.
+    Ok(())
+}
 
 #[tauri::command]
-pub async fn tts_available() -> bool { false }
+pub async fn tts_available(app: AppHandle) -> bool {
+    kokoro_available(app).await
+}
+
+// ─── Kokoro TTS (ONNX) ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn kokoro_available(app: AppHandle) -> bool {
+    let dir = kokoro_dir(&app);
+    dir.join("kokoro-v1.0.onnx").exists() && dir.join("voices-v1.0.bin").exists()
+}
+
+#[tauri::command]
+pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
+    let dir = kokoro_dir(&app);
+    let _ = fs::create_dir_all(&dir);
+
+    let model_path = dir.join("kokoro-v1.0.onnx");
+    let voices_path = dir.join("voices-v1.0.bin");
+
+    if model_path.exists() && voices_path.exists() {
+        return Ok(());
+    }
+
+    let client = reqwest::Client::new();
+
+    if !model_path.exists() {
+        log::info!("[Kokoro] Downloading model...");
+        let resp = client.get(KOKORO_MODEL_URL).send().await.map_err(|e| format!("Download model: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let total = resp.content_length().unwrap_or(0);
+        let mut downloaded: u64 = 0;
+        use futures_util::StreamExt;
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(&model_path).await.map_err(|e| format!("Create: {}", e))?;
+        let mut last_emit = std::time::Instant::now();
+        let mut stream = resp.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("Stream: {}", e))?;
+            file.write_all(&chunk).await.map_err(|e| format!("Write: {}", e))?;
+            downloaded += chunk.len() as u64;
+            if last_emit.elapsed().as_millis() > 300 {
+                let progress = if total > 0 { downloaded as f64 / total as f64 * 0.9 } else { 0.0 };
+                let _ = app.emit("kokoro-download-progress", progress);
+                last_emit = std::time::Instant::now();
+            }
+        }
+        file.flush().await.map_err(|e| format!("Flush: {}", e))?;
+        log::info!("[Kokoro] Model downloaded");
+    }
+
+    if !voices_path.exists() {
+        log::info!("[Kokoro] Downloading voices...");
+        let resp = client.get(KOKORO_VOICES_URL).send().await.map_err(|e| format!("Download voices: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| format!("Read: {}", e))?;
+        fs::write(&voices_path, &bytes).map_err(|e| format!("Write: {}", e))?;
+        log::info!("[Kokoro] Voices downloaded");
+    }
+
+    let _ = app.emit("kokoro-download-progress", 1.0_f64);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn kokoro_load(app: AppHandle) -> Result<(), String> {
+    {
+        let state = app.state::<SpeechState>();
+        if *lock_safe(&state.kokoro_loaded) { return Ok(()); }
+    }
+
+    let dir = kokoro_dir(&app);
+    let model_path = dir.join("kokoro-v1.0.onnx");
+    let voices_path = dir.join("voices-v1.0.bin");
+
+    if !model_path.exists() || !voices_path.exists() {
+        return Err("Kokoro model not downloaded".to_string());
+    }
+
+    log::info!("[Kokoro] Loading model...");
+    let start = std::time::Instant::now();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut engine = KokoroEngine::new();
+        engine.load(&model_path, &voices_path)?;
+        Ok::<KokoroEngine, String>(engine)
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?;
+
+    let engine = result?;
+    {
+        let state = app.state::<SpeechState>();
+        *lock_safe(&state.kokoro_engine) = engine;
+        *lock_safe(&state.kokoro_loaded) = true;
+    }
+    log::info!("[Kokoro] Model loaded in {:?}", start.elapsed());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn kokoro_loaded(app: AppHandle) -> bool {
+    let state = app.state::<SpeechState>();
+    let guard = lock_safe(&state.kokoro_loaded);
+    let val = *guard;
+    drop(guard);
+    val
+}
+
+#[tauri::command]
+pub async fn kokoro_voices(app: AppHandle) -> Vec<String> {
+    let state = app.state::<SpeechState>();
+    let engine = lock_safe(&state.kokoro_engine);
+    let mut names = engine.voice_names();
+    names.sort();
+    names
+}
+
+#[tauri::command]
+pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, speed: f32) -> Result<String, String> {
+    {
+        let state = app.state::<SpeechState>();
+        let loaded = *lock_safe(&state.kokoro_loaded);
+        if !loaded {
+            kokoro_load(app.clone()).await?;
+        }
+    }
+
+    log::info!("[Kokoro] Synthesizing {} chars with voice {}", text.len(), voice);
+    let start = std::time::Instant::now();
+
+    let app_clone = app.clone();
+    let voice_clone = voice.clone();
+    let samples = tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let state = app_clone.state::<SpeechState>();
+            let mut engine = lock_safe(&state.kokoro_engine);
+            engine.synthesize(&text, &voice_clone, speed)
+        }))
+        .unwrap_or_else(|panic_val| {
+            let msg = panic_val
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| panic_val.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown panic payload");
+            log::error!("[Kokoro] PANIC in synthesis: {}", msg);
+            Err(format!("Panic: {}", msg))
+        })
+    })
+    .await
+    .map_err(|e| format!("Task: {}", e))?
+    .map_err(|e| format!("Synthesis: {}", e))?;
+
+    log::info!("[Kokoro] Synthesized {} samples in {:?}", samples.len(), start.elapsed());
+
+    let out_dir = speech_dir(&app).join("tts_chunks");
+    let _ = fs::create_dir_all(&out_dir);
+    let out_path = out_dir.join(next_chunk_filename());
+
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 24000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(&out_path, spec)
+        .map_err(|e| format!("WAV writer: {}", e))?;
+    for &s in &samples {
+        let clamped = s.clamp(-1.0, 1.0);
+        let i16_val = if clamped < 0.0 { (clamped * 32768.0) as i16 } else { (clamped * 32767.0) as i16 };
+        writer.write_sample(i16_val).map_err(|e| format!("WAV write: {}", e))?;
+    }
+    writer.finalize().map_err(|e| format!("WAV finalize: {}", e))?;
+
+    Ok(out_path.to_string_lossy().to_string())
+}
 
 // ─── Voice Cloning (WAV storage) ───────────────────────────────────────
 

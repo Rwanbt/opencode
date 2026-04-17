@@ -8,7 +8,6 @@ mod llm;
 mod validate;
 #[cfg(target_os = "android")]
 mod proxy;
-#[allow(dead_code)]
 mod kokoro;
 mod parakeet;
 mod speech;
@@ -138,6 +137,12 @@ pub fn run() {
             speech::tts_list_voice_clones,
             speech::tts_delete_voice_clone,
             speech::tts_available,
+            speech::kokoro_available,
+            speech::kokoro_download_model,
+            speech::kokoro_load,
+            speech::kokoro_loaded,
+            speech::kokoro_voices,
+            speech::kokoro_synthesize,
         ]);
     }
 

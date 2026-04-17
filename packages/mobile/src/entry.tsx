@@ -16,6 +16,7 @@ import { ExtractionProgress } from "./components/extraction-progress"
 import { ModelManager } from "./components/model-manager"
 import { createPlatform, setPrivateServerFp } from "./platform"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
+import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 
 const root = document.getElementById("root")
 
@@ -341,6 +342,14 @@ function FullApp(props: {
     }
     window.addEventListener("model-selected" as any, handler as any)
     onCleanup(() => window.removeEventListener("model-selected" as any, handler as any))
+  })
+
+  // Wire STT/TTS listeners — mic button dispatches `stt-start`/`stt-stop`,
+  // copy button dispatches `tts-toggle`. See packages/app/src/components/
+  // prompt-input.tsx for the UI side.
+  onMount(() => {
+    initSpeechListeners()
+    onCleanup(cleanupSpeechListeners)
   })
   const connection = (): ServerConnection.Any => {
     if (props.serverInfo.variant === "embedded") {
