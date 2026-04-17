@@ -106,6 +106,36 @@ Globe icon in prompt toolbar — toggle web search per message.
 | Voice Input | microphone | Record → STT → text |
 | Send | arrow | Send message |
 
+### OAuth Sign-in (deep link)
+
+Providers that redirect back to the app no longer require the user to
+copy-paste the authorization code. Register
+`opencode://oauth/callback?providerID=<id>&code=<code>&state=<opt>` as
+the `redirect_uri` and the desktop shell auto-finalises the token
+exchange — see
+[`packages/app/src/pages/layout/deep-links.ts`](../app/src/pages/layout/deep-links.ts)
+(`parseOAuthCallbackDeepLink` + `oauthCallbackEvent`) and
+`dialog-connect-provider.tsx` for the UI-side listener. Refresh token
+rotation and keychain-backed storage are tracked separately in
+[`SECURITY_AUDIT.md`](../../SECURITY_AUDIT.md) §4.
+
+### Git upstream notifications
+
+Each project opens a fork-scoped probe (warm-up 30 s, then every 5 min)
+that runs `git fetch --quiet --prune` on the tracked upstream and
+compares `rev-list --count HEAD..upstream` / `upstream..HEAD`. A
+divergence publishes `vcs.branch.behind` on the bus and the
+notification context forwards it to `platform.notify()` with a native
+OS notification. Offline or detached-HEAD states are logged at `warn`
+and do not tear down the VCS service.
+
+### Release hardening
+
+`devtools` is no longer force-enabled on the main window — Tauri 2's
+default (debug-only) is now respected, which keeps production builds
+free of the `__TAURI__` inspection surface an XSS foothold would
+otherwise abuse.
+
 ## Prerequisites
 
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) (Rust, platform libs)
