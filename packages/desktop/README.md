@@ -37,16 +37,22 @@ Custom GGUF models downloadable from HuggingFace with VRAM-based recommendations
 
 #### llama-server Flags
 
+Most numeric flags are derived at runtime by `packages/opencode/src/local-llm-server/auto-config.ts` (`deriveConfig()`) from the detected device profile (total/free RAM, big CPU cores, GPU backend + VRAM, thermal state). Environment variables let advanced users pin specific values.
+
 | Flag | Value | Purpose |
 |------|-------|---------|
-| `--n-gpu-layers 99` | all layers | Offload to GPU |
-| `--fit on` | auto | Adapt to available VRAM |
-| `-fitt 512` | margin | Leave 512 MiB free |
-| `-fitc 16384` | min ctx | Never below 16K context |
+| `--n-gpu-layers <N>` | adaptive (env: `OPENCODE_N_GPU_LAYERS`) | Layers offloaded to fit 85 % of detected VRAM |
+| `--threads <N>` | adaptive (2–6, big cores only) | Performance cores via cpufreq split |
+| `--batch-size <N>` | adaptive (64–512) | Scales with free RAM, halved under thermal throttle |
+| `--ubatch-size <N>` | batch / 4 | Sub-batch for prefill |
+| `--cache-type-k/v` | adaptive f16/q8_0/q4_0 (env: `OPENCODE_KV_CACHE_TYPE`) | Quant tier from VRAM headroom |
+| `--fit on` | auto (fork-only, opt-in via `OPENCODE_LLAMA_ENABLE_FIT`) | Secondary VRAM adjustment |
+| `-fitt 512` / `-fitc 16384` | margin + min ctx (when `--fit` enabled) | Never below 16K context |
 | `--flash-attn on` | — | Flash Attention |
-| `--cache-type-k/v` | from settings | KV cache quant (q4_0 default + Hadamard rotation) |
 | `-np 1` | single slot | Minimize VRAM |
 | `--model-draft` | optional | Speculative decoding (VRAM Guard) |
+
+The runtime logs `log.info("llama adaptive config", { profile, chosen, modelSizeMb })` at each spawn so you can verify the derived values.
 
 ### Speech-to-Text (STT)
 

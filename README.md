@@ -60,11 +60,13 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 
 **Inference Engine (llama.cpp b8731)**
 - Vulkan GPU backend, auto-downloaded on first model load
+- **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
 - `--flash-attn on` — Flash Attention for memory efficiency
-- `--cache-type-k/v q4_0` — Hadamard rotation KV cache (72% memory savings)
-- `--fit on` — auto-adjusts context size and GPU layer placement to available VRAM
+- `--cache-type-k/v` — Hadamard rotation KV cache; adaptive tier (f16 / q8_0 / q4_0) based on VRAM headroom
+- `--fit on` — fork-only secondary VRAM adjustment (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables if < 1.5 GB free)
 - Single slot (`-np 1`) to minimize memory footprint
+- **Benchmark harness** (`bun run bench:llm`): reproducible FTL / TPS / peak RSS / wall-time measurement per model, per run, JSONL output for CI archival
 
 **Speech-to-Text (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet via ONNX Runtime — ~300ms for 5s of audio (18x real-time)
@@ -273,12 +275,16 @@ To prevent confusion from AI-generated summaries of this project:
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Adaptive runtime config** | Implemented | `auto-config.ts`: n_gpu_layers / threads / batch / KV quant derived from detected VRAM, RAM, big.LITTLE, GPU backend, thermal state |
+| **Benchmark harness** | Implemented | `bun run bench:llm` measures FTL, TPS, peak RSS, wall per model; JSONL output |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` for gpt-*/o1/o3/o4; empirical 3.5 chars/token for Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
+| HuggingFace model search | Implemented | Zod-validated response, VRAM badges, download manager, 9 pre-curated models |
+| **Resumable GGUF downloads** | Implemented | HTTP `Range` header — 4G interruption doesn't restart a 4 GB transfer from zero |
 | STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
 | TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
 | TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
@@ -286,6 +292,7 @@ To prevent confusion from AI-generated summaries of this project:
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Circuit breaker restart | Implemented | `ensureCorrectModel` bails after 3 restarts in 120 s to avoid burn-cycle loops |
 
 ### Security & Governance
 | Capability | Status | Notes |
@@ -294,6 +301,10 @@ To prevent confusion from AI-generated summaries of this project:
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; no `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Android release hardening** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Tauri command input validation** | Implemented | `download_model` / `load_llm_model` / `delete_model` guards: filename charset, HTTPS allowlist to `huggingface.co` / `hf.co` |
+| **Rust logging chain** | Implemented | `log` + `android_logger` on mobile; no `eprintln!` in release → no path/URL leaks to logcat |
 
 ### Knowledge & Memory
 | Capability | Status | Notes |

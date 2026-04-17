@@ -10,10 +10,36 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 
 ### Local LLM Inference
 - On-device inference via llama.cpp with JNI bridge (GPU optional: OpenCL/Vulkan)
+- Adaptive runtime config: `n_gpu_layers` / threads / batch size derived from
+  device profile (RAM, big.LITTLE CPU, GPU backend, thermal state) via
+  `packages/opencode/src/local-llm-server/auto-config.ts`
 - Model management: download GGUF models from HuggingFace, load/unload/delete
+- **Resumable downloads**: HTTP `Range` header picks up where a 4G interruption
+  left off (4 GB GGUF doesn't restart from zero when signal drops)
 - OpenAI-compatible HTTP API via llama-server on port 14097
 - File-based IPC between Rust backend and Kotlin LlamaEngine
-- HuggingFace search for additional GGUF models
+- HuggingFace search for additional GGUF models (Zod-validated response)
+
+### Foreground Service (`LlamaService.kt`)
+- `startForegroundService()` invoked from `MainActivity.onCreate()` keeps
+  the whole process tree at `adj=0`, exempting it from Android 12+
+  PhantomProcessKiller and MIUI SmartPower
+- `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` declared (required on API 34+)
+- Persistent notification with `POST_NOTIFICATIONS` permission request
+- `LlamaService.waitForInstance()` + `spawnServer()` / `stopChildProcess()`
+  used by `LlamaEngine` and the PTY server
+
+### Hardened Release Build
+- `isDebuggable = false`, `isJniDebuggable = false`,
+  `isShrinkResources = true` on release `buildType`
+- `android:allowBackup="false"` + `android:fullBackupContent="false"` on
+  `<application>` — blocks `adb backup` data exfiltration
+- `android:windowSoftInputMode="adjustResize"` — chat input stays visible
+  above the keyboard on mid-range devices
+- Strict CSP on `tauri.conf.json` (`connect-src` limited to loopback +
+  HuggingFace + Tauri IPC; `object-src 'none'`; `frame-ancestors 'none'`)
+- All Rust logs routed through `log` + `android_logger` (no more raw
+  `eprintln!` leaking paths/URLs to logcat in release)
 
 ### Speech-to-Text (STT)
 - NVIDIA Parakeet TDT 0.6B v3 (INT8) via ONNX Runtime (same engine as desktop)
