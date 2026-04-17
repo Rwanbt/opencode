@@ -12,6 +12,59 @@ const LLM_PORT: u16 = 14097;
 // Latest llama.cpp with Hadamard rotation for KV cache (PR #21038)
 const LLAMA_RELEASE_TAG: &str = "b8731";
 
+// ─── Inter-process lifecycle coordination ─────────────────────────────
+//
+// The TypeScript sidecar (LocalLLMServer) manages llama-server lifetime via
+// ref files in {tmpdir}/opencode-llm-14097/. Tauri participates in the same
+// protocol so the sidecar respects the "owner alive → don't kill" invariant.
+//
+// owner.pid  : "{owner_pid}:{child_pid}" — written atomically via tmp+rename
+// refs/{pid} : presence of an active consumer (written by each process)
+
+fn llm_base_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("opencode-llm-{}", LLM_PORT))
+}
+fn llm_ref_dir() -> std::path::PathBuf {
+    llm_base_dir().join("refs")
+}
+fn llm_owner_file() -> std::path::PathBuf {
+    llm_base_dir().join("owner.pid")
+}
+
+fn write_llm_ref(pid: u32) {
+    let dir = llm_ref_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let _ = std::fs::write(
+        dir.join(format!("{}.ref", pid)),
+        format!(r#"{{"pid":{},"since":{}}}"#, pid, since),
+    );
+}
+
+fn remove_llm_ref(pid: u32) {
+    let _ = std::fs::remove_file(llm_ref_dir().join(format!("{}.ref", pid)));
+}
+
+fn write_llm_owner(owner_pid: u32, child_pid: u32) {
+    let path = llm_owner_file();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = path.with_extension("pid.tmp");
+    if std::fs::write(&tmp, format!("{}:{}", owner_pid, child_pid)).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
+fn remove_llm_owner_and_ref() {
+    let pid = std::process::id();
+    remove_llm_ref(pid);
+    let _ = std::fs::remove_file(llm_owner_file());
+}
+
 fn llama_asset_name() -> String {
     let tag = LLAMA_RELEASE_TAG;
     // CUDA 12.4 instead of Vulkan: fixes Gemma 4 <unused> token infinite loop
@@ -522,6 +575,14 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .spawn()
         .map_err(|e| format!("Failed to start llama-server: {}", e))?;
 
+    // Participate in the inter-process ref protocol so the TypeScript sidecar
+    // (LocalLLMServer) knows Tauri is the owner and won't kill the server on
+    // its own exit. Must happen BEFORE child is moved into the Mutex.
+    let own_pid = std::process::id();
+    let child_pid = child.id().unwrap_or(0);
+    write_llm_owner(own_pid, child_pid);
+    write_llm_ref(own_pid);
+
     {
         let state = app.state::<LlmServerState>();
         *state.child.lock().unwrap() = Some(child);
@@ -595,6 +656,9 @@ pub async fn unload_llm_model(app: AppHandle) -> Result<(), String> {
         tracing::info!("[LLM] Stopping llama-server");
         let _ = child.kill().await;
         let _ = child.wait().await;
+        // Remove Tauri's owner.pid and ref file so the TypeScript sidecar
+        // won't see a live owner and incorrectly skip orphan recovery.
+        remove_llm_owner_and_ref();
     }
     Ok(())
 }

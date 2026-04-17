@@ -1,5 +1,6 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
+import { LocalLLMServer } from "@/local-llm-server"
 import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
@@ -249,6 +250,12 @@ export namespace LLM {
         headers: {},
       },
     )
+
+    // Démarrer llama-server si absent. DOIT être avant getLocalLLMAdaptiveLimits
+    // pour que les adaptive limits soient calculées sur un serveur déjà démarré.
+    if (input.model.providerID === "local-llm") {
+      await LocalLLMServer.ensureRunning(input.model.api.id, input.abort)
+    }
 
     // Adaptive limits for local-llm: derived from actual n_ctx reported by llama-server.
     // For all other providers: standard model output limit.
