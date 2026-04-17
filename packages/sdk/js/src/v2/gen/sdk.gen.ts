@@ -920,6 +920,8 @@ export class Pty extends HeyApiClient {
       env?: {
         [key: string]: string
       }
+      cols?: number
+      rows?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -935,6 +937,8 @@ export class Pty extends HeyApiClient {
             { in: "body", key: "cwd" },
             { in: "body", key: "title" },
             { in: "body", key: "env" },
+            { in: "body", key: "cols" },
+            { in: "body", key: "rows" },
           ],
         },
       ],

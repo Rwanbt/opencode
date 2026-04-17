@@ -85,6 +85,15 @@ export namespace Pty {
     cwd: z.string().optional(),
     title: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    // Initial PTY dimensions. When omitted the platform default (80x24) is
+    // used, which on mobile webviews causes the first shell prompt to be
+    // dropped: the shell writes its prompt at 80x24, the frontend fit()s
+    // down to ~36x11 immediately after spawn, and mksh/bash do not re-emit
+    // the prompt after SIGWINCH. Passing the estimated final dims at spawn
+    // time sidesteps the problem — the prompt is written in the right
+    // dimensions from the start and any subsequent fit() is a minor tweak.
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
   })
 
   export type CreateInput = z.infer<typeof CreateInput>
@@ -230,6 +239,8 @@ export namespace Pty {
             name: "xterm-256color",
             cwd,
             env,
+            cols: input.cols,
+            rows: input.rows,
           }),
         )
 

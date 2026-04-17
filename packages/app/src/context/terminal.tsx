@@ -22,6 +22,36 @@ export type LocalPTY = {
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
+// Monospace char metrics matching the defaults in terminal.tsx
+// (fontSize: 14, DejaVu Sans Mono / JetBrains Mono ≈ 0.6em advance).
+const CHAR_ADVANCE_PX = 8.4
+const LINE_HEIGHT_PX = 17
+// Terminal container uses ~40% of viewport height on mobile split layout,
+// full height on desktop. Conservative estimate halfway between the two
+// so the pre-spawn prompt lands in dimensions close to the final fit.
+const HEIGHT_FACTOR = 0.6
+const WIDTH_PADDING_PX = 32
+
+/**
+ * Estimate the terminal grid size from the current viewport so we can
+ * spawn the shell at its (approximate) final dimensions. This avoids the
+ * 80x24 → target resize storm that drops the first prompt on mobile (mksh
+ * does not re-emit its prompt after SIGWINCH). The fit() pass in
+ * terminal.tsx still runs once the container is mounted and snaps to the
+ * exact grid; this just ensures the initial mismatch is small enough
+ * that the shell keeps its prompt.
+ */
+function estimateTerminalSize(fallback?: { cols?: number; rows?: number }) {
+  if (typeof window === "undefined") {
+    return { cols: fallback?.cols ?? 80, rows: fallback?.rows ?? 24 }
+  }
+  const vw = Math.max(200, window.innerWidth ?? 800)
+  const vh = Math.max(200, window.innerHeight ?? 600)
+  const cols = Math.max(40, Math.min(200, Math.floor((vw - WIDTH_PADDING_PX) / CHAR_ADVANCE_PX)))
+  const rows = Math.max(12, Math.min(80, Math.floor((vh * HEIGHT_FACTOR) / LINE_HEIGHT_PX)))
+  return { cols, rows }
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -271,9 +301,12 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
+    const estimated = estimateTerminalSize({ cols: pty.cols, rows: pty.rows })
     const next = await client.pty
       .create({
         title: pty.title,
+        cols: estimated.cols,
+        rows: estimated.rows,
       })
       .catch((error: unknown) => {
         console.error("Failed to clone terminal", error)
@@ -313,9 +346,10 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     },
     new() {
       const nextNumber = pickNextTerminalNumber()
+      const estimated = estimateTerminalSize()
 
       sdk.client.pty
-        .create({ title: defaultTitle(nextNumber) })
+        .create({ title: defaultTitle(nextNumber), cols: estimated.cols, rows: estimated.rows })
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
