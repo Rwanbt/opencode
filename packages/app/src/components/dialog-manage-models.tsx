@@ -8,7 +8,7 @@ import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectProvider } from "./dialog-select-provider"
+// DialogSelectProvider loaded on-demand (keeps manage-models chunk slim).
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
@@ -16,7 +16,9 @@ export const DialogManageModels: Component = () => {
   const dialog = useDialog()
 
   const handleConnectProvider = () => {
-    dialog.show(() => <DialogSelectProvider />)
+    void import("./dialog-select-provider").then((m) => {
+      dialog.show(() => <m.DialogSelectProvider />)
+    })
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
