@@ -285,17 +285,45 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
+    const handleVcsBranchBehind = (
+      directory: string,
+      event: { properties: { branch: string; upstream: string; behind: number; ahead: number } },
+    ) => {
+      if (meta.disposed) return
+      if (!settings.notifications.agent()) return
+      const { branch, upstream, behind, ahead } = event.properties
+      if (behind === 0 && ahead === 0) return
+
+      const descKey =
+        behind > 0 && ahead > 0
+          ? "notification.vcs.branchDiverged.description"
+          : behind > 0
+            ? "notification.vcs.branchBehind.description"
+            : "notification.vcs.branchAhead.description"
+
+      const title = language.t("notification.vcs.branchBehind.title")
+      const description = language.t(descKey, { branch, upstream, behind, ahead })
+      const href = `/${base64Encode(directory)}`
+      void platform.notify(title, description, href)
+    }
+
     const unsub = globalSDK.event.listen((e) => {
       const event = e.details
-      if (event.type !== "session.idle" && event.type !== "session.error") return
-
       const directory = e.name
       const time = Date.now()
+
       if (event.type === "session.idle") {
         handleSessionIdle(directory, event, time)
         return
       }
-      handleSessionError(directory, event, time)
+      if (event.type === "session.error") {
+        handleSessionError(directory, event, time)
+        return
+      }
+      if (event.type === "vcs.branch.behind") {
+        handleVcsBranchBehind(directory, event)
+        return
+      }
     })
     onCleanup(() => {
       meta.disposed = true

@@ -516,6 +516,11 @@ export const dict = {
   "notification.session.error.title": "Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
 
+  "notification.vcs.branchBehind.title": "Branch behind upstream",
+  "notification.vcs.branchBehind.description": "{{branch}} is {{behind}} commit(s) behind {{upstream}}",
+  "notification.vcs.branchAhead.description": "{{branch}} is {{ahead}} commit(s) ahead of {{upstream}}",
+  "notification.vcs.branchDiverged.description": "{{branch}} is {{behind}} behind / {{ahead}} ahead of {{upstream}}",
+
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",

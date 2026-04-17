@@ -70,6 +70,9 @@ export namespace Git {
     readonly status: (cwd: string) => Effect.Effect<Item[]>
     readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
     readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
+    readonly fetch: (cwd: string, remote?: string) => Effect.Effect<boolean>
+    readonly upstream: (cwd: string, branch?: string) => Effect.Effect<string | undefined>
+    readonly revCount: (cwd: string, range: string) => Effect.Effect<number>
   }
 
   const kind = (code: string): Kind => {
@@ -242,6 +245,34 @@ export namespace Git {
         })
       })
 
+      // Non-mutating network fetch of remote refs. Does not touch working tree
+      // or local branches; only updates refs/remotes/* and FETCH_HEAD. Returns
+      // false if the remote is unreachable, the caller decides what to do.
+      const fetchRemote = Effect.fn("Git.fetch")(function* (cwd: string, remote = "origin") {
+        const result = yield* run(["fetch", "--quiet", "--prune", remote], { cwd })
+        return result.exitCode === 0
+      })
+
+      // Resolve the upstream tracking ref (e.g. "origin/main") for a branch.
+      // Returns undefined if the branch is not tracking any remote.
+      const upstream = Effect.fn("Git.upstream")(function* (cwd: string, branch?: string) {
+        const target = branch ? `${branch}@{upstream}` : "HEAD@{upstream}"
+        const result = yield* run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", target], { cwd })
+        if (result.exitCode !== 0) return
+        const ref = out(result)
+        return ref || undefined
+      })
+
+      // Count revisions in a range like "HEAD..origin/main" (behind) or
+      // "origin/main..HEAD" (ahead). Returns 0 on any failure — callers
+      // interpret that as "no divergence detected" rather than propagating.
+      const revCount = Effect.fn("Git.revCount")(function* (cwd: string, range: string) {
+        const result = yield* run(["rev-list", "--count", range], { cwd })
+        if (result.exitCode !== 0) return 0
+        const n = Number.parseInt(out(result), 10)
+        return Number.isFinite(n) ? n : 0
+      })
+
       return Service.of({
         run,
         branch,
@@ -253,6 +284,9 @@ export namespace Git {
         status,
         diff,
         stats,
+        fetch: fetchRemote,
+        upstream,
+        revCount,
       })
     }),
   )
@@ -299,5 +333,17 @@ export namespace Git {
 
   export async function stats(cwd: string, ref: string) {
     return runPromise((git) => git.stats(cwd, ref))
+  }
+
+  export async function fetch(cwd: string, remote?: string) {
+    return runPromise((git) => git.fetch(cwd, remote))
+  }
+
+  export async function upstream(cwd: string, branch?: string) {
+    return runPromise((git) => git.upstream(cwd, branch))
+  }
+
+  export async function revCount(cwd: string, range: string) {
+    return runPromise((git) => git.revCount(cwd, range))
   }
 }
