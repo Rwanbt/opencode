@@ -13,6 +13,25 @@ mod kokoro;
 mod parakeet;
 mod speech;
 
+/// Install the process-wide logger. Release builds log at Info level, debug
+/// builds at Debug. On Android we route to logcat (`adb logcat -s OpenCode:I`);
+/// on desktop we rely on stderr. Called once during `run()`.
+fn init_logging() {
+    #[cfg(target_os = "android")]
+    {
+        let level = if cfg!(debug_assertions) {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        };
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_max_level(level)
+                .with_tag("OpenCode"),
+        );
+    }
+}
+
 /// Append a line to runtime/logs/debug.log for JavaScript-side diagnostics.
 #[cfg(target_os = "android")]
 #[tauri::command]
@@ -28,7 +47,7 @@ fn write_debug_log(app: tauri::AppHandle, message: String) {
             .unwrap_or(0);
         let _ = writeln!(f, "[{}] {}", now, message);
     }
-    eprintln!("[debug.log] {}", message);
+    log::debug!("[debug.log] {}", message);
 }
 
 /// Fetch a URL using a reqwest client that accepts self-signed TLS certificates.
@@ -68,6 +87,8 @@ async fn fetch_private_server(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_logging();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())

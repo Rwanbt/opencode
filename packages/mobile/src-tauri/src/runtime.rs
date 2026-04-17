@@ -45,10 +45,10 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
 
     // Log debug info
     if let Some(nlib) = native_lib_dir(&dir) {
-        eprintln!("[OpenCode] nativeLibDir={}, bun_exists={}, cli_exists={}",
+        log::debug!("[OpenCode] nativeLibDir={}, bun_exists={}, cli_exists={}",
             nlib.display(), nlib.join("libbun_exec.so").exists(), dir.join("opencode-cli.js").exists());
     } else {
-        eprintln!("[OpenCode] nativeLibDir not found, cli_exists={}", dir.join("opencode-cli.js").exists());
+        log::debug!("[OpenCode] nativeLibDir not found, cli_exists={}", dir.join("opencode-cli.js").exists());
     }
 
     RuntimeInfo {
@@ -172,14 +172,14 @@ pub async fn start_embedded_server(
             let link = home_dir.join(dir_name);
             if target.exists() && !link.exists() {
                 let _ = std::os::unix::fs::symlink(&target, &link);
-                eprintln!("[OpenCode] Symlinked {} -> {}", link.display(), target.display());
+                log::debug!("[OpenCode] Symlinked {} -> {}", link.display(), target.display());
             }
         }
         // Also create a "storage" link to the full /sdcard
         let storage_link = home_dir.join("storage");
         if !storage_link.exists() {
             let _ = std::os::unix::fs::symlink(&external_storage, &storage_link);
-            eprintln!("[OpenCode] Symlinked {} -> {}", storage_link.display(), external_storage.display());
+            log::debug!("[OpenCode] Symlinked {} -> {}", storage_link.display(), external_storage.display());
         }
     }
 
@@ -357,9 +357,9 @@ alias cls='clear'
         }
         if !bundle.is_empty() {
             let _ = fs::write(&ca_bundle_path, &bundle);
-            eprintln!("[OpenCode] Created CA bundle with {} bytes", bundle.len());
+            log::info!("[OpenCode] Created CA bundle with {} bytes", bundle.len());
         } else {
-            eprintln!("[OpenCode] WARNING: No CA certificates found on device");
+            log::warn!("[OpenCode] No CA certificates found on device");
         }
     }
 
@@ -443,10 +443,10 @@ alias cls='clear'
     };
 
     let resolv_override_path = nlib_dir.join("libresolv_override.so");
-    eprintln!("[OpenCode] Spawning: {} {:?}", cmd_path.display(), cmd_args);
-    eprintln!("[OpenCode] LD_LIBRARY_PATH={}", lib_path);
-    eprintln!("[OpenCode] LD_PRELOAD={} (exists={})", resolv_override_path.display(), resolv_override_path.exists());
-    eprintln!("[OpenCode] SSL_CERT_FILE={} (exists={})", ca_bundle_path.display(), ca_bundle_path.exists());
+    log::debug!("[OpenCode] Spawning: {} {:?}", cmd_path.display(), cmd_args);
+    log::debug!("[OpenCode] LD_LIBRARY_PATH={}", lib_path);
+    log::debug!("[OpenCode] LD_PRELOAD={} (exists={})", resolv_override_path.display(), resolv_override_path.exists());
+    log::debug!("[OpenCode] SSL_CERT_FILE={} (exists={})", ca_bundle_path.display(), ca_bundle_path.exists());
 
     // Log files for post-mortem analysis + stderr piped through a thread to logcat
     let log_dir = dir.join("logs");
@@ -487,18 +487,16 @@ alias cls='clear'
             use std::io::{BufRead, BufReader, Write};
             let reader = BufReader::new(stderr_pipe);
             let mut file = fs::File::create(&log_file_path).ok();
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    eprintln!("[bun] {}", line);
-                    if let Some(ref mut f) = file {
-                        let _ = writeln!(f, "{}", line);
-                    }
+            for line in reader.lines().map_while(Result::ok) {
+                log::info!("[bun] {}", line);
+                if let Some(ref mut f) = file {
+                    let _ = writeln!(f, "{}", line);
                 }
             }
         });
     }
 
-    eprintln!("[OpenCode] Server spawned with pid {:?}", child.id());
+    log::info!("[OpenCode] Server spawned with pid {:?}", child.id());
 
     // Check if process exited immediately (crash)
     std::thread::sleep(Duration::from_millis(500));
@@ -506,14 +504,14 @@ alias cls='clear'
         Ok(Some(status)) => {
             std::thread::sleep(Duration::from_millis(500)); // let stderr thread flush
             let stderr = fs::read_to_string(log_dir.join("server_stderr.log")).unwrap_or_default();
-            eprintln!("[OpenCode] Server exited immediately with status: {}", status);
+            log::error!("[OpenCode] Server exited immediately with status: {}", status);
             return Err(format!("Server crashed ({}): {}", status, &stderr[..stderr.len().min(500)]));
         }
         Ok(None) => {
-            eprintln!("[OpenCode] Server still running after 500ms — good");
+            log::info!("[OpenCode] Server still running after 500ms — good");
         }
         Err(e) => {
-            eprintln!("[OpenCode] Error checking server status: {}", e);
+            log::warn!("[OpenCode] Error checking server status: {}", e);
         }
     }
 

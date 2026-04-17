@@ -5,17 +5,39 @@
 //! CONNECT proxy that Bun connects to via HTTP_PROXY/HTTPS_PROXY env vars.
 //! The proxy uses reqwest (Bionic/rustls) which has working DNS resolution.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-static PROXY_RUNNING: AtomicBool = AtomicBool::new(false);
-static mut PROXY_PORT: u16 = 0;
+// PROXY_STARTING ensures only one caller races past the check; the winner
+// completes bind() then publishes PROXY_PORT. Other callers that arrive while
+// the port is still 0 yield until it's published.
+static PROXY_STARTING: AtomicBool = AtomicBool::new(false);
+static PROXY_PORT: AtomicU16 = AtomicU16::new(0);
 
 /// Start the local CONNECT proxy on a random port. Returns the port number.
+/// Idempotent and safe under concurrent calls.
 pub async fn start_proxy() -> Result<u16, String> {
-    if PROXY_RUNNING.load(Ordering::Relaxed) {
-        return Ok(unsafe { PROXY_PORT });
+    // Fast path: already running.
+    let already = PROXY_PORT.load(Ordering::Acquire);
+    if already != 0 {
+        return Ok(already);
+    }
+
+    // Only one thread may perform the bind; others wait for the port.
+    if PROXY_STARTING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        // Another caller is binding; poll for the port briefly.
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            let p = PROXY_PORT.load(Ordering::Acquire);
+            if p != 0 {
+                return Ok(p);
+            }
+        }
+        return Err("Proxy startup timed out waiting on concurrent initializer".to_string());
     }
 
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -26,10 +48,9 @@ pub async fn start_proxy() -> Result<u16, String> {
         .map_err(|e| format!("Proxy addr: {}", e))?
         .port();
 
-    unsafe { PROXY_PORT = port; }
-    PROXY_RUNNING.store(true, Ordering::Relaxed);
+    PROXY_PORT.store(port, Ordering::Release);
 
-    eprintln!("[Proxy] CONNECT proxy listening on 127.0.0.1:{}", port);
+    log::info!("[Proxy] CONNECT proxy listening on 127.0.0.1:{}", port);
 
     tokio::spawn(async move {
         loop {
@@ -38,7 +59,7 @@ pub async fn start_proxy() -> Result<u16, String> {
                     tokio::spawn(handle_connection(stream));
                 }
                 Err(e) => {
-                    eprintln!("[Proxy] Accept error: {}", e);
+                    log::warn!("[Proxy] Accept error: {}", e);
                 }
             }
         }
@@ -95,7 +116,7 @@ async fn handle_connect(request: &str, client: &mut TcpStream) {
             };
         }
         Err(e) => {
-            eprintln!("[Proxy] CONNECT to {} failed: {}", target, e);
+            log::warn!("[Proxy] CONNECT to {} failed: {}", target, e);
             let response = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Length: {}\r\n\r\n{}", e.to_string().len(), e);
             let _ = client.write_all(response.as_bytes()).await;
         }
