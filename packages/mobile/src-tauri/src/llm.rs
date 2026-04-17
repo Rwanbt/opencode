@@ -256,6 +256,13 @@ pub async fn check_llm_health(app: AppHandle) -> bool {
     is_llm_loaded(app).await
 }
 
+#[tauri::command]
+pub async fn llm_idle_tick() -> Result<(), String> {
+    // No-op placeholder — hook for foreground-service keepalive in A.4-part2.
+    log::debug!("llm_idle_tick: app went background");
+    Ok(())
+}
+
 /// Set LLM configuration env vars (called by frontend before load)
 #[tauri::command]
 pub async fn set_llm_config(
