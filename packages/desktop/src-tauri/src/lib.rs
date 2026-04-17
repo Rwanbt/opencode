@@ -578,9 +578,14 @@ async fn initialize(app: AppHandle) {
         });
 
         let app = app.clone();
-        tokio::spawn(done_rx.map(async move |_| {
+        // Await the oneshot inside the task rather than pairing FutureExt::map
+        // with an async closure — the latter yields Future<Future<()>> which
+        // tokio::spawn cannot drive, and triggers an internal clippy panic on
+        // the current toolchain (clippy 0.1.90 type_op_prove_predicate).
+        tokio::spawn(async move {
+            let _ = done_rx.await;
             app.unlisten(id);
-        }))
+        })
     });
 
     // The loading task waits for SQLite migration (if needed) then for the sidecar health check.
