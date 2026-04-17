@@ -20,7 +20,7 @@
     ],
     "withGlobalTauri": true,
     "security": {
-      "csp": null,
+      "csp": "default-src 'self' ipc: https://tauri.localhost; connect-src 'self' ipc: https: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* wss://127.0.0.1:* wss://localhost:*; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'",
       "assetProtocol": {
         "enable": true,
         "scope": {
