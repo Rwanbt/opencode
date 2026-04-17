@@ -132,7 +132,7 @@ export namespace LocalLLMServer {
 
     // 2. Fuzzy : strip .gguf + suffixes de quantization/précision courants
     if (!gguf) {
-      const QUANT_SUFFIX = /[-_](q\d+(_[a-z0-9]+)?|iq\d+(_[a-z]+)?|f16|fp16|bf16|f32|fp32).*$/i
+      const QUANT_SUFFIX = /[-_](q\d+(_[a-z0-9]+)?|iq\d+(_[a-z]+)?|f16|fp16|bf16|f32|fp32)\.gguf$/i
       gguf = files.find((f) => {
         const stripped = f.replace(/\.gguf$/i, "").replace(QUANT_SUFFIX, "").toLowerCase()
         return stripped === modelIDLower
