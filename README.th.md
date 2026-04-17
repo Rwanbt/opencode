@@ -295,8 +295,10 @@ SDK เต็มรูปแบบ (`@opencode/plugin`) พร้อมสถา
 |-----------|-------|---------|
 | **CSP เข้มงวด (desktop + mobile)** | Implemented | `connect-src` จำกัดเฉพาะ loopback + HuggingFace + ผู้ให้บริการ HTTPS; ไม่มี `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **การเสริมความแข็งแกร่ง release Android** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **การเสริมความแข็งแกร่ง release เดสก์ท็อป** | Implemented | Devtools ไม่ถูกเปิดใช้งานโดยบังคับอีกต่อไป — คืนค่าดีฟอลต์ของ Tauri 2 (เฉพาะในโหมด debug) เพื่อให้จุดเริ่มของ XSS ไม่สามารถเกาะเข้ากับ `__TAURI__` ในโปรดักชันได้ |
 | **การตรวจสอบอินพุตคำสั่ง Tauri** | Implemented | การ์ด `download_model` / `load_llm_model` / `delete_model`: charset ชื่อไฟล์, HTTPS allowlist สำหรับ `huggingface.co` / `hf.co` |
 | **Rust logging chain** | Implemented | `log` + `android_logger` บนมือถือ; ไม่มี `eprintln!` ใน release → ไม่มีการรั่วไหล path/URL ไปยัง logcat |
+| **ตัวติดตามการตรวจสอบความปลอดภัย** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — การค้นพบทั้งหมดจัดประเภทเป็น S1/S2/S3 พร้อม `path:line`, สถานะ และเหตุผลของการแก้ไขที่เลื่อน |
 
 ---
 

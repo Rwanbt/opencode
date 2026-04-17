@@ -285,9 +285,9 @@ Model Context Protocol 用戶端與伺服器。支援 stdio、HTTP/SSE 和 Strea
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
 | HuggingFace model search | Implemented | 經 Zod 驗證的回應、VRAM 徽章、下載管理器、9 個預選模型 |
 | **可續傳 GGUF 下載** | Implemented | HTTP `Range` 標頭 — 4G 中斷不會讓 4 GB 傳輸從零重啟 |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime，~300ms/5s，25 種語言，桌面 + 行動（麥克風監聽在兩端皆已接入） |
+| TTS (Pocket TTS) | Implemented | 8 種語音，零樣本語音複製，法語原生（僅桌面 — Android 上無 Python sidecar） |
+| TTS (Kokoro) | Implemented | 54 種語音，9 種語言，ONNX 執行於 **桌面 + Android**（在行動端 `speech.rs` 中接入 6 個 Tauri 命令，CPUExecutionProvider） |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
@@ -303,8 +303,10 @@ Model Context Protocol 用戶端與伺服器。支援 stdio、HTTP/SSE 和 Strea
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
 | **嚴格 CSP（桌面 + 行動）** | Implemented | `connect-src` 限定為 loopback + HuggingFace + HTTPS 提供者；無 `unsafe-eval`、`object-src 'none'`、`frame-ancestors 'none'` |
 | **Android 發行版強化** | Implemented | `isDebuggable=false`、`allowBackup=false`、`isShrinkResources=true`、`FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **桌面發行版強化** | Implemented | 不再強制啟用 Devtools — 還原 Tauri 2 預設（僅在 debug 中），使 XSS 立足點無法在生產環境掛接到 `__TAURI__` |
 | **Tauri 命令輸入驗證** | Implemented | `download_model` / `load_llm_model` / `delete_model` 守衛：檔名字元集，HTTPS 允許清單 `huggingface.co` / `hf.co` |
 | **Rust 日誌鏈** | Implemented | 行動端 `log` + `android_logger`；發行版無 `eprintln!` → 不會向 logcat 洩漏路徑/URL |
+| **安全稽核追蹤器** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — 所有發現按 S1/S2/S3 分類，附 `path:line`、狀態及延期修復理由 |
 
 ### 知識與記憶
 | 能力 | Status | Notes |
@@ -316,7 +318,10 @@ Model Context Protocol 用戶端與伺服器。支援 stdio、HTTP/SSE 和 Strea
 ### 平台擴充（實驗性）
 | 能力 | Status | Notes |
 |------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android：嵌入式執行時、裝置端 LLM、STT + TTS (Kokoro)。iOS：遠端模式 |
+| **OAuth 回呼深層連結** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` 自動完成 token 交換；無需複製貼上驗證碼 |
+| **上游分支監視器** | Implemented | 週期性 `git fetch`（暖身 30 秒，間隔 5 分鐘）在本地 HEAD 與追蹤的 upstream 分叉時觸發 `vcs.branch.behind`；透過 `platform.notify()` 於桌面與行動端呈現 |
+| **依 viewport 尺寸啟動 PTY** | Implemented | `Pty.create({cols, rows})` 使用來自 `window.innerWidth/innerHeight` 的估算器 — shell 直接以最終尺寸啟動，而非 80×24→36×11，修復 mksh/bash 在 Android 上首個 prompt 不可見的 bug |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

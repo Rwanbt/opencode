@@ -285,9 +285,9 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
 | HuggingFace model search | Implemented | استجابة مُتحقَّق منها عبر Zod، شارات VRAM، مدير التنزيل، 9 نماذج مُنتقاة مسبقاً |
 | **تنزيلات GGUF قابلة للاستئناف** | Implemented | رأس HTTP `Range` — انقطاع 4G لا يُعيد تشغيل نقل 4 جيجابايت من الصفر |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime، ~300ms/5s، 25 لغة، سطح المكتب + الجوال (مستمع الميكروفون موصول من الجانبين) |
+| TTS (Pocket TTS) | Implemented | 8 أصوات، استنساخ صوت zero-shot، أصلي فرنسي (سطح المكتب فقط — لا يوجد Python sidecar على Android) |
+| TTS (Kokoro) | Implemented | 54 صوتاً، 9 لغات، ONNX على **سطح المكتب + Android** (6 أوامر Tauri موصولة في `speech.rs` للجوال، CPUExecutionProvider) |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
@@ -303,8 +303,10 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
 | **CSP صارمة (سطح المكتب + الجوال)** | Implemented | `connect-src` مقصورة على loopback + HuggingFace + مزوّدات HTTPS؛ بدون `unsafe-eval`، `object-src 'none'`، `frame-ancestors 'none'` |
 | **تقوية إصدار Android** | Implemented | `isDebuggable=false`، `allowBackup=false`، `isShrinkResources=true`، `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **تقوية إصدار سطح المكتب** | Implemented | لم تعد أدوات المطور مفعّلة بالقوة — تمّت استعادة افتراضي Tauri 2 (وضع تصحيح فقط) حتى لا تتمكن ثغرة XSS من الارتباط بـ `__TAURI__` في الإنتاج |
 | **التحقق من مدخلات أوامر Tauri** | Implemented | حُرّاس `download_model` / `load_llm_model` / `delete_model`: charset اسم الملف، قائمة سماح HTTPS لـ `huggingface.co` / `hf.co` |
 | **سلسلة تسجيل Rust** | Implemented | `log` + `android_logger` على الجوال؛ لا `eprintln!` في الإصدار → لا تسرّب مسار/URL إلى logcat |
+| **متتبّع تدقيق الأمان** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — جميع النتائج مصنّفة S1/S2/S3 مع `path:line`، الحالة، وتعليل التأجيل للإصلاح |
 
 ### المعرفة والذاكرة
 | Capability | Status | Notes |
@@ -316,7 +318,10 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 ### امتدادات المنصة (تجريبية)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android: وقت تشغيل مدمج، LLM على الجهاز، STT + TTS (Kokoro). iOS: وضع عن بُعد |
+| **رابط عميق لعودة OAuth** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` يُنهي تبادل الرمز تلقائياً؛ لا حاجة لنسخ/لصق رمز المصادقة |
+| **مراقب فرع upstream** | Implemented | `git fetch` دوري (إحماء 30 ثانية، فاصل 5 دقائق) يُطلق `vcs.branch.behind` عندما يتباعد HEAD المحلي عن upstream المتتبع؛ يُعرض عبر `platform.notify()` على سطح المكتب والجوال |
+| **إطلاق PTY بحجم viewport** | Implemented | `Pty.create({cols, rows})` يستخدم مُقدِّراً من `window.innerWidth/innerHeight` — تبدأ الصَّدفات بأبعادها النهائية بدلاً من 80×24→36×11، يُصلح خطأ عدم ظهور أول موجه أوامر على Android لـ mksh/bash |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

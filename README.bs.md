@@ -297,8 +297,10 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 |-----------|--------|----------|
 | **Stroga CSP (desktop + mobilni)** | Implemented | `connect-src` ogranicen na loopback + HuggingFace + HTTPS provajdere; bez `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
 | **Ojacavanje Android release-a** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Ojacavanje desktop release-a** | Implemented | Devtools vise nisu prisilno omoguceni — vracen je Tauri 2 default (samo u debug rezimu) tako da XSS uporiste ne moze pristupiti `__TAURI__` u produkciji |
 | **Validacija ulaza Tauri komandi** | Implemented | Straze `download_model` / `load_llm_model` / `delete_model`: charset imena fajla, HTTPS allowlist za `huggingface.co` / `hf.co` |
 | **Rust logging lanac** | Implemented | `log` + `android_logger` na mobilnom; bez `eprintln!` u release-u → bez curenja path/URL-a u logcat |
+| **Tracker sigurnosne revizije** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — sva otkrica klasifikovana kao S1/S2/S3 sa `path:line`, statusom i obrazlozenjem odlozenog popravka |
 
 ---
 
