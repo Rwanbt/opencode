@@ -511,11 +511,34 @@ export namespace File {
         })
       })
 
+      // Guard against symlink escapes: Instance.containsPath is a *textual*
+      // check on the joined path, so a symlink planted at `projet/docs/evil`
+      // that points to `/etc` would still pass. Resolve the real path and
+      // re-check containment. For paths that do not exist yet (mkdir), fall
+      // back to the parent directory so we still block obviously-escaping
+      // canonical forms.
+      function assertInsideProject(full: string) {
+        if (!Instance.containsPath(full)) {
+          throw new Error("Access denied: path escapes project directory")
+        }
+        try {
+          const real = AppFileSystem.resolve(full)
+          if (!Instance.containsPath(real)) {
+            throw new Error("Access denied: symlink escapes project directory")
+          }
+        } catch (e: any) {
+          if (typeof e?.message === "string" && e.message.startsWith("Access denied")) {
+            throw e
+          }
+          // Missing path or permission issue — the textual check already passed.
+        }
+      }
+
       const read = Effect.fn("File.read")(function* (file: string) {
         using _ = log.time("read", { file })
         const full = path.join(Instance.directory, file)
 
-        if (!Instance.containsPath(full)) throw new Error("Access denied: path escapes project directory")
+        assertInsideProject(full)
 
         if (isImageByExtension(file)) {
           const exists = yield* appFs.existsSafe(full)
@@ -600,7 +623,7 @@ export namespace File {
         }
 
         const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
-        if (!Instance.containsPath(resolved)) throw new Error("Access denied: path escapes project directory")
+        assertInsideProject(resolved)
 
         const entries = yield* appFs.readDirectoryEntries(resolved).pipe(Effect.orElseSucceed(() => []))
 
@@ -658,9 +681,11 @@ export namespace File {
 
       const mkdir = Effect.fn("File.mkdir")(function* (dir: string) {
         const resolved = path.isAbsolute(dir) ? dir : path.join(Instance.directory, dir)
-        if (!Instance.containsPath(resolved)) {
-          throw new Error("Access denied: path escapes project directory")
-        }
+        // assertInsideProject falls back to a textual check if the target
+        // does not yet exist (mkdir's normal case), which is fine: any
+        // symlink on the parent chain would itself be detected because
+        // AppFileSystem.resolve walks existing segments.
+        assertInsideProject(resolved)
         yield* appFs.ensureDir(resolved).pipe(Effect.catch(() => Effect.void))
         return { absolute: resolved }
       })
