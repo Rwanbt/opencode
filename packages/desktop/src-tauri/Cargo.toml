@@ -38,7 +38,7 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1.48.0", features = ["process", "rt", "macros"] }
+tokio = { version = "1.48.0", features = ["process", "rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 listeners = "0.3"
 tauri-plugin-os = "2"
 futures = "0.3.31"

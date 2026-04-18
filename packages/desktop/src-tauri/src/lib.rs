@@ -396,6 +396,20 @@ pub fn run() {
             handle.manage(speech::SpeechState::new());
 
             builder.mount_events(&handle);
+            // Start the localhost keychain endpoint before the sidecar is spawned.
+            // Failure is non-fatal — the sidecar will fall back to FileStorage.
+            {
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    match auth_storage::start_keychain_endpoint(handle).await {
+                        Ok(e) => tracing::info!(
+                            "keychain endpoint listening at {} (token redacted)",
+                            e.url
+                        ),
+                        Err(e) => tracing::warn!("keychain endpoint failed to start: {e}"),
+                    }
+                });
+            }
             tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())

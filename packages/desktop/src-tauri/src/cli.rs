@@ -456,6 +456,14 @@ pub fn spawn_command(
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
+    // Sprint 5 item 4 — expose the localhost keychain endpoint to the sidecar.
+    // If the endpoint did not start (boot failure or feature disabled), these
+    // vars are omitted and the sidecar falls back to FileStorage.
+    if let Some(ep) = crate::auth_storage::endpoint() {
+        envs.push(("OPENCODE_KEYCHAIN_URL".to_string(), ep.url.clone()));
+        envs.push(("OPENCODE_KEYCHAIN_TOKEN".to_string(), ep.token.clone()));
+    }
+
     let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
             tracing::info!("WSL is enabled, spawning CLI server in WSL");
