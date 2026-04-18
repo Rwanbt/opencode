@@ -1,0 +1,141 @@
+# slsa.yml — SLSA Level 3 build provenance generator
+#
+# Purpose
+# -------
+# Emit SLSA v1 `.intoto.jsonl` provenance documents for every artifact
+# attached to a published release using the official reusable generator
+# `slsa-framework/slsa-github-generator`. The generator runs on
+# pinned, isolated runners and signs the provenance with Fulcio OIDC
+# (no repo secret required).
+#
+# Trigger model
+# -------------
+# - Primary: called by `publish.yml` after the build job via
+#   `workflow_call`. `publish.yml` should pass a SHA-256 digest string
+#   (`name1:digest1,name2:digest2,...`) through the `artifacts` input.
+# - Fallback: `release.published` — resolves digests from assets already
+#   attached to the release via `gh release download` then hashing.
+#
+# Verifying generated provenance
+# ------------------------------
+#   slsa-verifier verify-artifact <artifact> \
+#     --provenance-path <artifact>.intoto.jsonl \
+#     --source-uri github.com/Rwanbt/opencode \
+#     --source-tag <tag>
+#
+# Fork-safety: gated on the canonical repo via `if:` on each job.
+
+name: slsa
+
+on:
+  workflow_call:
+    inputs:
+      artifacts:
+        description: "Comma-separated base64(subjects) map: name1:hex1,name2:hex2"
+        required: true
+        type: string
+      upload-assets:
+        description: "Attach .intoto.jsonl to the GitHub release"
+        required: false
+        type: boolean
+        default: true
+      release-tag:
+        description: "Release tag to attach provenance to"
+        required: false
+        type: string
+        default: ""
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  build-subjects:
+    # When triggered by release.published, we compute subjects ourselves.
+    # When called by publish.yml, we forward the provided digest map.
+    if: github.repository == 'Rwanbt/opencode'
+    name: Collect subjects
+    runs-on: ubuntu-latest
+    outputs:
+      subjects: ${{ steps.hash.outputs.subjects }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve tag
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.release-tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build subjects from workflow_call input
+        if: github.event_name == 'workflow_call'
+        id: hash-from-input
+        run: |
+          # Input format: "name1:hex1,name2:hex2"
+          # SLSA generator expects base64(sha256sum -style output).
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import base64, os, sys
+          raw = os.environ["ART"].strip()
+          if not raw:
+              print("subjects=")
+              sys.exit(0)
+          lines = []
+          for pair in raw.split(","):
+              name, hex_digest = pair.split(":", 1)
+              lines.append(f"{hex_digest.strip()}  {name.strip()}")
+          blob = "\n".join(lines).encode()
+          print("subjects=" + base64.b64encode(blob).decode())
+          PY
+        env:
+          ART: ${{ inputs.artifacts }}
+
+      - name: Build subjects from release assets
+        if: github.event_name == 'release'
+        id: hash-from-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          mkdir -p artifacts
+          gh release download "$TAG" --repo "${{ github.repository }}" --dir artifacts \
+            --pattern '*.apk' --pattern '*.aab' \
+            --pattern '*.dmg' --pattern '*.msi' --pattern '*.exe' \
+            --pattern '*.deb' --pattern '*.rpm' \
+            --pattern '*.AppImage' --pattern '*.tar.gz' --pattern '*.zip' || true
+          cd artifacts
+          if ls * 1> /dev/null 2>&1; then
+            SUBJECTS=$(sha256sum * | base64 -w0)
+          else
+            SUBJECTS=""
+          fi
+          echo "subjects=$SUBJECTS" >> "$GITHUB_OUTPUT"
+
+      - name: Pick the populated output
+        id: hash
+        run: |
+          A="${{ steps.hash-from-input.outputs.subjects }}"
+          B="${{ steps.hash-from-release.outputs.subjects }}"
+          if [ -n "$A" ]; then
+            echo "subjects=$A" >> "$GITHUB_OUTPUT"
+          else
+            echo "subjects=$B" >> "$GITHUB_OUTPUT"
+          fi
+
+  provenance:
+    name: SLSA generator (L3)
+    needs: [build-subjects]
+    if: needs.build-subjects.outputs.subjects != ''
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: ${{ needs.build-subjects.outputs.subjects }}
+      upload-assets: ${{ github.event_name == 'release' || inputs.upload-assets }}
+      upload-tag-name: ${{ needs.build-subjects.outputs.tag }}
+      provenance-name: opencode.intoto.jsonl
