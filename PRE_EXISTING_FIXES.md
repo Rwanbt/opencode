@@ -198,3 +198,160 @@ Proposition de découpage (un commit par thème) :
 6. `sec(rag): validate embedding responses with Zod (S2.V2)`
 7. `sec(rpc): UUID ids + 30s timeout + delete-before-resolve (S2.V1)`
 8. `feat(mobile/thermal): wire PowerManager.getCurrentThermalStatus via JNI (I9)`
+
+---
+
+## Passe finale — 7 items (2026-04-18)
+
+Deuxième passe de nettoyage ciblée sur les 7 findings persistants de
+`SECURITY_AUDIT.md` / `AUDIT_REPORT.md`. Validation : `bun run typecheck`
+(14 pkg ok), `cargo check --release` desktop (ok), `cargo check` mobile host
+(ok), `cargo clippy --no-deps` desktop + mobile (0 warning introduit).
+**Aucun commit fait.**
+
+| # | Item | Statut |
+|---|------|--------|
+| 1 | S2.A3 `unsafe env::set_var` SAFETY comments | ENRICHED — déjà présents, reformulés en `SAFETY:` capitalisé + rationale thread-safety explicite |
+| 2 | S2.A4 Windows registry `u16` alignment | FIXED — cast alignée via `u16::from_le_bytes` sur chunks_exact(2), plus aucun cast non-aligné |
+| 3 | S3.A1 innerHTML lint rule | DOCUMENTED — `.eslintrc.restrict.cjs` créé (no-restricted-syntax), 4 call sites annotés `eslint-disable-next-line` avec justification. Pas d'ESLint en CI → rule opt-in |
+| 4 | S3.A2 deep-link directory validation | FIXED — `isSafeDirectory` exige maintenant un chemin absolu (POSIX `/`, Windows `X:\`/`X:/`, UNC `\\`). Les chemins relatifs ou bare names sont rejetés |
+| 5 | S2.L1 SSE heartbeat double-stop race | NO-OP — un flag `let done = false` protège déjà `stop()` (event.ts:36). Pas de modification nécessaire |
+| 6 | S2.L2 Terminal focus microbursts | NO-OP — `createEffect(on(...))` appelle `onCleanup(stop)` avant chaque ré-exécution : Solid cancel rAF+timers automatiquement. Pas de race observable |
+| 7 | A.11 Tauri command input guards | FIXED — path traversal colmaté sur `tts_save/delete_voice_clone` (desktop + mobile), bounds sur `tts_speak`, `kokoro_synthesize`, `stt_transcribe`, `parse_markdown_command`, `wsl_path`, `fetch_private_server`, `write_debug_log`, charset guard sur `check_app_exists`/`resolve_app_path` |
+
+### Détails
+
+**S2.A3 — SAFETY comments (ENRICHED)**
+Fichier : `packages/desktop/src-tauri/src/main.rs:14,70`. Commentaires
+existants (`// Safety:`) reformulés en `// SAFETY:` (convention Rust) avec
+rationale détaillée : `env::set_var` n'est unsound qu'en cas d'accès
+concurrent à l'environnement (libc `setenv`/`getenv` non thread-safe), et
+les deux call sites s'exécutent en haut de `main()` avant tout spawn tokio
+/ rayon / plugin.
+
+**S2.A4 — Registry alignment (FIXED)**
+Fichier : `packages/desktop/src-tauri/src/os/windows.rs:200-210`.
+Remplacement du `std::slice::from_raw_parts(data.as_ptr().cast::<u16>(), …)`
+(UB sur strict-alignment, Windows-on-ARM ou sanitizer) par une boucle
+`chunks_exact(2)` + `u16::from_le_bytes([a, b])` qui est 1-byte aligned
+par construction. Le `unsafe` autour du bloc disparaît (l'`unsafe` restant
+entoure seulement les appels FFI `RegGetValueW`).
+Test manuel : `cargo check --release` desktop → ok ; `cargo clippy --no-deps`
+→ aucun nouveau warning. Fonctionnellement identique (LE order imposé par
+Registry API).
+
+**S3.A1 — innerHTML lint rule (DOCUMENTED)**
+Aucun `eslint.config.*` ou `.eslintrc*` n'existe dans le repo (confirmé par
+`Glob **/eslint.config.*` et `**/.eslintrc*`). Création de
+`.eslintrc.restrict.cjs` à la racine avec deux rules `no-restricted-syntax` :
+une pour `x.innerHTML = …`, une pour JSX `innerHTML={…}`. Le fichier
+documente les 7 call sites vettés et sert de living-doc même sans CI
+ESLint.
+
+4 call sites annotés (les 3 de l'audit + le JSX dans content-bash.tsx) :
+- `packages/ui/src/components/markdown.tsx:95,329`
+- `packages/app/src/components/file-tree.tsx:99`
+- `packages/web/src/components/share/content-bash.tsx:51-52`
+
+Chaque annotation précise la provenance du HTML (icon registry statique,
+Shiki sanitized, DOM outerHTML) pour passer l'audit.
+
+**Risque** : la règle ne s'active que si quelqu'un branche ESLint sur le
+repo. C'est un filet documentaire pour un futur setup. Aucune régression
+possible ici (fichier isolé, pas chargé par le runtime).
+
+**S3.A2 — Deep-link directory (FIXED)**
+Fichier : `packages/app/src/pages/layout/deep-links.ts:17-40`.
+Ajout d'une heuristique `isAbsolutePath(d)` appelée depuis
+`isSafeDirectory` : accepte `/...` (POSIX), `X:\`/`X:/` (Windows drive),
+`\\server\share` (UNC). Tout le reste (relatif, bare name) est refusé.
+L'appel à `GET /project` pour croiser les roots connus a été évalué mais
+écarté : `parseDeepLink` est synchrone, appelé au drain des deep-links
+pending avant que l'app n'ait forcément chargé `/project` — cela
+introduirait une dépendance réseau dans un hot path startup. L'absolute
+path check est la barrière la plus rentable et la moins risquée.
+
+**Tests manuels** :
+1. `opencode://open-project?directory=../../etc` → rejeté (log silencieux).
+2. `opencode://open-project?directory=/tmp/demo` → accepté.
+3. `opencode://open-project?directory=C:\Users\me\project` → accepté.
+4. `opencode://open-project?directory=relative/path` → rejeté.
+
+**Risque** : les tests unitaires existants (`helpers.test.ts`) utilisent
+tous des chemins absolus (`/tmp/demo`, `/a`, `/b`, `/c`), donc aucune
+régression attendue. Un utilisateur qui aurait construit un deep-link avec
+un chemin relatif (improbable, l'UI n'en génère jamais) devra utiliser
+la forme absolue.
+
+**S2.L1 — SSE heartbeat (NO-OP)**
+Vérifié `packages/opencode/src/server/routes/event.ts:36-62` : un flag
+`let done = false` est déjà présent et gate `stop()`. `stop()` est câblé
+sur 3 chemins (Bus.InstanceDisposed, stream.onAbort, finally de la boucle
+SSE) et chacun est idempotent par construction. Le finding est obsolète.
+
+**S2.L2 — Terminal focus microbursts (NO-OP)**
+Vérifié `packages/app/src/pages/session/terminal-panel.tsx:168-206` : la
+fonction `focus(id)` retourne un cleanup qui `cancelAnimationFrame(frame)`
+et `clearTimeout(timer)` pour tous les timers enregistrés. Le cleanup est
+appelé par `onCleanup(stop)` à l'intérieur de `createEffect(on(...))`, ce
+qui garantit que Solid l'exécute avant chaque ré-exécution de l'effect.
+Pas de race observable : un switch rapide de terminal actif annule bien
+l'ancien rAF + timers avant de créer les nouveaux. Aucun correctif
+nécessaire.
+
+**A.11 — Tauri command input guards (FIXED)**
+
+Inventaire des 42 `#[tauri::command]` (desktop + mobile) et revue par
+catégorie d'entrée :
+
+| Commande | Risque | Guard ajouté |
+|---|---|---|
+| `tts_save_voice_clone(name, audio_base64)` (desktop + mobile) | **path traversal** via `name` dans `{dir}/{name}.wav` | `validate_voice_clone_name` (charset + traversal) + bound 32 MiB sur audio_base64 |
+| `tts_delete_voice_clone(name)` (desktop + mobile) | **path traversal** — idem `fs::remove_file` | `validate_voice_clone_name` |
+| `tts_speak(text, voice?)` (desktop) | DoS via text multi-MB | bound 1 MiB + charset guard sur voice (path-sep, null) |
+| `kokoro_synthesize(text, voice, speed)` (desktop + mobile) | idem + speed NaN | bound 1 MiB + voice charset + `speed.is_finite() && 0.1..=4.0` |
+| `stt_transcribe(audio_base64)` (desktop + mobile) | DoS | bound 64 MiB |
+| `parse_markdown_command(markdown)` (desktop) | DoS | bound 8 MiB |
+| `wsl_path(path)` (desktop) | null byte / CRLF injection dans args | bound 4096 + refus `\r`/`\n` |
+| `check_app_exists(app_name)` / `resolve_app_path(app_name)` (desktop) | registry lookup / `which` avec entrée non validée | `validate_open_app_name` appliqué (charset alias-only) |
+| `fetch_private_server(url, body?)` (mobile) | DoS via URL/body énorme | bound url 4096 + CRLF refus + body bound 16 MiB |
+| `write_debug_log(message)` (mobile) | flood log file | truncate à 8192 B (char-boundary safe) |
+| Autres (`set_remote_credentials`, `set_default_server_url`, `download_model`, `load_llm_model`, `delete_model`, `open_path`, `generate_llm`, …) | — | déjà validés (validate_filename / validate_url / validate_open_target) ou types scalaires |
+
+Validators ajoutés dans :
+- `packages/desktop/src-tauri/src/validate.rs` : `validate_voice_clone_name`, `validate_bounded_text`
+- `packages/mobile/src-tauri/src/validate.rs` : `validate_voice_clone_name`, `validate_bounded_text` (le module `validate` mobile est maintenant cross-target puisque `speech.rs` est host-compilé ; `validate_url` reste cfg-gated android car elle utilise le crate `url` déclaré android-only dans Cargo.toml)
+
+**Tests manuels** :
+1. `tts_save_voice_clone({name: "../../../etc/passwd", ...})` → `Err("voice clone name contains forbidden characters")`.
+2. `tts_save_voice_clone({name: "voice-01_clean.A", ...})` → ok (charset alphanumérique + `.- _`).
+3. `kokoro_synthesize({text: "x".repeat(2_000_000), ...})` → `Err("kokoro text exceeds 1048576 byte limit")`.
+4. `kokoro_synthesize({text: "hi", voice: "af_heart", speed: f32::NAN})` → `Err("speed out of range")`.
+5. `wsl_path({path: "path\nwith\nnewline"})` → `Err("wsl path contains control characters")`.
+6. `check_app_exists({app_name: "C:\\Windows\\System32\\cmd.exe"})` → `false` (validate_open_app_name refuse les séparateurs).
+
+**Risques** :
+- `validate_voice_clone_name` impose `[a-zA-Z0-9_][a-zA-Z0-9\-_. ]*`. Les noms
+  existants (créés avant ce correctif) qui incluraient des caractères hors
+  charset (ex: émoji, accents) deviendront non-supprimables via l'UI.
+  Atténuation : 128 B max + charset ASCII only ; on accepte l'incompat
+  mineure pour fermer le path traversal.
+- `validate_open_app_name` applique `[a-zA-Z0-9_\- . ]{1,64}`. Les alias
+  custom comme `"vscode-insiders"`, `"Google Chrome"`, `"iTerm"` passent
+  (couverts par les tests unitaires existants dans `validate.rs:178-185`).
+- Bounds à 1 / 8 / 32 / 64 MiB : tous très au-dessus des usages réels
+  (messages UI ~KiB, audio voice ~MiB). Pas de régression UX attendue.
+
+---
+
+### Validation finale
+
+```
+$ bun run typecheck       # 14/14 packages OK
+$ cd packages/desktop/src-tauri && cargo check --release    # OK
+$ cd packages/mobile/src-tauri && cargo check               # OK
+$ cd packages/desktop/src-tauri && cargo clippy --no-deps   # 0 new warning
+$ cd packages/mobile/src-tauri && cargo clippy --no-deps    # 0 new warning
+```
+
+Aucun commit fait — à revoir avant `git commit`.

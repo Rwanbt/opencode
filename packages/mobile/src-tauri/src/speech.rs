@@ -166,6 +166,7 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
+    crate::validate::validate_bounded_text(&audio_base64, 64 * 1024 * 1024, "audio_base64")?;
     {
         let state = app.state::<SpeechState>();
         let loaded = *lock_safe(&state.stt_loaded);
@@ -359,6 +360,15 @@ pub async fn kokoro_voices(app: AppHandle) -> Vec<String> {
 
 #[tauri::command]
 pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, speed: f32) -> Result<String, String> {
+    // Defence in depth: bound all user-supplied inputs before they feed the
+    // ONNX engine / filesystem.
+    crate::validate::validate_bounded_text(&text, 1024 * 1024, "kokoro text")?;
+    if voice.len() > 128 || voice.contains('/') || voice.contains('\\') || voice.contains('\0') {
+        return Err("invalid voice name".into());
+    }
+    if !speed.is_finite() || !(0.1..=4.0).contains(&speed) {
+        return Err("speed out of range".into());
+    }
     {
         let state = app.state::<SpeechState>();
         let loaded = *lock_safe(&state.kokoro_loaded);
@@ -420,10 +430,14 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
 
 #[tauri::command]
 pub async fn tts_save_voice_clone(app: AppHandle, audio_base64: String, name: String) -> Result<String, String> {
+    // Refuse path traversal / separators — `name` is concatenated into a
+    // filesystem path below. Also bound the base64 payload.
+    let safe_name = crate::validate::validate_voice_clone_name(&name)?.to_string();
+    crate::validate::validate_bounded_text(&audio_base64, 32 * 1024 * 1024, "audio_base64")?;
     let dir = speech_dir(&app).join("voices");
     let _ = fs::create_dir_all(&dir);
     let wav_bytes = base64_decode(&audio_base64)?;
-    let wav_path = dir.join(format!("{}.wav", name));
+    let wav_path = dir.join(format!("{}.wav", safe_name));
     fs::write(&wav_path, &wav_bytes).map_err(|e| format!("Write: {}", e))?;
     Ok(wav_path.to_string_lossy().to_string())
 }
@@ -447,7 +461,9 @@ pub async fn tts_list_voice_clones(app: AppHandle) -> Vec<String> {
 
 #[tauri::command]
 pub async fn tts_delete_voice_clone(app: AppHandle, name: String) -> Result<(), String> {
-    let path = speech_dir(&app).join("voices").join(format!("{}.wav", name));
+    // Refuse path traversal — the name is appended to a filesystem path.
+    let safe_name = crate::validate::validate_voice_clone_name(&name)?.to_string();
+    let path = speech_dir(&app).join("voices").join(format!("{}.wav", safe_name));
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
     Ok(())
 }

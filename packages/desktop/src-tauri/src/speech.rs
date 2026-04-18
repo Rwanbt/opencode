@@ -263,6 +263,10 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
+    // Bound the base64 payload to avoid an XSS pinning the process. 64 MiB
+    // of base64 decodes to ~48 MiB of PCM — well beyond any realistic
+    // voice-note length the UI can record.
+    crate::validate::validate_bounded_text(&audio_base64, 64 * 1024 * 1024, "audio_base64")?;
     {
         let state = app.state::<SpeechState>();
         let loaded = *state.stt_loaded.lock_safe();
@@ -432,6 +436,19 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
+    // Defence in depth: the renderer should chunk long texts itself, but an
+    // XSS could still feed an unbounded string. 1 MiB of UTF-8 is well above
+    // any realistic spoken sentence.
+    crate::validate::validate_bounded_text(&text, 1024 * 1024, "tts text")?;
+    if let Some(ref v) = voice {
+        // The voice name is baked into the multipart form body. We don't
+        // resolve it as a filesystem path here (Pocket TTS maps it server
+        // side), but we still refuse shell / path separators + control
+        // chars as defence in depth.
+        if v.len() > 128 || v.contains('/') || v.contains('\\') || v.contains('\0') || v.contains('\n') || v.contains('\r') {
+            return Err("invalid voice name".into());
+        }
+    }
     // Ensure server is running
     {
         let ready = {
@@ -518,14 +535,21 @@ pub async fn tts_stop(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_save_voice_clone(app: AppHandle, audio_base64: String, name: String) -> Result<String, String> {
+    // Refuse path traversal (`../../../etc/passwd`) and control chars in the
+    // clone name — the name is concatenated into a filename below.
+    let safe_name = crate::validate::validate_voice_clone_name(&name)?.to_string();
+    // Bound the base64 payload size to avoid an XSS pinning the process with
+    // a multi-GiB string. 32 MiB is ~24 MiB of decoded audio — more than
+    // enough for a voice sample.
+    crate::validate::validate_bounded_text(&audio_base64, 32 * 1024 * 1024, "audio_base64")?;
     let dir = speech_dir(&app).join("voices");
     let _ = fs::create_dir_all(&dir);
 
     let audio_bytes = base64_decode(&audio_base64)?;
-    let wav_path = dir.join(format!("{}.wav", name));
+    let wav_path = dir.join(format!("{}.wav", safe_name));
     fs::write(&wav_path, &audio_bytes).map_err(|e| format!("Write: {}", e))?;
 
-    tracing::info!("[TTS] Saved voice clone '{}' ({} bytes)", name, audio_bytes.len());
+    tracing::info!("[TTS] Saved voice clone '{}' ({} bytes)", safe_name, audio_bytes.len());
     Ok(wav_path.to_string_lossy().to_string())
 }
 
@@ -551,7 +575,10 @@ pub async fn tts_list_voice_clones(app: AppHandle) -> Vec<String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn tts_delete_voice_clone(app: AppHandle, name: String) -> Result<(), String> {
-    let path = speech_dir(&app).join("voices").join(format!("{}.wav", name));
+    // Refuse path traversal — a deep-link / XSS could otherwise unlink
+    // arbitrary files under the user's speech data directory.
+    let safe_name = crate::validate::validate_voice_clone_name(&name)?.to_string();
+    let path = speech_dir(&app).join("voices").join(format!("{}.wav", safe_name));
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
     Ok(())
 }
@@ -709,6 +736,14 @@ pub async fn kokoro_voices(app: AppHandle) -> Vec<String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, speed: f32) -> Result<String, String> {
+    // Bound all user-controlled inputs (defence in depth against XSS).
+    crate::validate::validate_bounded_text(&text, 1024 * 1024, "kokoro text")?;
+    if voice.len() > 128 || voice.contains('/') || voice.contains('\\') || voice.contains('\0') {
+        return Err("invalid voice name".into());
+    }
+    if !speed.is_finite() || !(0.1..=4.0).contains(&speed) {
+        return Err("speed out of range".into());
+    }
     // Ensure loaded
     {
         let state = app.state::<SpeechState>();

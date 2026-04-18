@@ -91,6 +91,46 @@ pub fn validate_open_target(target: &str) -> Result<String, String> {
 /// fully-qualified binary path here they could launch anything. We only allow
 /// short bare aliases made of letters, digits, dash, dot, underscore, plus
 /// spaces — covering `code`, `cursor`, `iTerm`, `Google Chrome`, etc.
+/// Validate a filesystem name used to build a voice-clone / user asset file.
+/// Unlike `validate_filename`, this version does not require a specific
+/// extension — the caller appends its own (`.wav` for voice clones). We
+/// refuse anything that contains a path separator, null byte, or traversal
+/// component so a hostile deep link / XSS cannot write outside the intended
+/// directory.
+pub fn validate_voice_clone_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name.len() > 128 {
+        return Err("voice clone name length out of range".into());
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") || name.contains('\0') {
+        return Err("voice clone name contains forbidden characters".into());
+    }
+    // Only allow a conservative charset: letters, digits, dash, dot,
+    // underscore, space. Rejects leading `.` (hidden files on unix) by
+    // bounding the first char separately.
+    let mut chars = name.chars();
+    let first = chars.next().ok_or("empty")?;
+    if !(first.is_ascii_alphanumeric() || first == '_') {
+        return Err("voice clone name must start with a letter, digit, or underscore".into());
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ')) {
+        return Err("voice clone name has invalid characters".into());
+    }
+    Ok(name)
+}
+
+/// Cap the size of arbitrary text fed to TTS / markdown / synthesis
+/// commands. The limit is generous (1 MiB of UTF-8) but prevents an XSS
+/// from pinning the process by feeding megabytes through the parser.
+pub fn validate_bounded_text(text: &str, max_bytes: usize, label: &str) -> Result<(), String> {
+    if text.len() > max_bytes {
+        return Err(format!("{label} exceeds {max_bytes} byte limit"));
+    }
+    if text.contains('\0') {
+        return Err(format!("{label} contains a null byte"));
+    }
+    Ok(())
+}
+
 pub fn validate_open_app_name(name: &str) -> Result<&str, String> {
     if name.is_empty() || name.len() > 64 {
         return Err("app_name length out of range".into());

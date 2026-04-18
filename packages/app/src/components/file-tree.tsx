@@ -96,6 +96,9 @@ const buildDragImage = (target: HTMLElement) => {
     "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
   image.style.position = "absolute"
   image.style.top = "-1000px"
+  // eslint-disable-next-line no-restricted-syntax -- drag image: the source
+  // `outerHTML` comes from our own DOM nodes (already rendered through Solid's
+  // escaping), not from a string. See .eslintrc.restrict.cjs.
   image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
   return image
 }

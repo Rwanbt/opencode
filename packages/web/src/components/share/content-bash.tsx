@@ -48,7 +48,12 @@ export function ContentBash(props: Props) {
           <span>{props.description}</span>
         </div>
         <div data-slot="content">
+          {/* eslint-disable-next-line no-restricted-syntax -- both HTML
+              strings come from the Shiki-rendered backend pipeline which
+              escapes user input. See .eslintrc.restrict.cjs for the audit
+              trail. */}
           <div innerHTML={commandHtml()} />
+          {/* eslint-disable-next-line no-restricted-syntax -- same as above. */}
           <div data-slot="output" ref={overflow.ref} innerHTML={outputHtml()} />
         </div>
       </div>

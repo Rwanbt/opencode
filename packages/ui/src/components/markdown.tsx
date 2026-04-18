@@ -92,6 +92,9 @@ function createIcon(path: string, slot: string) {
   svg.setAttribute("fill", "none")
   svg.setAttribute("viewBox", "0 0 20 20")
   svg.setAttribute("aria-hidden", "true")
+  // eslint-disable-next-line no-restricted-syntax -- icon lookup: `path` is a
+  // static SVG `<path …/>` string from the compiled icon registry, never
+  // user-controlled. See .eslintrc.restrict.cjs for the audit trail.
   svg.innerHTML = path
   icon.appendChild(svg)
   return icon
@@ -326,6 +329,9 @@ export function Markdown(
       copied: i18n.t("ui.message.copied"),
     }
     const temp = document.createElement("div")
+    // eslint-disable-next-line no-restricted-syntax -- sanitized markdown:
+    // `content` is the output of the Rust-side Shiki/markdown renderer which
+    // escapes user input before returning. See .eslintrc.restrict.cjs.
     temp.innerHTML = content
     decorate(temp, labels)
 

@@ -15,11 +15,26 @@ const parseUrl = (input: string) => {
 // length. An absurdly long path coming from a hostile deep link would clog UI
 // state and could hit API-side parsing limits.
 const DIR_MAX = 4096
+// Heuristic absolute-path check. Tauri runs on Windows / macOS / Linux; the
+// renderer has no access to `node:path`, so we inline the rule:
+//   * POSIX absolute: starts with `/`
+//   * Windows absolute: `X:\` or `X:/` with a letter, or UNC `\\server\share`
+// A relative path (e.g. `../../etc`) or bare name is rejected — the app's
+// project picker always has an absolute root, and a hostile deep link that
+// could inject a relative path might otherwise be resolved against whatever
+// CWD the process happens to have.
+const isAbsolutePath = (d: string) => {
+  if (d.startsWith("/")) return true
+  if (/^[a-zA-Z]:[\\/]/.test(d)) return true
+  if (d.startsWith("\\\\")) return true // UNC
+  return false
+}
 const isSafeDirectory = (d: string) => {
   if (!d || d.length > DIR_MAX) return false
   if (/[\0\r\n]/.test(d)) return false
   // Catch javascript: / data: / opencode: masquerading as a path.
   if (/^[a-z][a-z0-9+.-]*:/i.test(d) && !/^[a-zA-Z]:[\\/]/.test(d)) return false
+  if (!isAbsolutePath(d)) return false
   return true
 }
 
