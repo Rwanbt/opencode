@@ -32,6 +32,7 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
+import { AuditLog } from "./audit"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Scope, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
@@ -432,6 +433,17 @@ export namespace Session {
           })
         }
 
+        // Audit — fire-and-forget, gated by experimental.audit.enabled.
+        AuditLog.recordAsync({
+          action: "session.create",
+          target: result.id,
+          metadata: {
+            projectID: result.projectID,
+            workspaceID: result.workspaceID,
+            parentID: result.parentID,
+          },
+        })
+
         return result
       })
 
@@ -484,6 +496,7 @@ export namespace Session {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
+          AuditLog.recordAsync({ action: "session.remove", target: sessionID })
         } catch (e) {
           log.error(e)
         }

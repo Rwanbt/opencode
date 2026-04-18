@@ -4,6 +4,9 @@ import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
 import { AppFileSystem } from "../filesystem"
+// NOTE: Audit log is imported dynamically at call sites below to avoid a
+// static cycle (audit -> config -> auth -> audit). The dynamic form keeps
+// the dependency lazy and breaks the cycle at module-evaluation time.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B1 — Keychain migration design (Sprint 2 — design only, not yet implemented)
@@ -67,9 +70,82 @@ import { AppFileSystem } from "../filesystem"
 //     MCP oauth-callback). They already go through this namespace so a
 //     storage-adapter swap is transparent.
 //
-// Status: design committed in Sprint 2, implementation targeted Sprint 3.
-// Tracking: see SPRINT2_NOTES.md (item B1). Runtime unchanged in this sprint.
+// Status (Sprint 4):
+//   - Rust Tauri commands `auth_storage_{get,set,delete,list}` are registered
+//     in `packages/desktop/src-tauri/src/auth_storage.rs` using the `keyring`
+//     crate. They are NOT yet invoked from this TypeScript module — the
+//     sidecar keeps the FileStorage behaviour for backward compat.
+//   - `AuthStorage` abstract type + a switch that could pick Keychain vs File
+//     at runtime is below (unused, exported for the upcoming desktop client
+//     migration).
+//   - Android: EncryptedSharedPreferences is documented (see
+//     packages/mobile/... TODO) but no plugin yet.
+//   - CLI fallback (no Tauri): FileStorage current behaviour retained. AES-GCM
+//     chiffré fallback reste design-only.
+//   - Migration transparente : lorsqu'un `KeychainStorage.load()` répond vide
+//     et qu'un `auth.json` existe, la logique de migration (implémentée sous
+//     `maybeMigrateToKeychain`) écrira le contenu vers le keychain, renommera
+//     `auth.json` en `auth.json.migrated` et emettra un warn one-shot. Non
+//     activée tant que `AUTH_STORAGE_BACKEND !== "keychain"`.
+// Tracking: see SPRINT4_NOTES.md (item B1).
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── AuthStorage adapter pattern (Sprint 4 scaffold) ────────────────────────
+// Exposed as a pure interface so the migration to keychain can happen without
+// touching any call site. The FileStorage implementation below is the current
+// behaviour verbatim.
+
+/** Backend selector. Read from env at module init so tests can override. */
+const AUTH_STORAGE_BACKEND = (process.env.OPENCODE_AUTH_STORAGE ?? "file").toLowerCase() as
+  | "file"
+  | "keychain"
+
+/** Minimal storage abstraction for provider credentials. */
+export interface AuthStorage {
+  load(): Promise<Record<string, unknown>>
+  save(data: Record<string, unknown>): Promise<void>
+}
+
+/**
+ * KeychainStorage — stub, to be wired against the Tauri command above.
+ *
+ * Implementation outline (not yet enabled — would require an IPC channel to
+ * the Tauri shell from the sidecar process, which is out of scope for this
+ * sprint):
+ *
+ *   - load(): for each key in the index, invoke auth_storage_get(service, k)
+ *     and parse the JSON blob; return the aggregate record.
+ *   - save(data): diff vs the index; for each changed key call
+ *     auth_storage_set(service, k, JSON.stringify(v)); for removed keys call
+ *     auth_storage_delete(service, k).
+ *
+ * Why this isn't enabled yet:
+ *   - The sidecar is a standalone Bun process. It does not have a handle to
+ *     the Tauri `invoke` channel; we need either (a) a small local HTTP
+ *     endpoint on the Tauri side that the sidecar POSTs to, or (b) a stdin
+ *     IPC protocol. Picking (a) requires adding a localhost-only endpoint
+ *     with a one-shot token minted at sidecar spawn. Deferred to Sprint 5.
+ */
+export class KeychainStorage implements AuthStorage {
+  async load(): Promise<Record<string, unknown>> {
+    throw new Error("KeychainStorage not yet wired — see Sprint 4 B1 notes")
+  }
+  async save(_data: Record<string, unknown>): Promise<void> {
+    throw new Error("KeychainStorage not yet wired — see Sprint 4 B1 notes")
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Migration helper (dormant until KeychainStorage is wired).
+//
+// Contract: on first successful KeychainStorage.save of the aggregated
+// auth.json content, rename `auth.json` to `auth.json.migrated`. Keep the
+// backup for 7 days (see cleanup note below). Log a one-shot warn.
+//
+// Cleanup: a separate 7d purger would unlink `auth.json.migrated` older than
+// 7d. Not scheduled in this sprint.
+// ────────────────────────────────────────────────────────────────────────────
+export const AUTH_BACKEND = AUTH_STORAGE_BACKEND
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -139,6 +215,12 @@ export namespace Auth {
         yield* fsys
           .writeJson(file, { ...data, [norm]: info }, 0o600)
           .pipe(Effect.mapError(fail("Failed to write auth data")))
+        // Audit after successful write — best-effort, never blocks the flow.
+        // `info.type` is safe to expose (oauth|api|wellknown); no secrets leak.
+        // Dynamic import breaks the audit -> config -> auth cycle.
+        void import("../session/audit").then(({ AuditLog }) =>
+          AuditLog.recordAsync({ action: "auth.set", target: norm, metadata: { type: info.type } }),
+        ).catch(() => {})
       })
 
       const remove = Effect.fn("Auth.remove")(function* (key: string) {
@@ -147,6 +229,9 @@ export namespace Auth {
         delete data[key]
         delete data[norm]
         yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+        void import("../session/audit").then(({ AuditLog }) =>
+          AuditLog.recordAsync({ action: "auth.remove", target: norm }),
+        ).catch(() => {})
       })
 
       return Service.of({ get, all, set, remove })

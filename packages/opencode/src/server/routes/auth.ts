@@ -169,6 +169,53 @@ export const AuthRoutes = () =>
         return c.json(true)
       },
     )
+    .post(
+      "/ws-ticket",
+      describeRoute({
+        summary: "Issue a short-lived WebSocket ticket",
+        description:
+          "Consumes the current Basic/JWT session and emits a 60-second JWT usable for the WebSocket handshake. The ticket is ALSO set as `opencode_ws_ticket` HttpOnly+SameSite=Strict cookie so browser WS upgrades can authenticate without exposing the token to JS.",
+        operationId: "collab.wsTicket",
+        responses: {
+          200: {
+            description: "Ticket issued",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ ticket: z.string(), expiresAt: z.number() })),
+              },
+            },
+          },
+          ...errors(401),
+        },
+      }),
+      async (c) => {
+        const caller = c.get("user" as never) as
+          | { id: string; username: string; role: "admin" | "member" }
+          | undefined
+        if (!caller) return c.json({ error: "Unauthenticated" }, 401)
+        const ticket = JwtAuth.issueWsTicket({
+          id: caller.id ?? "basic-auth",
+          username: caller.username ?? "opencode",
+          role: (caller.role ?? "admin") as any,
+        })
+        const expiresAt = Date.now() + 60_000
+        // HttpOnly + SameSite=Strict so JS can't read it and CSRF can't force
+        // WS upgrade from a third-party origin. `Secure` only under TLS —
+        // determined from the request URL scheme to stay compatible with
+        //127.0.0.1 HTTP dev.
+        const secure = new URL(c.req.url).protocol === "https:"
+        const attrs = [
+          `opencode_ws_ticket=${ticket}`,
+          "HttpOnly",
+          "SameSite=Strict",
+          "Path=/",
+          `Max-Age=60`,
+          ...(secure ? ["Secure"] : []),
+        ].join("; ")
+        c.header("Set-Cookie", attrs, { append: true })
+        return c.json({ ticket, expiresAt })
+      },
+    )
     .get(
       "/me",
       describeRoute({
