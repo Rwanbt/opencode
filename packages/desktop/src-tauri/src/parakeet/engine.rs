@@ -100,12 +100,21 @@ impl ParakeetEngine {
         let vocab_size = self.vocab_size;
         let blank_idx = self.blank_idx;
 
-        // Take sessions out to avoid borrow conflicts
-        let mut pp = self.preprocessor.take().unwrap();
-        let mut enc = self.encoder.take().unwrap();
-        let mut dec = self.decoder_joint.take().unwrap();
+        // Take sessions into local Options to avoid borrow conflicts (each
+        // ort::Session::run() needs &mut self, but we also need to pass the
+        // tensors through three sessions in sequence). The Options are
+        // restored unconditionally below, so a panic inside the body does
+        // not leave `self` with three None sessions — reloading the ~700 MB
+        // of ONNX models from disk on every transient failure was the
+        // old behavior.
+        let mut pp_opt: Option<ort::session::Session> = Some(self.preprocessor.take().unwrap());
+        let mut enc_opt: Option<ort::session::Session> = Some(self.encoder.take().unwrap());
+        let mut dec_opt: Option<ort::session::Session> = Some(self.decoder_joint.take().unwrap());
 
-        let result = (|| -> Result<String, String> {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<String, String> {
+            let pp = pp_opt.as_mut().unwrap();
+            let enc = enc_opt.as_mut().unwrap();
+            let dec = dec_opt.as_mut().unwrap();
 
         // 1. Preprocess: audio → mel features
         let waveforms = ArrayD::from_shape_vec(IxDyn(&[1, samples.len()]), samples.to_vec())
@@ -215,11 +224,24 @@ impl ParakeetEngine {
         tracing::info!("[Parakeet] Total: {:?}", start.elapsed());
         Ok(text)
 
-        })();
+        }));
 
-        self.preprocessor = Some(pp);
-        self.encoder = Some(enc);
-        self.decoder_joint = Some(dec);
-        result
+        // Unconditional restore — runs even if the closure above panicked.
+        self.preprocessor = pp_opt.take();
+        self.encoder = enc_opt.take();
+        self.decoder_joint = dec_opt.take();
+
+        match result {
+            Ok(inner) => inner,
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&'static str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "parakeet transcribe panicked".to_string());
+                tracing::error!("[Parakeet] transcribe panicked: {}", msg);
+                Err(format!("Transcribe panicked: {msg}"))
+            }
+        }
     }
 }
