@@ -475,17 +475,53 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         LLM_PORT
     );
 
-    // Read settings from env vars (set by frontend via auto-start hook)
-    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE").unwrap_or_else(|_| "q4_0".to_string());
+    // Read settings. Precedence: explicit env var > shared adaptive config file
+    // (written by the TS sidecar's auto-config) > fallback default. This keeps
+    // Tauri's standalone spawn path in sync with the sidecar's deriveConfig()
+    // instead of hard-coding `--n-gpu-layers 99` and a half-best thread count.
+    let adaptive = read_shared_llm_config();
+
+    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE")
+        .ok()
+        .or_else(|| adaptive.as_ref().and_then(|c| c.kv_cache_type.clone()))
+        .unwrap_or_else(|| "q4_0".to_string());
     let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
     let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
-    tracing::info!("[LLM] Config: kv={}, offload={}, mmap={}", kv_cache_type, offload_mode, mmap_mode);
 
-    // Detect physical CPU cores for thread count
-    let n_threads = std::thread::available_parallelism()
-        .map(|n| n.get() / 2) // use physical cores, not hyperthreads
-        .unwrap_or(4)
-        .max(2);
+    // n_gpu_layers: env > shared file > 99 (the historic "offload everything"
+    // sentinel; llama.cpp silently caps it to the real layer count).
+    let n_gpu_layers = std::env::var("OPENCODE_N_GPU_LAYERS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.n_gpu_layers))
+        .unwrap_or(99);
+
+    // Threads: env > shared file > physical cores heuristic.
+    let n_threads = std::env::var("OPENCODE_N_THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.n_threads))
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get() / 2)
+                .unwrap_or(4)
+                .max(2)
+        });
+
+    // Batch / ubatch: env > shared file > llama.cpp default (skipped).
+    let batch_size = std::env::var("OPENCODE_BATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.batch_size));
+    let ubatch_size = std::env::var("OPENCODE_UBATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.ubatch_size));
+
+    tracing::info!(
+        "[LLM] Config: kv={}, offload={}, mmap={}, ngl={}, threads={}, batch={:?}, ubatch={:?}",
+        kv_cache_type, offload_mode, mmap_mode, n_gpu_layers, n_threads, batch_size, ubatch_size
+    );
 
     let mut cmd = tokio::process::Command::new(&server_exe);
     cmd.arg("--model")
@@ -494,9 +530,10 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .arg(LLM_PORT.to_string())
         .arg("--host")
         .arg("127.0.0.1")
-        // GPU: offload all layers, let --fit adjust if VRAM is tight
+        // GPU layers: adaptive (env / shared config / 99 fallback); --fit
+        // will still clamp to available VRAM via the embedded fork.
         .arg("--n-gpu-layers")
-        .arg("99")
+        .arg(n_gpu_layers.to_string())
         // --fit auto-adjusts ctx_size and layer placement to available VRAM
         .arg("--fit")
         .arg("on")
@@ -507,8 +544,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // Flash Attention for memory efficiency
         .arg("--flash-attn")
         .arg("on")
-        // KV cache quantization — read from user settings or default to q8_0
-        // With llama.cpp b8731+, Hadamard rotation is auto-applied for better quality
+        // KV cache quantization — read from user settings or default to q4_0
         .arg("--cache-type-k")
         .arg(&kv_cache_type)
         .arg("--cache-type-v")
@@ -519,6 +555,13 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // CPU threads
         .arg("--threads")
         .arg(n_threads.to_string());
+
+    if let Some(bs) = batch_size {
+        cmd.arg("--batch-size").arg(bs.to_string());
+    }
+    if let Some(ubs) = ubatch_size {
+        cmd.arg("--ubatch-size").arg(ubs.to_string());
+    }
 
     // Memory mapping control
     match mmap_mode.as_str() {
@@ -695,6 +738,43 @@ pub async fn check_llm_health(app: AppHandle, _port: Option<u16>) -> bool {
     {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
+    }
+}
+
+/// Adaptive llama-server config written by the TypeScript sidecar
+/// (packages/opencode/src/local-llm-server/auto-config.ts) into
+/// `{tmpdir}/opencode-llm-14097/llm_config.json`. All fields optional —
+/// we only override defaults when the sidecar has something to say.
+#[derive(Debug, Default, serde::Deserialize)]
+struct SharedLlmConfig {
+    #[serde(default)]
+    n_gpu_layers: Option<u32>,
+    #[serde(default)]
+    n_threads: Option<usize>,
+    #[serde(default)]
+    batch_size: Option<u32>,
+    #[serde(default)]
+    ubatch_size: Option<u32>,
+    #[serde(default)]
+    kv_cache_type: Option<String>,
+}
+
+fn read_shared_llm_config() -> Option<SharedLlmConfig> {
+    let path = llm_base_dir().join("llm_config.json");
+    let bytes = std::fs::read(&path).ok()?;
+    match serde_json::from_slice::<SharedLlmConfig>(&bytes) {
+        Ok(c) => {
+            tracing::info!("[LLM] Loaded adaptive config from {}", path.display());
+            Some(c)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "[LLM] Failed to parse {} ({}), falling back to defaults",
+                path.display(),
+                e
+            );
+            None
+        }
     }
 }
 

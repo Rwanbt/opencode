@@ -444,6 +444,23 @@ export namespace LocalLLMServer {
       modelSizeMb,
     })
 
+    // Publish the adaptive config so other spawners (the Tauri desktop path
+    // in particular) can honor the same values instead of hard-coding
+    // --n-gpu-layers 99 etc. Best-effort: a failure here is not fatal.
+    try {
+      fs.mkdirSync(BASE_DIR, { recursive: true })
+      const shared = {
+        n_gpu_layers: Number(ngl) || cfg.nGpuLayers,
+        n_threads: cfg.nThreads,
+        batch_size: cfg.batchSize,
+        ubatch_size: cfg.uBatchSize,
+        kv_cache_type: kvCache,
+      }
+      fs.writeFileSync(path.join(BASE_DIR, "llm_config.json"), JSON.stringify(shared))
+    } catch (e) {
+      log.warn("Failed to write shared llm_config.json", { err: String(e) })
+    }
+
     const args = [
       "--model",
       modelPath,
