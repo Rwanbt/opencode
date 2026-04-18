@@ -9,17 +9,7 @@
  * desktop hook the `ttsProvider` setting is still read but forced to Kokoro.
  */
 
-function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  const tauri = (globalThis as any).__TAURI__
-  if (!tauri?.core?.invoke) return Promise.reject("Tauri not available")
-  return tauri.core.invoke(cmd, args)
-}
-
-function convertFileSrc(path: string): string {
-  const tauri = (globalThis as any).__TAURI__
-  if (tauri?.core?.convertFileSrc) return tauri.core.convertFileSrc(path)
-  return `https://asset.localhost/${encodeURIComponent(path)}`
-}
+import { invokeTauri, convertFileSrc } from "../../../app/src/hooks/speech-tauri-adapter"
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
