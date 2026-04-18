@@ -51,6 +51,11 @@ specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 dirs = "6.0.0"
+# B1 (Sprint 4) — OS keychain for auth token storage.
+#   - apple-native      : Security.framework (macOS)
+#   - windows-native    : wincred (Windows)
+#   - sync-secret-service + vendored : libsecret (Linux, vendored openssl-sys)
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored"] }
 ort = { version = "=2.0.0-rc.10", features = ["download-binaries"], optional = true }
 bincode = { version = "2.0", features = ["std", "derive", "serde"], optional = true }
 ndarray = { version = "0.16.1", optional = true }

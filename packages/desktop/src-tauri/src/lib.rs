@@ -1,3 +1,4 @@
+mod auth_storage;
 mod cli;
 mod constants;
 mod llm;
@@ -497,6 +498,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             speech::kokoro_loaded,
             speech::kokoro_voices,
             speech::kokoro_synthesize,
+            auth_storage::auth_storage_get,
+            auth_storage::auth_storage_set,
+            auth_storage::auth_storage_delete,
+            auth_storage::auth_storage_list,
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
