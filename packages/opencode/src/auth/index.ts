@@ -127,11 +127,113 @@ export interface AuthStorage {
  *     with a one-shot token minted at sidecar spawn. Deferred to Sprint 5.
  */
 export class KeychainStorage implements AuthStorage {
-  async load(): Promise<Record<string, unknown>> {
-    throw new Error("KeychainStorage not yet wired — see Sprint 4 B1 notes")
+  /** Namespace under which all OpenCode keys live in the OS keychain. */
+  static readonly SERVICE = "auth"
+
+  private readonly baseUrl?: string
+  private readonly token?: string
+
+  constructor() {
+    this.baseUrl = process.env.OPENCODE_KEYCHAIN_URL
+    this.token = process.env.OPENCODE_KEYCHAIN_TOKEN
   }
-  async save(_data: Record<string, unknown>): Promise<void> {
-    throw new Error("KeychainStorage not yet wired — see Sprint 4 B1 notes")
+
+  /** True when the Tauri shell injected a reachable endpoint. */
+  available(): boolean {
+    return !!this.baseUrl && !!this.token
+  }
+
+  private headers(): HeadersInit {
+    return {
+      "X-Keychain-Token": this.token ?? "",
+      "Content-Type": "application/octet-stream",
+    }
+  }
+
+  async load(): Promise<Record<string, unknown>> {
+    if (!this.available()) {
+      throw new Error(
+        "KeychainStorage unavailable (OPENCODE_KEYCHAIN_URL/TOKEN not set). " +
+          "Set OPENCODE_AUTH_STORAGE=file to use FileStorage explicitly.",
+      )
+    }
+    const listRes = await fetch(`${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}`, {
+      method: "GET",
+      headers: this.headers(),
+    })
+    if (!listRes.ok) throw new Error(`keychain list failed: ${listRes.status}`)
+    const keys = (await listRes.json()) as string[]
+    const out: Record<string, unknown> = {}
+    for (const key of keys) {
+      const r = await fetch(
+        `${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}/${encodeURIComponent(key)}`,
+        { method: "GET", headers: this.headers() },
+      )
+      if (r.status === 404) continue
+      if (!r.ok) throw new Error(`keychain get ${key} failed: ${r.status}`)
+      const { value } = (await r.json()) as { value: string }
+      try {
+        out[key] = JSON.parse(value)
+      } catch {
+        out[key] = value
+      }
+    }
+    return out
+  }
+
+  async save(data: Record<string, unknown>): Promise<void> {
+    if (!this.available()) {
+      throw new Error("KeychainStorage unavailable")
+    }
+    // Fetch the current key set to detect removals.
+    const listRes = await fetch(`${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}`, {
+      method: "GET",
+      headers: this.headers(),
+    })
+    const existing: string[] = listRes.ok ? await listRes.json() : []
+    const wanted = new Set(Object.keys(data))
+    // Upsert each wanted key.
+    for (const [key, value] of Object.entries(data)) {
+      const r = await fetch(
+        `${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}/${encodeURIComponent(key)}`,
+        { method: "PUT", headers: this.headers(), body: JSON.stringify(value) },
+      )
+      if (!r.ok && r.status !== 204) throw new Error(`keychain set ${key} failed: ${r.status}`)
+    }
+    // Delete removed keys.
+    for (const key of existing) {
+      if (wanted.has(key)) continue
+      await fetch(
+        `${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}/${encodeURIComponent(key)}`,
+        { method: "DELETE", headers: this.headers() },
+      )
+    }
+  }
+
+  /** Single-entry set, used by the migration path. */
+  async set(key: string, value: unknown): Promise<void> {
+    if (!this.available()) throw new Error("KeychainStorage unavailable")
+    const r = await fetch(
+      `${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}/${encodeURIComponent(key)}`,
+      { method: "PUT", headers: this.headers(), body: JSON.stringify(value) },
+    )
+    if (!r.ok && r.status !== 204) throw new Error(`keychain set ${key} failed: ${r.status}`)
+  }
+
+  async get(key: string): Promise<unknown | undefined> {
+    if (!this.available()) throw new Error("KeychainStorage unavailable")
+    const r = await fetch(
+      `${this.baseUrl}/kc/${encodeURIComponent(KeychainStorage.SERVICE)}/${encodeURIComponent(key)}`,
+      { method: "GET", headers: this.headers() },
+    )
+    if (r.status === 404) return undefined
+    if (!r.ok) throw new Error(`keychain get ${key} failed: ${r.status}`)
+    const { value } = (await r.json()) as { value: string }
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value
+    }
   }
 }
 
@@ -150,6 +252,111 @@ export const AUTH_BACKEND = AUTH_STORAGE_BACKEND
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
+const migratedMarker = path.join(Global.Path.data, "auth.json.migrated")
+
+// ─── Migration (Sprint 5 item 5) ────────────────────────────────────────────
+//
+// When OPENCODE_AUTH_STORAGE=keychain and a legacy auth.json exists:
+//   1. Load each entry into the keychain.
+//   2. Round-trip read to verify.
+//   3. Rename auth.json -> auth.json.migrated (7-day retention window).
+//   4. Log a one-shot warning.
+// Idempotent: if all entries already present, no-op + rename only.
+//
+// Rollback: when OPENCODE_AUTH_STORAGE=file and auth.json.migrated exists but
+// auth.json does not, restore the migrated file. This covers the "user flipped
+// the env var back" case.
+
+let migrationDone = false
+
+async function maybeMigrateToKeychain(storage: KeychainStorage): Promise<void> {
+  if (migrationDone) return
+  migrationDone = true // set early so concurrent calls don't race
+  const fs = await import("fs/promises")
+  let legacy: Record<string, unknown>
+  try {
+    const raw = await fs.readFile(file, "utf8")
+    legacy = JSON.parse(raw)
+  } catch (e: any) {
+    if (e?.code === "ENOENT") return // nothing to migrate
+    throw e
+  }
+  if (!legacy || typeof legacy !== "object") return
+  const keys = Object.keys(legacy)
+  if (keys.length === 0) {
+    // empty file — just rename and move on.
+    await fs.rename(file, migratedMarker).catch(() => {})
+    return
+  }
+  try {
+    // Upsert + verify round-trip per entry.
+    for (const k of keys) {
+      await storage.set(k, legacy[k])
+      const verify = await storage.get(k)
+      if (JSON.stringify(verify) !== JSON.stringify(legacy[k])) {
+        throw new Error(`keychain round-trip verification failed for key=${k}`)
+      }
+    }
+    await fs.rename(file, migratedMarker)
+    console.warn(
+      `[auth] migrated ${keys.length} credential(s) from auth.json to OS keychain. ` +
+        `A backup is kept at ${migratedMarker} for 7 days.`,
+    )
+  } catch (err) {
+    migrationDone = false // allow retry on next call
+    throw err
+  }
+}
+
+async function maybeRollbackFromKeychain(): Promise<void> {
+  const fs = await import("fs/promises")
+  const exists = async (p: string) => {
+    try {
+      await fs.access(p)
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (await exists(file)) return // nothing to restore
+  if (!(await exists(migratedMarker))) return
+  await fs.rename(migratedMarker, file)
+  console.warn(`[auth] rolled back auth.json.migrated -> auth.json (OPENCODE_AUTH_STORAGE=file)`)
+}
+
+async function maybePurgeMigratedBackup(): Promise<void> {
+  const fs = await import("fs/promises")
+  try {
+    const stat = await fs.stat(migratedMarker)
+    const ageMs = Date.now() - stat.mtimeMs
+    if (ageMs > 7 * 24 * 60 * 60 * 1000) {
+      await fs.unlink(migratedMarker)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Public entry point — invoked at app init from a suitable early boot hook.
+ * Idempotent & safe to call in tests (no-op when the configured backend is
+ * file, or when the keychain endpoint is unavailable).
+ */
+export async function initAuthStorage(): Promise<void> {
+  try {
+    await maybePurgeMigratedBackup()
+    if (AUTH_STORAGE_BACKEND === "keychain") {
+      const kc = new KeychainStorage()
+      if (!kc.available()) return
+      await maybeMigrateToKeychain(kc)
+    } else {
+      await maybeRollbackFromKeychain()
+    }
+  } catch (err) {
+    // Never fail boot on a migration error; the legacy file still works.
+    console.warn(`[auth] storage init failed: ${(err as Error)?.message ?? err}`)
+  }
+}
 
 const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
