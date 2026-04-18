@@ -10,9 +10,15 @@ import { stream } from "./markdown-stream"
 type Entry = {
   hash: string
   html: string
+  at: number
 }
 
-const max = 200
+// S1.L2: each entry holds shiki-tokenized HTML that can reach ~1 MB. At 200
+// entries we were climbing to ~200 MB RSS before any eviction. Cap to 50 and
+// evict on TTL so long browsing sessions bleed cold entries even without new
+// inserts.
+const max = 50
+const TTL_MS = 60_000
 const cache = new Map<string, Entry>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
@@ -225,15 +231,32 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
-function touch(key: string, value: Entry) {
+function touch(key: string, value: Omit<Entry, "at"> & { at?: number }) {
   cache.delete(key)
-  cache.set(key, value)
+  cache.set(key, { hash: value.hash, html: value.html, at: value.at ?? Date.now() })
+
+  // S1.L2: drop expired entries opportunistically on each write.
+  const cutoff = Date.now() - TTL_MS
+  for (const [k, entry] of cache) {
+    if (entry.at >= cutoff) break // Map iterates in insertion order = age order
+    cache.delete(k)
+  }
 
   if (cache.size <= max) return
 
   const first = cache.keys().next().value
   if (!first) return
   cache.delete(first)
+}
+
+function cacheGet(key: string): Entry | undefined {
+  const entry = cache.get(key)
+  if (!entry) return
+  if (Date.now() - entry.at > TTL_MS) {
+    cache.delete(key)
+    return
+  }
+  return entry
 }
 
 export function Markdown(
@@ -266,7 +289,7 @@ export function Markdown(
           const key = base ? `${base}:${index}:${block.mode}` : hash
 
           if (key && hash) {
-            const cached = cache.get(key)
+            const cached = cacheGet(key)
             if (cached && cached.hash === hash) {
               touch(key, cached)
               return cached.html

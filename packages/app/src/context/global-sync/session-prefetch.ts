@@ -2,6 +2,11 @@ const key = (directory: string, sessionID: string) => `${directory}\n${sessionID
 
 export const SESSION_PREFETCH_TTL = 15_000
 
+// S1.L3: the cache used to grow unbounded with every session viewed (only
+// explicit directory clears released memory). Cap at 100 entries with an LRU
+// eviction so a long browsing burst across many projects stays within bounds.
+const CACHE_MAX = 100
+
 type Meta = {
   limit: number
   cursor?: string
@@ -70,12 +75,24 @@ export function setSessionPrefetch(input: {
   complete: boolean
   at?: number
 }) {
-  cache.set(key(input.directory, input.sessionID), {
+  const id = key(input.directory, input.sessionID)
+  // Refresh to MRU position — delete+set makes Map iteration order = LRU.
+  cache.delete(id)
+  cache.set(id, {
     limit: input.limit,
     cursor: input.cursor,
     complete: input.complete,
     at: input.at ?? Date.now(),
   })
+
+  while (cache.size > CACHE_MAX) {
+    const oldest = cache.keys().next().value
+    if (!oldest) break
+    cache.delete(oldest)
+    // rev counter left alone — we keep it so any in-flight prefetch that
+    // completes against an evicted entry fails the `isSessionPrefetchCurrent`
+    // check only if the key was re-inserted in the meantime.
+  }
 }
 
 export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<string>) {

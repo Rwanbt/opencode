@@ -614,6 +614,13 @@ export namespace LocalLLMServer {
     })()
     void child.exited.then(() => {
       stderrReader.cancel().catch(() => undefined)
+      // A.12: reset owned-pid cache on natural exit so isHealthy()/kill paths
+      // don't keep holding a stale pid that now belongs to someone else.
+      // Only clear if *this* child is still the registered one — avoids a race
+      // where ensureCorrectModel already spawned a replacement and bumped the pid.
+      if (_ownedChildPid === child.pid) {
+        _ownedChildPid = null
+      }
     })
 
     _ownedChildPid = child.pid

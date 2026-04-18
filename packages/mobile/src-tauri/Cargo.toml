@@ -36,6 +36,9 @@ opencode-kokoro-shared = { path = "../../../crates/opencode-kokoro-shared" }
 [target.'cfg(target_os = "android")'.dependencies]
 url = "2"
 android_logger = "0.14"
+# I9 thermal — JNI bridge to PowerManager.getCurrentThermalStatus()
+jni = "0.21"
+ndk-context = "0.1"
 
 # STT/TTS engines (cross-platform ONNX Runtime)
 # Android: set ORT_LIB_LOCATION to ONNX Runtime AAR extracted .so directory before building.

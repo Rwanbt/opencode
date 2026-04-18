@@ -1,3 +1,14 @@
+//! Speech (STT + TTS) Tauri commands.
+//!
+//! dead_code: cross-cfg API surface — every `#[tauri::command]` in this file
+//! is only registered in the invoke_handler under
+//! `#[cfg(target_os = "android")]` in `lib.rs`. On host (Windows/Linux)
+//! `cargo check` the module compiles but none of these symbols are called,
+//! which generates 30+ dead_code warnings. Silence at module scope rather
+//! than cfg-gating the entire module (we want host compile to stay honest
+//! about ONNX Runtime type errors).
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;

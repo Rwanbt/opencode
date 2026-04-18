@@ -54,6 +54,10 @@ fn write_debug_log(app: tauri::AppHandle, message: String) {
 /// mode (which uses an rcgen self-signed cert that rustls/Mozilla CA bundle
 /// does not trust). The fingerprint is validated by the caller (JS side) via
 /// the `fp` parameter received from the pairing QR code.
+///
+/// dead_code allow: registered in invoke_handler under `#[cfg(target_os="android")]`,
+/// so host cargo check sees no caller.
+#[allow(dead_code)]
 #[tauri::command]
 async fn fetch_private_server(
     url: String,
@@ -86,32 +90,88 @@ async fn fetch_private_server(
 
 /// Return the current Android thermal state. Maps
 /// `PowerManager.getCurrentThermalStatus()` (API 29+) to one of:
-/// "nominal" | "moderate" | "severe".
+/// "nominal" | "fair" | "serious" | "critical".
 ///
-/// Mapping:
-///   THERMAL_STATUS_NONE (0) / LIGHT (1)     -> "nominal"
-///   THERMAL_STATUS_MODERATE (2)             -> "moderate"
-///   THERMAL_STATUS_SEVERE (3) and above     -> "severe"
+/// Mapping (Android PowerManager THERMAL_STATUS_* constants):
+///   NONE (0), LIGHT (1)                 -> "nominal"
+///   MODERATE (2)                        -> "fair"
+///   SEVERE (3)                          -> "serious"
+///   CRITICAL (4), EMERGENCY (5), SHUTDOWN (6) -> "critical"
 ///
-/// Implementation status (I9, Sprint 3): JNI stub.
+/// Implementation (I9, Sprint 3 cleanup): JNI query to
+/// PowerManager.getCurrentThermalStatus(). Falls back to "nominal" on any
+/// JNI error or pre-API-29 device — the TS cache layer tolerates stale reads.
 ///
-/// Full implementation requires:
-///   1. A `jni` crate dependency.
-///   2. `ndk-context::android_context()` to get the JavaVM + Activity.
-///   3. Calling `ContextCompat.getSystemService(Context, Class<PowerManager>)`
-///      then `pm.getCurrentThermalStatus()`.
-///   4. (Optional) registering a `PowerManager.OnThermalStatusChangedListener`
-///      to push events to the JS side rather than polling every 30s.
-///
-/// Until we add the `jni` + `ndk-context` deps to Cargo.toml for the android
-/// target and write the JNI boilerplate, we return "nominal" so callers keep
-/// their current behaviour. The TS cache layer already handles variable-rate
-/// updates and invalidation via `resetProfileCache()`.
+/// Polling model: callers poll every ~30s; this matches Android Thermal API
+/// guidance and avoids the complexity of a PowerManager.OnThermalStatusChangedListener
+/// which would require holding a long-lived JNI global ref. If future work
+/// wants push updates, see the `thermal_listener.md` design note.
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn get_thermal_state() -> &'static str {
-    // TODO(I9): replace with real JNI query to PowerManager.getCurrentThermalStatus()
-    "nominal"
+    match query_thermal_status_jni() {
+        Ok(code) => thermal_code_to_label(code),
+        Err(e) => {
+            log::debug!("[thermal] JNI query failed, returning nominal: {}", e);
+            "nominal"
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn thermal_code_to_label(code: i32) -> &'static str {
+    match code {
+        0 | 1 => "nominal",        // NONE, LIGHT
+        2 => "fair",               // MODERATE
+        3 => "serious",            // SEVERE
+        _ if code >= 4 => "critical", // CRITICAL, EMERGENCY, SHUTDOWN
+        _ => "nominal",            // unknown/negative — be conservative
+    }
+}
+
+#[cfg(target_os = "android")]
+fn query_thermal_status_jni() -> Result<i32, String> {
+    use jni::objects::{JObject, JString, JValue};
+
+    // SAFETY: ndk_context is populated by the Tauri/Android runtime before
+    // our code runs. The VM and context pointers stay valid for the process
+    // lifetime. We never mutate either.
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
+        .map_err(|e| format!("JavaVM::from_raw: {e:?}"))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|e| format!("attach_current_thread: {e:?}"))?;
+
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+
+    // Context.getSystemService("power") -> PowerManager
+    let service_name: JString = env
+        .new_string("power")
+        .map_err(|e| format!("new_string: {e:?}"))?;
+    let pm = env
+        .call_method(
+            &activity,
+            "getSystemService",
+            "(Ljava/lang/String;)Ljava/lang/Object;",
+            &[JValue::Object(&service_name)],
+        )
+        .map_err(|e| format!("getSystemService: {e:?}"))?
+        .l()
+        .map_err(|e| format!("getSystemService ret: {e:?}"))?;
+
+    if pm.is_null() {
+        return Err("PowerManager unavailable".into());
+    }
+
+    // PowerManager.getCurrentThermalStatus() -> int (API 29+)
+    let status = env
+        .call_method(&pm, "getCurrentThermalStatus", "()I", &[])
+        .map_err(|e| format!("getCurrentThermalStatus: {e:?}"))?
+        .i()
+        .map_err(|e| format!("getCurrentThermalStatus ret: {e:?}"))?;
+
+    Ok(status)
 }
 
 // Desktop placeholder — see I9 backlog. A real implementation would need a
@@ -122,6 +182,7 @@ fn get_thermal_state() -> &'static str {
 pub fn run() {
     init_logging();
 
+    #[cfg_attr(not(target_os = "android"), allow(unused_mut))]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
