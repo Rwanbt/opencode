@@ -20,6 +20,13 @@
  * which primary/secondary pair to pass. Keeping the switch at the call site
  * avoids magic behaviour for users who haven't opted in.
  */
+import type {
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3GenerateResult,
+  LanguageModelV3StreamPart,
+  LanguageModelV3StreamResult,
+} from "@ai-sdk/provider"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "provider.fallback" })
@@ -143,6 +150,140 @@ export async function withFallback<T>(
  * the resolution without reaching into Config internals.
  */
 export type FallbackDirection = "local" | "cloud" | null
+
+/**
+ * Wrap two `LanguageModelV3` instances so that handshake-class failures on
+ * `primary.doStream` (connection refused, 5xx before the first chunk, timeout)
+ * cause a single retry against `secondary`. Once the first chunk is received
+ * from primary, errors propagate unchanged (no mid-stream retry — see design
+ * note above for rationale).
+ *
+ * The returned model appears as a regular `LanguageModelV3`. The `provider`
+ * and `modelId` fields are inherited from primary for observability.
+ *
+ * Gate this at the call site on `experimental.provider.fallback`. When the
+ * flag is null/unset, the caller must pass the primary model unwrapped, so
+ * behaviour is byte-identical to the pre-wrapper code path.
+ */
+export function withStreamingFallback(
+  primary: LanguageModelV3,
+  secondary: LanguageModelV3,
+  opts: { label?: string } = {},
+): LanguageModelV3 {
+  const label = opts.label ?? `${primary.provider}/${primary.modelId}`
+
+  const doStream = async (options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> => {
+    // Handshake retry: attempt primary. If the promise itself rejects (pre-stream
+    // failure), or if the first pull from the stream fails synchronously with a
+    // retryable error, switch to secondary. If the primary returns a stream AND
+    // the first chunk reads cleanly, we forward the rest of that stream as-is.
+    let primaryResult: LanguageModelV3StreamResult
+    try {
+      primaryResult = await primary.doStream(options)
+    } catch (err) {
+      if (!isNetworkRetryable(err)) throw err
+      log.warn("primary handshake failed, falling back to secondary", {
+        label,
+        error: (err as Error)?.message ?? String(err),
+      })
+      return secondary.doStream(options)
+    }
+
+    // Peek the first chunk. If it is a `stream-start` warning followed by an
+    // `error` part (or if the reader throws on first read), we treat this as a
+    // handshake failure too — the primary TCP/HTTP succeeded but the provider
+    // immediately signalled an error before emitting any content.
+    const reader = primaryResult.stream.getReader()
+    let firstBatch: LanguageModelV3StreamPart[] = []
+    let preChunkError: unknown
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        firstBatch.push(value)
+        // Stop buffering once we see a token-bearing or terminal part.
+        if (
+          value.type === "text-delta" ||
+          value.type === "reasoning-delta" ||
+          value.type === "tool-input-delta" ||
+          value.type === "tool-input-start" ||
+          value.type === "finish"
+        ) {
+          break
+        }
+        if (value.type === "error") {
+          preChunkError = (value as { type: "error"; error: unknown }).error
+          break
+        }
+      }
+    } catch (err) {
+      preChunkError = err
+    }
+
+    if (preChunkError && isNetworkRetryable(preChunkError)) {
+      log.warn("primary errored before first chunk, falling back to secondary", {
+        label,
+        error: (preChunkError as Error)?.message ?? String(preChunkError),
+      })
+      // Drain/ignore the rest of primary's stream — it's already dead.
+      try {
+        await reader.cancel()
+      } catch {
+        // ignore
+      }
+      return secondary.doStream(options)
+    }
+
+    // Stitch: re-emit the buffered parts, then continue pulling from primary.
+    // Any error after this point propagates — we do NOT attempt secondary.
+    const stream = new ReadableStream<LanguageModelV3StreamPart>({
+      async start(controller) {
+        try {
+          for (const part of firstBatch) controller.enqueue(part)
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            controller.enqueue(value)
+          }
+          controller.close()
+        } catch (err) {
+          controller.error(err)
+        }
+      },
+      async cancel(reason) {
+        try {
+          await reader.cancel(reason)
+        } catch {
+          // ignore
+        }
+      },
+    })
+
+    return { stream, request: primaryResult.request, response: primaryResult.response }
+  }
+
+  const doGenerate = async (options: LanguageModelV3CallOptions): Promise<LanguageModelV3GenerateResult> => {
+    try {
+      return await primary.doGenerate(options)
+    } catch (err) {
+      if (!isNetworkRetryable(err)) throw err
+      log.warn("primary doGenerate failed, falling back to secondary", {
+        label,
+        error: (err as Error)?.message ?? String(err),
+      })
+      return secondary.doGenerate(options)
+    }
+  }
+
+  return {
+    specificationVersion: "v3",
+    provider: primary.provider,
+    modelId: primary.modelId,
+    supportedUrls: primary.supportedUrls,
+    doGenerate,
+    doStream,
+  }
+}
 
 export async function resolveFallbackDirection(): Promise<FallbackDirection> {
   try {
