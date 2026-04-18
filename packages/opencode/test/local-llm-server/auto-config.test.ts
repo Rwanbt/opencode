@@ -1,5 +1,15 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { deriveConfig, type DeviceProfile } from "../../src/local-llm-server/auto-config"
+
+let prevAllowCpu: string | undefined
+beforeAll(() => {
+  prevAllowCpu = process.env.OPENCODE_ALLOW_CPU_ONLY
+  process.env.OPENCODE_ALLOW_CPU_ONLY = "1"
+})
+afterAll(() => {
+  if (prevAllowCpu === undefined) delete process.env.OPENCODE_ALLOW_CPU_ONLY
+  else process.env.OPENCODE_ALLOW_CPU_ONLY = prevAllowCpu
+})
 
 function profile(overrides: Partial<DeviceProfile> = {}): DeviceProfile {
   return {
