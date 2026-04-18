@@ -563,10 +563,28 @@ pub async fn stop_local_server(port: u32, password: Option<String>) -> Result<()
         let _ = req.send().await;
     }
 
-    // Kill the stored process
-    if let Ok(mut guard) = SERVER_PROCESS.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
+    // Kill the stored process AND reap it so its stderr pipe closes and the
+    // background reader thread can exit. Without wait(), child becomes a
+    // zombie and the BufReader<ChildStderr> in the stderr thread stays
+    // blocked on `lines()` forever — repeated stop/start cycles leak
+    // threads + fds on Android.
+    let child_opt = SERVER_PROCESS.lock().ok().and_then(|mut g| g.take());
+    if let Some(mut child) = child_opt {
+        let _ = child.kill();
+        let start = Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(_status)) => break,
+                Ok(None) if start.elapsed() > Duration::from_secs(2) => {
+                    log::warn!("[OpenCode] Server did not exit within 2s after kill, detaching");
+                    break;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                Err(e) => {
+                    log::warn!("[OpenCode] wait() after kill failed: {}", e);
+                    break;
+                }
+            }
         }
     }
 
