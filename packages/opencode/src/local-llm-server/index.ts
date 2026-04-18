@@ -484,8 +484,74 @@ export namespace LocalLLMServer {
       String(cfg.batchSize),
       "--ubatch-size",
       String(cfg.uBatchSize),
+      // W4: explicit mmap (on by default in llama.cpp but made visible so
+      // operators can see it, and so `--no-mmap` can be passed via env if
+      // needed on a quirky storage backend).
+      "--mmap",
+      // W4: enable the server's slot management + persistent KV cache slots.
+      // `--slots` exposes slot introspection; `--slot-save-path` lets the
+      // server write KV cache snapshots that can be restored across sessions.
+      "--slots",
+      "--slot-save-path",
+      path.join(BASE_DIR, "kv-slots"),
+      // W4: reuse cached prefix tokens across prompts (prompt-cache-like
+      // behaviour for the server mode). 256 is a conservative window.
+      "--cache-reuse",
+      "256",
     ]
     if (useFit) args.push("--fit", "on", "-fitt", "512", "-fitc", "16384")
+
+    // Ensure the slot save directory exists (best-effort).
+    try {
+      fs.mkdirSync(path.join(BASE_DIR, "kv-slots"), { recursive: true })
+    } catch (e) {
+      log.warn("Failed to create kv-slots dir", { err: String(e) })
+    }
+
+    // W4: speculative decoding via a draft model. Enabled if the user sets
+    // OPENCODE_DRAFT_MODEL=<absolute path> OR if a sibling drafter file is
+    // detected next to the main model (pattern: *-0.5B-*.gguf or *-draft*.gguf).
+    //
+    // VRAM guard: speculative decoding loads a second model into VRAM. As a
+    // safety net we require at least ~4 GiB headroom beyond the main model
+    // size; otherwise we skip draft and log. This is a coarse heuristic, not
+    // a precise accounting (real cost depends on draft model layers, kv quant,
+    // ctx size). Users on constrained devices can force-enable via env.
+    const draftPath = (() => {
+      const env = process.env.OPENCODE_DRAFT_MODEL
+      if (env && fs.existsSync(env)) return env
+      try {
+        const dir = path.dirname(modelPath)
+        const candidates = fs
+          .readdirSync(dir)
+          .filter((f) => f.toLowerCase().endsWith(".gguf"))
+          .filter((f) => /(-0\.?5b-|-draft)/i.test(f))
+        if (candidates.length > 0) return path.join(dir, candidates[0])
+      } catch {}
+      return null
+    })()
+
+    if (draftPath) {
+      const vramHeadroomMb = Math.max(0, (profile.vramMb ?? 0) - modelSizeMb)
+      const force = process.env.OPENCODE_DRAFT_FORCE === "1"
+      if (vramHeadroomMb >= 4096 || force) {
+        args.push("--model-draft", draftPath, "--draft-max", "16", "--draft-min", "5")
+        log.info("speculative decoding enabled", {
+          draft: path.basename(draftPath),
+          vramHeadroomMb,
+          forced: force,
+        })
+      } else {
+        log.warn("skipping speculative decoding: insufficient VRAM headroom", {
+          draft: path.basename(draftPath),
+          modelSizeMb,
+          vramMb: profile.vramMb,
+          vramHeadroomMb,
+          hint: "Set OPENCODE_DRAFT_FORCE=1 to override.",
+        })
+      }
+    }
+
     return args
   }
 

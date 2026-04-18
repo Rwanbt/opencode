@@ -1028,6 +1028,26 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          task: z
+            .object({
+              cost_cap: z
+                .number()
+                .positive()
+                .optional()
+                .describe(
+                  "Cumulative USD cost cap per task session. Further /task/:id/followup calls return 429 cost_cap_exceeded once reached. Undefined = no cap.",
+                ),
+              max_parallel: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe(
+                  "Maximum number of background tasks executing concurrently per project. Additional tasks are enqueued and started when slots free. Default: 4.",
+                ),
+            })
+            .optional()
+            .describe("Task orchestration limits (cost caps, concurrency)"),
           openTelemetry: z
             .boolean()
             .optional()
