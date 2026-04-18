@@ -528,18 +528,27 @@ export namespace LocalLLMServer {
       stderr: "pipe",
     })
 
-    // Pipe stderr vers le ring buffer (non bloquant)
+    // Pipe stderr vers le ring buffer (non bloquant).
+    //
+    // The reader must be cancel()-able: if the child crashes mid-write the
+    // pipe normally gets EOF and `read()` returns `{done:true}`, but in
+    // degenerate cases (dangling fd, host kernel panic replay in CI) the
+    // reader could sit forever. We cancel it explicitly once child.exited
+    // resolves so the handle is always released.
+    const stderrReader = (child.stderr as ReadableStream<Uint8Array>).getReader()
     ;(async () => {
       try {
-        const reader = (child.stderr as ReadableStream<Uint8Array>).getReader()
         const decoder = new TextDecoder()
         while (true) {
-          const { done, value } = await reader.read()
+          const { done, value } = await stderrReader.read()
           if (done) break
           stderrBuf.append(decoder.decode(value))
         }
       } catch {}
     })()
+    void child.exited.then(() => {
+      stderrReader.cancel().catch(() => undefined)
+    })
 
     _ownedChildPid = child.pid
     _currentModelID = modelID
