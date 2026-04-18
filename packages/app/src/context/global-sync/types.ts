@@ -130,7 +130,13 @@ export type RootLoadResult = {
   limited: boolean
 }
 
+// Power-users bounce between many worktrees in a single app lifetime.
+// MAX_DIR_STORES + DIR_IDLE_TTL_MS bound the Solid reactive graph so we
+// don't accumulate dead roots + three persisted stores (vcs/meta/icon)
+// per directory forever. The audit flagged this earlier — the eviction
+// path was already in place; we just tighten the defaults a bit so
+// idle tabs are freed sooner than the previous 20 minute window.
 export const MAX_DIR_STORES = 30
-export const DIR_IDLE_TTL_MS = 20 * 60 * 1000
+export const DIR_IDLE_TTL_MS = 10 * 60 * 1000
 export const SESSION_RECENT_WINDOW = 4 * 60 * 60 * 1000
 export const SESSION_RECENT_LIMIT = 50
