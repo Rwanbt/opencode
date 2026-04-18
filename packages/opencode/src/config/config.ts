@@ -1172,6 +1172,13 @@ export namespace Config {
                 .describe(
                   "Cascading provider fallback. 'local' = on cloud error, retry via local-llm-server. 'cloud' = on local error, retry via configured cloud provider. Default: null (disabled).",
                 ),
+              fallback_cloud_providerID: z
+                .string()
+                .nullable()
+                .optional()
+                .describe(
+                  "Override the secondary provider used when fallback='cloud'. Must match a providerID declared in `provider`. Recommended: a fast, cheap model (e.g. anthropic/claude-haiku, google/gemini-flash). Default: null (= first configured non-local provider).",
+                ),
             })
             .optional()
             .describe("Provider-layer experimental behaviour (fallback, retry policy)"),

@@ -543,6 +543,39 @@ export namespace LLM {
     // direction === "cloud"
     const all = await Provider.list().catch(() => undefined as any)
     if (!all) return undefined
+
+    // Customisable cloud fallback (Sprint 6 item 5).
+    // If `experimental.provider.fallback_cloud_providerID` is set and matches a
+    // configured provider, prefer it. Otherwise fall back to the historic
+    // "first non-local non-primary provider" heuristic. Invalid overrides log
+    // a one-shot warn and degrade to default behaviour.
+    const cfg = await Config.get().catch(() => undefined as any)
+    const override: string | null | undefined = (cfg as any)?.experimental?.provider?.fallback_cloud_providerID
+    if (override && typeof override === "string") {
+      const prov = (all as Record<string, any>)[override]
+      if (!prov) {
+        log.warn("fallback_cloud_providerID not found in configured providers, falling back to default selection", {
+          requested: override,
+        })
+      } else if (override === primaryProviderID) {
+        log.warn("fallback_cloud_providerID matches primary provider, ignoring (would be a no-op)", {
+          providerID: override,
+        })
+      } else {
+        const modelID = Object.keys(prov?.models ?? {})[0]
+        if (modelID) {
+          const model = await Provider.getModel(override as any, modelID as any).catch(() => undefined as any)
+          if (model) {
+            const lm = await Provider.getLanguage(model).catch(() => undefined as any)
+            if (lm) return lm
+          }
+        }
+        log.warn("fallback_cloud_providerID resolved but has no usable model, falling back to default selection", {
+          requested: override,
+        })
+      }
+    }
+
     for (const [providerID, prov] of Object.entries<any>(all as Record<string, any>)) {
       if (providerID === primaryProviderID || providerID === "local-llm") continue
       const modelID = Object.keys(prov?.models ?? {})[0]
