@@ -1,6 +1,7 @@
 mod cli;
 mod constants;
 mod llm;
+mod util;
 mod validate;
 // pub for examples/test_kokoro.rs — revert to `mod` if examples are removed
 pub mod kokoro;
@@ -581,7 +582,7 @@ async fn initialize(app: AppHandle) {
             let _ = init_tx.send(InitStep::SqliteWaiting);
 
             if matches!(e.payload, SqliteMigrationProgress::Done)
-                && let Some(done_tx) = done_tx.lock().unwrap().take()
+                && let Some(done_tx) = crate::util::MutexSafe::lock_safe(done_tx.as_ref()).take()
             {
                 let _ = done_tx.send(());
             }
