@@ -91,6 +91,40 @@ export namespace JwtAuth {
     return issue(user)
   }
 
+  // ───── WS ticket (B2, Sprint 4) ──────────────────────────────────────────
+  // Short-lived JWT (60s) intended to be set as an HttpOnly cookie on
+  // /auth/ws-ticket so that the WebSocket upgrade handshake can authenticate
+  // via cookie (always sent) OR via Sec-WebSocket-Protocol "bearer,<jwt>"
+  // (preferred — no cookie jar pollution). This replaces the legacy
+  // `?authorization=Bearer+<jwt>` query string which leaks into access logs.
+  const WS_TICKET_TTL = 60 * 1000 // 60 s
+
+  export interface WsTicketPayload extends TokenPayload {
+    /** Discriminator so ticket tokens cannot be used as access tokens. */
+    kind: "ws-ticket"
+  }
+
+  export function issueWsTicket(user: { id: string; username: string; role: UserRole }): string {
+    const now = Date.now()
+    const payload: WsTicketPayload = {
+      kind: "ws-ticket",
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      iat: now,
+      exp: now + WS_TICKET_TTL,
+    }
+    return sign(payload, getSecret())
+  }
+
+  /** Verify a WS ticket JWT. Returns null on invalid / expired / wrong kind. */
+  export function verifyWsTicket(token: string): WsTicketPayload | null {
+    const payload = verify(token, getSecret())
+    if (!payload) return null
+    if ((payload as any).kind !== "ws-ticket") return null
+    return payload as WsTicketPayload
+  }
+
   export function verifyAccessToken(token: string): TokenPayload | null {
     return verify(token, getSecret())
   }
@@ -106,20 +140,59 @@ export namespace JwtAuth {
       if (c.req.method === "OPTIONS") return next()
 
       // Prefer the Authorization header — always safe.
-      // WebSocket upgrade requests from browsers cannot set custom headers, so
-      // we also accept `?authorization=Bearer+<jwt>` but ONLY for actual WS
-      // upgrade requests AND only for Bearer tokens (never Basic, because
-      // base64 credentials in URLs leak through logs / referrers / proxies).
-      // The bearer token itself is short-lived and signed, so embedding it in
-      // the URL has a much smaller blast radius than Basic.
       let authHeader = c.req.header("Authorization")
-      if (!authHeader) {
-        const upgrade = c.req.header("Upgrade")?.toLowerCase()
-        if (upgrade === "websocket") {
-          const q = c.req.query("authorization")
-          if (q?.startsWith("Bearer ")) {
-            authHeader = q
+
+      // ─── B2 (Sprint 4) — WebSocket-upgrade auth ────────────────────────
+      // Order of preference for WS upgrades:
+      //   1. Authorization header (normal path — some clients CAN set it)
+      //   2. Sec-WebSocket-Protocol: bearer,<ws-ticket-jwt>
+      //      (standards-compliant; the ticket is a ws-ticket kind, 60s TTL)
+      //   3. Cookie `opencode_ws_ticket=<jwt>` (HttpOnly, browser WS upgrades)
+      //   4. LEGACY: ?authorization=Bearer+<jwt> (query string)
+      //      — gated by experimental.ws_auth_legacy (default true for back-compat
+      //        in Sprint 4, flip to false in Sprint 5 after clients migrate).
+      const upgrade = c.req.header("Upgrade")?.toLowerCase()
+      if (!authHeader && upgrade === "websocket") {
+        // (2) Sec-WebSocket-Protocol
+        const proto = c.req.header("Sec-WebSocket-Protocol")
+        if (proto) {
+          const parts = proto.split(",").map((s) => s.trim())
+          const idx = parts.indexOf("bearer")
+          if (idx >= 0 && parts[idx + 1]) {
+            const ticket = verifyWsTicket(parts[idx + 1])
+            if (ticket) {
+              c.set("user", { id: ticket.sub, username: ticket.username, role: ticket.role })
+              // Echo back the chosen subprotocol so the browser's WebSocket
+              // is happy (Bun takes care of the upgrade response).
+              c.header("Sec-WebSocket-Protocol", `bearer,${parts[idx + 1]}`)
+              return next()
+            }
           }
+        }
+
+        // (3) Cookie
+        const cookie = c.req.header("Cookie")
+        if (cookie) {
+          const m = /(?:^|;\s*)opencode_ws_ticket=([^;]+)/.exec(cookie)
+          if (m) {
+            const ticket = verifyWsTicket(decodeURIComponent(m[1]))
+            if (ticket) {
+              c.set("user", { id: ticket.sub, username: ticket.username, role: ticket.role })
+              return next()
+            }
+          }
+        }
+
+        // (4) Legacy query string — opt-out via experimental.ws_auth_legacy = false.
+        let legacyAllowed = true
+        try {
+          const cfg = await Config.get()
+          const v = (cfg as any)?.experimental?.ws_auth_legacy
+          if (v === false) legacyAllowed = false
+        } catch {}
+        if (legacyAllowed) {
+          const q = c.req.query("authorization")
+          if (q?.startsWith("Bearer ")) authHeader = q
         }
       }
 

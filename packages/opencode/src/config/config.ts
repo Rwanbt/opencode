@@ -1192,6 +1192,12 @@ export namespace Config {
             })
             .optional()
             .describe("Audit log for security-sensitive actions"),
+          ws_auth_legacy: z
+            .boolean()
+            .optional()
+            .describe(
+              "Allow the legacy `?authorization=Bearer+<jwt>` query-string WS handshake. Default true in Sprint 4 for backward compat; flip to false once all clients migrate to the cookie/Sec-WebSocket-Protocol flow.",
+            ),
           anythingllm: z
             .object({
               enabled: z.boolean().default(false).describe("Enable AnythingLLM integration"),
