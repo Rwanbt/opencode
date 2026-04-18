@@ -105,9 +105,23 @@ export namespace JwtAuth {
       // Allow CORS preflight
       if (c.req.method === "OPTIONS") return next()
 
-      // WebSocket connections from browsers cannot send custom HTTP headers.
-      // Fall back to ?authorization= query parameter for WS upgrade requests.
-      const authHeader = c.req.header("Authorization") || c.req.query("authorization")
+      // Prefer the Authorization header — always safe.
+      // WebSocket upgrade requests from browsers cannot set custom headers, so
+      // we also accept `?authorization=Bearer+<jwt>` but ONLY for actual WS
+      // upgrade requests AND only for Bearer tokens (never Basic, because
+      // base64 credentials in URLs leak through logs / referrers / proxies).
+      // The bearer token itself is short-lived and signed, so embedding it in
+      // the URL has a much smaller blast radius than Basic.
+      let authHeader = c.req.header("Authorization")
+      if (!authHeader) {
+        const upgrade = c.req.header("Upgrade")?.toLowerCase()
+        if (upgrade === "websocket") {
+          const q = c.req.query("authorization")
+          if (q?.startsWith("Bearer ")) {
+            authHeader = q
+          }
+        }
+      }
 
       // Try JWT Bearer token first
       if (authHeader?.startsWith("Bearer ")) {
@@ -125,7 +139,7 @@ export namespace JwtAuth {
         throw new HTTPException(401, { message: "Invalid or expired token" })
       }
 
-      // Fall back to Basic Auth (backward compatibility)
+      // Fall back to Basic Auth (backward compatibility) — header only.
       if (authHeader?.startsWith("Basic ")) {
         const { Flag } = await import("../flag/flag")
         const password = Flag.OPENCODE_SERVER_PASSWORD
