@@ -94,12 +94,118 @@ describe("DAG team — wave ordering (unit guard for I11 e2e)", () => {
   })
 })
 
-describe.skip("DAG team — full e2e (see setup instructions in this file header)", () => {
-  it("runs explore+critic in parallel then tester, passes prior outputs as context", async () => {
-    // See header for enablement steps.
+// ───────────────────────────────────────────────────────────────────────────
+// Dispatch simulator — verifies the wave-ordering contract without pulling
+// in the full agent/session/worktree stack. This is *not* a replacement for
+// the full e2e (see skipped block below for that), but it does exercise:
+//   (a) waves execute in order (N+1 only after all of N finished),
+//   (b) within a wave, tasks may run in parallel,
+//   (c) a dependent receives the outputs of its parents as context.
+// Bugs in `computeWaves` OR in a naive dispatcher that forgets to await the
+// prior wave would be caught here.
+// ───────────────────────────────────────────────────────────────────────────
+
+interface DagTask {
+  id: string
+  depends_on?: number[]
+  /** Simulated "work" that produces an output string. */
+  run: (ctx: { inputs: string[] }) => Promise<string>
+}
+
+async function dispatchDag(tasks: DagTask[]): Promise<{
+  order: string[]
+  outputs: Record<string, string>
+  contextSeen: Record<string, string[]>
+}> {
+  const waves = computeWaves(tasks)
+  const order: string[] = []
+  const outputs: Record<string, string> = {}
+  const contextSeen: Record<string, string[]> = {}
+  for (const wave of waves) {
+    // Parallel execution inside a wave.
+    await Promise.all(
+      wave.map(async (i) => {
+        const t = tasks[i]
+        const inputs = (t.depends_on ?? []).map((d) => outputs[tasks[d].id])
+        contextSeen[t.id] = inputs
+        const out = await t.run({ inputs })
+        outputs[t.id] = out
+        order.push(t.id)
+      }),
+    )
+  }
+  return { order, outputs, contextSeen }
+}
+
+describe("DAG team — dispatch contract (harness for I11 e2e)", () => {
+  it("runs explore+critic in wave 0 before tester in wave 1", async () => {
+    const tasks: DagTask[] = [
+      { id: "explore", depends_on: [], run: async () => "explore-out" },
+      { id: "critic", depends_on: [], run: async () => "critic-out" },
+      { id: "tester", depends_on: [0, 1], run: async () => "tester-out" },
+    ]
+    const { order, contextSeen } = await dispatchDag(tasks)
+    // tester must finish strictly after explore AND critic.
+    expect(order.indexOf("tester")).toBe(2)
+    expect(order.indexOf("explore")).toBeLessThan(order.indexOf("tester"))
+    expect(order.indexOf("critic")).toBeLessThan(order.indexOf("tester"))
+    // tester received both parents' outputs.
+    expect(contextSeen["tester"]).toEqual(["explore-out", "critic-out"])
+    // wave-0 tasks saw empty context.
+    expect(contextSeen["explore"]).toEqual([])
+    expect(contextSeen["critic"]).toEqual([])
   })
 
-  it("leaves no dangling subtask session when a dependent fails", async () => {
-    // Verifies cleanup behaviour of tool/team.ts on partial failures.
+  it("does not leave orphans: all tasks produce an output", async () => {
+    const tasks: DagTask[] = [
+      { id: "a", depends_on: [], run: async () => "A" },
+      { id: "b", depends_on: [0], run: async () => "B" },
+      { id: "c", depends_on: [0], run: async () => "C" },
+      { id: "d", depends_on: [1, 2], run: async () => "D" },
+    ]
+    const { outputs } = await dispatchDag(tasks)
+    expect(Object.keys(outputs).sort()).toEqual(["a", "b", "c", "d"])
   })
+
+  it("propagates failure in a wave — dependents are not dispatched", async () => {
+    const tasks: DagTask[] = [
+      { id: "explore", depends_on: [], run: async () => "ok" },
+      {
+        id: "critic",
+        depends_on: [],
+        run: async () => {
+          throw new Error("boom")
+        },
+      },
+      { id: "tester", depends_on: [0, 1], run: async () => "tester-out" },
+    ]
+    await expect(dispatchDag(tasks)).rejects.toThrow("boom")
+    // tester must NOT be recorded as having run — checked indirectly by the
+    // rejection above; a naive impl that swallows wave errors and still
+    // dispatches wave 1 would resolve instead of reject.
+  })
+})
+
+describe.skip("DAG team — full e2e (requires mock provider + in-process server)", () => {
+  // To enable:
+  //   1. Register a deterministic mock provider via test/lib/llm-server.ts
+  //      (responds "explore-output" / "critic-output" / "tester-output" per
+  //      subtask prompt fingerprint).
+  //   2. Set OPENCODE_TEST_HOME=<tmp>, OPENCODE_DB=:memory:,
+  //      OPENCODE_SERVER_PASSWORD=test.
+  //   3. Boot Server.listen({ hostname: "127.0.0.1", port: 0 }) in-process,
+  //      POST /session, POST /session/:id/message with a team-tool request.
+  //   4. Poll GET /task/:id until status === "completed"; assert via
+  //      /session/:id/messages that the order, context, and lack of orphans
+  //      are as verified by the `dispatchDag` contract above.
+  //
+  // Missing pieces for this sprint (tracked in SPRINT4_NOTES §I11):
+  //   - The team tool wiring requires the permission/Instance/Workspace
+  //     scopes to be bootstrapped under the Effect runtime; the bun-test
+  //     preload in `test/preload.ts` does not currently stand these up
+  //     end-to-end.
+  //   - A harness helper `withInProcessServer(opts, fn)` needs to be added
+  //     to `test/lib/` — not in scope for Sprint 4.
+  it("runs explore+critic in parallel then tester, passes prior outputs as context", async () => {})
+  it("leaves no dangling subtask session when a dependent fails", async () => {})
 })
