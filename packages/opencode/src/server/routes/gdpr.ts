@@ -28,6 +28,9 @@ import { Global } from "../../global"
 import { Session } from "../../session"
 import { Auth } from "../../auth"
 import { AuditLog } from "../../session/audit"
+import { Database } from "../../storage/db"
+import { Workspace } from "../../control-plane/workspace"
+import { Project } from "../../project/project"
 import { Log } from "../../util/log"
 import { errors } from "../error"
 
@@ -120,18 +123,83 @@ export const GdprRoutes = () =>
           log.error("delete: session enumeration failed", { e: String(e) })
         }
 
-        // Auth / config files.
+        // Worktrees — iterate per-project before DB is closed (needs Database
+        // context to list/remove). `Workspace.remove` invokes the adaptor which
+        // (for worktree type) calls `git worktree remove`, then clears the row.
+        try {
+          for (const project of Project.list()) {
+            let spaces: ReturnType<typeof Workspace.list> = []
+            try {
+              spaces = Workspace.list(project)
+            } catch (e) {
+              log.warn("delete: workspace.list failed", { projectID: project.id, e: String(e) })
+              continue
+            }
+            for (const ws of spaces) {
+              try {
+                await Workspace.remove(ws.id)
+              } catch (e) {
+                log.warn("delete: workspace.remove failed", { id: ws.id, e: String(e) })
+              }
+            }
+          }
+        } catch (e) {
+          log.error("delete: worktree cleanup failed", { e: String(e) })
+        }
+
+        // Crash reports directory (<datadir>/crashes/*.json).
+        try {
+          const crashDir = path.join(Global.Path.data, "crashes")
+          const entries = await fs.readdir(crashDir).catch((e: any) => {
+            if (e?.code === "ENOENT") return [] as string[]
+            throw e
+          })
+          for (const name of entries) {
+            try {
+              await fs.unlink(path.join(crashDir, name))
+            } catch (e: any) {
+              if (e?.code !== "ENOENT") log.warn("delete: crash unlink failed", { name, e: String(e) })
+            }
+          }
+          // Best-effort rmdir — may fail if a crash was written concurrently.
+          await fs.rmdir(crashDir).catch(() => {})
+        } catch (e) {
+          log.warn("delete: crashes cleanup failed", { e: String(e) })
+        }
+
+        // Close the SQLite connection *before* unlinking the DB file. On
+        // Windows the file is locked while any Database.Client() handle is
+        // open, so `fs.unlink` would fail with EBUSY.
+        try {
+          Database.close()
+        } catch (e) {
+          log.warn("delete: Database.close failed", { e: String(e) })
+        }
+
+        // Auth / config / DB files.
         const toUnlink = [
           path.join(Global.Path.data, "auth.json"),
+          Database.Path,
           path.join(Global.Path.config, "opencode.jsonc"),
           path.join(Global.Path.config, "opencode.json"),
           path.join(Global.Path.config, "config.json"),
         ]
         for (const f of toUnlink) {
+          if (f === ":memory:") continue
           try {
             await fs.unlink(f)
           } catch (e: any) {
             if (e?.code !== "ENOENT") log.warn("delete: unlink failed", { f, e: String(e) })
+          }
+          // SQLite WAL/SHM sidecars follow the main DB path.
+          if (f === Database.Path) {
+            for (const ext of ["-wal", "-shm", "-journal"]) {
+              try {
+                await fs.unlink(f + ext)
+              } catch (e: any) {
+                if (e?.code !== "ENOENT") log.warn("delete: wal unlink failed", { f: f + ext, e: String(e) })
+              }
+            }
           }
         }
 
