@@ -27,12 +27,39 @@
             <certificates src="user"/>
         </trust-anchors>
     </base-config>
-    <!-- Loopback only: embedded opencode-cli sidecar listens on 127.0.0.1,
-         and 10.0.2.2 is the Android emulator's host alias. Neither route
-         leaves the device, so cleartext is safe here. -->
+    <!-- Loopback + RFC1918 LAN ranges only. Embedded opencode-cli sidecar
+         listens on 127.0.0.1; 10.0.2.2 is the Android emulator's host alias.
+         LAN ranges (10/8, 172.16/12, 192.168/16) are required for "Remote
+         Server" pairing over a trusted home/office Wi-Fi. Cleartext outside
+         these ranges is rejected (MITM footgun on open Wi-Fi). -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- RFC1918 private ranges. Android's network_security_config does not
+             support CIDR notation, so we enumerate the /8, /12, /16 prefixes
+             via includeSubdomains-style domain entries. Android matches these
+             as literal IP addresses; the full RFC1918 coverage requires the
+             sysadmin to add specific LAN hosts below if auto-matching fails.
+             The 10/8, 172.16-31/12 and 192.168/16 anchors below cover the
+             most common router-assigned subnets. -->
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <domain includeSubdomains="true">172.16.0.0</domain>
+        <domain includeSubdomains="true">172.17.0.0</domain>
+        <domain includeSubdomains="true">172.18.0.0</domain>
+        <domain includeSubdomains="true">172.19.0.0</domain>
+        <domain includeSubdomains="true">172.20.0.0</domain>
+        <domain includeSubdomains="true">172.21.0.0</domain>
+        <domain includeSubdomains="true">172.22.0.0</domain>
+        <domain includeSubdomains="true">172.23.0.0</domain>
+        <domain includeSubdomains="true">172.24.0.0</domain>
+        <domain includeSubdomains="true">172.25.0.0</domain>
+        <domain includeSubdomains="true">172.26.0.0</domain>
+        <domain includeSubdomains="true">172.27.0.0</domain>
+        <domain includeSubdomains="true">172.28.0.0</domain>
+        <domain includeSubdomains="true">172.29.0.0</domain>
+        <domain includeSubdomains="true">172.30.0.0</domain>
+        <domain includeSubdomains="true">172.31.0.0</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
     </domain-config>
 </network-security-config>

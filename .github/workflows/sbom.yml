@@ -1,0 +1,39 @@
+name: SBOM
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  sbom:
+    name: Generate SBOM (SPDX + CycloneDX)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: opencode-sbom.spdx.json
+          output-file: opencode-sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: ${{ github.event_name == 'release' }}
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: opencode-sbom.cyclonedx.json
+          output-file: opencode-sbom.cyclonedx.json
+          upload-artifact: true
+          upload-release-assets: ${{ github.event_name == 'release' }}

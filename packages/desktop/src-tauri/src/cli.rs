@@ -356,11 +356,55 @@ fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
     None
 }
 
+// Exact-match allowlist of env vars from the user's interactive shell that
+// we forward to the sidecar. Anything else (notably *_API_KEY, *_TOKEN,
+// *_SECRET) is dropped — the sidecar reads credentials from auth.json, not
+// from inherited env, so forwarding arbitrary secrets only widens the blast
+// radius of a compromised sidecar.
+const SHELL_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LANGUAGE",
+    "TERM",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "NO_COLOR",
+    "FORCE_COLOR",
+    "NODE_ENV",
+    "BUN_INSTALL",
+    "SHELL",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+];
+
+// Prefix-match allowlist (LC_* locales, OPENCODE_* config).
+const SHELL_ENV_ALLOWED_PREFIXES: &[&str] = &["LC_", "OPENCODE_"];
+
+fn is_shell_env_allowed(key: &str) -> bool {
+    if SHELL_ENV_ALLOWLIST.contains(&key) {
+        return true;
+    }
+    SHELL_ENV_ALLOWED_PREFIXES
+        .iter()
+        .any(|p| key.starts_with(p))
+}
+
 fn merge_shell_env(
     shell_env: Option<HashMap<String, String>>,
     envs: Vec<(String, String)>,
 ) -> Vec<(String, String)> {
-    let mut merged = shell_env.unwrap_or_default();
+    let mut merged: HashMap<String, String> = shell_env
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(k, _)| is_shell_env_allowed(k))
+        .collect();
+    // Explicit envs from the caller (opencode-internal) always win and
+    // bypass the allowlist — they are not user-controlled.
     for (key, value) in envs {
         merged.insert(key, value);
     }
