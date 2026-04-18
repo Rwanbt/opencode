@@ -84,6 +84,40 @@ async fn fetch_private_server(
     Ok(serde_json::json!({ "status": status, "body": body }))
 }
 
+/// Return the current Android thermal state. Maps
+/// `PowerManager.getCurrentThermalStatus()` (API 29+) to one of:
+/// "nominal" | "moderate" | "severe".
+///
+/// Mapping:
+///   THERMAL_STATUS_NONE (0) / LIGHT (1)     -> "nominal"
+///   THERMAL_STATUS_MODERATE (2)             -> "moderate"
+///   THERMAL_STATUS_SEVERE (3) and above     -> "severe"
+///
+/// Implementation status (I9, Sprint 3): JNI stub.
+///
+/// Full implementation requires:
+///   1. A `jni` crate dependency.
+///   2. `ndk-context::android_context()` to get the JavaVM + Activity.
+///   3. Calling `ContextCompat.getSystemService(Context, Class<PowerManager>)`
+///      then `pm.getCurrentThermalStatus()`.
+///   4. (Optional) registering a `PowerManager.OnThermalStatusChangedListener`
+///      to push events to the JS side rather than polling every 30s.
+///
+/// Until we add the `jni` + `ndk-context` deps to Cargo.toml for the android
+/// target and write the JNI boilerplate, we return "nominal" so callers keep
+/// their current behaviour. The TS cache layer already handles variable-rate
+/// updates and invalidation via `resetProfileCache()`.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn get_thermal_state() -> &'static str {
+    // TODO(I9): replace with real JNI query to PowerManager.getCurrentThermalStatus()
+    "nominal"
+}
+
+// Desktop placeholder — see I9 backlog. A real implementation would need a
+// native hook per OS: Windows WMI (MSAcpi_ThermalZoneTemperature),
+// Linux /sys/class/thermal/thermal_zone*/temp, macOS IOKit SMC.
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_logging();
@@ -105,6 +139,7 @@ pub fn run() {
         builder = builder.invoke_handler(tauri::generate_handler![
             fetch_private_server,
             write_debug_log,
+            get_thermal_state,
             runtime::check_runtime,
             runtime::extract_runtime,
             runtime::start_embedded_server,

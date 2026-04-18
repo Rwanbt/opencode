@@ -1090,6 +1090,12 @@ export namespace Config {
           dlp: z
             .object({
               enabled: z.boolean().default(false).describe("Enable DLP (Data Loss Prevention) to redact secrets before sending to LLM"),
+              scan_tool_outputs: z
+                .boolean()
+                .default(false)
+                .describe(
+                  "Run secret + prompt-injection scanner on tool outputs before passing them to the LLM. Off by default to avoid false positives in dev.",
+                ),
             })
             .optional()
             .describe("Data Loss Prevention - redacts secrets, keys, and tokens from content sent to LLM providers"),
@@ -1145,6 +1151,47 @@ export namespace Config {
             })
             .optional()
             .describe("Memory management for LSP servers (idle timeout, max concurrent, LRU eviction)"),
+          crash: z
+            .object({
+              upload_endpoint: z
+                .string()
+                .url()
+                .optional()
+                .describe(
+                  "Opt-in HTTPS endpoint where crash reports will be POSTed as JSON. Default: undefined (local file only).",
+                ),
+            })
+            .optional()
+            .describe("Crash reporter — local-first, optional remote upload"),
+          provider: z
+            .object({
+              fallback: z
+                .enum(["local", "cloud"])
+                .nullable()
+                .optional()
+                .describe(
+                  "Cascading provider fallback. 'local' = on cloud error, retry via local-llm-server. 'cloud' = on local error, retry via configured cloud provider. Default: null (disabled).",
+                ),
+            })
+            .optional()
+            .describe("Provider-layer experimental behaviour (fallback, retry policy)"),
+          audit: z
+            .object({
+              enabled: z
+                .boolean()
+                .default(false)
+                .describe(
+                  "Enable audit log. Records session create/delete, auth mutations, tool permission grants, task cancellations, config writes.",
+                ),
+              retention_days: z
+                .number()
+                .int()
+                .positive()
+                .default(90)
+                .describe("Days of audit entries to retain"),
+            })
+            .optional()
+            .describe("Audit log for security-sensitive actions"),
           anythingllm: z
             .object({
               enabled: z.boolean().default(false).describe("Enable AnythingLLM integration"),

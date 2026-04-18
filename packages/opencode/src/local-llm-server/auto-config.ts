@@ -115,6 +115,78 @@ export function resetProfileCache() {
   cached = undefined
 }
 
+// ── Thermal listener (I9) ─────────────────────────────────────────────────
+//
+// On Android, we periodically poll the Tauri command `get_thermal_state`
+// (backed by `PowerManager.getCurrentThermalStatus()` — API 29+). When the
+// state changes we invalidate the cached profile so the next `detectProfile`
+// call re-derives thread/batch/context sizes under the new thermal envelope.
+//
+// Desktop keeps `thermalState: "nominal"` until per-OS native hooks land
+// (Windows WMI / Linux /sys/class/thermal / macOS IOKit). See I9 backlog.
+//
+// The polling loop is opt-in and kept in this module so a single consumer
+// (the auto-config derivation path) owns the lifecycle.
+
+let thermalPollTimer: ReturnType<typeof setInterval> | undefined
+let lastThermal: ThermalState | undefined
+
+function normalizeThermal(raw: unknown): ThermalState {
+  if (typeof raw !== "string") return "nominal"
+  const v = raw.toLowerCase()
+  if (v === "severe" || v === "critical" || v === "emergency" || v === "shutdown") return "critical"
+  if (v === "moderate" || v === "serious") return "serious"
+  if (v === "light" || v === "fair") return "fair"
+  return "nominal"
+}
+
+/**
+ * Start polling the Android Tauri command every `intervalMs` (default 30s).
+ * No-op on non-Android runtimes. Returns a stop() function.
+ *
+ * `invokeThermal` is injected so the module stays dependency-free (the Tauri
+ * global `invoke()` is only available inside the mobile webview, not in the
+ * sidecar CLI process).
+ */
+export function startThermalListener(
+  invokeThermal: () => Promise<string>,
+  intervalMs = 30_000,
+): () => void {
+  if (process.platform !== "android" && process.env.OPENCODE_THERMAL_FORCE !== "1") {
+    return () => {}
+  }
+  if (thermalPollTimer) return () => stopThermalListener()
+
+  const tick = async () => {
+    try {
+      const raw = await invokeThermal()
+      const next = normalizeThermal(raw)
+      if (next !== lastThermal) {
+        lastThermal = next
+        // Only mutate cache through the public reset API — keeps invariants
+        // centralized should `cached` semantics evolve.
+        if (cached) cached.thermalState = next
+        resetProfileCache()
+      }
+    } catch {
+      // Swallow: thermal probe is advisory, never critical-path.
+    }
+  }
+  // Prime immediately so first `detectProfile` after startup has fresh data.
+  void tick()
+  thermalPollTimer = setInterval(tick, intervalMs)
+  // Don't hold the event loop alive for this advisory poll.
+  if (typeof (thermalPollTimer as any)?.unref === "function") (thermalPollTimer as any).unref()
+  return () => stopThermalListener()
+}
+
+export function stopThermalListener() {
+  if (thermalPollTimer) {
+    clearInterval(thermalPollTimer)
+    thermalPollTimer = undefined
+  }
+}
+
 // ── Config derivation ──────────────────────────────────────────────────────
 
 export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers = 32): LlamaConfig {
