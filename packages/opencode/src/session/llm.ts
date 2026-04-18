@@ -8,6 +8,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { resolveFallbackDirection, withStreamingFallback } from "@/provider/fallback"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
@@ -165,7 +166,7 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await raceAbort(
+    const [languageRaw, cfg, provider, auth] = await raceAbort(
       Promise.all([
         Provider.getLanguage(input.model),
         Config.get(),
@@ -174,6 +175,37 @@ export namespace LLM {
       ]),
       input.abort,
     )
+
+    // ── Provider fallback (Sprint 5 item 2) ─────────────────────────────────
+    // Opt-in: experimental.provider.fallback = "local" | "cloud" | null.
+    // null => no wrap, byte-identical behaviour. Secondary resolution is best
+    // effort: if no secondary can be built (no local-llm configured, no other
+    // cloud provider), we log once and proceed without wrapping. Retry is
+    // handshake-only; mid-stream errors propagate (see fallback.ts).
+    let language = languageRaw
+    try {
+      const direction = await resolveFallbackDirection()
+      if (direction) {
+        const primaryIsLocal = input.model.providerID === "local-llm"
+        const wantSecondary =
+          (direction === "local" && !primaryIsLocal) || (direction === "cloud" && primaryIsLocal)
+        if (wantSecondary) {
+          const secondary = await resolveSecondaryLanguageModel(direction, input.model.providerID).catch(
+            () => undefined,
+          )
+          if (secondary) {
+            language = withStreamingFallback(languageRaw, secondary, {
+              label: `${input.model.providerID} -> ${direction}`,
+            })
+            l.info("provider fallback armed", { direction })
+          }
+        }
+      }
+    } catch (err) {
+      l.warn("provider fallback setup failed, using primary only", {
+        error: (err as Error)?.message ?? String(err),
+      })
+    }
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
@@ -480,6 +512,47 @@ export namespace LLM {
       Permission.merge(input.agent.permission, input.permission ?? []),
     )
     return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  }
+
+  /**
+   * Resolve the secondary language model for provider fallback (item 2).
+   *
+   * Strategy:
+   *   - direction = "local" : secondary is local-llm provider's first listed
+   *     model. If local-llm is not configured, returns undefined.
+   *   - direction = "cloud" : secondary is the first non-local, non-primary
+   *     provider that has at least one model. This keeps the picker stable
+   *     (user order in config) without inventing heuristics.
+   *
+   * Returns undefined on any lookup failure — the caller treats that as
+   * "no fallback available" and streams with primary only.
+   */
+  async function resolveSecondaryLanguageModel(
+    direction: "local" | "cloud",
+    primaryProviderID: string,
+  ): Promise<import("@ai-sdk/provider").LanguageModelV3 | undefined> {
+    if (direction === "local") {
+      const localProvider = await Provider.getProvider("local-llm" as any).catch(() => undefined as any)
+      if (!localProvider) return undefined
+      const modelID = Object.keys(localProvider.models ?? {})[0]
+      if (!modelID) return undefined
+      const model = await Provider.getModel("local-llm" as any, modelID as any).catch(() => undefined as any)
+      if (!model) return undefined
+      return await Provider.getLanguage(model).catch(() => undefined as any)
+    }
+    // direction === "cloud"
+    const all = await Provider.list().catch(() => undefined as any)
+    if (!all) return undefined
+    for (const [providerID, prov] of Object.entries<any>(all as Record<string, any>)) {
+      if (providerID === primaryProviderID || providerID === "local-llm") continue
+      const modelID = Object.keys(prov?.models ?? {})[0]
+      if (!modelID) continue
+      const model = await Provider.getModel(providerID as any, modelID as any).catch(() => undefined as any)
+      if (!model) continue
+      const lm = await Provider.getLanguage(model).catch(() => undefined as any)
+      if (lm) return lm
+    }
+    return undefined
   }
 
   // Check if messages contain any tool-call content
