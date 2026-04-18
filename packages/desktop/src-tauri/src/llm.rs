@@ -361,22 +361,25 @@ pub async fn download_model(
     url: String,
     filename: String,
 ) -> Result<(), String> {
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let safe_url = crate::validate::validate_url(&url)?.to_string();
     let dir = models_dir(&app);
     let _ = fs::create_dir_all(&dir);
-    let target = dir.join(&filename);
+    let target = dir.join(&safe_name);
 
-    tracing::info!("[LLM] Downloading model {} -> {}", url, target.display());
-    download_file(&app, &url, &target, Some(&filename)).await?;
-    tracing::info!("[LLM] Model download complete: {}", filename);
+    tracing::info!("[LLM] Downloading model {} -> {}", safe_url, target.display());
+    download_file(&app, &safe_url, &target, Some(&safe_name)).await?;
+    tracing::info!("[LLM] Model download complete: {}", safe_name);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String> {
-    let path = models_dir(&app).join(&filename);
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let path = models_dir(&app).join(&safe_name);
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
-    let part = models_dir(&app).join(format!("{}.part", &filename));
+    let part = models_dir(&app).join(format!("{}.part", &safe_name));
     let _ = fs::remove_file(&part);
     Ok(())
 }
@@ -384,9 +387,14 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 #[tauri::command]
 #[specta::specta]
 pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Option<String>) -> Result<(), String> {
-    let model_path = models_dir(&app).join(&filename);
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let safe_draft = match draft_model.as_deref() {
+        Some(d) => Some(crate::validate::validate_filename(d)?.to_string()),
+        None => None,
+    };
+    let model_path = models_dir(&app).join(&safe_name);
     if !model_path.exists() {
-        return Err(format!("Model not found: {}", filename));
+        return Err(format!("Model not found: {}", safe_name));
     }
 
     // Unload any existing model managed by this app
@@ -412,7 +420,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .await
         && resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();
-            if body.contains(&filename) {
+            if body.contains(&safe_name) {
                 // Same model — check whether the slot is idle or stuck processing
                 let slot_idle = match client
                     .get(format!("http://127.0.0.1:{}/slots", LLM_PORT))
@@ -428,9 +436,9 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
                 };
 
                 if slot_idle {
-                    tracing::info!("[LLM] Reusing existing llama-server (idle slot) with {}", filename);
+                    tracing::info!("[LLM] Reusing existing llama-server (idle slot) with {}", safe_name);
                     let state = app.state::<LlmServerState>();
-                    *state.active_model.lock().unwrap() = Some(filename.clone());
+                    *state.active_model.lock().unwrap() = Some(safe_name.clone());
                     return Ok(());
                 }
                 tracing::warn!("[LLM] Orphaned llama-server is stuck (slot processing) — killing it");
@@ -462,7 +470,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
 
     tracing::info!(
         "[LLM] Starting llama-server with {} on port {}",
-        filename,
+        safe_name,
         LLM_PORT
     );
 
@@ -532,10 +540,21 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     }
 
     // Speculative decoding: use a small draft model for 2-3x speedup
-    // Prefer the argument from frontend UI, fallback to env var for CLI usage
-    let draft_model = draft_model
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("OPENCODE_DRAFT_MODEL").ok());
+    // Prefer the argument from frontend UI, fallback to env var for CLI usage.
+    // Env var path is validated here (same allowlist as IPC) to avoid injection via env.
+    let draft_model = match safe_draft.filter(|s| !s.is_empty()) {
+        Some(d) => Some(d),
+        None => match std::env::var("OPENCODE_DRAFT_MODEL").ok() {
+            Some(env_draft) => match crate::validate::validate_filename(&env_draft) {
+                Ok(v) => Some(v.to_string()),
+                Err(e) => {
+                    tracing::warn!("[LLM] Ignoring invalid OPENCODE_DRAFT_MODEL env: {}", e);
+                    None
+                }
+            },
+            None => None,
+        },
+    };
     if let Some(ref draft) = draft_model {
         let draft_path = models_dir(&app).join(draft);
         if draft_path.exists() {
@@ -582,7 +601,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     {
         let state = app.state::<LlmServerState>();
         *state.child.lock().unwrap() = Some(child);
-        *state.active_model.lock().unwrap() = Some(filename.clone());
+        *state.active_model.lock().unwrap() = Some(safe_name.clone());
     }
 
     // Wait for server to become healthy (up to 120s for large models)
