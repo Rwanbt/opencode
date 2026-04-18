@@ -17,6 +17,7 @@ import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { createAuthenticatedWebSocket } from "@/utils/ws-auth"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -635,21 +636,46 @@ export const Terminal = (props: TerminalProps) => {
           return
         }
 
-        const next = new URL(auth.url + `/pty/${id}/connect`)
-        next.searchParams.set("directory", directory)
-        next.searchParams.set("cursor", String(seek))
-        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        // Browsers strip userinfo from WebSocket URLs — Chromium/WebView2
-        // silently drops url.username/url.password so the Authorization
-        // header is never sent. Pass credentials as a query parameter instead.
+        // Sprint 6 item 3 — migrate to ticket flow.
+        // createAuthenticatedWebSocket tries POST /auth/ws-ticket (3s timeout),
+        // then falls back to the legacy `?authorization=Basic+...` query param
+        // when the endpoint is not available. `ws_auth_legacy` stays `true` on
+        // the server during the transition so both paths work.
         const basicToken = btoa(`${auth.username}:${auth.password}`)
-        next.searchParams.set("authorization", `Basic ${basicToken}`)
+        const wsPath = `/pty/${id}/connect?directory=${encodeURIComponent(directory)}&cursor=${encodeURIComponent(String(seek))}`
+        addDebug(`WS opening (ticket flow): ${auth.url}${wsPath.split("?")[0]}`)
 
-        const redactedParams = next.searchParams.toString().replace(/authorization=[^&]+/, "authorization=REDACTED")
-        addDebug(`WS url: ${next.protocol}//${next.hostname}:${next.port}${next.pathname} params=${redactedParams}`)
-        const socket = new WebSocket(next)
-        socket.binaryType = "arraybuffer"
-        ws = socket
+        // Placeholder `socket` — real one assigned once the async ticket
+        // fetch completes. Local `stop`/`handleClose` close over `socket`, so
+        // the pattern is: construct first, wire listeners, assign `ws = socket`.
+        // If disposed while fetching, we close() and bail.
+        let socket: WebSocket
+        createAuthenticatedWebSocket(auth.url, wsPath, {
+          authorization: `Basic ${basicToken}`,
+        })
+          .then((ws2) => {
+            if (disposed) {
+              try {
+                ws2.close(1000)
+              } catch {
+                // ignore
+              }
+              return
+            }
+            socket = ws2
+            socket.binaryType = "arraybuffer"
+            ws = socket
+            socket.addEventListener("open", handleOpen)
+            socket.addEventListener("message", handleMessage)
+            socket.addEventListener("error", handleError)
+            socket.addEventListener("close", handleClose)
+            drop = stop
+          })
+          .catch((err) => {
+            if (disposed) return
+            addDebug(`WS ticket flow failed: ${String(err)}`)
+            retry(err instanceof Error ? err : new Error(String(err)))
+          })
 
         const handleOpen = () => {
           if (disposed) return
@@ -720,11 +746,11 @@ export const Terminal = (props: TerminalProps) => {
           retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
         }
 
-        drop = stop
-        socket.addEventListener("open", handleOpen)
-        socket.addEventListener("message", handleMessage)
-        socket.addEventListener("error", handleError)
-        socket.addEventListener("close", handleClose)
+        // Listeners & `drop` are wired inside the createAuthenticatedWebSocket
+        // `.then()` above, once the socket is actually constructed (the ticket
+        // fetch is async). This preserves cleanup semantics: if the component
+        // is disposed during the ticket fetch, the `.then()` closes the fresh
+        // socket with 1000 and never registers handlers.
       }
 
       probe.control({

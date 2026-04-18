@@ -15,11 +15,11 @@
  *     the server is validated against all three clients in parallel (see the
  *     per-client checklist below).
  *
- * Per-client migration checklist (for follow-up PRs):
- *   [ ] packages/app/src/hooks/use-collaborative.ts  -> use helper
- *   [ ] packages/app/src/components/terminal.tsx     -> use helper
- *   [ ] packages/web/src/components/Share.tsx        -> use helper
- *   [ ] packages/mobile/src-tauri/assets/runtime/... -> mirror helper in Bun
+ * Per-client migration checklist (Sprint 6 item 3 update):
+ *   [x] packages/app/src/components/terminal.tsx     -> migrated (Basic auth → ticket)
+ *   [-] packages/app/src/hooks/use-collaborative.ts  -> N/A (collaborative tenant server, `token` query param, different auth domain)
+ *   [-] packages/web/src/components/Share.tsx        -> N/A (anonymous /share_poll, no credentials)
+ *   [ ] packages/mobile/src-tauri/assets/runtime/... -> mirror helper in Bun (out of scope: runtime bundle is a prebuilt JS, not a migration target)
  *
  * Once all four are shipped and telemetry shows zero query-string handshakes
  * for >=2 stable releases, flip `experimental.ws_auth_legacy` to false on the
