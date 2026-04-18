@@ -270,6 +270,12 @@ pub async fn abort_llm(app: AppHandle) -> Result<(), String> {
 }
 
 /// Generate text via Kotlin LlamaEngine (file IPC).
+///
+/// Protocol: `generate|{max}|{temp}|{prompt}`.
+/// `prompt` is placed LAST on purpose so a prompt containing `|` is kept
+/// intact — the Kotlin side calls `split("|", limit = 3)` on the argument
+/// tail, which stops after the third token. An older layout put prompt
+/// first and any `|` in user text would corrupt max / temp parsing.
 #[tauri::command]
 pub async fn generate_llm(
     app: AppHandle,
@@ -280,8 +286,14 @@ pub async fn generate_llm(
     let max = max_tokens.unwrap_or(512);
     let temp = temperature.unwrap_or(0.7);
 
-    // Send generate command — timeout 300s for generation
-    let cmd = format!("generate|{}|{}|{}", prompt, max, temp);
+    // Defensive: drop \0 / CR / LF that could break the request-file parser.
+    let clean_prompt: String = prompt
+        .chars()
+        .filter(|c| *c != '\0' && *c != '\r' && *c != '\n')
+        .collect();
+
+    // Send generate command — timeout 300s for generation.
+    let cmd = format!("generate|{}|{}|{}", max, temp, clean_prompt);
     let result = llm_command(&app, &cmd, 300)?;
 
     // Emit full result as token event
