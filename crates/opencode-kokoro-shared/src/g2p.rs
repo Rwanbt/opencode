@@ -43,7 +43,7 @@ fn arpa_to_ipa(arpa: &str) -> String {
 
 fn load_cmudict() -> &'static HashMap<String, String> {
     CMUDICT.get_or_init(|| {
-        let raw = include_str!("../../assets/cmudict.dict");
+        let raw = include_str!("../assets/cmudict.dict");
         let mut dict = HashMap::with_capacity(140000);
         for line in raw.lines() {
             let parts: Vec<&str> = line.splitn(2, ' ').collect();

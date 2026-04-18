@@ -1,0 +1,10 @@
+[package]
+name = "opencode-kokoro-shared"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Phoneme + tokenizer helpers shared by the desktop and mobile Tauri crates."
+
+[lib]
+name = "opencode_kokoro_shared"
+path = "src/lib.rs"
