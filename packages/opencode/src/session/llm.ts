@@ -442,7 +442,12 @@ export namespace LLM {
         ...input.model.headers,
         ...headers,
       },
-      maxRetries: input.retries ?? 0,
+      // Retry transient provider errors (rate limits, 5xx, connection reset)
+      // by default — 0 retries meant every flaky Anthropic/OpenAI 503 became
+      // a visible failure in the agent loop, even though the SDK itself can
+      // recover in a few hundred ms. Callers that genuinely want "no retry"
+      // (tests, dry-runs) still pass retries: 0 explicitly.
+      maxRetries: input.retries ?? 2,
       messages: safeMessages,
       model: wrapLanguageModel({
         model: language,

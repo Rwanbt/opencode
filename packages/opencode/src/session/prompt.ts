@@ -245,7 +245,10 @@ export namespace SessionPrompt {
               mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
             })
           }),
-          { concurrency: "unbounded", discard: true },
+          // Bound parallel fs stats / agent lookups for the same reason
+          // as resolvePart below — @-mention heavy messages shouldn't
+          // serialize, but 100 parallel stats is pointless.
+          { concurrency: 8, discard: true },
         )
         return parts
       })
@@ -1388,7 +1391,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
         })
 
-        const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+        // Cap concurrency: resolvePart can call back into plugins, the file
+        // system, or provider lookups for each attached part. "unbounded"
+        // worked fine for the usual 1–3 attachments, but a user attaching
+        // 100 files (e.g. via drag-and-drop of a folder) would hammer all
+        // of those paths in parallel and potentially trip provider rate
+        // limits or starve the event loop.
+        const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: 8 }).pipe(
           Effect.map((x) => x.flat().map(assign)),
         )
 
