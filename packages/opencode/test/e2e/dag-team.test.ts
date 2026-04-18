@@ -186,26 +186,28 @@ describe("DAG team — dispatch contract (harness for I11 e2e)", () => {
   })
 })
 
-describe.skip("DAG team — full e2e (requires mock provider + in-process server)", () => {
-  // To enable:
-  //   1. Register a deterministic mock provider via test/lib/llm-server.ts
-  //      (responds "explore-output" / "critic-output" / "tester-output" per
-  //      subtask prompt fingerprint).
-  //   2. Set OPENCODE_TEST_HOME=<tmp>, OPENCODE_DB=:memory:,
-  //      OPENCODE_SERVER_PASSWORD=test.
-  //   3. Boot Server.listen({ hostname: "127.0.0.1", port: 0 }) in-process,
-  //      POST /session, POST /session/:id/message with a team-tool request.
-  //   4. Poll GET /task/:id until status === "completed"; assert via
-  //      /session/:id/messages that the order, context, and lack of orphans
-  //      are as verified by the `dispatchDag` contract above.
+describe.skip("DAG team — full e2e (requires team-tool runtime bootstrap)", () => {
+  // Sprint 5 unblocked the transport layer:
+  //   - `test/lib/in-process-server.ts` now boots `Server.listen` on port 0,
+  //     returning `{ url, fetch, close }`.
+  //   - `test/lib/mock-provider.ts` returns a LanguageModelV3-compatible mock
+  //     that can be plugged into `Provider.getLanguage` via an e2e seam.
   //
-  // Missing pieces for this sprint (tracked in SPRINT4_NOTES §I11):
-  //   - The team tool wiring requires the permission/Instance/Workspace
-  //     scopes to be bootstrapped under the Effect runtime; the bun-test
-  //     preload in `test/preload.ts` does not currently stand these up
-  //     end-to-end.
-  //   - A harness helper `withInProcessServer(opts, fn)` needs to be added
-  //     to `test/lib/` — not in scope for Sprint 4.
+  // Still blocked — tracked for Sprint 6:
+  //   - The `team` tool wiring requires Instance/Workspace/Permission scopes
+  //     bootstrapped under the Effect runtime. `test/preload.ts` stands up
+  //     logging and DB only; Instance.run is not exposed for tests.
+  //   - Without Instance.run, POST /task cannot materialise a sandbox worktree
+  //     and the orchestrator loop cannot dispatch subtasks. The
+  //     `dispatchDag` unit contract above guards the ordering semantics in the
+  //     meantime.
+  //
+  // To enable:
+  //   1. Export an `Instance.runForTest(fn)` that bootstraps the minimum scope
+  //      needed by session/task routes (see src/project/instance.ts).
+  //   2. Seed Provider registry with the mock provider; set its model as the
+  //      default for the test session.
+  //   3. Flip the `describe.skip` below to `describe` and uncomment bodies.
   it("runs explore+critic in parallel then tester, passes prior outputs as context", async () => {})
   it("leaves no dangling subtask session when a dependent fails", async () => {})
 })
