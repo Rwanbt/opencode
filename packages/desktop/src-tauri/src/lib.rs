@@ -1,6 +1,7 @@
 mod cli;
 mod constants;
 mod llm;
+mod validate;
 // pub for examples/test_kokoro.rs — revert to `mod` if examples are removed
 pub mod kokoro;
 mod parakeet;
