@@ -1,3 +1,4 @@
+use crate::util::MutexSafe;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -227,7 +228,7 @@ pub async fn stt_download_model(app: AppHandle) -> Result<(), String> {
 pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
     {
         let state = app.state::<SpeechState>();
-        if *state.stt_loaded.lock().unwrap() {
+        if *state.stt_loaded.lock_safe() {
             return Ok(());
         }
     }
@@ -251,8 +252,8 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
     let engine = result?;
     {
         let state = app.state::<SpeechState>();
-        *state.stt_engine.lock().unwrap() = engine;
-        *state.stt_loaded.lock().unwrap() = true;
+        *state.stt_engine.lock_safe() = engine;
+        *state.stt_loaded.lock_safe() = true;
     }
     tracing::info!("[STT] Model loaded in {:?}", start.elapsed());
     Ok(())
@@ -264,7 +265,7 @@ pub async fn stt_load_model(app: AppHandle) -> Result<(), String> {
 pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<String, String> {
     {
         let state = app.state::<SpeechState>();
-        let loaded = *state.stt_loaded.lock().unwrap();
+        let loaded = *state.stt_loaded.lock_safe();
         if !loaded {
             stt_load_model(app.clone()).await?;
         }
@@ -283,7 +284,7 @@ pub async fn stt_transcribe(app: AppHandle, audio_base64: String) -> Result<Stri
     let app_clone = app.clone();
     let text = tokio::task::spawn_blocking(move || {
         let state = app_clone.state::<SpeechState>();
-        let mut engine = state.stt_engine.lock().unwrap();
+        let mut engine = state.stt_engine.lock_safe();
         engine.transcribe(&samples)
     })
     .await
@@ -305,7 +306,7 @@ pub async fn stt_available(app: AppHandle) -> bool {
 #[specta::specta]
 pub async fn stt_loaded(app: AppHandle) -> bool {
     let state = app.state::<SpeechState>();
-    *state.stt_loaded.lock().unwrap()
+    *state.stt_loaded.lock_safe()
 }
 
 // ─── TTS (Pocket TTS) ─────────────────────────────────────────────────
@@ -317,7 +318,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     // Fast path: already running and confirmed healthy
     {
         let state = app.state::<SpeechState>();
-        if *state.tts_ready.lock().unwrap() && state.tts_child.lock().unwrap().is_some() {
+        if *state.tts_ready.lock_safe() && state.tts_child.lock_safe().is_some() {
             return Ok(TTS_PORT);
         }
     }
@@ -325,10 +326,10 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     // Kill any existing child that may be in a bad state
     {
         let state = app.state::<SpeechState>();
-        if let Some(mut c) = state.tts_child.lock().unwrap().take() {
+        if let Some(mut c) = state.tts_child.lock_safe().take() {
             let _ = c.start_kill();
         }
-        *state.tts_ready.lock().unwrap() = false;
+        *state.tts_ready.lock_safe() = false;
     }
 
     let pocket_tts = find_pocket_tts().ok_or("pocket-tts not found. Run: pip install pocket-tts")?;
@@ -357,7 +358,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
 
     {
         let state = app.state::<SpeechState>();
-        *state.tts_child.lock().unwrap() = Some(child);
+        *state.tts_child.lock_safe() = Some(child);
     }
 
     // Clone client so we don't hold the State across await points
@@ -371,7 +372,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     loop {
         if start.elapsed().as_secs() > 60 {
             let state = app.state::<SpeechState>();
-            if let Some(mut c) = state.tts_child.lock().unwrap().take() {
+            if let Some(mut c) = state.tts_child.lock_safe().take() {
                 let _ = c.start_kill();
             }
             return Err("TTS server failed to start".to_string());
@@ -384,7 +385,7 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
             && resp.status().is_success() {
                 {
                     let state = app.state::<SpeechState>();
-                    *state.tts_ready.lock().unwrap() = true;
+                    *state.tts_ready.lock_safe() = true;
                 }
                 tracing::info!("[TTS] Pocket TTS ready after {:?}", start.elapsed());
 
@@ -435,7 +436,7 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     {
         let ready = {
             let state = app.state::<SpeechState>();
-            *state.tts_ready.lock().unwrap()
+            *state.tts_ready.lock_safe()
         };
         if !ready {
             tts_start(app.clone()).await?;
@@ -465,14 +466,14 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
             let state = app.state::<SpeechState>();
-            *state.tts_ready.lock().unwrap() = false;
+            *state.tts_ready.lock_safe() = false;
             return Err(format!("TTS HTTP {}", r.status()));
         }
         Err(e) => {
             tracing::warn!("[TTS] Request failed, retrying: {}", e);
             {
                 let state = app.state::<SpeechState>();
-                *state.tts_ready.lock().unwrap() = false;
+                *state.tts_ready.lock_safe() = false;
             }
             tts_start(app.clone()).await?;
             let retry_form = build_tts_form(&app, &text, &voice_name)?;
@@ -506,8 +507,8 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
 pub async fn tts_stop(app: AppHandle) -> Result<(), String> {
     let state = app.state::<SpeechState>();
     tracing::info!("[TTS] Stopping Pocket TTS");
-    *state.tts_ready.lock().unwrap() = false;
-    if let Some(mut child) = state.tts_child.lock().unwrap().take() {
+    *state.tts_ready.lock_safe() = false;
+    if let Some(mut child) = state.tts_child.lock_safe().take() {
         let _ = child.start_kill();
     }
     Ok(())
@@ -651,7 +652,7 @@ pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
 pub async fn kokoro_load(app: AppHandle) -> Result<(), String> {
     {
         let state = app.state::<SpeechState>();
-        if *state.kokoro_loaded.lock().unwrap() {
+        if *state.kokoro_loaded.lock_safe() {
             return Ok(());
         }
     }
@@ -677,8 +678,8 @@ pub async fn kokoro_load(app: AppHandle) -> Result<(), String> {
     let engine = result?;
     {
         let state = app.state::<SpeechState>();
-        *state.kokoro_engine.lock().unwrap() = engine;
-        *state.kokoro_loaded.lock().unwrap() = true;
+        *state.kokoro_engine.lock_safe() = engine;
+        *state.kokoro_loaded.lock_safe() = true;
     }
     tracing::info!("[Kokoro] Model loaded in {:?}", start.elapsed());
     Ok(())
@@ -689,7 +690,7 @@ pub async fn kokoro_load(app: AppHandle) -> Result<(), String> {
 #[specta::specta]
 pub async fn kokoro_loaded(app: AppHandle) -> bool {
     let state = app.state::<SpeechState>();
-    *state.kokoro_loaded.lock().unwrap()
+    *state.kokoro_loaded.lock_safe()
 }
 
 #[cfg(feature = "onnx")]
@@ -697,7 +698,7 @@ pub async fn kokoro_loaded(app: AppHandle) -> bool {
 #[specta::specta]
 pub async fn kokoro_voices(app: AppHandle) -> Vec<String> {
     let state = app.state::<SpeechState>();
-    let engine = state.kokoro_engine.lock().unwrap();
+    let engine = state.kokoro_engine.lock_safe();
     let mut names = engine.voice_names();
     names.sort();
     names
@@ -711,7 +712,7 @@ pub async fn kokoro_synthesize(app: AppHandle, text: String, voice: String, spee
     // Ensure loaded
     {
         let state = app.state::<SpeechState>();
-        let loaded = *state.kokoro_loaded.lock().unwrap();
+        let loaded = *state.kokoro_loaded.lock_safe();
         if !loaded {
             kokoro_load(app.clone()).await?;
         }

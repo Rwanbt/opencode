@@ -1,3 +1,4 @@
+use crate::util::MutexSafe;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -400,12 +401,12 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     // Unload any existing model managed by this app
     {
         let state = app.state::<LlmServerState>();
-        let mut child_guard = state.child.lock().unwrap();
+        let mut child_guard = state.child.lock_safe();
         if let Some(ref mut child) = *child_guard {
             let _ = child.start_kill();
         }
         *child_guard = None;
-        *state.active_model.lock().unwrap() = None;
+        *state.active_model.lock_safe() = None;
     }
 
     // Check for orphaned llama-server on our port (e.g. from a crash or force-kill).
@@ -438,7 +439,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
                 if slot_idle {
                     tracing::info!("[LLM] Reusing existing llama-server (idle slot) with {}", safe_name);
                     let state = app.state::<LlmServerState>();
-                    *state.active_model.lock().unwrap() = Some(safe_name.clone());
+                    *state.active_model.lock_safe() = Some(safe_name.clone());
                     return Ok(());
                 }
                 tracing::warn!("[LLM] Orphaned llama-server is stuck (slot processing) — killing it");
@@ -600,8 +601,8 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
 
     {
         let state = app.state::<LlmServerState>();
-        *state.child.lock().unwrap() = Some(child);
-        *state.active_model.lock().unwrap() = Some(safe_name.clone());
+        *state.child.lock_safe() = Some(child);
+        *state.active_model.lock_safe() = Some(safe_name.clone());
     }
 
     // Wait for server to become healthy (up to 120s for large models)
@@ -612,19 +613,19 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         if start.elapsed().as_secs() > 120 {
             // Timeout - kill server
             let state = app.state::<LlmServerState>();
-            let mut guard = state.child.lock().unwrap();
+            let mut guard = state.child.lock_safe();
             if let Some(ref mut c) = *guard {
                 let _ = c.start_kill();
             }
             *guard = None;
-            *state.active_model.lock().unwrap() = None;
+            *state.active_model.lock_safe() = None;
             return Err("Server failed to start within 120s".to_string());
         }
 
         // Check if process is still alive
         {
             let state = app.state::<LlmServerState>();
-            let mut guard = state.child.lock().unwrap();
+            let mut guard = state.child.lock_safe();
             if let Some(ref mut c) = *guard {
                 match c.try_wait() {
                     Ok(Some(status)) => {
@@ -662,9 +663,9 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
 pub async fn unload_llm_model(app: AppHandle) -> Result<(), String> {
     let child_opt = {
         let state = app.state::<LlmServerState>();
-        let mut guard = state.child.lock().unwrap();
+        let mut guard = state.child.lock_safe();
         let child = guard.take();
-        *state.active_model.lock().unwrap() = None;
+        *state.active_model.lock_safe() = None;
         child
     };
     if let Some(mut child) = child_opt {
