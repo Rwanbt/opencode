@@ -10,12 +10,38 @@ const parseUrl = (input: string) => {
   }
 }
 
+// A directory path is user-clickable, so we forbid embedded URL schemes (which
+// would be passed through to the shell/opener) and control chars, and cap the
+// length. An absurdly long path coming from a hostile deep link would clog UI
+// state and could hit API-side parsing limits.
+const DIR_MAX = 4096
+const isSafeDirectory = (d: string) => {
+  if (!d || d.length > DIR_MAX) return false
+  if (/[\0\r\n]/.test(d)) return false
+  // Catch javascript: / data: / opencode: masquerading as a path.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(d) && !/^[a-zA-Z]:[\\/]/.test(d)) return false
+  return true
+}
+
+// Provider IDs are identifiers like "anthropic" / "openrouter" — we never load
+// arbitrary strings as module names, but a hostile providerID could still
+// XSS via any component that renders it unescaped. Constrain to a safe shape.
+const isSafeProviderID = (p: string) => /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(p)
+
+// OAuth one-time codes / states are opaque to us; only bound the size.
+const isBoundedOpaque = (s: string, max = 4096) =>
+  s.length > 0 && s.length <= max && !/[\0\r\n]/.test(s)
+
+// Prompts land in the chat input — no scheme / control-char filter needed but
+// a hostile QR should not be able to stuff a multi-megabyte string in state.
+const PROMPT_MAX = 16_384
+
 export const parseDeepLink = (input: string) => {
   const url = parseUrl(input)
   if (!url) return
   if (url.hostname !== "open-project") return
   const directory = url.searchParams.get("directory")
-  if (!directory) return
+  if (!directory || !isSafeDirectory(directory)) return
   return directory
 }
 
@@ -24,9 +50,10 @@ export const parseNewSessionDeepLink = (input: string) => {
   if (!url) return
   if (url.hostname !== "new-session") return
   const directory = url.searchParams.get("directory")
-  if (!directory) return
+  if (!directory || !isSafeDirectory(directory)) return
   const prompt = url.searchParams.get("prompt") || undefined
   if (!prompt) return { directory }
+  if (prompt.length > PROMPT_MAX) return { directory }
   return { directory, prompt }
 }
 
@@ -53,7 +80,10 @@ export const parseOAuthCallbackDeepLink = (input: string): OAuthCallbackDeepLink
   const providerID = url.searchParams.get("providerID")
   const code = url.searchParams.get("code")
   if (!providerID || !code) return
+  if (!isSafeProviderID(providerID)) return
+  if (!isBoundedOpaque(code)) return
   const state = url.searchParams.get("state") ?? undefined
+  if (state !== undefined && !isBoundedOpaque(state)) return
   return { providerID, code, state }
 }
 
