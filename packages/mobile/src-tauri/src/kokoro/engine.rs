@@ -1,6 +1,12 @@
 //! Kokoro TTS ONNX engine.
 //! Model: kokoro-v1.0.onnx (~310MB) + voices-v1.0.bin (~26MB)
 //! License: Apache-2.0
+//!
+//! dead_code: cross-cfg API surface — fns/fields are consumed by
+//! `#[tauri::command]`s in `speech.rs` that only register on
+//! `#[cfg(target_os = "android")]`. Host (Windows/Linux) cargo check compiles
+//! the module to validate the code but never calls in.
+#![allow(dead_code)]
 
 use ndarray::{Array1, Array2};
 use ort::{

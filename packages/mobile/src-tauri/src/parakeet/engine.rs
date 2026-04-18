@@ -3,6 +3,10 @@
 //! Model license: CC-BY-4.0 (NVIDIA)
 //!
 //! Pipeline: audio → mel spectrogram (nemo128) → encoder → greedy RNN-T decoder → text
+//!
+//! dead_code: cross-cfg API surface — consumed by `#[tauri::command]`s in
+//! `speech.rs` that only register on `#[cfg(target_os = "android")]`.
+#![allow(dead_code)]
 
 use ndarray::{Array1, Array2, Array3, ArrayD, Axis, IxDyn};
 use ort::{
