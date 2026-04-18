@@ -15,6 +15,7 @@ import os from "os"
 import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
+import { AuditLog } from "@/session/audit"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -214,6 +215,16 @@ export namespace Permission {
         })
 
         if (input.reply === "reject") {
+          AuditLog.recordAsync({
+            action: "permission.deny",
+            target: existing.info.permission,
+            metadata: {
+              sessionID: existing.info.sessionID,
+              requestID: existing.info.id,
+              patterns: existing.info.patterns,
+              hasFeedback: Boolean(input.message),
+            },
+          })
           yield* Deferred.fail(
             existing.deferred,
             input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
@@ -231,6 +242,17 @@ export namespace Permission {
           }
           return
         }
+
+        AuditLog.recordAsync({
+          action: "permission.grant",
+          target: existing.info.permission,
+          metadata: {
+            sessionID: existing.info.sessionID,
+            requestID: existing.info.id,
+            patterns: existing.info.patterns,
+            scope: input.reply, // "once" | "always"
+          },
+        })
 
         yield* Deferred.succeed(existing.deferred, undefined)
         if (input.reply === "once") return

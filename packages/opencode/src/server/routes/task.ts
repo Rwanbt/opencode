@@ -14,6 +14,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Log } from "../../util/log"
 import { Config } from "../../config/config"
+import { AuditLog } from "../../session/audit"
 
 const log = Log.create({ service: "server.task" })
 
@@ -265,6 +266,7 @@ export const TaskRoutes = lazy(() =>
         await SessionPrompt.cancel(id)
         await SessionStatus.set(id, { type: "cancelled" })
         await Bus.publish(SessionStatus.Event.TaskCancelled, { sessionID: id })
+        AuditLog.recordAsync({ action: "task.cancel", target: id })
         return c.json(true)
       },
     )
