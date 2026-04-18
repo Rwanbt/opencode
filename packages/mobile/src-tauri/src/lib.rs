@@ -4,7 +4,11 @@ use tauri::Manager;
 mod runtime;
 #[cfg(target_os = "android")]
 mod llm;
-#[cfg(target_os = "android")]
+// `validate` is pure Rust (no Android-specific deps) and is now referenced
+// from `speech.rs` (host-compiled). Keep it available on every target — the
+// few `#[allow(dead_code)]`s inside guard against the unused-symbol warnings
+// when no caller is cfg-enabled.
+#[allow(dead_code)]
 mod validate;
 #[cfg(target_os = "android")]
 mod proxy;
@@ -35,6 +39,18 @@ fn init_logging() {
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn write_debug_log(app: tauri::AppHandle, message: String) {
+    // Bound defensively — a hostile caller could otherwise flood the log
+    // file. Silently truncate rather than erroring (the command is called
+    // from JS on hot paths and a Result would complicate every call site).
+    let message = if message.len() > 8192 {
+        let mut cutoff = 8192;
+        while cutoff > 0 && !message.is_char_boundary(cutoff) {
+            cutoff -= 1;
+        }
+        &message[..cutoff]
+    } else {
+        message.as_str()
+    };
     use std::io::Write;
     let dir = runtime::runtime_dir(&app);
     let log_dir = dir.join("logs");
@@ -65,6 +81,18 @@ async fn fetch_private_server(
     headers: Option<std::collections::HashMap<String, String>>,
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    // Defence in depth: bound the URL and body so an XSS cannot pin the
+    // process with multi-MB strings. The URL allowlist is enforced at the
+    // JS layer (the fingerprint-validated remote-server URL) — we do not
+    // duplicate the allowlist here because custom desktop ports are
+    // legitimate.
+    crate::validate::validate_bounded_text(&url, 4096, "url")?;
+    if url.contains('\n') || url.contains('\r') {
+        return Err("url contains control characters".into());
+    }
+    if let Some(ref b) = body {
+        crate::validate::validate_bounded_text(b, 16 * 1024 * 1024, "body")?;
+    }
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(30))

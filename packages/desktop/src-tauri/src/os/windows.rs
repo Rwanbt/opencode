@@ -198,9 +198,17 @@ pub fn resolve_windows_app_path(app_name: &str) -> Option<String> {
                 return None;
             }
 
-            let words = unsafe {
-                std::slice::from_raw_parts(data.as_ptr().cast::<u16>(), (size as usize) / 2)
-            };
+            // RegGetValueW writes little-endian UTF-16. The buffer is a
+            // `Vec<u8>` so its pointer alignment is only 1 byte — casting
+            // directly to `*const u16` is UB on strict-alignment targets
+            // (Windows-on-ARM, sanitizers). Decode LE pairs explicitly, which
+            // is alignment-safe and has no cost in practice (registry values
+            // are short).
+            let byte_len = (size as usize).min(data.len()) & !1; // drop trailing odd byte
+            let mut words: Vec<u16> = Vec::with_capacity(byte_len / 2);
+            for chunk in data[..byte_len].chunks_exact(2) {
+                words.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+            }
             let len = words.iter().position(|v| *v == 0).unwrap_or(words.len());
             let value = String::from_utf16_lossy(&words[..len]).trim().to_string();
 

@@ -139,6 +139,12 @@ async fn await_initialization(
 #[tauri::command]
 #[specta::specta]
 fn check_app_exists(app_name: &str) -> bool {
+    // Refuse traversal / shell / path separators: both check paths below
+    // interpret the name as a registry key (Windows) or a filename (macOS)
+    // and feed it to `which` (Linux).
+    if crate::validate::validate_open_app_name(app_name).is_err() {
+        return false;
+    }
     #[cfg(target_os = "windows")]
     {
         os::windows::check_windows_app(app_name)
@@ -158,6 +164,9 @@ fn check_app_exists(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn resolve_app_path(app_name: &str) -> Option<String> {
+    // Same guard as `check_app_exists`: refuse anything that isn't a bare
+    // app alias before it reaches the Windows registry lookup.
+    crate::validate::validate_open_app_name(app_name).ok()?;
     #[cfg(target_os = "windows")]
     {
         os::windows::resolve_windows_app_path(app_name)
@@ -280,6 +289,13 @@ fn check_linux_app(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
+    // Defence in depth: bound the input before handing it to an external
+    // command. A null byte would confuse both Windows and wsl.exe argument
+    // parsing; overly long inputs have no legitimate use (MAX_PATH ≈ 260).
+    crate::validate::validate_bounded_text(&path, 4096, "wsl path")?;
+    if path.contains('\r') || path.contains('\n') {
+        return Err("wsl path contains control characters".into());
+    }
     if !cfg!(windows) {
         return Ok(path);
     }
