@@ -43,6 +43,112 @@
 
 ---
 
+## Why This Fork?
+
+> **TL;DR — this is the only open-source coding agent that ships a DAG-based orchestrator, a REST task API, per-agent MCP scoping, a 9-state session FSM, a built-in vulnerability scanner, _and_ a first-class Android app with on-device LLM inference. No other CLI — proprietary or open — combines all of these.**
+
+### The one-sentence pitch
+
+> An orchestrated coding agent that runs on desktop, server, _and_ phone, with local models end-to-end, zero cloud dependency, and enterprise-grade governance primitives baked in — not bolted on.
+
+### Capability matrix — this fork vs. the 2026 landscape
+
+| Capability                        | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Qwen Code |
+| --------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :-------: |
+| Open source                       |       ✅       |      ❌      |  partial  |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |     ✅     |
+| BYOM (bring your own model)       |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |  partial  |
+| Local models (llama.cpp / Ollama) |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |     ✅     |
+| Parallel agents in isolated worktrees | ✅ native |  ✅ (Teams) |  partial  |      ❌     |      via plugin     |   ❌   | partial | ✅ (v3.58) |     ❌     |
+| Explicit **DAG orchestration**    |     ✅ **unique**  |   ad-hoc    |     ❌     |      ❌     |          ❌          |   ❌   | recipes (linear) | ❌ |     ❌     |
+| **REST task API** (programmable)  |     ✅ **unique**  |  partial (SDK) |  ❌   |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |     ❌     |
+| **TUI task dashboard**            |       ✅       |      ❌      |     ❌     |      ❌     |       partial       |   ❌   |   ❌   |   ❌   |  partial  |
+| MCP support                       | ✅ + **per-agent scoping** | ✅ | ✅ | ✅ | ✅ | via plugins | ✅ | ✅ | ✅ |
+| **9-state session FSM**           |     ✅ **unique**  |      ❌      |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |     ❌     |
+| Built-in **vulnerability scanner**|     ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |     ❌     |
+| First-class **Android app**       |     ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |     ❌     |
+| Adaptive runtime (VRAM/CPU/thermal) | ✅ **unique** |      ❌      |     ❌     |      ❌     |      hardcoded      | hardcoded | hardcoded | hardcoded | hardcoded |
+| Prompt caching (cloud + local KV) |       ✅       |      ✅      |     ✅     |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |     ✅     |
+| Auto-commits / Git rollback       |       ✅       |      ✅      |     ✅     |      ✅     |      ✅ (signed)     |   ✅   |   ✅   |   ✅   |     ✅     |
+| Price                             |  free + BYOM  |  $20/mo sub |$20/mo sub |  1000/day free | free + BYOM    | free + BYOM | free + BYOM | free + BYOM | free + BYOM |
+
+### Positioning by category
+
+#### vs. vendor-locked premium CLIs (Claude Code, Codex, Amazon Q)
+
+Their strength: a proprietary frontier model deeply integrated. Claude Opus 4.6 sits at 80.8 % on SWE-bench Verified. Their ceiling: no BYOM, no local model, no open core, no mobile.
+
+- **We lose**: the raw quality of a locked-in frontier model. If you run this fork against a weaker backend, you inherit that backend's limits.
+- **We win**: sovereignty, zero marginal cost on local models, open architecture (DAG, REST, MCP scoping), and — the card nobody else holds — **the phone in your pocket**.
+
+> Plug Opus 4.6 / Sonnet 4.6 into this fork via BYOM and you get parity on raw reasoning _plus_ everything they can't give you.
+
+#### vs. open-source BYOM peers (opencode upstream, Aider, Cline, Continue, Roo Code)
+
+Same philosophy. What sets this fork apart is **five engineering decisions competitors don't match**:
+
+1. **Native DAG orchestration** — declarative sub-tasks with dependency edges and wave-based parallel execution. The rest of the field either has ad-hoc sub-agents (Claude Code), linear recipes (Goose), or nothing. A DAG lets you model real dependencies (fan-out then join) instead of scripting them.
+2. **REST task API** — 8 endpoints for the full task lifecycle (`list / get / cancel / resume / followup / promote / team / messages`). Turns the agent into a **platform**: cron, Temporal, Airflow, or another agent can drive it. No other open CLI exposes this.
+3. **Explicit 9-state session FSM** (`idle · busy · retry · queued · blocked · awaiting_input · completed · failed · cancelled`) — persistent states survive DB restarts. Competitors have implicit `running/done/error` at best. An explicit FSM = better debugging, better crash recovery, and an **audit log enterprises can actually reason about**.
+4. **Per-agent MCP scoping** — principle of least privilege applied to tools. Others scope MCP globally (every agent sees every server) or not at all. When you hand an agent a shell, you shouldn't also hand it the production database.
+5. **Built-in vulnerability scanner** — auto-scans edits/writes for secrets, injection sinks, unsafe patterns. Normally outsourced to Snyk/Semgrep; shipping it in-band closes the loop before the bad diff is even committed.
+
+- **We lose**: maturity and discoverability. Aider has 39 k stars, 4.1 M installs, 15 B tokens/week. This fork starts from zero on that axis.
+- **We win**: on architecture. Every item above is a _shipped feature_, not a roadmap item.
+
+#### vs. specialized CLIs (Warp 2.0, Crush, Plandex, Kimi CLI, Qwen Code)
+
+Different category. Those tools bet on terminal UX (Warp, Crush), XXL context (Plandex = 2 M tokens), or a niche model (Qwen3-Coder 480B, Kimi). This fork is **platform/infrastructure**, not a single-angle product. If you want a prettier prompt, go elsewhere. If you want to run 10 agents in parallel across worktrees and query them from another service, start here.
+
+### The card nobody else holds: mobile
+
+**None of the 30+ serious coding CLIs shipping in 2026 has a mobile app.** PocketPal and MLC Chat run models on-device but they are chats, not coding agents.
+
+This fork + the Android app are **architecturally unified** — same agent model, same session format, same MCP surface. That yields a proposition no one else can make:
+
+> An orchestrated coding agent executable on desktop, server, _or_ phone, with local models end-to-end.
+
+Kick off 5 tasks in isolated worktrees from a laptop. Check their progress from a phone, on the subway, offline, on an on-device 4B model. Consolidate results via the DAG. That scenario exists here and nowhere else.
+
+### What this fork does **not** claim
+
+- We do **not** outperform Claude Opus on SWE-bench when you run this fork against a weaker backend. Quality-of-model is decoupled from quality-of-orchestration — pick both.
+- We do **not** have the adoption of Aider or Cline yet. If you need the biggest plugin registry today, they win.
+- We do **not** position against niche specialists (Warp's UX, Plandex's 2 M context). Different sport.
+
+### Diagram — where the fork adds value
+
+```
+                   ┌──────────────────────────────────────────┐
+                   │            Your orchestrator             │
+                   │  (cron, Temporal, Airflow, another LLM)  │
+                   └────────────────┬─────────────────────────┘
+                                    │ REST /task/* (fork-only)
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        OpenCode (this fork)                               │
+│                                                                           │
+│  ┌─────────────┐   DAG waves    ┌──────────────┐                          │
+│  │ Orchestrator│ ─────────────▶ │  Agent pool  │ ──▶ isolated worktrees   │
+│  │ (read-only) │                │  (5 parallel)│      (git, no Docker)    │
+│  └─────────────┘                └──────┬───────┘                          │
+│         │                              │                                  │
+│         ▼                              ▼                                  │
+│   9-state FSM              per-agent MCP scoping                          │
+│   (persistent)             (least-privilege tools)                        │
+│         │                              │                                  │
+│         ▼                              ▼                                  │
+│   vulnerability scanner on every edit/write                               │
+│                                                                           │
+└───────────────┬───────────────────────────────────────────┬───────────────┘
+                │                                           │
+                ▼                                           ▼
+   Local LLM (llama.cpp b8731)                  Cloud providers (25+)
+   + adaptive runtime (auto-config.ts)          with ephemeral prompt cache
+   desktop + **Android**                        Anthropic, OpenAI, Gemini…
+```
+
+---
+
 ## Fork Features
 
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
