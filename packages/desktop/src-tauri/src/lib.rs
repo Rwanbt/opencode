@@ -173,10 +173,19 @@ fn resolve_app_path(app_name: &str) -> Option<String> {
 #[tauri::command]
 #[specta::specta]
 fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<(), String> {
+    // Validate target path / URL before it reaches any plugin or OS call.
+    let safe_path = crate::validate::validate_open_target(&path)?;
+    let safe_app = match app_name.as_deref() {
+        Some(name) => Some(crate::validate::validate_open_app_name(name)?.to_string()),
+        None => None,
+    };
+
     #[cfg(target_os = "windows")]
     {
-        let app_name = app_name.map(|v| os::windows::resolve_windows_app_path(&v).unwrap_or(v));
-        let is_powershell = app_name.as_ref().is_some_and(|v| {
+        let resolved_app = safe_app
+            .as_deref()
+            .map(|v| os::windows::resolve_windows_app_path(v).unwrap_or_else(|| v.to_string()));
+        let is_powershell = resolved_app.as_ref().is_some_and(|v| {
             std::path::Path::new(v)
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -187,15 +196,15 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         });
 
         if is_powershell {
-            return os::windows::open_in_powershell(path);
+            return os::windows::open_in_powershell(safe_path);
         }
 
-        tauri_plugin_opener::open_path(path, app_name.as_deref())
+        tauri_plugin_opener::open_path(safe_path, resolved_app.as_deref())
             .map_err(|e| format!("Failed to open path: {e}"))
     }
 
     #[cfg(not(target_os = "windows"))]
-    tauri_plugin_opener::open_path(path, app_name.as_deref())
+    tauri_plugin_opener::open_path(safe_path, safe_app.as_deref())
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
