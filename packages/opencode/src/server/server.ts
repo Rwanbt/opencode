@@ -81,9 +81,8 @@ export namespace Server {
             const ALLOWED_OPENCODE_ORIGINS = [
               "https://opencode.ai",
               "https://www.opencode.ai",
-              "https://app.opencode.ai",
-              "https://api.opencode.ai",
-              "https://dev.opencode.ai",
+              "https://docs.opencode.ai",
+              "https://console.opencode.ai",
             ]
             if (ALLOWED_OPENCODE_ORIGINS.includes(input)) return input
 

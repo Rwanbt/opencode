@@ -676,17 +676,29 @@ export namespace MCP {
           }
         }
 
-        // Filter tools by their server name prefix
+        // Build an authoritative map of tool keys per connected server from the
+        // cached defs. This avoids prefix collisions between e.g. "github" and
+        // "github_enterprise" where startsWith(sanitize(name) + "_") matches both.
+        const toolKeysByServer = new Map<string, Set<string>>()
+        for (const name of connectedNames) {
+          const listed = s.defs[name]
+          if (!listed) continue
+          const set = new Set<string>()
+          for (const t of listed) set.add(sanitize(name) + "_" + sanitize(t.name))
+          toolKeysByServer.set(name, set)
+        }
+
         const filtered: Record<string, Tool> = {}
         for (const [key, tool] of Object.entries(allTools)) {
-          // Tool keys are sanitize(clientName) + "_" + sanitize(toolName)
-          // Check if any allowed server's sanitized name is a prefix
-          const isAllowed = connectedNames.some(
-            (serverName) => allowedServers.has(serverName) && key.startsWith(sanitize(serverName) + "_"),
-          )
-          if (isAllowed) {
-            filtered[key] = tool
+          let allowed = false
+          for (const [serverName, keys] of toolKeysByServer) {
+            if (!allowedServers.has(serverName)) continue
+            if (keys.has(key)) {
+              allowed = true
+              break
+            }
           }
+          if (allowed) filtered[key] = tool
         }
         return filtered
       })
