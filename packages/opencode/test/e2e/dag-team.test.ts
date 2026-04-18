@@ -188,26 +188,34 @@ describe("DAG team — dispatch contract (harness for I11 e2e)", () => {
 
 describe.skip("DAG team — full e2e (requires team-tool runtime bootstrap)", () => {
   // Sprint 5 unblocked the transport layer:
-  //   - `test/lib/in-process-server.ts` now boots `Server.listen` on port 0,
-  //     returning `{ url, fetch, close }`.
-  //   - `test/lib/mock-provider.ts` returns a LanguageModelV3-compatible mock
-  //     that can be plugged into `Provider.getLanguage` via an e2e seam.
+  //   - `test/lib/in-process-server.ts` boots `Server.listen` on port 0.
+  //   - `test/lib/mock-provider.ts` returns a LanguageModelV3-compatible mock.
   //
-  // Still blocked — tracked for Sprint 6:
-  //   - The `team` tool wiring requires Instance/Workspace/Permission scopes
-  //     bootstrapped under the Effect runtime. `test/preload.ts` stands up
-  //     logging and DB only; Instance.run is not exposed for tests.
-  //   - Without Instance.run, POST /task cannot materialise a sandbox worktree
-  //     and the orchestrator loop cannot dispatch subtasks. The
-  //     `dispatchDag` unit contract above guards the ordering semantics in the
-  //     meantime.
+  // Sprint 6 added a partial Instance harness:
+  //   - `test/lib/with-instance-for-test.ts` exposes `withInstanceForTest(fn)`
+  //     which wraps the ALS InstanceContext on a per-test tmpdir, so
+  //     `Instance.directory`/`worktree`/`project` resolve inside `fn`.
+  //
+  // Still blocked — tracked for a follow-up sprint:
+  //   - `withInstanceForTest` only covers the ALS scope. It does NOT yet
+  //     bootstrap an in-memory SessionStatus/Session/Task/Permission service
+  //     set, nor does it swap the Provider registry to the mock model.
+  //   - Without a Permission mock, the real permission service can block on
+  //     interactive prompts during tool execution. Without a Provider mock
+  //     seam on Provider.list(), `session/llm.ts` resolves a real provider
+  //     and hits the network.
+  //   - See the checklist at the top of `test/lib/with-instance-for-test.ts`
+  //     for the exact wiring left to do.
   //
   // To enable:
-  //   1. Export an `Instance.runForTest(fn)` that bootstraps the minimum scope
-  //      needed by session/task routes (see src/project/instance.ts).
-  //   2. Seed Provider registry with the mock provider; set its model as the
-  //      default for the test session.
-  //   3. Flip the `describe.skip` below to `describe` and uncomment bodies.
+  //   1. Extend `withInstanceForTest` to accept `{ provider, permission,
+  //      session }` overrides that install test-only Effect Layers for those
+  //      services (Layer.succeed(Service, impl)).
+  //   2. Register the mock provider as the default model for the synthesised
+  //      session (inside the `init` hook).
+  //   3. Boot `in-process-server` inside the helper so `POST /task` is
+  //      reachable on localhost.
+  //   4. Flip the `describe.skip` below to `describe` and uncomment bodies.
   it("runs explore+critic in parallel then tester, passes prior outputs as context", async () => {})
   it("leaves no dangling subtask session when a dependent fails", async () => {})
 })
