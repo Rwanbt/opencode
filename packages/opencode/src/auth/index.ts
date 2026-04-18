@@ -399,13 +399,67 @@ export namespace Auth {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Auth") {}
 
+  // ─── Backend selector (Sprint 6 item 2) ─────────────────────────────────
+  //
+  // When OPENCODE_AUTH_STORAGE=keychain and OPENCODE_KEYCHAIN_URL is present,
+  // route all reads/writes through the KeychainStorage HTTP adapter. When the
+  // endpoint is unavailable (e.g. `opencode serve` running outside the desktop
+  // shell with the env var lingering), log a one-shot warn and fall back to
+  // the file path. Never crash — auth.json is always a valid last resort.
+  //
+  // The selection happens once per Auth.layer evaluation (runtime is memoized
+  // via makeRuntime's internal cache). Tests that flip the env var between
+  // cases must call `makeRuntime` fresh or override the layer explicitly.
+  let keychainFallbackWarned = false
+  function selectKeychain(): KeychainStorage | undefined {
+    if (AUTH_STORAGE_BACKEND !== "keychain") return undefined
+    const kc = new KeychainStorage()
+    if (!kc.available()) {
+      if (!keychainFallbackWarned) {
+        keychainFallbackWarned = true
+        console.warn(
+          "[auth] OPENCODE_AUTH_STORAGE=keychain but OPENCODE_KEYCHAIN_URL is not set — falling back to FileStorage. " +
+            "This is expected on headless CLI runs; desktop sidecar should inject the URL automatically.",
+        )
+      }
+      return undefined
+    }
+    return kc
+  }
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fsys = yield* AppFileSystem.Service
       const decode = Schema.decodeUnknownOption(Info)
+      const keychain = selectKeychain()
 
       const all = Effect.fn("Auth.all")(function* () {
+        if (keychain) {
+          // Keychain path: best-effort read; on transport error, degrade to the
+          // file (prevents a transient endpoint glitch from locking out the user).
+          // The Promise/catch is handled *inside* tryPromise's `try` callback
+          // so the Effect itself never fails (returns {} on any error).
+          const loaded = yield* Effect.tryPromise({
+            try: async () => {
+              try {
+                return await keychain.load()
+              } catch (e) {
+                console.warn(
+                  `[auth] keychain read failed, falling back to auth.json: ${(e as Error)?.message ?? String(e)}`,
+                )
+                return undefined
+              }
+            },
+            catch: (cause) => new AuthError({ message: "Failed to read keychain", cause }),
+          })
+          if (loaded !== undefined) {
+            return Record.filterMap(loaded as Record<string, unknown>, (value) =>
+              Result.fromOption(decode(value), () => undefined),
+            )
+          }
+          // Fallthrough: file read below.
+        }
         const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
         return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
       })
@@ -419,9 +473,17 @@ export namespace Auth {
         const data = yield* all()
         if (norm !== key) delete data[key]
         delete data[norm + "/"]
-        yield* fsys
-          .writeJson(file, { ...data, [norm]: info }, 0o600)
-          .pipe(Effect.mapError(fail("Failed to write auth data")))
+        const next = { ...data, [norm]: info }
+        if (keychain) {
+          yield* Effect.tryPromise({
+            try: () => keychain.save(next),
+            catch: (cause) => new AuthError({ message: "Failed to write keychain", cause }),
+          })
+        } else {
+          yield* fsys
+            .writeJson(file, next, 0o600)
+            .pipe(Effect.mapError(fail("Failed to write auth data")))
+        }
         // Audit after successful write — best-effort, never blocks the flow.
         // `info.type` is safe to expose (oauth|api|wellknown); no secrets leak.
         // Dynamic import breaks the audit -> config -> auth cycle.
@@ -435,7 +497,14 @@ export namespace Auth {
         const data = yield* all()
         delete data[key]
         delete data[norm]
-        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+        if (keychain) {
+          yield* Effect.tryPromise({
+            try: () => keychain.save(data as Record<string, unknown>),
+            catch: (cause) => new AuthError({ message: "Failed to write keychain", cause }),
+          })
+        } else {
+          yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+        }
         void import("../session/audit").then(({ AuditLog }) =>
           AuditLog.recordAsync({ action: "auth.remove", target: norm }),
         ).catch(() => {})
