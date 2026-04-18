@@ -1,0 +1,174 @@
+# release-sign.yml — Artifact signing & build provenance (dormant-friendly)
+#
+# Purpose
+# -------
+# Sign every artifact attached to a published GitHub release and emit
+# SLSA-compatible build provenance attestations. Signatures use cosign
+# keyless (Fulcio OIDC) so no long-lived secret lives in the repo.
+#
+# Requirements
+# ------------
+#   * id-token: write   (mandatory, used by Fulcio OIDC)
+#   * attestations: write (for actions/attest-build-provenance)
+#   * contents: write   (to upload .sig/.cert assets back to the release)
+#
+# Activation
+# ----------
+# This workflow activates automatically once a release is PUBLISHED.
+# No repo secrets required (Fulcio OIDC is provisioned by GitHub Actions).
+# It can also be triggered manually with `workflow_dispatch` against an
+# existing release tag.
+#
+# Fork-safety
+# -----------
+# The `if: github.repository == 'Rwanbt/opencode'` gate prevents the
+# workflow from spamming downstream forks of this repository.
+#
+# Verifying a signed artifact
+# ---------------------------
+#   cosign verify-blob \
+#     --certificate-identity-regexp 'https://github.com/Rwanbt/opencode/.+' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --signature <artifact>.sig --certificate <artifact>.cert \
+#     <artifact>
+
+name: release-sign
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to (re)sign"
+        required: true
+
+permissions: {}
+
+jobs:
+  attest-provenance:
+    name: Attest build provenance
+    if: github.repository == 'Rwanbt/opencode'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --dir artifacts \
+            --pattern '*.apk' \
+            --pattern '*.aab' \
+            --pattern '*.dmg' \
+            --pattern '*.msi' \
+            --pattern '*.exe' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.AppImage' \
+            --pattern '*.tar.gz' \
+            --pattern '*.zip' || true
+          ls -la artifacts
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "artifacts/*"
+
+  cosign-sign:
+    name: cosign keyless sign
+    if: github.repository == 'Rwanbt/opencode'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.4.1"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --dir artifacts \
+            --pattern '*.apk' \
+            --pattern '*.aab' \
+            --pattern '*.dmg' \
+            --pattern '*.msi' \
+            --pattern '*.exe' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.AppImage' \
+            --pattern '*.tar.gz' \
+            --pattern '*.zip' || true
+
+      - name: Sign artifacts (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          cd artifacts
+          for f in *; do
+            [ -f "$f" ] || continue
+            echo "::group::sign $f"
+            cosign sign-blob --yes \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.cert" \
+              "$f"
+            # Checksum for cross-verification
+            sha256sum "$f" > "$f.sha256"
+            echo "::endgroup::"
+          done
+          ls -la
+
+      - name: Upload signatures & certificates to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd artifacts
+          shopt -s nullglob
+          uploads=()
+          for ext in sig cert sha256; do
+            for f in *.$ext; do uploads+=("$f"); done
+          done
+          if [ ${#uploads[@]} -gt 0 ]; then
+            gh release upload "${{ steps.tag.outputs.tag }}" \
+              --repo "${{ github.repository }}" \
+              --clobber \
+              "${uploads[@]}"
+          fi
