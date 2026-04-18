@@ -36,6 +36,80 @@ pub fn validate_url(url: &str) -> Result<&str, String> {
     Ok(url)
 }
 
+/// Extensions that are always refused from `open_path`: they execute code on
+/// double-click across Windows / macOS / Linux shells, so an XSS issuing
+/// invoke("open_path") would otherwise be RCE.
+const FORBIDDEN_OPEN_EXT: &[&str] = &[
+    "exe", "bat", "cmd", "com", "ps1", "psm1", "vbs", "vbe", "js", "jse",
+    "msi", "msp", "reg", "scr", "lnk", "inf", "hta", "wsf", "cpl", "jar",
+    "sh", "bash", "zsh", "command", "app", "dylib", "so", "dll",
+];
+
+/// Validate a target for the `open_path` Tauri command.
+///
+/// We accept two shapes:
+/// * an `http://` or `https://` URL (opened in the default browser);
+/// * a filesystem path that (a) canonicalizes successfully, (b) does not have
+///   a forbidden executable extension, (c) does not contain a NUL byte.
+///
+/// Everything else (javascript:, file:, data:, opencode:, bare aliases) is
+/// refused — an XSS must not be able to launch arbitrary binaries.
+pub fn validate_open_target(target: &str) -> Result<String, String> {
+    if target.is_empty() || target.len() > 4096 || target.contains('\0') {
+        return Err("path length invalid".into());
+    }
+
+    if let Ok(parsed) = url::Url::parse(target) {
+        match parsed.scheme() {
+            "http" | "https" => return Ok(target.to_string()),
+            "file" | "data" | "javascript" | "opencode" => {
+                return Err(format!("scheme not allowed: {}", parsed.scheme()));
+            }
+            // Single-letter schemes on Windows (`C:\…`) parse as Url with a
+            // drive-letter scheme — fall through to the filesystem branch.
+            _ => {}
+        }
+    }
+
+    let p = Path::new(target);
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve path: {e}"))?;
+
+    if let Some(ext) = canonical.extension().and_then(|e| e.to_str()) {
+        let lower = ext.to_ascii_lowercase();
+        if FORBIDDEN_OPEN_EXT.iter().any(|e| *e == lower) {
+            return Err(format!("extension not allowed: {lower}"));
+        }
+    }
+
+    Ok(canonical.to_string_lossy().to_string())
+}
+
+/// Validate the optional `app_name` parameter of `open_path`. The upstream
+/// resolver later maps this to an executable; if we let an attacker pass a
+/// fully-qualified binary path here they could launch anything. We only allow
+/// short bare aliases made of letters, digits, dash, dot, underscore, plus
+/// spaces — covering `code`, `cursor`, `iTerm`, `Google Chrome`, etc.
+pub fn validate_open_app_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name.len() > 64 {
+        return Err("app_name length out of range".into());
+    }
+    if name.contains('/')
+        || name.contains('\\')
+        || name.contains("..")
+        || name.contains('\0')
+    {
+        return Err("app_name contains forbidden characters".into());
+    }
+    if !name.chars().all(|c| {
+        c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ')
+    }) {
+        return Err("app_name has invalid characters".into());
+    }
+    Ok(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,5 +148,39 @@ mod tests {
     fn accepts_allowlist_url() {
         assert!(validate_url("https://huggingface.co/unsloth/model/resolve/main/x.gguf").is_ok());
         assert!(validate_url("https://cdn-lfs.huggingface.co/repos/foo/bar").is_ok());
+    }
+
+    #[test]
+    fn open_target_rejects_dangerous_schemes() {
+        assert!(validate_open_target("javascript:alert(1)").is_err());
+        assert!(validate_open_target("data:text/html,<script>").is_err());
+        assert!(validate_open_target("file:///etc/passwd").is_err());
+        assert!(validate_open_target("opencode://connect").is_err());
+        assert!(validate_open_target("").is_err());
+        assert!(validate_open_target("x\0y").is_err());
+    }
+
+    #[test]
+    fn open_target_accepts_http_urls() {
+        assert!(validate_open_target("https://example.com/").is_ok());
+        assert!(validate_open_target("http://localhost:3000/").is_ok());
+    }
+
+    #[test]
+    fn open_app_name_rejects_path_like() {
+        assert!(validate_open_app_name("C:\\Windows\\System32\\cmd.exe").is_err());
+        assert!(validate_open_app_name("../../evil").is_err());
+        assert!(validate_open_app_name("/usr/bin/sh").is_err());
+        assert!(validate_open_app_name("").is_err());
+        assert!(validate_open_app_name("x\0y").is_err());
+    }
+
+    #[test]
+    fn open_app_name_accepts_aliases() {
+        assert!(validate_open_app_name("code").is_ok());
+        assert!(validate_open_app_name("cursor").is_ok());
+        assert!(validate_open_app_name("Google Chrome").is_ok());
+        assert!(validate_open_app_name("iTerm").is_ok());
+        assert!(validate_open_app_name("vscode-insiders").is_ok());
     }
 }
