@@ -16,7 +16,7 @@
 import { randomBytes } from "crypto"
 import { Database } from "../storage/db"
 import { AuditLogTable } from "./audit.sql"
-import { and, desc, eq, gte, lte, SQL } from "drizzle-orm"
+import { and, desc, eq, gte, lt, lte, SQL } from "drizzle-orm"
 import { Log } from "../util/log"
 import { Config } from "../config/config"
 
@@ -92,6 +92,60 @@ export namespace AuditLog {
     limit?: number
     action?: string
     actor?: string
+  }
+
+  /**
+   * Delete audit rows older than `now - retention_days * 86400_000`.
+   *
+   * Returns the number of deleted rows. No-op when audit is disabled or the
+   * retention config is missing / invalid. Silently swallows DB errors (audit
+   * purge is best-effort — a failing purge must not crash the server).
+   */
+  export async function purgeExpired(): Promise<number> {
+    try {
+      const cfg = await Config.get()
+      const audit = (cfg as any)?.experimental?.audit
+      if (!audit?.enabled) return 0
+      const days = typeof audit.retention_days === "number" && audit.retention_days > 0 ? audit.retention_days : 90
+      const cutoff = Date.now() - days * 86_400_000
+      const res = Database.use((db) => db.delete(AuditLogTable).where(lt(AuditLogTable.ts, cutoff)).run())
+      // better-sqlite3 returns { changes } on `.run()`. Tolerate undefined.
+      const n = (res as any)?.changes ?? 0
+      if (n > 0) log.info("purged audit rows", { removed: n, retentionDays: days })
+      return n
+    } catch (e) {
+      log.warn("audit purge failed", { e: String(e) })
+      return 0
+    }
+  }
+
+  /** Interval handle returned by `startRetentionTimer`. */
+  let _retentionTimer: ReturnType<typeof setInterval> | undefined
+
+  /**
+   * Kick off the retention purger: run once now (fire-and-forget) and then
+   * every 24h. Uses `unref()` so the timer does not keep the event loop alive.
+   * Safe to call multiple times — subsequent calls are no-ops.
+   */
+  export function startRetentionTimer(): void {
+    if (_retentionTimer) return
+    // Initial run — swallow errors, best-effort.
+    void purgeExpired().catch(() => {})
+    _retentionTimer = setInterval(
+      () => {
+        void purgeExpired().catch(() => {})
+      },
+      24 * 60 * 60 * 1000,
+    )
+    _retentionTimer.unref?.()
+  }
+
+  /** Stop the retention timer. Test-only. */
+  export function stopRetentionTimer(): void {
+    if (_retentionTimer) {
+      clearInterval(_retentionTimer)
+      _retentionTimer = undefined
+    }
   }
 
   export function list(input: ListInput = {}): Entry[] {
