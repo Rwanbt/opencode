@@ -75,10 +75,18 @@ export namespace Server {
             )
               return input
 
-            // *.opencode.ai (https only, adjust if needed)
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-              return input
-            }
+            // Explicit opencode.ai origins we actually use — narrower than
+            // the previous *.opencode.ai regex, which would accept anything
+            // user-controlled at a hostile subdomain (e.g. evil.opencode.ai).
+            const ALLOWED_OPENCODE_ORIGINS = [
+              "https://opencode.ai",
+              "https://www.opencode.ai",
+              "https://app.opencode.ai",
+              "https://api.opencode.ai",
+              "https://dev.opencode.ai",
+            ]
+            if (ALLOWED_OPENCODE_ORIGINS.includes(input)) return input
+
             if (opts?.cors?.includes(input)) {
               return input
             }
