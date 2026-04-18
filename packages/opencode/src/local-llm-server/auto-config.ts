@@ -124,10 +124,23 @@ export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers 
   // safety margin for KV cache, activations, and other small allocations.
   const vramBudget = Math.max(0, p.vramMb * 0.85)
   const mbPerLayer = modelSizeMb > 0 ? modelSizeMb / Math.max(1, modelLayers) : 1
-  const nGpuLayers =
-    p.gpuBackend === "none" || vramBudget <= 0
-      ? 0
-      : Math.max(0, Math.min(modelLayers, Math.floor(vramBudget / mbPerLayer)))
+  const hasUsableGpu = p.gpuBackend !== "none" && vramBudget > 0
+
+  // GPU acceleration is mandatory by default. Silently falling back to
+  // n_gpu_layers=0 yielded a nominally-working server that ran at <5 tok/s,
+  // which is worse UX than a loud error telling the user to install a
+  // driver / choose a smaller model. Users who really want CPU-only must
+  // opt in with OPENCODE_ALLOW_CPU_ONLY=1 (Android emulators, VMs, CI…).
+  if (!hasUsableGpu && process.env.OPENCODE_ALLOW_CPU_ONLY !== "1") {
+    throw new Error(
+      `No usable GPU backend detected (gpuBackend="${p.gpuBackend}", vramMb=${p.vramMb}). ` +
+        `Install a GPU driver (CUDA / ROCm / Vulkan / Metal) or set ` +
+        `OPENCODE_ALLOW_CPU_ONLY=1 to explicitly allow CPU-only inference.`,
+    )
+  }
+  const nGpuLayers = hasUsableGpu
+    ? Math.max(0, Math.min(modelLayers, Math.floor(vramBudget / mbPerLayer)))
+    : 0
 
   // Threads: use only the "big" cores on heterogeneous CPUs, cap at 6 to
   // avoid diminishing returns + P-core contention on the WebView.
