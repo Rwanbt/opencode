@@ -248,6 +248,11 @@ pub async fn start_embedded_server(
         ("librg_exec.so", "rg"),
         ("libbun_exec.so", "bun"),
         ("libtoybox_exec.so", "toybox"),
+        // Busybox is optional — bundled only when `prepare-android-runtime.sh`
+        // has downloaded it. If absent the block below silently skips it and
+        // toybox continues to provide ls/cat/etc. Busybox's added value is
+        // richer applets (vi, nano, awk, sed implementations, less, etc.).
+        ("libbusybox_exec.so", "busybox"),
     ];
     for (src_name, link_name) in &bin_links {
         let src = nlib_dir.join(src_name);
@@ -310,26 +315,66 @@ pub async fn start_embedded_server(
         }
     }
 
+    // Busybox applet symlinks — when libbusybox_exec.so is shipped alongside
+    // libtoybox_exec.so, override the ones where busybox's implementation is
+    // strictly richer (full vi, less, nano, awk, sed, hexdump, etc.). Toybox's
+    // Android build omits `vi` entirely, so users typing `vim file.txt` hit
+    // `toybox: unknown command vi`. Busybox-static aarch64 (~1 MB) includes a
+    // full-featured vi applet plus less/nano/gawk-compat awk/sed.
+    // See packages/mobile/scripts/prepare-android-runtime.sh for bundling.
+    let busybox_src = nlib_dir.join("libbusybox_exec.so");
+    if busybox_src.exists() {
+        // Only expose applets where busybox adds real UX value over toybox.
+        // Keep toybox as fallback for all the rest (already linked above).
+        let busybox_cmds = [
+            // Editors & viewers — toybox doesn't have vi, less, nano
+            "vi", "vim", "less", "nano", "ed",
+            // Scripting — richer than toybox's stubs
+            "awk", "gawk", "sed",
+            // Misc — busybox variants
+            "bc", "dc", "expr", "tr",
+        ];
+        for cmd in &busybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != busybox_src,
+                Err(_) => true,
+            };
+            if needs {
+                let _ = fs::remove_file(&link);
+                let _ = std::os::unix::fs::symlink(&busybox_src, &link);
+            }
+        }
+    }
+
     // Create shell init file (.mkshrc) for /system/bin/sh (mksh).
     // Sourced via ENV variable (set in .env_vars, passed to PTY spawn env).
     // Keep it minimal — TERM, PATH, HOME are already set via PTY env vars.
     // Do NOT re-export ENV here (causes infinite source loop in mksh).
     let mkshrc_path = home_dir.join(".mkshrc");
+    // mksh resolves aliases BEFORE PATH lookup, so editor aliases would
+    // shadow real busybox symlinks. Only emit the fallback aliases when
+    // busybox is absent.
+    let editor_aliases = if busybox_src.exists() {
+        "# busybox bundled — vi/vim/nano/less/awk/sed are real PATH binaries\n"
+    } else {
+        "# busybox not bundled — route editor/viewer names to the toybox stubs\n\
+alias vim='vi'\n\
+alias nano='vi'\n\
+alias less='more'\n"
+    };
     // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
-    let mkshrc_content = "# OpenCode mobile shell init
-PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"
-alias ls='ls --color=auto'
-alias ll='ls -la --color=auto'
-alias la='ls -A --color=auto'
-alias grep='grep --color=auto'
-alias ..='cd ..'
-alias cls='clear'
-# Editor aliases — toybox only provides `vi`; expose it under the common
-# muscle-memory command names so users don't hit 'command not found'.
-alias vim='vi'
-alias nano='vi'
-alias less='more'
-";
+    let mkshrc_content = format!(
+        "# OpenCode mobile shell init\n\
+PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"\n\
+alias ls='ls --color=auto'\n\
+alias ll='ls -la --color=auto'\n\
+alias la='ls -A --color=auto'\n\
+alias grep='grep --color=auto'\n\
+alias ..='cd ..'\n\
+alias cls='clear'\n\
+{editor_aliases}"
+    );
     let _ = fs::write(&mkshrc_path, mkshrc_content);
 
     // .profile for login shells — just source .mkshrc
