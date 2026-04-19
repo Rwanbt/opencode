@@ -1,10 +1,49 @@
 import { createSignal, Show } from "solid-js"
-import { usePlatform } from "../../context/platform"
+import { usePlatform, type Platform } from "../../context/platform"
 import { ServerConnection } from "../../context/server"
 
 export interface RemoteConnectProps {
   onConnect: (url: string) => void
   onCancel?: () => void
+}
+
+export type CheckServerResult =
+  | { ok: true }
+  | { ok: false; kind: "auth" | "http" | "network"; status?: number; message: string }
+
+/**
+ * Pré-flight check appelé avant d'engager une connexion remote. Distingue
+ * échec réseau / TLS, échec d'auth (401), et autres erreurs HTTP, pour que
+ * l'appelant puisse afficher un message contextuel au lieu d'un opaque
+ * "impossible de joindre" une fois l'utilisateur déjà dans l'app principale.
+ */
+export async function checkServerReachable(
+  platform: Pick<Platform, "fetch">,
+  url: string,
+  username?: string,
+  password?: string,
+  timeoutMs = 10000,
+): Promise<CheckServerResult> {
+  const cleanUrl = url.replace(/\/+$/, "")
+  const fetchFn = platform.fetch ?? fetch
+  const headers: Record<string, string> = {}
+  if (password) {
+    headers["Authorization"] = "Basic " + btoa(`${username ?? "opencode"}:${password}`)
+  }
+  try {
+    const response = await fetchFn(`${cleanUrl}/doc`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (response.ok) return { ok: true }
+    if (response.status === 401) {
+      return { ok: false, kind: "auth", status: 401, message: "Authentication failed. Check username/password." }
+    }
+    return { ok: false, kind: "http", status: response.status, message: `Server returned ${response.status}` }
+  } catch (e: any) {
+    return { ok: false, kind: "network", message: e?.message || "Cannot reach server" }
+  }
 }
 
 /**
@@ -19,8 +58,6 @@ export function RemoteConnect(props: RemoteConnectProps) {
   const [status, setStatus] = createSignal<"idle" | "checking" | "error" | "connected">("idle")
   const [error, setError] = createSignal("")
 
-  const fetchFn = platform.fetch ?? fetch
-
   async function checkServer() {
     const url = serverUrl().replace(/\/+$/, "")
     if (!url) {
@@ -32,35 +69,15 @@ export function RemoteConnect(props: RemoteConnectProps) {
     setStatus("checking")
     setError("")
 
-    try {
-      // Try to reach the server's doc endpoint
-      const headers: Record<string, string> = {}
-      if (password()) {
-        headers["Authorization"] = "Basic " + btoa(`${username()}:${password()}`)
+    const result = await checkServerReachable(platform, url, username(), password())
+    if (result.ok) {
+      setStatus("connected")
+      if (platform.setDefaultServer) {
+        await platform.setDefaultServer(url as ServerConnection.Key)
       }
-
-      const response = await fetchFn(`${url}/doc`, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(10000),
-      })
-
-      if (response.ok) {
-        setStatus("connected")
-        // Save server URL for next time
-        if (platform.setDefaultServer) {
-          await platform.setDefaultServer(url as ServerConnection.Key)
-        }
-        props.onConnect(url)
-      } else if (response.status === 401) {
-        setError("Authentication failed. Check username/password.")
-        setStatus("error")
-      } else {
-        setError(`Server returned ${response.status}`)
-        setStatus("error")
-      }
-    } catch (e: any) {
-      setError(e.message || "Cannot reach server")
+      props.onConnect(url)
+    } else {
+      setError(result.message)
       setStatus("error")
     }
   }

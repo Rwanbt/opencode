@@ -8,6 +8,7 @@ import {
   AppInterface,
   PlatformProvider,
   ServerConnection,
+  checkServerReachable,
 } from "@opencode-ai/app"
 import "@opencode-ai/app/index.css"
 import "./mobile.css"
@@ -15,6 +16,7 @@ import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
 import { ModelManager } from "./components/model-manager"
 import { createPlatform, setPrivateServerFp } from "./platform"
+import { writeDebugLog } from "./runtime"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 
@@ -41,6 +43,7 @@ function App() {
   const [remoteUrl, setRemoteUrl] = createSignal("")
   const [remoteUsername, setRemoteUsername] = createSignal("opencode")
   const [remotePassword, setRemotePassword] = createSignal("")
+  const [remoteChecking, setRemoteChecking] = createSignal(false)
   const [connectStatus, setConnectStatus] = createSignal("Starting local server...")
   const [showModelManager, setShowModelManager] = createSignal(false)
 
@@ -86,12 +89,23 @@ function App() {
 
   async function handleRemoteConnect() {
     const url = remoteUrl().trim()
+    await writeDebugLog(`[FIX-ACTIVE-V2] handleRemoteConnect raw=${url}`)
     if (!url) return
-    const normalized = /^https?:\/\//.test(url) ? url : `http://${url}`
+    const normalized = (/^https?:\/\//.test(url) ? url : `http://${url}`).replace(/\/+$/, "")
     const p = await ensurePlatform()
-    await p.setDefaultServer?.(normalized as any)
     const username = remoteUsername().trim() || undefined
     const password = remotePassword() || undefined
+    await writeDebugLog(`[FIX-ACTIVE-V2] normalized=${normalized} user=${username} hasPass=${!!password}`)
+    setError("")
+    setRemoteChecking(true)
+    const check = await checkServerReachable(p, normalized, username, password)
+    await writeDebugLog(`[FIX-ACTIVE-V2] preflight result ok=${check.ok} msg=${check.ok ? "OK" : check.message}`)
+    setRemoteChecking(false)
+    if (!check.ok) {
+      setError(check.message)
+      return
+    }
+    await p.setDefaultServer?.(normalized as any)
     setServerInfo({ url: normalized, variant: "http", username, password })
     setMode("ready")
   }
@@ -308,27 +322,41 @@ function App() {
               outline: "none",
             }}
           />
+          <Show when={error()}>
+            <div style={{
+              width: "100%", "max-width": "320px",
+              padding: "10px 14px", "border-radius": "8px",
+              background: "#7f1d1d", color: "#fca5a5",
+              "font-size": "14px", "text-align": "center",
+            }}>
+              {error()}
+            </div>
+          </Show>
           <div style={{ display: "flex", gap: "12px", width: "100%", "max-width": "320px" }}>
             <button
               onClick={() => setMode("selecting")}
+              disabled={remoteChecking()}
               style={{
                 flex: "1", padding: "14px", "border-radius": "10px",
                 border: "1px solid #333", background: "#1a1a1a",
-                color: "#888", "font-size": "15px", cursor: "pointer",
+                color: "#888", "font-size": "15px", cursor: remoteChecking() ? "not-allowed" : "pointer",
+                opacity: remoteChecking() ? "0.5" : "1",
               }}
             >
               Back
             </button>
             <button
               onClick={handleRemoteConnect}
+              disabled={remoteChecking()}
               style={{
                 flex: "1", padding: "14px", "border-radius": "10px",
                 border: "1px solid #3b82f6", background: "#1e3a5f",
-                color: "#e5e5e5", "font-size": "15px", cursor: "pointer",
+                color: "#e5e5e5", "font-size": "15px", cursor: remoteChecking() ? "wait" : "pointer",
                 "font-weight": "600",
+                opacity: remoteChecking() ? "0.7" : "1",
               }}
             >
-              Connect
+              {remoteChecking() ? "Connecting..." : "Connect"}
             </button>
           </div>
         </div>
