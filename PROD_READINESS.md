@@ -25,11 +25,12 @@ Verdict courant : **GO CONDITIONNEL** (voir §3 Dépendances de release).
 | Crash observability | Reporter + rotation 50 fichiers | `SPRINT3_NOTES.md` I1 |
 | GDPR endpoints | export + delete + purge worktrees | `SPRINT3_NOTES.md` I3, `SPRINT4_NOTES.md` #3 |
 | Audit log | instrumenté 6 call sites + retention purger | `SPRINT4_NOTES.md` #1–#2 |
-| Keychain desktop | commandes Tauri + IPC endpoint + migration | `SPRINT4_NOTES.md` #6, `SPRINT5_NOTES.md` #4–#5 |
-| Provider fallback | câblé (gaté `experimental.provider.fallback`) | `SPRINT5_NOTES.md` #2 |
-| WS ticket flow | serveur livré ; clients **non migrés** | `SPRINT4_NOTES.md` #7, `SPRINT5_NOTES.md` #6 |
-| Thermal listener Android | stub JNI (retourne "nominal") | `SPRINT3_NOTES.md` I9 |
-| E2E DAG team | harness partiel, full e2e skippé | `SPRINT5_NOTES.md` #3 |
+| Keychain desktop | commandes Tauri + IPC endpoint + Auth.layer wire + migration auto | `SPRINT4_NOTES.md` #6, `SPRINT5_NOTES.md` #4–#5, `SPRINT6_NOTES.md` #2 |
+| Provider fallback | câblé + cloud providerID customisable (`experimental.provider.fallback_cloud_providerID`) | `SPRINT5_NOTES.md` #2, `SPRINT6_NOTES.md` #5 |
+| WS ticket flow | serveur + terminal migré ; 2 autres sites NOT APPLICABLE | `SPRINT4_NOTES.md` #7, `SPRINT5_NOTES.md` #6, `SPRINT6_NOTES.md` #3 |
+| Thermal listener Android | JNI impl Rust cfg-gated, validation via `tauri android build` | `PRE_EXISTING_FIXES.md` I9 |
+| E2E DAG team | full e2e | `RESIDUAL_DEBT_CLEANUP.md` |
+| Keychain runtime test | mock endpoint TS + round-trip test | `RESIDUAL_DEBT_CLEANUP.md` |
 
 ---
 
@@ -218,6 +219,11 @@ label correspondant (`qa-android`, `dependencies`, `release`,
   étendu, keychain Rust, WS ticket serveur.
 - `SPRINT5_NOTES.md` — mock provider, fallback câblé, in-process
   server, keychain IPC, migration auth.json, helper WS client.
+- `SPRINT6_NOTES.md` — fallback cloud providerID config, Auth.layer
+  keychain selection + initAuthStorage boot, terminal WS migré,
+  keychain-smoke + DAG e2e skeleton.
+- `RESIDUAL_DEBT_CLEANUP.md` — dette résiduelle finalisée (DAG full
+  e2e + keychain mock test).
 
 ### Livrables infra (ce pack)
 - `.github/workflows/release-sign.yml` — cosign keyless + attest-build-provenance.
