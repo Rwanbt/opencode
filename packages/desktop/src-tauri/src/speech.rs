@@ -419,8 +419,11 @@ const POCKET_PRESET_VOICES: &[&str] = &[
     "alba", "fantine", "cosette", "eponine", "azelma", "marius", "javert", "jean",
 ];
 
-/// Build multipart form for Pocket TTS (text + voice_url or voice_wav clone)
-fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwest::multipart::Form, String> {
+/// Build multipart form for Pocket TTS (text + voice_url or voice_wav clone).
+/// Returns (form, used_clone) — used_clone=true means voice_wav was attached,
+/// which lets the caller surface a clean error if the server rejects it
+/// (Kyutai voice-cloning weights are gated behind a HuggingFace license).
+fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<(reqwest::multipart::Form, bool), String> {
     let clone_path = speech_dir(app).join("voices").join(format!("{}.wav", voice_name));
     if clone_path.exists() {
         let wav_bytes = fs::read(&clone_path).map_err(|e| format!("Read clone: {}", e))?;
@@ -428,13 +431,13 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
             .file_name(format!("{}.wav", voice_name))
             .mime_str("audio/wav")
             .map_err(|e| e.to_string())?;
-        Ok(reqwest::multipart::Form::new()
+        Ok((reqwest::multipart::Form::new()
             .text("text", text.to_string())
-            .part("voice_wav", part))
+            .part("voice_wav", part), true))
     } else if POCKET_PRESET_VOICES.contains(&voice_name) {
-        Ok(reqwest::multipart::Form::new()
+        Ok((reqwest::multipart::Form::new()
             .text("text", text.to_string())
-            .text("voice_url", voice_name.to_string()))
+            .text("voice_url", voice_name.to_string()), false))
     } else {
         // Unknown voice name and no clone WAV — common after: user deleted a
         // clone but localStorage still points at it, or a stale settings
@@ -444,9 +447,9 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
             "[TTS] Voice '{}' has no clone WAV and is not a preset; falling back to 'alba'",
             voice_name
         );
-        Ok(reqwest::multipart::Form::new()
+        Ok((reqwest::multipart::Form::new()
             .text("text", text.to_string())
-            .text("voice_url", "alba".to_string()))
+            .text("voice_url", "alba".to_string()), false))
     }
 }
 
@@ -485,7 +488,7 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     tracing::info!("[TTS] Synthesizing {} chars with voice {}", text.len(), voice_name);
     let start = std::time::Instant::now();
 
-    let form = build_tts_form(&app, &text, &voice_name)?;
+    let (form, used_clone) = build_tts_form(&app, &text, &voice_name)?;
 
     // Clone client so we don't hold the State across await
     let client = {
@@ -502,9 +505,25 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
     let resp = match resp {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            let snippet: String = body.chars().take(500).collect();
+            tracing::error!("[TTS] HTTP {} voice='{}' body: {}", status, voice_name, snippet);
+            // Voice cloning weights are gated behind a HuggingFace license.
+            // The server hides the real stack trace behind a generic 500, so
+            // translate it into actionable guidance when the caller sent a clone.
+            if used_clone && status.as_u16() == 500 {
+                return Err(format!(
+                    "Voice cloning unavailable — accept terms at \
+                     https://huggingface.co/kyutai/pocket-tts then run \
+                     `huggingface-cli login`, or use a preset voice (alba, marius, \
+                     javert, jean, fantine, cosette, eponine, azelma)."
+                ));
+            }
+            // For any other 500 the server is probably genuinely sick.
             let state = app.state::<SpeechState>();
             *state.tts_ready.lock_safe() = false;
-            return Err(format!("TTS HTTP {}", r.status()));
+            return Err(format!("TTS HTTP {}: {}", status, snippet));
         }
         Err(e) => {
             tracing::warn!("[TTS] Request failed, retrying: {}", e);
@@ -513,7 +532,7 @@ pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> R
                 *state.tts_ready.lock_safe() = false;
             }
             tts_start(app.clone()).await?;
-            let retry_form = build_tts_form(&app, &text, &voice_name)?;
+            let (retry_form, _) = build_tts_form(&app, &text, &voice_name)?;
             client
                 .post(format!("http://127.0.0.1:{}/tts", TTS_PORT))
                 .multipart(retry_form)
