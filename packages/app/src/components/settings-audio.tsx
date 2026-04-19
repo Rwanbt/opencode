@@ -4,6 +4,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { showToast } from "@opencode-ai/ui/toast"
 import { SettingsList } from "./settings-list"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
@@ -270,6 +271,7 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
   const [clones, setClones] = createSignal<string[]>([])
   const [uploading, setUploading] = createSignal(false)
   const [recording, setRecording] = createSignal(false)
+  const [testing, setTesting] = createSignal<string | null>(null)
   let mediaRecorder: MediaRecorder | null = null
   let audioChunks: Blob[] = []
 
@@ -282,6 +284,41 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
 
   // Load on mount
   loadClones()
+
+  // Synthesize a short test phrase with a given voice so the user can verify
+  // a freshly-recorded clone actually produces audio before triggering TTS
+  // on a real message. The common failure mode is the Pocket TTS server
+  // accepting the WAV but returning empty/garbled audio for a voice the
+  // user thought was selected — this button surfaces it immediately.
+  const handleTest = async (voiceName: string) => {
+    if (testing()) return
+    setTesting(voiceName)
+    try {
+      const wavPath: string = await invokeTauri("tts_speak", {
+        text: "Voice test, one two three.",
+        voice: voiceName,
+      })
+      // `convertFileSrc` from the shared speech adapter routes through the
+      // Tauri asset protocol so the file URL actually resolves inside the
+      // webview. Inlining the helper would duplicate the import path;
+      // we intentionally keep it inline to avoid a circular dep into the
+      // speech hook from a settings component.
+      const tauri = (globalThis as any).__TAURI__
+      const url =
+        tauri?.core?.convertFileSrc?.(wavPath) ??
+        (wavPath.startsWith("http") ? wavPath : `file://${wavPath}`)
+      await new Audio(url).play()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      showToast({
+        title: "Voice test failed",
+        description: `Could not synthesize with "${voiceName}": ${msg}`,
+        variant: "error",
+      })
+    } finally {
+      setTesting(null)
+    }
+  }
 
   const handleUpload = async () => {
     const input = document.createElement("input")
@@ -450,13 +487,23 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
                         <span class="text-11-regular text-text-weak ml-2">(active)</span>
                       </Show>
                     </button>
-                    <button
-                      type="button"
-                      class="text-12-regular text-text-critical-base hover:underline shrink-0"
-                      onClick={() => handleDelete(name)}
-                    >
-                      Delete
-                    </button>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        class="text-12-regular text-text-weak hover:text-text-strong disabled:opacity-50"
+                        disabled={testing() !== null}
+                        onClick={() => handleTest(name)}
+                      >
+                        {testing() === name ? "Testing..." : "Test"}
+                      </button>
+                      <button
+                        type="button"
+                        class="text-12-regular text-text-critical-base hover:underline"
+                        onClick={() => handleDelete(name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 )}
               </For>

@@ -410,6 +410,15 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     }
 }
 
+/// Predefined Pocket TTS voices (Les Misérables set shipped with the sidecar).
+/// Anything outside this list that isn't also a saved voice clone WAV would
+/// be rejected by Pocket TTS with HTTP 400 — but we'd have already used up
+/// the user's "click TTS → hear silence" feedback budget. Keep the list in
+/// sync with `TTS_VOICES` in `settings-audio.tsx`.
+const POCKET_PRESET_VOICES: &[&str] = &[
+    "alba", "fantine", "cosette", "eponine", "azelma", "marius", "javert", "jean",
+];
+
 /// Build multipart form for Pocket TTS (text + voice_url or voice_wav clone)
 fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwest::multipart::Form, String> {
     let clone_path = speech_dir(app).join("voices").join(format!("{}.wav", voice_name));
@@ -422,11 +431,22 @@ fn build_tts_form(app: &AppHandle, text: &str, voice_name: &str) -> Result<reqwe
         Ok(reqwest::multipart::Form::new()
             .text("text", text.to_string())
             .part("voice_wav", part))
-    } else {
-        // Pocket TTS API uses "voice_url" for predefined voice names (alba, marius, etc.)
+    } else if POCKET_PRESET_VOICES.contains(&voice_name) {
         Ok(reqwest::multipart::Form::new()
             .text("text", text.to_string())
             .text("voice_url", voice_name.to_string()))
+    } else {
+        // Unknown voice name and no clone WAV — common after: user deleted a
+        // clone but localStorage still points at it, or a stale settings
+        // migration. Fall back to the default preset rather than hand
+        // Pocket TTS a name it will reject.
+        tracing::warn!(
+            "[TTS] Voice '{}' has no clone WAV and is not a preset; falling back to 'alba'",
+            voice_name
+        );
+        Ok(reqwest::multipart::Form::new()
+            .text("text", text.to_string())
+            .text("voice_url", "alba".to_string()))
     }
 }
 
