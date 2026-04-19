@@ -65,11 +65,32 @@ fn write_debug_log(app: tauri::AppHandle, message: String) {
     log::info!("[debug.log] {}", message);
 }
 
-/// Fetch a URL using a reqwest client that accepts self-signed TLS certificates.
-/// Used by the mobile app to connect to the desktop OpenCode server in Internet
-/// mode (which uses an rcgen self-signed cert that rustls/Mozilla CA bundle
-/// does not trust). The fingerprint is validated by the caller (JS side) via
-/// the `fp` parameter received from the pairing QR code.
+/// Streaming wire protocol for `fetch_private_server`. Status + headers are
+/// emitted first so the JS side can resolve the `Response`, then `Chunk`
+/// messages stream the body until `End` (or `Error` on failure). SSE / chat
+/// events are async-iterable on top of `response.body`, so a buffered
+/// `resp.text().await` starved the SDK reader and chat tokens never arrived.
+#[cfg(target_os = "android")]
+#[derive(serde::Serialize, Clone)]
+#[serde(tag = "kind")]
+#[allow(dead_code)]
+enum PrivateFetchMsg {
+    Headers {
+        status: u16,
+        headers: std::collections::HashMap<String, String>,
+    },
+    Chunk {
+        data: Vec<u8>,
+    },
+    End,
+    Error {
+        message: String,
+    },
+}
+
+/// Fetch a URL with a reqwest client that accepts self-signed TLS certs,
+/// streaming the body to JS through a Tauri Channel so SSE / chat tokens
+/// flow incrementally instead of buffering the whole response.
 ///
 /// dead_code allow: registered in invoke_handler under `#[cfg(target_os="android")]`,
 /// so host cargo check sees no caller.
@@ -80,7 +101,10 @@ async fn fetch_private_server(
     method: Option<String>,
     headers: Option<std::collections::HashMap<String, String>>,
     body: Option<String>,
-) -> Result<serde_json::Value, String> {
+    on_event: tauri::ipc::Channel<PrivateFetchMsg>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+
     // Defence in depth: bound the URL and body so an XSS cannot pin the
     // process with multi-MB strings. The URL allowlist is enforced at the
     // JS layer (the fingerprint-validated remote-server URL) — we do not
@@ -95,12 +119,15 @@ async fn fetch_private_server(
     }
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(std::time::Duration::from_secs(30))
+        // No global timeout: SSE streams can be idle for many minutes between
+        // events. Keepalive / heartbeats are the SDK's job.
         .build()
         .map_err(|e| e.to_string())?;
 
     let method_str = method.unwrap_or_else(|| "GET".into());
-    let parsed_method: reqwest::Method = method_str.parse().map_err(|_| format!("invalid method: {method_str}"))?;
+    let parsed_method: reqwest::Method = method_str
+        .parse()
+        .map_err(|_| format!("invalid method: {method_str}"))?;
     let mut req = client.request(parsed_method, &url);
 
     for (k, v) in headers.unwrap_or_default() {
@@ -110,20 +137,118 @@ async fn fetch_private_server(
         req = req.body(b);
     }
 
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+    log::info!("[priv-fetch] start url={url} method={method_str}");
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("[priv-fetch] send error url={url}: {e}");
+            let _ = on_event.send(PrivateFetchMsg::Error {
+                message: e.to_string(),
+            });
+            return Err(e.to_string());
+        }
+    };
     let status = resp.status().as_u16();
-    // Préserve les vrais headers (notamment Content-Type) pour que le SDK
-    // parse correctement la réponse en JSON. Sans ça, `Response.json()` côté
-    // JS retourne la string brute non parsée → tous les checks `data?.x`
-    // échouent silencieusement.
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let content_length = resp.headers().get("content-length").and_then(|v| v.to_str().ok()).map(String::from);
+    log::info!(
+        "[priv-fetch] response status={status} content_type={content_type:?} content_length={content_length:?} url={url}"
+    );
+
     let mut resp_headers = std::collections::HashMap::<String, String>::new();
     for (name, value) in resp.headers() {
         if let Ok(v) = value.to_str() {
             resp_headers.insert(name.to_string(), v.to_string());
         }
     }
-    let body = resp.text().await.map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "status": status, "body": body, "headers": resp_headers }))
+    if on_event
+        .send(PrivateFetchMsg::Headers {
+            status,
+            headers: resp_headers,
+        })
+        .is_err()
+    {
+        log::warn!("[priv-fetch] channel closed before Headers delivered url={url}");
+        return Ok(());
+    }
+
+    // For non-streaming responses (everything except SSE / ndjson), pull the
+    // body in one shot via `resp.bytes()`. This is more reliable than
+    // `bytes_stream()` for short bodies — some HTTP/2 + rustls + self-signed
+    // cert combinations leave the per-chunk stream pending even after
+    // Content-Length bytes have been read, which kept JS-side
+    // `Response.text()` waiting forever and caused the SDK to abort the
+    // POST after its internal timeout.
+    let is_streaming =
+        content_type.contains("text/event-stream") || content_type.contains("application/x-ndjson");
+
+    if is_streaming {
+        let mut stream = resp.bytes_stream();
+        let mut chunk_count: u64 = 0;
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    chunk_count += 1;
+                    let chunk_len = chunk.len();
+                    if on_event
+                        .send(PrivateFetchMsg::Chunk {
+                            data: chunk.to_vec(),
+                        })
+                        .is_err()
+                    {
+                        log::info!(
+                            "[priv-fetch] channel dropped at chunk #{chunk_count} url={url}"
+                        );
+                        return Ok(());
+                    }
+                    if chunk_count == 1 || chunk_count.is_multiple_of(20) {
+                        log::info!("[priv-fetch] stream chunk #{chunk_count} ({chunk_len}b) url={url}");
+                    }
+                }
+                Err(e) => {
+                    log::warn!("[priv-fetch] stream error url={url}: {e}");
+                    let _ = on_event.send(PrivateFetchMsg::Error {
+                        message: e.to_string(),
+                    });
+                    return Err(e.to_string());
+                }
+            }
+        }
+        log::info!("[priv-fetch] stream End ({chunk_count} chunks) url={url}");
+    } else {
+        match resp.bytes().await {
+            Ok(body) => {
+                let len = body.len();
+                if !body.is_empty()
+                    && on_event
+                        .send(PrivateFetchMsg::Chunk {
+                            data: body.to_vec(),
+                        })
+                        .is_err()
+                {
+                    log::warn!("[priv-fetch] channel closed before single-shot chunk delivered url={url}");
+                    return Ok(());
+                }
+                log::info!("[priv-fetch] single-shot body {len}b url={url}");
+            }
+            Err(e) => {
+                log::warn!("[priv-fetch] body read error url={url}: {e}");
+                let _ = on_event.send(PrivateFetchMsg::Error {
+                    message: e.to_string(),
+                });
+                return Err(e.to_string());
+            }
+        }
+    }
+
+    let _ = on_event.send(PrivateFetchMsg::End);
+    log::info!("[priv-fetch] command return Ok url={url}");
+    Ok(())
 }
 
 /// Return the current Android thermal state. Maps

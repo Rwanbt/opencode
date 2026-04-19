@@ -25,6 +25,135 @@ function isPrivateHostUrl(url: string): boolean {
   }
 }
 
+type PrivateFetchMsg =
+  | { kind: "Headers"; status: number; headers: Record<string, string> }
+  | { kind: "Chunk"; data: number[] | Uint8Array }
+  | { kind: "End" }
+  | { kind: "Error"; message: string }
+
+// Fetch routed through the Rust `fetch_private_server` command, which accepts
+// self-signed TLS certs. Body is streamed back chunk-by-chunk via a Tauri
+// `Channel`, then plumbed into a `ReadableStream` so SSE / chat tokens flow
+// incrementally — a buffered text() variant starved the SDK reader and chat
+// responses never appeared even though POST /prompt_async returned 200.
+async function privateFetch(url: string, init: RequestInit | undefined, input: RequestInfo | URL): Promise<Response> {
+  const { invoke, Channel } = await import("@tauri-apps/api/core")
+  const channel = new Channel<PrivateFetchMsg>()
+  const requestHeaders = Object.fromEntries(
+    new Headers(init?.headers ?? (input instanceof Request ? input.headers : {})).entries(),
+  )
+  const method = init?.method ?? (input instanceof Request ? input.method : "GET")
+  // Body extraction must handle both init.body (raw fetch(url, init) calls)
+  // AND Request.body (the SDK builds a `new Request(url, fetchOptions)` and
+  // calls fetch(request) — in that case `init` is undefined). Without the
+  // Request branch, every POST went through with an empty body and the
+  // server replied 400 — the chat send "échoue" came from this.
+  let body: string | undefined
+  if (typeof init?.body === "string") {
+    body = init.body
+  } else if (input instanceof Request) {
+    try {
+      const t = await input.clone().text()
+      if (t.length > 0) body = t
+    } catch {}
+  }
+
+  return await new Promise<Response>((resolve, reject) => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null
+    const pending: Uint8Array[] = []
+    let closeMode: "open" | "end" | { error: Error } = "open"
+    let headersReceived = false
+    const t0 = performance.now()
+    let chunkCount = 0
+    const tag = `[priv-js] ${url.slice(-60)}`
+    const dlog = (m: string) => {
+      try {
+        const inv = (window as any).__TAURI_INTERNALS__?.invoke
+        if (inv) inv("write_debug_log", { message: `${tag} ${m}` }).catch(() => {})
+      } catch {}
+    }
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c
+        for (const chunk of pending) c.enqueue(chunk)
+        pending.length = 0
+        if (closeMode === "end") c.close()
+        else if (typeof closeMode === "object") c.error(closeMode.error)
+      },
+      cancel() {
+        dlog(`stream CANCEL after ${(performance.now() - t0).toFixed(0)}ms chunks=${chunkCount}`)
+        controller = null
+      },
+    })
+
+    channel.onmessage = (msg) => {
+      if (msg.kind === "Headers") {
+        if (headersReceived) return
+        headersReceived = true
+        dlog(`HEADERS status=${msg.status} t=${(performance.now() - t0).toFixed(0)}ms`)
+        resolve(new Response(stream, { status: msg.status, headers: msg.headers }))
+        return
+      }
+      if (msg.kind === "Chunk") {
+        const arr = msg.data instanceof Uint8Array ? msg.data : new Uint8Array(msg.data as any)
+        chunkCount++
+        if (chunkCount === 1 || chunkCount % 25 === 0) {
+          dlog(`CHUNK #${chunkCount} (${arr.length}b) t=${(performance.now() - t0).toFixed(0)}ms`)
+        }
+        if (controller) controller.enqueue(arr)
+        else pending.push(arr)
+        return
+      }
+      if (msg.kind === "End") {
+        dlog(`END t=${(performance.now() - t0).toFixed(0)}ms chunks=${chunkCount}`)
+        if (controller) controller.close()
+        else closeMode = "end"
+        return
+      }
+      if (msg.kind === "Error") {
+        dlog(`ERROR ${msg.message}`)
+        const err = new Error(msg.message)
+        if (controller) controller.error(err)
+        else closeMode = { error: err }
+        if (!headersReceived) {
+          headersReceived = true
+          reject(err)
+        }
+      }
+    }
+
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+    if (signal) {
+      const onAbort = () => {
+        if (!headersReceived) {
+          headersReceived = true
+          reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+        }
+        try { controller?.error(signal.reason ?? new DOMException("Aborted", "AbortError")) } catch {}
+        controller = null
+      }
+      if (signal.aborted) onAbort()
+      else signal.addEventListener("abort", onAbort, { once: true })
+    }
+
+    invoke("fetch_private_server", {
+      url,
+      method,
+      headers: requestHeaders,
+      body,
+      onEvent: channel,
+    }).catch((e: unknown) => {
+      const err = e instanceof Error ? e : new Error(String(e))
+      if (!headersReceived) {
+        headersReceived = true
+        reject(err)
+      }
+      try { controller?.error(err) } catch {}
+    })
+  })
+}
+
 const pkg = { version: "0.1.0" }
 
 // Lazy-load Tauri plugins to prevent crash if not available
@@ -226,18 +355,7 @@ export async function createPlatform(): Promise<Platform> {
         if (inv) inv("write_debug_log", { message: `[FIX-ACTIVE-V2] fetch url=${url} usePrivate=${usePrivateFetch} fp=${!!_privateFp}` }).catch(() => {})
       } catch {}
       if (usePrivateFetch) {
-        return import("@tauri-apps/api/core").then(({ invoke }) =>
-          invoke<{ status: number; body: string; headers: Record<string, string> }>("fetch_private_server", {
-            url,
-            method: init?.method ?? (input instanceof Request ? input.method : "GET"),
-            headers: Object.fromEntries(
-              new Headers(
-                init?.headers ?? (input instanceof Request ? input.headers : {}),
-              ).entries(),
-            ),
-            body: typeof init?.body === "string" ? init.body : undefined,
-          }).then(({ status, body, headers }) => new Response(body, { status, headers })),
-        )
+        return privateFetch(url, init, input)
       }
       // Chemin normal : utilise la référence _baseFetch capturée à la création
       // du platform (identique au code original avant les modifications C1).
