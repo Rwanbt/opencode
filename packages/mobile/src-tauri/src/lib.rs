@@ -62,7 +62,7 @@ fn write_debug_log(app: tauri::AppHandle, message: String) {
             .unwrap_or(0);
         let _ = writeln!(f, "[{}] {}", now, message);
     }
-    log::debug!("[debug.log] {}", message);
+    log::info!("[debug.log] {}", message);
 }
 
 /// Fetch a URL using a reqwest client that accepts self-signed TLS certificates.
@@ -112,8 +112,18 @@ async fn fetch_private_server(
 
     let resp = req.send().await.map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
+    // Préserve les vrais headers (notamment Content-Type) pour que le SDK
+    // parse correctement la réponse en JSON. Sans ça, `Response.json()` côté
+    // JS retourne la string brute non parsée → tous les checks `data?.x`
+    // échouent silencieusement.
+    let mut resp_headers = std::collections::HashMap::<String, String>::new();
+    for (name, value) in resp.headers() {
+        if let Ok(v) = value.to_str() {
+            resp_headers.insert(name.to_string(), v.to_string());
+        }
+    }
     let body = resp.text().await.map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "status": status, "body": body }))
+    Ok(serde_json::json!({ "status": status, "body": body, "headers": resp_headers }))
 }
 
 /// Return the current Android thermal state. Maps

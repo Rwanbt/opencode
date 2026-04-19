@@ -10,6 +10,21 @@ export function setPrivateServerFp(fp: string | null) {
   _privateFp = fp
 }
 
+// IPs RFC1918 + loopback + IPv6 ULA. Utilisé comme fallback quand l'utilisateur
+// arrive sur une URL HTTPS LAN sans avoir transité par le deep link `opencode://`
+// (cas typique : scan via Google Lens / scanner tiers qui ne route pas les
+// schemes custom — l'utilisateur copie-colle l'URL HTTPS à la main, donc fp
+// jamais transmis). Sans cette détection, le tauri-plugin-http rejette le cert
+// self-signed et l'erreur affichée est un opaque "impossible de joindre".
+function isPrivateHostUrl(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase()
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost$|::1$|fc|fd)/.test(h)
+  } catch {
+    return false
+  }
+}
+
 const pkg = { version: "0.1.0" }
 
 // Lazy-load Tauri plugins to prevent crash if not available
@@ -191,30 +206,38 @@ export async function createPlatform(): Promise<Platform> {
     },
 
     fetch: (input, init) => {
-      // Quand un fingerprint de serveur privé est connu et que l'URL est HTTPS,
-      // on utilise la commande Rust fetch_private_server qui accepte les certs
-      // self-signed (mode Internet avec cert rcgen auto-signé).
-      if (_privateFp) {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : (input as Request).url
-        if (/^https:\/\//.test(url)) {
-          return import("@tauri-apps/api/core").then(({ invoke }) =>
-            invoke<{ status: number; body: string }>("fetch_private_server", {
-              url,
-              method: init?.method ?? (input instanceof Request ? input.method : "GET"),
-              headers: Object.fromEntries(
-                new Headers(
-                  init?.headers ?? (input instanceof Request ? input.headers : {}),
-                ).entries(),
-              ),
-              body: typeof init?.body === "string" ? init.body : undefined,
-            }).then(({ status, body }) => new Response(body, { status })),
-          )
-        }
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url
+      // Routage via la commande Rust fetch_private_server (accept_invalid_certs)
+      // dans deux cas :
+      //   1. fp pinning explicite reçu via deep link `opencode://...&fp=...`
+      //   2. fallback HTTPS vers IP privée RFC1918 sans fp (scan QR via scanner
+      //      tiers qui ne route pas les schemes custom — l'utilisateur a copié
+      //      l'URL à la main). Sans ce fallback, l'erreur est silencieuse et
+      //      affiche "impossible de joindre".
+      const isHttps = /^https:\/\//.test(url)
+      const usePrivateFetch = isHttps && (_privateFp || isPrivateHostUrl(url))
+      try {
+        const inv = (window as any).__TAURI_INTERNALS__?.invoke
+        if (inv) inv("write_debug_log", { message: `[FIX-ACTIVE-V2] fetch url=${url} usePrivate=${usePrivateFetch} fp=${!!_privateFp}` }).catch(() => {})
+      } catch {}
+      if (usePrivateFetch) {
+        return import("@tauri-apps/api/core").then(({ invoke }) =>
+          invoke<{ status: number; body: string; headers: Record<string, string> }>("fetch_private_server", {
+            url,
+            method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+            headers: Object.fromEntries(
+              new Headers(
+                init?.headers ?? (input instanceof Request ? input.headers : {}),
+              ).entries(),
+            ),
+            body: typeof init?.body === "string" ? init.body : undefined,
+          }).then(({ status, body, headers }) => new Response(body, { status, headers })),
+        )
       }
       // Chemin normal : utilise la référence _baseFetch capturée à la création
       // du platform (identique au code original avant les modifications C1).
