@@ -18,6 +18,42 @@ use std::path::Path;
 
 const MAX_TOKENS_PER_STEP: usize = 10;
 
+/// Count the "big" (performance) cores on the running device by reading
+/// /sys/devices/system/cpu/*/cpufreq/cpuinfo_max_freq. Cores within 80% of the
+/// top frequency count as big. Falls back to min(num_cpus, 4) on non-Linux.
+fn detect_big_cores() -> usize {
+    #[cfg(target_os = "android")]
+    {
+        let mut freqs: Vec<u64> = Vec::new();
+        for i in 0..16 {
+            let path = format!(
+                "/sys/devices/system/cpu/cpu{}/cpufreq/cpuinfo_max_freq",
+                i
+            );
+            match std::fs::read_to_string(&path) {
+                Ok(s) => {
+                    if let Ok(f) = s.trim().parse::<u64>() {
+                        freqs.push(f);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        if !freqs.is_empty() {
+            let max = *freqs.iter().max().unwrap();
+            let threshold = (max as f64 * 0.8) as u64;
+            let big = freqs.iter().filter(|f| **f >= threshold).count();
+            // At least 2, at most 4 — more than 4 on phones leads to thermal
+            // throttling well before the ASR inference completes.
+            return big.clamp(2, 4);
+        }
+    }
+    // Desktop / fallback: use at most 4 threads.
+    std::thread::available_parallelism()
+        .map(|n| n.get().min(4))
+        .unwrap_or(2)
+}
+
 pub struct ParakeetEngine {
     preprocessor: Option<Session>,
     encoder: Option<Session>,
@@ -40,11 +76,19 @@ impl ParakeetEngine {
     }
 
     fn make_session(path: &Path) -> Result<Session, String> {
+        // Pin intra-op threads to the number of "big" CPU cores (sm8250 has
+        // 1+3+4 = 1 prime + 3 big + 4 little). Letting ORT default to
+        // num_logical_cpus makes it schedule work on efficiency cores which
+        // trashes latency on heterogeneous ARM SoCs. 4 threads is a safe
+        // upper bound for Snapdragon 865 / 8gen1-class flagships.
+        let big_cores = detect_big_cores();
         Session::builder()
             .map_err(|e| e.to_string())?
             .with_config_entry("session.log_severity_level", "3")
             .map_err(|e| e.to_string())?
             .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| e.to_string())?
+            .with_intra_threads(big_cores)
             .map_err(|e| e.to_string())?
             .with_execution_providers([CPUExecutionProvider::default().build()])
             .map_err(|e| e.to_string())?

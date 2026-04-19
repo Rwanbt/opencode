@@ -553,6 +553,62 @@ export const Terminal = (props: TerminalProps) => {
         handleResize = scheduleFit
         window.addEventListener("resize", handleResize)
         cleanups.push(() => window.removeEventListener("resize", handleResize))
+
+        // Android portrait bug: at mount time, the container dimensions
+        // reported by getBoundingClientRect() can be stale — the viewport is
+        // still settling (soft keyboard animation, safe-area inset, address
+        // bar collapse). This leaves the terminal initialised with too-small
+        // cols/rows, the cursor lands outside the visible area, and the
+        // first prompt is invisible until the user types (which triggers a
+        // SIGWINCH → correct repaint).
+        //
+        // Two guards:
+        //   1. ResizeObserver on the container — catches every dimension
+        //      change, including post-mount viewport settling and keyboard
+        //      toggle. `fit.observeResize()` already watches the terminal
+        //      internal element but not the outer container we control.
+        //   2. A few delayed refits covering the window where the viewport
+        //      stabilizes (50ms / 200ms / 500ms). Cheap, idempotent.
+        if (typeof ResizeObserver !== "undefined") {
+          const ro = new ResizeObserver(() => scheduleFit())
+          ro.observe(container)
+          cleanups.push(() => ro.disconnect())
+        }
+        const refreshTimers: ReturnType<typeof setTimeout>[] = []
+        for (const delay of [50, 200, 500]) {
+          refreshTimers.push(
+            setTimeout(() => {
+              if (disposed) return
+              try {
+                fit.fit()
+                // Force a full repaint so the first prompt (already received
+                // from the PTY) becomes visible even if the terminal
+                // internals think the screen is unchanged. `refresh` is an
+                // xterm.js-compatible method not guaranteed on ghostty-web,
+                // hence the optional chain.
+                const refresh = (t as unknown as { refresh?: (s: number, e: number) => void }).refresh
+                refresh?.call(t, 0, Math.max(0, t.rows - 1))
+              } catch {
+                // ignore — disposed or not yet fully open
+              }
+            }, delay),
+          )
+        }
+        cleanups.push(() => {
+          for (const timer of refreshTimers) clearTimeout(timer)
+        })
+
+        // `orientationchange` fires before the viewport resizes on Android;
+        // chain a post-event refit so the PTY is notified once the new
+        // dimensions settle.
+        const handleOrientation = () => {
+          setTimeout(() => {
+            if (disposed) return
+            try { fit.fit() } catch { /* ignore */ }
+          }, 200)
+        }
+        window.addEventListener("orientationchange", handleOrientation)
+        cleanups.push(() => window.removeEventListener("orientationchange", handleOrientation))
       }
 
       const write = (data: string) =>
