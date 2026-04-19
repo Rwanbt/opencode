@@ -9,6 +9,10 @@ import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
 import { consoleManagedProviderLabel } from "@tui/util/provider-origin"
+import { LocalLLMServer } from "@/local-llm-server"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tui.dialog-model" })
 
 export function useConnected() {
   const sync = useSync()
@@ -147,6 +151,21 @@ export function DialogModel(props: { providerID?: string }) {
 
   function onSelect(providerID: string, modelID: string) {
     local.model.set({ providerID, modelID }, { recent: true })
+    // Warm up the local llama-server right away — the first user prompt
+    // would otherwise block for several seconds on mmap + weight load.
+    // Fire-and-forget: ensureRunning is idempotent, single-flight across
+    // processes, and `session/llm.ts` re-awaits it at query time as a
+    // safety net. Any spawn error just gets logged here so the TUI
+    // doesn't crash; the user will see the real error on their first
+    // message via the existing llm-path error reporting.
+    if (providerID === "local-llm") {
+      void LocalLLMServer.ensureRunning(modelID).catch((err) => {
+        log.warn("eager llama-server warmup failed", {
+          modelID,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
     const list = local.model.variant.list()
     const cur = local.model.variant.selected()
     if (cur === "default" || (cur && list.includes(cur))) {
