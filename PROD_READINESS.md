@@ -6,9 +6,10 @@
 > `PRODUCTION_REVIEW_2026-04.md` ; ce document agrège l'état courant
 > et pointe vers les docs détaillés.
 
-Dernière mise à jour : **2026-04-18**
+Dernière mise à jour : **2026-04-19**
 Branche cible merge : `dev → main`
-Verdict courant : **GO CONDITIONNEL** (voir §3 Dépendances de release).
+Verdict courant : **NO-GO UX** — 9 bugs QA REAL utilisateur bloquants
+(voir §3bis). Sprint infra/sécu terminé, mais UX produit pas prête.
 
 ---
 
@@ -93,6 +94,26 @@ Verdict courant : **GO CONDITIONNEL** (voir §3 Dépendances de release).
       `.github/DEPENDABOT_TRIAGE.md`). Owner : Infra.
 - [ ] **Release notes remplies** depuis `RELEASE_NOTES_TEMPLATE.md`
       avec checksums réels. Owner : Release manager.
+
+### 3 bis. QA REAL — 9 bugs UX bloquants (Mi 10 Pro MIUI 13 + Desktop Win)
+
+Source : QA utilisateur réel 2026-04-19, détail dans `NEXT_SESSION_PLAN.md`.
+
+| # | Sévérité | Titre | Fichier principal |
+|---|----------|-------|-------------------|
+| 1 | HAUTE    | Terminal portrait first-prompt invisible (scheduleSize manquant dans refits) | `packages/app/src/components/terminal.tsx` |
+| 2 | HAUTE    | `vim` → `toybox: unknown command vi` (bundler busybox-static) | `packages/mobile/src-tauri/assets/runtime/bin/` + `runtime.rs` |
+| 3 | HAUTE    | Kokoro TTS download silencieux mobile (surfacer erreurs/progress) | `packages/mobile/src-tauri/src/speech.rs` + `use-speech.ts` |
+| 4 | HAUTE    | Voice clone desktop sans son (désync ttsVoice + test button) | `packages/desktop/src-tauri/src/speech.rs` + `settings-audio.tsx` |
+| 5 | WONT-FIX | OAuth Gemini + Anthropic impossibles (API-key only, voir NEXT_SESSION_PLAN.md) | `packages/opencode/src/plugin/codex.ts` (pattern de référence) |
+| 6 | HAUTE    | CLI TUI ne spawn pas llama-server à la sélection modèle local | `cli/cmd/tui/component/dialog-model.tsx` |
+| 7 | MOY      | Panneau git changes lent (memoization + virtualization) | `packages/app/src/pages/session/session-side-panel.tsx` |
+| 8 | CRITIQUE | QR internet mode "impossible de joindre" (bind 0.0.0.0 + fingerprint + /health) | `packages/desktop/src-tauri/src/server.rs` + `tls.rs` |
+| 9 | BASSE    | LLM lent : UX badge "Recommandé par device class" + preset Eco | `packages/mobile/src/components/dialog-local-llm.tsx` |
+
+Ordre : Terminal (1+2) → Speech (3+4) → Local LLM (6+9) → OAuth (5) →
+Remote (7+8). Estimation ~10 h. Time-box priorité : 1, 2, 3, 6, 8 avant
+4, 7 avant 5, 9.
 
 ### Non release-blocking (backlog sprint 6+)
 
