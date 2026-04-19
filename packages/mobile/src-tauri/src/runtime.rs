@@ -279,7 +279,7 @@ pub async fn start_embedded_server(
             // Search & navigation
             "find", "which", "dirname", "basename",
             // Editors & viewers
-            "vi", "hexedit",
+            "vi", "more", "hexedit",
             // Archives
             "tar", "gzip", "gunzip", "zcat", "bunzip2", "bzcat", "cpio",
             // System info
@@ -324,6 +324,11 @@ alias la='ls -A --color=auto'
 alias grep='grep --color=auto'
 alias ..='cd ..'
 alias cls='clear'
+# Editor aliases — toybox only provides `vi`; expose it under the common
+# muscle-memory command names so users don't hit 'command not found'.
+alias vim='vi'
+alias nano='vi'
+alias less='more'
 ";
     let _ = fs::write(&mkshrc_path, mkshrc_content);
 

@@ -22,6 +22,39 @@ use opencode_kokoro_shared::{g2p, tokenizer};
 
 const STYLE_DIM: usize = 256;
 
+/// Count "big" CPU cores on Android (within 80% of the top freq). Falls back
+/// to min(available_parallelism, 4) elsewhere. See parakeet::engine for the
+/// full explanation — kept inline here to avoid a shared-module dep.
+fn detect_big_cores() -> usize {
+    #[cfg(target_os = "android")]
+    {
+        let mut freqs: Vec<u64> = Vec::new();
+        for i in 0..16 {
+            let path = format!(
+                "/sys/devices/system/cpu/cpu{}/cpufreq/cpuinfo_max_freq",
+                i
+            );
+            match std::fs::read_to_string(&path) {
+                Ok(s) => {
+                    if let Ok(f) = s.trim().parse::<u64>() {
+                        freqs.push(f);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        if !freqs.is_empty() {
+            let max = *freqs.iter().max().unwrap();
+            let threshold = (max as f64 * 0.8) as u64;
+            let big = freqs.iter().filter(|f| **f >= threshold).count();
+            return big.clamp(2, 4);
+        }
+    }
+    std::thread::available_parallelism()
+        .map(|n| n.get().min(4))
+        .unwrap_or(2)
+}
+
 pub struct KokoroEngine {
     session: Option<Session>,
     voices: HashMap<String, Vec<f32>>,  // voice_name → flat f32 style data
@@ -38,10 +71,14 @@ impl KokoroEngine {
     pub fn load(&mut self, model_path: &Path, voices_path: &Path) -> Result<(), String> {
         tracing::info!("[Kokoro] Loading model...");
 
+        // Pin intra-op threads to big cores (see parakeet::engine for rationale).
+        let big_cores = detect_big_cores();
         self.session = Some(
             Session::builder()
                 .map_err(|e| e.to_string())?
                 .with_optimization_level(GraphOptimizationLevel::Level3)
+                .map_err(|e| e.to_string())?
+                .with_intra_threads(big_cores)
                 .map_err(|e| e.to_string())?
                 .with_execution_providers([CPUExecutionProvider::default().build()])
                 .map_err(|e| e.to_string())?

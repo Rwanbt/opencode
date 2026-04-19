@@ -524,7 +524,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
 
-#[cfg(test)]
+#[cfg(any(debug_assertions, test))]
 fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
     builder
         .export(

@@ -220,6 +220,15 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
     // Returns a port for API parity with desktop. Kokoro is in-process so the
     // port is only a sentinel (0 = "in-process, no HTTP server"). The frontend
     // checks the return value but routes audio via kokoro_synthesize file path.
+    //
+    // Out-of-the-box flow: if the model files are not yet on disk, kick off a
+    // download here so the first `tts_speak` doesn't stall for 3+ minutes on a
+    // 310MB fetch *in addition* to the 6s model load. The download emits
+    // `kokoro-download-progress` events so the frontend can show a spinner
+    // the first time the user enables TTS.
+    if !kokoro_available(app.clone()).await {
+        kokoro_download_model(app.clone()).await?;
+    }
     kokoro_load(app).await?;
     Ok(0)
 }
@@ -227,6 +236,12 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
 #[tauri::command]
 pub async fn tts_speak(app: AppHandle, text: String, voice: Option<String>) -> Result<String, String> {
     let voice_name = voice.unwrap_or_else(|| "af_heart".to_string());
+    // Auto-download on first use. `kokoro_synthesize` already calls
+    // `kokoro_load`, but `kokoro_load` requires the files to be on disk — it
+    // returns "Kokoro model not downloaded" otherwise. Fetch first if absent.
+    if !kokoro_available(app.clone()).await {
+        kokoro_download_model(app.clone()).await?;
+    }
     kokoro_synthesize(app, text, voice_name, 1.0).await
 }
 
