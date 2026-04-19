@@ -13,6 +13,18 @@
     <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" />
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
+    <script>
+      // Silence tauri-plugin-decorum 1.1.1 observer noise: plugin never disconnects its MutationObserver
+      // so these two messages fire on every DOM mutation. Filter before its scripts run.
+      (function () {
+        var log = console.log
+        var noise = /^DECORUM: (Controls already exist|Waiting for \[data-tauri-decorum-tb\]|Element with data-tauri-decorum-tb not found)/
+        console.log = function () {
+          if (arguments.length && typeof arguments[0] === "string" && noise.test(arguments[0])) return
+          return log.apply(console, arguments)
+        }
+      })()
+    </script>
     <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
   </head>
   <body class="antialiased overscroll-none text-12-regular overflow-hidden">
