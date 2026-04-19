@@ -208,3 +208,27 @@ Aucun test runtime — design inline dans `auth/index.ts`. Implémentation Sprin
 - [ ] Tests transverses OK
 - [ ] Release notes rédigées (mentionner breaking change W9 shell env)
 - [ ] PR `dev → main` ouverte
+
+---
+
+## Matrice modèle local ↔ device mobile
+
+Guide de recommandation adossé à `packages/mobile/src/model-catalog.ts`. Le
+champ `deviceClass` + `minRamGB` driver le badge "Recommended for this
+device" / "Heavy for this device" dans `ModelManager`.
+
+| Classe device | RAM / cores typiques | SoC exemples | Modèles recommandés |
+|---------------|----------------------|--------------|---------------------|
+| **eco**      | < 6 GB ou < 6 cores big | Mi 10 Pro (sm8250 CPU-only), Pixel 6a, entry 2022 | Qwen 3.5 0.8B, Gemma 3 1B, Gemma 4 E2B, Qwen 3.5 2B |
+| **standard** | 6–8 GB, 6–8 cores    | SD 7 Gen 3, Dimensity 8300, Pixel 7/8, Mi 13 | Llama 3.2 3B, Gemma 3 4B, Phi-4 Mini 3.8B, Qwen 3.5 4B |
+| **flagship** | ≥ 8 GB, ≥ 8 cores, 2023+ SoC | SD 8 Gen 3, Tensor G4, A17 Pro, Mi 14 Ultra | Qwen 2.5 Coder 7B, Gemma 4 E4B |
+
+Règle empirique `minRamGB ≈ fileSize × 1.2 + 1 GB`. Au-delà, le modèle
+page-thrash ou OOM (LlamaEngine kill). Sur un Mi 10 Pro (6 GB RAM usable,
+sm8250 sans GPU inference), Gemma 4 E4B (5.0 GB) est hors tier — chaque
+token prend plusieurs secondes. Qwen 3.5 2B ou Gemma 4 E2B sont
+attendus.
+
+Preset "Eco" : déclenché automatiquement quand
+`detectDeviceProfile().tier === "eco"`. Le badge vert passe alors
+uniquement sur les modèles `deviceClass === "eco"`.
