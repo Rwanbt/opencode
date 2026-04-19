@@ -193,6 +193,13 @@ Packaged as JNI libs in `jniLibs/arm64-v8a/`:
 - `libllama_server.so` — OpenAI-compatible HTTP server
 - `librg_exec.so` — ripgrep for code search
 - `libbash_exec.so` — Bash shell
+- `libtoybox_exec.so` — toybox multicall (ls/cat/grep/sed/…)
+- `libbusybox_exec.so` — *(optional)* busybox-static for full-featured
+  `vi`/`vim`/`less`/`nano`/`awk`/`sed`. Toybox does not include `vi`, so
+  without this library `vim file` returns `toybox: unknown command vi`.
+  Fetch with `scripts/fetch-busybox.sh` (pulls from Alpine Linux apk
+  repository, SHA256-pinnable). `runtime.rs` creates the symlinks
+  automatically if the library is present.
 - `libstdcpp_compat.so`, `libgcc_compat.so` — C++ runtime for musl binaries
 
 ## Remote Connection
