@@ -9,6 +9,13 @@ pub struct TlsCerts {
     pub key_path: PathBuf,
     /// SHA-256 fingerprint formatted as colon-separated uppercase hex (e.g. "AB:CD:EF:…")
     pub fingerprint: String,
+    /// SHA-256 of the SubjectPublicKeyInfo, base64-encoded with standard
+    /// padding. Format expected by Chromium's
+    /// `--ignore-certificate-errors-spki-list=<b64>` flag — we pass this to
+    /// WebView2 so the app's own WS upgrades (`wss://127.0.0.1:PORT/...`)
+    /// can succeed against the self-signed loopback cert without blanket
+    /// cert-error ignore. Rotating the cert rotates this hash.
+    pub spki_hash_b64: String,
 }
 
 fn tls_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -28,13 +35,22 @@ pub fn ensure_cert(app: &AppHandle) -> Result<TlsCerts, String> {
     let cert_path = dir.join("cert.pem");
     let key_path = dir.join("key.pem");
     let fp_path = dir.join("fingerprint.txt");
+    let spki_path = dir.join("spki_hash.txt");
 
-    if !cert_path.exists() || !key_path.exists() || !fp_path.exists() {
-        generate_cert(&dir, &cert_path, &key_path, &fp_path)?;
+    // Missing spki_hash.txt = old install pre-v6; force a regenerate so
+    // WebView2 SPKI pinning can find the hash. Fingerprint rotates too,
+    // which means paired mobiles need to re-scan the QR — acceptable
+    // trade-off to unblock the desktop terminal WS.
+    if !cert_path.exists() || !key_path.exists() || !fp_path.exists() || !spki_path.exists() {
+        generate_cert(&dir, &cert_path, &key_path, &fp_path, &spki_path)?;
     }
 
     let fingerprint = std::fs::read_to_string(&fp_path)
         .map_err(|e| format!("Failed to read TLS fingerprint: {e}"))?
+        .trim()
+        .to_string();
+    let spki_hash_b64 = std::fs::read_to_string(&spki_path)
+        .map_err(|e| format!("Failed to read TLS SPKI hash: {e}"))?
         .trim()
         .to_string();
 
@@ -42,6 +58,7 @@ pub fn ensure_cert(app: &AppHandle) -> Result<TlsCerts, String> {
         cert_path,
         key_path,
         fingerprint,
+        spki_hash_b64,
     })
 }
 
@@ -51,11 +68,16 @@ pub fn regenerate_cert(app: &AppHandle) -> Result<TlsCerts, String> {
     let cert_path = dir.join("cert.pem");
     let key_path = dir.join("key.pem");
     let fp_path = dir.join("fingerprint.txt");
+    let spki_path = dir.join("spki_hash.txt");
 
-    generate_cert(&dir, &cert_path, &key_path, &fp_path)?;
+    generate_cert(&dir, &cert_path, &key_path, &fp_path, &spki_path)?;
 
     let fingerprint = std::fs::read_to_string(&fp_path)
         .map_err(|e| format!("Failed to read TLS fingerprint: {e}"))?
+        .trim()
+        .to_string();
+    let spki_hash_b64 = std::fs::read_to_string(&spki_path)
+        .map_err(|e| format!("Failed to read TLS SPKI hash: {e}"))?
         .trim()
         .to_string();
 
@@ -63,6 +85,7 @@ pub fn regenerate_cert(app: &AppHandle) -> Result<TlsCerts, String> {
         cert_path,
         key_path,
         fingerprint,
+        spki_hash_b64,
     })
 }
 
@@ -78,7 +101,9 @@ fn generate_cert(
     cert_path: &PathBuf,
     key_path: &PathBuf,
     fp_path: &PathBuf,
+    spki_path: &PathBuf,
 ) -> Result<(), String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
     use rcgen::{CertificateParams, KeyPair};
 
     std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create TLS directory: {e}"))?;
@@ -110,15 +135,28 @@ fn generate_cert(
             .collect::<String>()
     };
 
+    // Compute the SubjectPublicKeyInfo SHA-256 base64 for Chromium's
+    // `--ignore-certificate-errors-spki-list=<b64>` flag. rcgen's
+    // `KeyPair::public_key_der()` returns exactly the DER-encoded SPKI we
+    // need.
+    let spki_hash_b64 = {
+        let spki_der = key_pair.public_key_der();
+        let hash = Sha256::digest(&spki_der);
+        B64.encode(hash)
+    };
+
     std::fs::write(cert_path, cert.pem())
         .map_err(|e| format!("Failed to write cert.pem: {e}"))?;
     std::fs::write(key_path, key_pair.serialize_pem())
         .map_err(|e| format!("Failed to write key.pem: {e}"))?;
     std::fs::write(fp_path, &fingerprint)
         .map_err(|e| format!("Failed to write fingerprint.txt: {e}"))?;
+    std::fs::write(spki_path, &spki_hash_b64)
+        .map_err(|e| format!("Failed to write spki_hash.txt: {e}"))?;
 
     tracing::info!(
         fingerprint,
+        spki_hash_b64,
         path = %cert_path.display(),
         "Generated self-signed TLS certificate"
     );

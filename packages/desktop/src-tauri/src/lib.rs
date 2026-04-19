@@ -547,6 +547,29 @@ struct LoadingWindowComplete;
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
 
+    // Defensive cleanup: nuke any stray opencode-cli / llama-server processes
+    // left by a previous app instance that didn't exit cleanly (Tauri
+    // `RunEvent::Exit` can skip firing on abrupt close, crash, or
+    // close-via-tray-menu with state preserved). Without this, the new
+    // sidecar fails to bind its port and the app hangs at startup. Counterpart
+    // of the shutdown taskkill in the `RunEvent::Exit` arm below.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        for process in ["opencode-cli.exe", "llama-server.exe"] {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", process])
+                .creation_flags(0x08000000)
+                .output();
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for process in ["opencode-cli", "llama-server"] {
+            let _ = std::process::Command::new("killall").arg(process).output();
+        }
+    }
+
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
     setup_app(&app, init_rx);

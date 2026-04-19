@@ -50,17 +50,27 @@ async function fetchTicket(
   credentials: WsCredentials,
   timeoutMs: number,
 ): Promise<TicketResponse | null> {
+  // The server mounts AuthRoutes() at /collab (see server.ts:101), so the
+  // ticket endpoint lives at /collab/ws-ticket. Earlier iterations of the
+  // client hit /auth/ws-ticket and always 404'd, which silently fell back
+  // to the legacy query-string path — itself broken for Basic creds. We
+  // try both paths for forward compat in case the server mount is renamed.
+  const base = baseUrl.replace(/\/$/, "")
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/auth/ws-ticket`, {
-      method: "POST",
-      headers: { Authorization: credentials.authorization, "Content-Type": "application/json" },
-      credentials: "include",
-      signal: controller.signal,
-    })
-    if (!res.ok) return null
-    return (await res.json()) as TicketResponse
+    for (const path of ["/collab/ws-ticket", "/auth/ws-ticket"]) {
+      const res = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { Authorization: credentials.authorization, "Content-Type": "application/json" },
+        credentials: "include",
+        signal: controller.signal,
+      })
+      if (res.ok) return (await res.json()) as TicketResponse
+      // 401 means the auth is wrong — don't bother trying the other path.
+      if (res.status === 401) return null
+    }
+    return null
   } catch {
     return null
   } finally {
