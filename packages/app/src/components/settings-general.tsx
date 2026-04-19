@@ -931,6 +931,16 @@ export const SettingsGeneral: Component = () => {
                 {language.t("settings.desktop.remote.warning")}
               </span>
             </Show>
+            <Show when={(mode() === "lan" || mode() === "internet") && navigator.platform.toLowerCase().includes("win")}>
+              <span class="text-11-regular text-text-weak">
+                {language.t("settings.desktop.remote.warning.firewall")}
+              </span>
+            </Show>
+            <Show when={(mode() === "lan" || mode() === "internet") && !info()?.lanIp}>
+              <span class="text-11-regular text-text-accent">
+                {language.t("settings.desktop.remote.connection.manualHint")}
+              </span>
+            </Show>
           </div>
         </div>
       </Show>

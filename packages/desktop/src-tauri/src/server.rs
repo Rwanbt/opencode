@@ -104,17 +104,47 @@ fn save_remote_config(app: &AppHandle, config: &RemoteConfig) -> Result<(), Stri
 }
 
 /// Best-effort LAN IP discovery. We open a UDP socket and ask the OS which
-/// local address it would use to reach a public IP — this resolves the
-/// routing table without actually sending any packet, so it works offline
-/// on a private LAN as long as there's a default route.
+/// local address it would use to reach a target — `connect` on a UDP socket
+/// just resolves the routing table, no packet is sent, so it works offline
+/// on a private LAN as long as there's any matching route.
+///
+/// We probe multiple targets so a mismatched network environment doesn't
+/// silently leave `lan_ip = None`:
+///   1. `8.8.8.8`      — default-route probe (works when the host has any
+///                       internet gateway, even if offline/unreachable).
+///   2. `192.168.1.1`  — typical home/SOHO RFC1918 Class C gateway.
+///   3. `10.0.0.1`     — corp/vpn Class A.
+///   4. `172.16.0.1`   — Class B.
+/// The first probe that yields a non-loopback, non-link-local address wins.
 fn detect_lan_ip() -> Option<IpAddr> {
-    let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
-    sock.connect(("8.8.8.8", 80)).ok()?;
-    let addr = sock.local_addr().ok()?.ip();
-    if addr.is_unspecified() || addr.is_loopback() {
-        return None;
+    const PROBES: &[(u8, u8, u8, u8)] = &[
+        (8, 8, 8, 8),
+        (192, 168, 1, 1),
+        (10, 0, 0, 1),
+        (172, 16, 0, 1),
+    ];
+    for (a, b, c, d) in PROBES {
+        let Ok(sock) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)) else {
+            continue;
+        };
+        if sock.connect((Ipv4Addr::new(*a, *b, *c, *d), 80)).is_err() {
+            continue;
+        }
+        let Ok(local) = sock.local_addr() else { continue };
+        let addr = local.ip();
+        if addr.is_unspecified() || addr.is_loopback() {
+            continue;
+        }
+        // Reject link-local IPv4 (169.254/16) — those are APIPA fallback
+        // addresses that no other device on a real network will route to.
+        if let IpAddr::V4(v4) = addr
+            && v4.is_link_local()
+        {
+            continue;
+        }
+        return Some(addr);
     }
-    Some(addr)
+    None
 }
 
 #[tauri::command]

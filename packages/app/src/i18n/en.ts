@@ -754,6 +754,8 @@ export const dict = {
   "settings.desktop.remote.pair.unavailable": "QR unavailable",
   "settings.desktop.remote.restartRequired": "Restart OpenCode for changes to take effect.",
   "settings.desktop.remote.warning": "Remote access exposes OpenCode on your local network. Use a strong password and trust your Wi-Fi.",
+  "settings.desktop.remote.warning.firewall": "First-time setup: allow OpenCode (or Node.js) through the Windows Firewall when prompted, otherwise inbound connections from your phone will silently drop.",
+  "settings.desktop.remote.connection.manualHint": "No LAN address detected — check that you are on Wi-Fi and run `ipconfig` (Windows) or `ifconfig` (macOS/Linux) to find your machine's address manually.",
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
