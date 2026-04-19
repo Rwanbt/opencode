@@ -187,35 +187,55 @@ describe("DAG team — dispatch contract (harness for I11 e2e)", () => {
 })
 
 describe.skip("DAG team — full e2e (requires team-tool runtime bootstrap)", () => {
-  // Sprint 5 unblocked the transport layer:
-  //   - `test/lib/in-process-server.ts` boots `Server.listen` on port 0.
-  //   - `test/lib/mock-provider.ts` returns a LanguageModelV3-compatible mock.
+  // PROD `computeWaves` is now guarded by `test/e2e/team-waves.test.ts` which
+  // imports the real algorithm from `src/tool/team-waves.ts` — so a drift
+  // between the mirror above and prod is caught even while the full e2e is
+  // still skipped.
   //
-  // Sprint 6 added a partial Instance harness:
-  //   - `test/lib/with-instance-for-test.ts` exposes `withInstanceForTest(fn)`
-  //     which wraps the ALS InstanceContext on a per-test tmpdir, so
-  //     `Instance.directory`/`worktree`/`project` resolve inside `fn`.
+  // Precise remaining blockers (diagnosed in Sprint 6 residual-debt cleanup):
   //
-  // Still blocked — tracked for a follow-up sprint:
-  //   - `withInstanceForTest` only covers the ALS scope. It does NOT yet
-  //     bootstrap an in-memory SessionStatus/Session/Task/Permission service
-  //     set, nor does it swap the Provider registry to the mock model.
-  //   - Without a Permission mock, the real permission service can block on
-  //     interactive prompts during tool execution. Without a Provider mock
-  //     seam on Provider.list(), `session/llm.ts` resolves a real provider
-  //     and hits the network.
-  //   - See the checklist at the top of `test/lib/with-instance-for-test.ts`
-  //     for the exact wiring left to do.
+  //   1. TeamTool.execute calls `Agent.list()` + `Agent.get(name)` — resolves
+  //      from Config, which loads `opencode.json` / ~/.opencode/agents. No
+  //      test-time override; would need `Agent.overrideForTest(impl)` or a
+  //      test-config fixture seeded under `XDG_CONFIG_HOME/opencode/`.
   //
-  // To enable:
-  //   1. Extend `withInstanceForTest` to accept `{ provider, permission,
-  //      session }` overrides that install test-only Effect Layers for those
-  //      services (Layer.succeed(Service, impl)).
-  //   2. Register the mock provider as the default model for the synthesised
-  //      session (inside the `init` hook).
-  //   3. Boot `in-process-server` inside the helper so `POST /task` is
-  //      reachable on localhost.
-  //   4. Flip the `describe.skip` below to `describe` and uncomment bodies.
+  //   2. `Session.create({ parentID, permission })` writes to SQLite via
+  //      `Database.use(...)`. Works under `OPENCODE_DB=:memory:`, BUT it
+  //      requires an active InstanceContext (preload does NOT bootstrap one).
+  //      Would need `Instance.provide({ directory: tmpdir, fn })` wrapping
+  //      the whole test body. See `test/lib/with-instance-for-test.ts`.
+  //
+  //   3. `Workspace.create({ type: "worktree", projectID, ... })` invokes
+  //      `git worktree add` on the project. Test needs a real git repo
+  //      initialised under the tmpdir — add `git init && git commit --allow-empty`
+  //      as a helper setup step.
+  //
+  //   4. `SessionPrompt.resolvePromptParts` + `SessionPrompt.prompt()` drive
+  //      the full agent loop and call `streamText` on a resolved Provider.
+  //      The only existing seam is `OPENCODE_E2E_LLM_URL` which reroutes SDK
+  //      creation through a `createOpenAICompatible` pointed at the URL (see
+  //      `provider.ts:1467`). So the full path is unlockable without a
+  //      `Provider.register` hook: boot `test/lib/llm-server.ts` on a random
+  //      port, export `OPENCODE_E2E_LLM_URL=...` before the test, and seed a
+  //      provider entry in the config that maps to that URL.
+  //
+  //   5. `Permission` service reads rules from agent config. If the
+  //      synthesised agents in step 1 declare an `allow` ruleset covering
+  //      the tools invoked by the subtasks, the interactive prompt path is
+  //      skipped. A dedicated in-memory `Permission.Service` override would
+  //      be cleaner but is not required — rule-based auto-grant is enough.
+  //
+  // Call sites to touch to unblock (strictly additive):
+  //   - `src/agent/agent.ts`  → expose `Agent.overrideForTest(list)` or read
+  //     from an `OPENCODE_AGENTS_FIXTURE` env var.
+  //   - `src/provider/provider.ts` → already has `OPENCODE_E2E_LLM_URL` seam.
+  //   - `test/lib/with-instance-for-test.ts` → extend `init` hook to
+  //     `git init` the tmpdir and write a fixture config that declares the
+  //     `explore`, `general` agents with the right permission rules.
+  //
+  // Effort estimate: 4-6h end-to-end, 80% of which is agent-fixture +
+  // permission-ruleset wiring. Out of scope for this cleanup; the
+  // PROD-algorithm guard (team-waves.test.ts) covers the regression risk.
   it("runs explore+critic in parallel then tester, passes prior outputs as context", async () => {})
   it("leaves no dangling subtask session when a dependent fails", async () => {})
 })

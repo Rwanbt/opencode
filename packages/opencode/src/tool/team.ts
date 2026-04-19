@@ -14,6 +14,7 @@ import { Instance } from "../project/instance"
 import { Workspace } from "../control-plane/workspace"
 import { Database, eq } from "../storage/db"
 import { SessionTable } from "../session/session.sql"
+import { computeWaves } from "./team-waves"
 
 const log = Log.create({ service: "team" })
 
@@ -49,40 +50,6 @@ const parameters = z.object({
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
-}
-
-/** Group tasks into waves based on dependency graph. */
-function computeWaves(tasks: z.infer<typeof TaskDef>[]): number[][] {
-  const n = tasks.length
-  const assigned = new Array<number>(n).fill(-1)
-  let changed = true
-
-  while (changed) {
-    changed = false
-    for (let i = 0; i < n; i++) {
-      if (assigned[i] >= 0) continue
-      const deps = tasks[i].depends_on ?? []
-      if (deps.length === 0) {
-        assigned[i] = 0
-        changed = true
-      } else if (deps.every((d) => assigned[d] >= 0)) {
-        assigned[i] = Math.max(...deps.map((d) => assigned[d])) + 1
-        changed = true
-      }
-    }
-  }
-
-  // Check for unresolvable dependencies (cycles)
-  if (assigned.some((w) => w < 0)) {
-    throw new Error("Circular or invalid dependencies detected in task graph")
-  }
-
-  const maxWave = Math.max(...assigned)
-  const waves: number[][] = []
-  for (let w = 0; w <= maxWave; w++) {
-    waves.push(assigned.map((wave, idx) => (wave === w ? idx : -1)).filter((idx) => idx >= 0))
-  }
-  return waves
 }
 
 /** Get total cost of a session's messages. */
