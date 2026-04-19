@@ -10,20 +10,64 @@
  */
 
 import { invokeTauri, convertFileSrc } from "../../../app/src/hooks/speech-tauri-adapter"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import { showToast, toaster } from "@opencode-ai/ui/toast"
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
+let kokoroProgressUnlisten: UnlistenFn | undefined
+let kokoroErrorUnlisten: UnlistenFn | undefined
+let activeDownloadToastId: number | undefined
 
 export function initSpeechListeners() {
   window.addEventListener("stt-start", handleSttStart)
   window.addEventListener("stt-stop", handleSttStop)
   window.addEventListener("tts-toggle", ((e: Event) => { handleTtsToggle(e as CustomEvent) }) as EventListener)
+  // Kokoro download progress: one sticky loading toast, updated on each
+  // progress event, dismissed when we reach 1.0 (or on failure).
+  void listen<number>("kokoro-download-progress", (event) => {
+    const pct = Math.round((event.payload ?? 0) * 100)
+    if (pct >= 100) {
+      if (activeDownloadToastId) {
+        toaster.dismiss(activeDownloadToastId)
+        activeDownloadToastId = undefined
+      }
+      return
+    }
+    // Only create the toast the first time we see a non-terminal progress —
+    // subsequent events still refresh the content via showToast's return.
+    if (activeDownloadToastId === undefined) {
+      activeDownloadToastId = showToast({
+        title: "Downloading Kokoro voice model",
+        description: `${pct}% — ~310 MB, first launch only`,
+        variant: "loading",
+        persistent: true,
+      }) as unknown as number
+    }
+  }).then((fn) => { kokoroProgressUnlisten = fn })
+
+  void listen<string>("kokoro-download-error", (event) => {
+    if (activeDownloadToastId) {
+      toaster.dismiss(activeDownloadToastId)
+      activeDownloadToastId = undefined
+    }
+    showToast({
+      title: "Voice model download failed",
+      description: event.payload || "Unknown error",
+      variant: "error",
+    })
+  }).then((fn) => { kokoroErrorUnlisten = fn })
+
   void preloadModels()
 }
 
 export function cleanupSpeechListeners() {
   window.removeEventListener("stt-start", handleSttStart)
   window.removeEventListener("stt-stop", handleSttStop)
+  kokoroProgressUnlisten?.()
+  kokoroErrorUnlisten?.()
+  kokoroProgressUnlisten = undefined
+  kokoroErrorUnlisten = undefined
 }
 
 async function preloadModels() {
@@ -306,6 +350,13 @@ async function handleTtsToggle(e: CustomEvent) {
   chunkQueue = chunks
 
   try {
+    // Gate synthesis on model readiness. `tts_start` handles the 310 MB
+    // first-launch download AND the 6 s model load; the download toast is
+    // emitted by the Rust `kokoro-download-progress` listener set up in
+    // `initSpeechListeners`, so the user sees progress while we await.
+    await invokeTauri("tts_start")
+    if (ttsAborted) return
+
     const synth1Promise = synthesizeChunk(firstText, voice, speed)
     let synth2Promise: Promise<string> | null = null
     if (secondText) {
@@ -335,7 +386,18 @@ async function handleTtsToggle(e: CustomEvent) {
 
     await playNextChunk(voice, speed)
   } catch (err) {
-    console.error("[TTS] Failed:", err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("[TTS] Failed:", msg)
+    // `kokoro-download-error` already handles download failures; avoid a
+    // duplicate toast for those. Anything else (synth failure, invalid
+    // voice, ONNX runtime) surfaces here.
+    if (!/HTTP \d|Download|download/i.test(msg)) {
+      showToast({
+        title: "Text-to-speech failed",
+        description: msg,
+        variant: "error",
+      })
+    }
     stopPlayback()
   }
 }

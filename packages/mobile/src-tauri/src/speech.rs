@@ -266,8 +266,20 @@ pub async fn kokoro_available(app: AppHandle) -> bool {
 
 #[tauri::command]
 pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
-    let dir = kokoro_dir(&app);
-    let _ = fs::create_dir_all(&dir);
+    // Inner closure so every early-return path can emit a terminal error
+    // event on the way out. Frontend listens for `kokoro-download-error`
+    // even when nothing awaits the Result (e.g. prefetch at startup).
+    let result = kokoro_download_inner(&app).await;
+    if let Err(msg) = &result {
+        log::warn!("[Kokoro] Download failed: {}", msg);
+        let _ = app.emit("kokoro-download-error", msg.clone());
+    }
+    result
+}
+
+async fn kokoro_download_inner(app: &AppHandle) -> Result<(), String> {
+    let dir = kokoro_dir(app);
+    fs::create_dir_all(&dir).map_err(|e| format!("Create kokoro dir: {}", e))?;
 
     let model_path = dir.join("kokoro-v1.0.onnx");
     let voices_path = dir.join("voices-v1.0.bin");
@@ -280,9 +292,10 @@ pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
 
     if !model_path.exists() {
         log::info!("[Kokoro] Downloading model...");
+        let _ = app.emit("kokoro-download-progress", 0.0_f64);
         let resp = client.get(KOKORO_MODEL_URL).send().await.map_err(|e| format!("Download model: {}", e))?;
         if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
+            return Err(format!("Model HTTP {}", resp.status()));
         }
         let total = resp.content_length().unwrap_or(0);
         let mut downloaded: u64 = 0;
@@ -307,9 +320,10 @@ pub async fn kokoro_download_model(app: AppHandle) -> Result<(), String> {
 
     if !voices_path.exists() {
         log::info!("[Kokoro] Downloading voices...");
+        let _ = app.emit("kokoro-download-progress", 0.9_f64);
         let resp = client.get(KOKORO_VOICES_URL).send().await.map_err(|e| format!("Download voices: {}", e))?;
         if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
+            return Err(format!("Voices HTTP {}", resp.status()));
         }
         let bytes = resp.bytes().await.map_err(|e| format!("Read: {}", e))?;
         fs::write(&voices_path, &bytes).map_err(|e| format!("Write: {}", e))?;
