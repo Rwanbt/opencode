@@ -17,7 +17,6 @@ import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
-import { createAuthenticatedWebSocket } from "@/utils/ws-auth"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -252,7 +251,11 @@ export const Terminal = (props: TerminalProps) => {
   }
   const MAX_CONNECT_TRIES = 5
   const addDebug = (msg: string) => {
-    if (import.meta.env.DEV) console.info("[terminal-debug]", msg)
+    // Always log (was gated on import.meta.env.DEV). v5 diagnostic build:
+    // we need these checkpoints visible in production DevTools (F12) to
+    // trace where the terminal mount fails when the pane is empty. Revert
+    // the unconditional log once the terminal regression is resolved.
+    console.info("[terminal-debug]", msg)
   }
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
@@ -581,6 +584,12 @@ export const Terminal = (props: TerminalProps) => {
               if (disposed) return
               try {
                 fit.fit()
+                // After `fit.fit()` only the renderer is reshaped — the
+                // Rust-side PTY stays on whatever dims we sent last time.
+                // Force-push the current cols/rows so the shell gets a
+                // SIGWINCH with real dims and re-emits the prompt.
+                // `scheduleSize` is idempotent via `lastSize` guard.
+                scheduleSize(t.cols, t.rows)
                 // Force a full repaint so the first prompt (already received
                 // from the PTY) becomes visible even if the terminal
                 // internals think the screen is unchanged. `refresh` is an
@@ -604,7 +613,10 @@ export const Terminal = (props: TerminalProps) => {
         const handleOrientation = () => {
           setTimeout(() => {
             if (disposed) return
-            try { fit.fit() } catch { /* ignore */ }
+            try {
+              fit.fit()
+              scheduleSize(t.cols, t.rows)
+            } catch { /* ignore */ }
           }, 200)
         }
         window.addEventListener("orientationchange", handleOrientation)
@@ -692,46 +704,30 @@ export const Terminal = (props: TerminalProps) => {
           return
         }
 
-        // Sprint 6 item 3 — migrate to ticket flow.
-        // createAuthenticatedWebSocket tries POST /auth/ws-ticket (3s timeout),
-        // then falls back to the legacy `?authorization=Basic+...` query param
-        // when the endpoint is not available. `ws_auth_legacy` stays `true` on
-        // the server during the transition so both paths work.
+        // Synchronous WebSocket construction + listener attachment.
+        // Sprint 4-6 tried to route this through createAuthenticatedWebSocket
+        // (async ticket fetch with legacy fallback) but the async boundary
+        // between `new WebSocket()` and the `.then()` that wires handlers lets
+        // the `open` event fire first on fast loopback — `handleOpen` never
+        // runs, terminal stays silent. Back to the e22886176 pattern: open +
+        // attach in the same microtask, auth via `?authorization=Basic` query
+        // string (Chromium/WebView2 drops URL userinfo + can't set the
+        // Authorization header on WS upgrades, so query param is the only
+        // browser-reachable legacy auth). The server-side ticket endpoint and
+        // middleware (Sprints 4-6) stay wired for the next WS client migration.
         const basicToken = btoa(`${auth.username}:${auth.password}`)
-        const wsPath = `/pty/${id}/connect?directory=${encodeURIComponent(directory)}&cursor=${encodeURIComponent(String(seek))}`
-        addDebug(`WS opening (ticket flow): ${auth.url}${wsPath.split("?")[0]}`)
+        const next = new URL(auth.url + `/pty/${id}/connect`)
+        next.searchParams.set("directory", directory)
+        next.searchParams.set("cursor", String(seek))
+        next.searchParams.set("authorization", `Basic ${basicToken}`)
+        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
 
-        // Placeholder `socket` — real one assigned once the async ticket
-        // fetch completes. Local `stop`/`handleClose` close over `socket`, so
-        // the pattern is: construct first, wire listeners, assign `ws = socket`.
-        // If disposed while fetching, we close() and bail.
-        let socket: WebSocket
-        createAuthenticatedWebSocket(auth.url, wsPath, {
-          authorization: `Basic ${basicToken}`,
-        })
-          .then((ws2) => {
-            if (disposed) {
-              try {
-                ws2.close(1000)
-              } catch {
-                // ignore
-              }
-              return
-            }
-            socket = ws2
-            socket.binaryType = "arraybuffer"
-            ws = socket
-            socket.addEventListener("open", handleOpen)
-            socket.addEventListener("message", handleMessage)
-            socket.addEventListener("error", handleError)
-            socket.addEventListener("close", handleClose)
-            drop = stop
-          })
-          .catch((err) => {
-            if (disposed) return
-            addDebug(`WS ticket flow failed: ${String(err)}`)
-            retry(err instanceof Error ? err : new Error(String(err)))
-          })
+        const redactedParams = next.searchParams.toString().replace(/authorization=[^&]+/, "authorization=REDACTED")
+        addDebug(`WS url: ${next.protocol}//${next.hostname}:${next.port}${next.pathname} params=${redactedParams}`)
+
+        const socket = new WebSocket(next)
+        socket.binaryType = "arraybuffer"
+        ws = socket
 
         const handleOpen = () => {
           if (disposed) return
@@ -756,10 +752,10 @@ export const Terminal = (props: TerminalProps) => {
             const json = decoder.decode(bytes.subarray(1))
             try {
               const meta = JSON.parse(json) as { cursor?: unknown }
-              const next = meta?.cursor
-              if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
-                cursor = next
-                seek = next
+              const nextCursor = meta?.cursor
+              if (typeof nextCursor === "number" && Number.isSafeInteger(nextCursor) && nextCursor >= 0) {
+                cursor = nextCursor
+                seek = nextCursor
               }
             } catch (err) {
               debugTerminal("invalid websocket control frame", err)
@@ -802,11 +798,11 @@ export const Terminal = (props: TerminalProps) => {
           retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
         }
 
-        // Listeners & `drop` are wired inside the createAuthenticatedWebSocket
-        // `.then()` above, once the socket is actually constructed (the ticket
-        // fetch is async). This preserves cleanup semantics: if the component
-        // is disposed during the ticket fetch, the `.then()` closes the fresh
-        // socket with 1000 and never registers handlers.
+        drop = stop
+        socket.addEventListener("open", handleOpen)
+        socket.addEventListener("message", handleMessage)
+        socket.addEventListener("error", handleError)
+        socket.addEventListener("close", handleClose)
       }
 
       probe.control({

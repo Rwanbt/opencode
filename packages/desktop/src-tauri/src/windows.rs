@@ -153,16 +153,40 @@ fn base_window_config<'a, R: Runtime, M: Manager<R>>(
     let window_builder = window_builder.decorations(decorations);
 
     #[cfg(windows)]
-    let window_builder = window_builder
+    let window_builder = {
+        // Pin the self-signed loopback cert for WebView2 via SPKI list, ONLY
+        // when the sidecar is configured to serve TLS (Internet mode). Without
+        // this, `wss://127.0.0.1:PORT` upgrades for the terminal + WS clients
+        // fail with ERR_CERT_AUTHORITY_INVALID — Chromium has no equivalent
+        // of reqwest's `danger_accept_invalid_certs`. SPKI pinning is
+        // narrower than `--ignore-certificate-errors`: only this exact public
+        // key is trusted, other cert errors still bubble up. Rotate the cert
+        // → the hash changes automatically via ensure_cert.
+        let remote = crate::server::load_remote_config(_app);
+        let spki_arg = if remote.tls_enabled {
+            match crate::tls::ensure_cert(_app) {
+                Ok(certs) => format!(" --ignore-certificate-errors-spki-list={}", certs.spki_hash_b64),
+                Err(err) => {
+                    tracing::warn!(%err, "Failed to load TLS cert for WebView2 SPKI pinning; WS upgrades to wss://127.0.0.1 will fail");
+                    String::new()
+                }
+            }
+        } else {
+            String::new()
+        };
+
         // Some VPNs set a global/system proxy that WebView2 applies even for loopback
         // connections, which breaks the app's localhost sidecar server.
         // Note: when setting additional args, we must re-apply wry's default
         // `--disable-features=...` flags.
-        .additional_browser_args(
-            "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
-        )
-        .data_directory(_app.path().config_dir().expect("Failed to get config dir").join(_app.config().product_name.clone().unwrap()))
-        .decorations(false);
+        window_builder
+            .additional_browser_args(&format!(
+                "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection{}",
+                spki_arg
+            ))
+            .data_directory(_app.path().config_dir().expect("Failed to get config dir").join(_app.config().product_name.clone().unwrap()))
+            .decorations(false)
+    };
 
     #[cfg(target_os = "macos")]
     let window_builder = window_builder

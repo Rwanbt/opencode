@@ -22,7 +22,7 @@ onnx = ["dep:ort", "dep:ndarray", "dep:bincode"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset", "devtools"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -69,6 +69,7 @@ tokio-stream = { version = "0.1.18", features = ["sync"] }
 process-wrap = { version = "9.0.3", features = ["tokio1"] }
 rcgen = { version = "0.13", features = ["pem"] }
 sha2 = "0.10"
+base64 = "0.21"
 url = "2"
 opencode-kokoro-shared = { path = "../../../crates/opencode-kokoro-shared" }
 

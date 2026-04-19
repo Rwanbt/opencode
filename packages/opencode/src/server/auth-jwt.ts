@@ -162,9 +162,13 @@ export namespace JwtAuth {
             const ticket = verifyWsTicket(parts[idx + 1])
             if (ticket) {
               c.set("user", { id: ticket.sub, username: ticket.username, role: ticket.role })
-              // Echo back the chosen subprotocol so the browser's WebSocket
-              // is happy (Bun takes care of the upgrade response).
-              c.header("Sec-WebSocket-Protocol", `bearer,${parts[idx + 1]}`)
+              // RFC 6455 §4.2.2: the Sec-WebSocket-Protocol response header
+              // MUST contain exactly ONE subprotocol chosen from the client's
+              // offered list. Echoing "bearer,<ticket>" (two values) gets
+              // rejected by Chromium/WebView2 with "server selected invalid
+              // subprotocol" → WS closes immediately → no prompt, no input.
+              // Just echo "bearer" which was offered by the client.
+              c.header("Sec-WebSocket-Protocol", "bearer")
               return next()
             }
           }
@@ -184,6 +188,10 @@ export namespace JwtAuth {
         }
 
         // (4) Legacy query string — opt-out via experimental.ws_auth_legacy = false.
+        // Accept both Bearer <jwt> and Basic <base64>. Earlier Sprint-4 code
+        // only accepted Bearer here, which broke the terminal desktop WS
+        // when the ticket endpoint was unreachable — the client legitimately
+        // fell back to its Basic creds and got a silent 401.
         let legacyAllowed = true
         try {
           const cfg = await Config.get()
@@ -192,7 +200,7 @@ export namespace JwtAuth {
         } catch {}
         if (legacyAllowed) {
           const q = c.req.query("authorization")
-          if (q?.startsWith("Bearer ")) authHeader = q
+          if (q?.startsWith("Bearer ") || q?.startsWith("Basic ")) authHeader = q
         }
       }
 
