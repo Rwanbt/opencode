@@ -375,6 +375,10 @@ export async function createPlatform(): Promise<Platform> {
         }
       }
 
+      // Note: installExtendedEnv (Alpine rootfs + advanced tools) is
+      // handled by ExtractionProgress component at first launch, so it's
+      // done before this point when needed. No action here.
+
       const port = info.port
 
       if (info.server_running) {

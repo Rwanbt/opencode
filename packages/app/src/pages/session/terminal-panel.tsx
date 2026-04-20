@@ -23,43 +23,86 @@ import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { terminalProbe } from "@/testing/terminal"
 
-/** Send a key sequence to the active terminal by dispatching a KeyboardEvent to its textarea. */
-function sendTerminalKey(id: string, key: string, opts?: { ctrlKey?: boolean; code?: string }) {
+function focusTerminalTextarea(id: string) {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
-  if (!wrapper) return
-  const textarea = wrapper.querySelector("textarea")
-  if (!textarea) return
-  textarea.focus()
-  const event = new KeyboardEvent("keydown", {
-    key,
-    code: opts?.code ?? key,
-    ctrlKey: opts?.ctrlKey ?? false,
-    bubbles: true,
-    cancelable: true,
-  })
-  textarea.dispatchEvent(event)
+  const textarea = wrapper?.querySelector("textarea")
+  if (textarea && document.activeElement !== textarea) textarea.focus()
 }
 
-function TerminalMobileToolbar(props: { activeId: () => string | undefined }) {
+function TerminalMobileToolbar(props: {
+  activeId: () => string | undefined
+  sendBytes: (id: string, data: string) => void
+}) {
   const [ctrlActive, setCtrlActive] = createSignal(false)
+  const [altActive, setAltActive] = createSignal(false)
 
-  const send = (key: string, code?: string) => {
+  function emit(data: string) {
     const id = props.activeId()
     if (!id) return
-    sendTerminalKey(id, key, { ctrlKey: ctrlActive(), code })
-    if (ctrlActive()) setCtrlActive(false)
+    props.sendBytes(id, data)
+    focusTerminalTextarea(id)
   }
 
-  const keys = [
-    { label: "Esc", action: () => send("Escape", "Escape") },
-    { label: "Tab", action: () => send("Tab", "Tab") },
-    { label: "↑", action: () => send("ArrowUp", "ArrowUp") },
-    { label: "↓", action: () => send("ArrowDown", "ArrowDown") },
-    { label: "←", action: () => send("ArrowLeft", "ArrowLeft") },
-    { label: "→", action: () => send("ArrowRight", "ArrowRight") },
-    { label: "|", action: () => send("|") },
-    { label: "/", action: () => send("/") },
-    { label: "~", action: () => send("~") },
+  function sendKey(bytes: string) {
+    let out = bytes
+    if (altActive()) {
+      out = "\x1b" + out
+      setAltActive(false)
+    }
+    emit(out)
+  }
+
+  function sendChar(ch: string) {
+    if (ctrlActive()) {
+      const upper = ch.toUpperCase()
+      const code = upper.charCodeAt(0)
+      if (code >= 0x40 && code <= 0x5f) {
+        let byte = String.fromCharCode(code - 0x40)
+        if (altActive()) {
+          byte = "\x1b" + byte
+          setAltActive(false)
+        }
+        emit(byte)
+        setCtrlActive(false)
+        return
+      }
+      setCtrlActive(false)
+    }
+    sendKey(ch)
+  }
+
+  const btnBase = "shrink-0 px-3 h-8 rounded-md text-13-medium border"
+  const btnNormal = "bg-surface-base text-text-base border-border-base active:bg-surface-base-active"
+  const btnActive = "bg-text-strong text-background-base border-text-strong"
+
+  const keys: { label: string; action: () => void }[] = [
+    { label: "Esc", action: () => sendKey("\x1b") },
+    { label: "Tab", action: () => sendKey("\t") },
+    { label: "↑", action: () => sendKey("\x1b[A") },
+    { label: "↓", action: () => sendKey("\x1b[B") },
+    { label: "→", action: () => sendKey("\x1b[C") },
+    { label: "←", action: () => sendKey("\x1b[D") },
+    { label: "Home", action: () => sendKey("\x1b[H") },
+    { label: "End", action: () => sendKey("\x1b[F") },
+    { label: "PgUp", action: () => sendKey("\x1b[5~") },
+    { label: "PgDn", action: () => sendKey("\x1b[6~") },
+    { label: "Del", action: () => sendKey("\x1b[3~") },
+    { label: "F1", action: () => sendKey("\x1bOP") },
+    { label: "F2", action: () => sendKey("\x1bOQ") },
+    { label: "F3", action: () => sendKey("\x1bOR") },
+    { label: "F4", action: () => sendKey("\x1bOS") },
+    { label: "F5", action: () => sendKey("\x1b[15~") },
+    { label: "F6", action: () => sendKey("\x1b[17~") },
+    { label: "F7", action: () => sendKey("\x1b[18~") },
+    { label: "F8", action: () => sendKey("\x1b[19~") },
+    { label: "F9", action: () => sendKey("\x1b[20~") },
+    { label: "F10", action: () => sendKey("\x1b[21~") },
+    { label: "F11", action: () => sendKey("\x1b[23~") },
+    { label: "F12", action: () => sendKey("\x1b[24~") },
+    { label: ":", action: () => sendChar(":") },
+    { label: "|", action: () => sendChar("|") },
+    { label: "/", action: () => sendChar("/") },
+    { label: "~", action: () => sendChar("~") },
   ]
 
   return (
@@ -70,10 +113,10 @@ function TerminalMobileToolbar(props: { activeId: () => string | undefined }) {
     >
       <button
         type="button"
-        class="shrink-0 px-3 h-8 rounded-md text-13-medium border"
+        class={btnBase}
         classList={{
-          "bg-text-strong text-background-base border-text-strong": ctrlActive(),
-          "bg-surface-base text-text-base border-border-base": !ctrlActive(),
+          [btnActive]: ctrlActive(),
+          [btnNormal]: !ctrlActive(),
         }}
         onPointerDown={(e) => {
           e.preventDefault()
@@ -82,11 +125,25 @@ function TerminalMobileToolbar(props: { activeId: () => string | undefined }) {
       >
         Ctrl
       </button>
+      <button
+        type="button"
+        class={btnBase}
+        classList={{
+          [btnActive]: altActive(),
+          [btnNormal]: !altActive(),
+        }}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          setAltActive(!altActive())
+        }}
+      >
+        Alt
+      </button>
       <For each={keys}>
         {(k) => (
           <button
             type="button"
-            class="shrink-0 px-3 h-8 rounded-md text-13-medium bg-surface-base text-text-base border border-border-base active:bg-surface-base-active"
+            class={`${btnBase} ${btnNormal}`}
             onPointerDown={(e) => {
               e.preventDefault()
               k.action()
@@ -115,6 +172,7 @@ export function TerminalPanel() {
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
+  const sendHandles = new Map<string, (data: string) => void>()
 
   const [store, setStore] = createStore({
     autoCreated: false,
@@ -365,7 +423,10 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <Show when={isMobile()}>
-                <TerminalMobileToolbar activeId={() => terminal.active()} />
+                <TerminalMobileToolbar
+                  activeId={() => terminal.active()}
+                  sendBytes={(id, data) => sendHandles.get(id)?.(data)}
+                />
               </Show>
               <div class="flex-1 min-h-0 relative">
                 {(() => {
@@ -387,6 +448,7 @@ export function TerminalPanel() {
                             onConnect={() => ops.trim(pty.id)}
                             onCleanup={ops.update}
                             onConnectError={() => ops.clone(pty.id)}
+                            onSend={(fn) => { if (fn) sendHandles.set(pty.id, fn); else sendHandles.delete(pty.id) }}
                           />
                         </div>
                       )}

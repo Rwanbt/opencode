@@ -27,6 +27,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
+  onSend?: (fn: ((data: string) => void) | undefined) => void
 }
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty | undefined }> | undefined
@@ -258,7 +259,7 @@ export const Terminal = (props: TerminalProps) => {
     console.info("[terminal-debug]", msg)
   }
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError", "onSend"])
   const id = local.pty.id
   const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
@@ -811,6 +812,12 @@ export const Terminal = (props: TerminalProps) => {
           ws.close(4_000, "e2e")
         },
       })
+
+      const sendBytes = (data: string) => {
+        if (ws?.readyState === WebSocket.OPEN) ws.send(data)
+      }
+      local.onSend?.(sendBytes)
+      cleanups.push(() => local.onSend?.(undefined))
 
       open()
     }
