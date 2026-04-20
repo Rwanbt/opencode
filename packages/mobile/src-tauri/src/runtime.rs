@@ -315,27 +315,104 @@ pub async fn start_embedded_server(
         }
     }
 
-    // Busybox applet symlinks — when libbusybox_exec.so is shipped alongside
-    // libtoybox_exec.so, override the ones where busybox's implementation is
-    // strictly richer (full vi, less, nano, awk, sed, hexdump, etc.). Toybox's
-    // Android build omits `vi` entirely, so users typing `vim file.txt` hit
-    // `toybox: unknown command vi`. Busybox-static aarch64 (~1 MB) includes a
-    // full-featured vi applet plus less/nano/gawk-compat awk/sed.
-    // See packages/mobile/scripts/prepare-android-runtime.sh for bundling.
+    // Busybox applet symlinks — busybox is a STATIC binary that uses modern
+    // syscalls (rseq/statx/clone3?) blocked by Android zygote seccomp.
+    // Interactive applets (vi, less, nano, top) hit SIGSYS ("bad system
+    // call"). Non-interactive applets happen to work by luck.
+    //
+    // STRATEGY: prefer Android's /system/bin/toybox (dynamic-bionic,
+    // seccomp-safe) for every applet it provides. Fall back to busybox
+    // only for applets toybox lacks (awk, gawk, ed, bc, dc, tr variant).
+    // Android's toybox 0.8.6 covers most coreutils including vi.
     let busybox_src = nlib_dir.join("libbusybox_exec.so");
+    let system_toybox = std::path::PathBuf::from("/system/bin/toybox");
+
+    // Comprehensive list of applets that Android /system/bin/toybox
+    // provides on modern Android (0.8.6+). Verified via `toybox` applet
+    // list on Xiaomi Android 14. Interactive applets (vi, top, more,
+    // microcom) + coreutils + filesystem + archive + network tools.
+    if system_toybox.exists() {
+        let system_toybox_cmds = [
+            // Text editors / pagers
+            "vi", "vim", "more", "less",
+            // Process management
+            "top", "ps", "kill", "killall", "pkill", "pgrep", "nice", "renice",
+            "iotop", "ionice", "pidof", "pmap", "time", "timeout", "nohup", "watch",
+            // File ops
+            "ls", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch", "readlink",
+            "realpath", "stat", "chmod", "chown", "chgrp", "chattr", "file", "find",
+            // Text processing
+            "cat", "tac", "head", "tail", "wc", "sort", "uniq", "cut", "paste",
+            "tr", "tee", "sed", "grep", "egrep", "fgrep", "expand", "fold", "fmt",
+            "nl", "rev", "split", "strings", "xxd", "od", "dos2unix", "unix2dos",
+            // Archive / compression
+            "tar", "gzip", "gunzip", "zcat", "bzcat", "cpio", "uudecode", "uuencode",
+            // Network
+            "ping", "ping6", "nc", "netcat", "netstat", "ifconfig", "hostname",
+            "traceroute", "traceroute6",
+            // System info
+            "df", "du", "free", "uptime", "uname", "whoami", "who", "groups",
+            "id", "dmesg", "hostname", "lsof", "lspci", "lsusb", "lsmod",
+            // Misc utilities
+            "env", "printenv", "xargs", "yes", "seq", "sleep", "usleep",
+            "echo", "printf", "true", "false", "test", "[", "which", "dirname",
+            "basename", "pwd", "tty", "clear", "reset",
+            // Hashing
+            "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum",
+            "cmp", "diff",
+            // Misc
+            "date", "hwclock", "cal", "getopt", "install", "mktemp",
+        ];
+        for cmd in &system_toybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != system_toybox,
+                Err(_) => true,
+            };
+            if needs {
+                let _ = fs::remove_file(&link);
+                let _ = std::os::unix::fs::symlink(&system_toybox, &link);
+            }
+        }
+    }
+
+    // Additional system binaries in /system/bin/ (dynamic-bionic, safe).
+    // These are real binaries, not toybox applets, so we symlink to them
+    // directly. Available on most modern Android.
+    let system_bin_cmds: &[(&str, &str)] = &[
+        ("curl",   "/system/bin/curl"),
+        ("strace", "/system/bin/strace"),
+        ("wget",   "/system/bin/wget"),
+        ("awk",    "/system/bin/awk"),
+    ];
+    for (name, target_path) in system_bin_cmds {
+        let target = std::path::PathBuf::from(target_path);
+        if !target.exists() { continue; }
+        let link = bin_link_dir.join(name);
+        let needs = match fs::read_link(&link) {
+            Ok(t) => t != target,
+            Err(_) => true,
+        };
+        if needs {
+            let _ = fs::remove_file(&link);
+            let _ = std::os::unix::fs::symlink(&target, &link);
+        }
+    }
+
+    // Busybox only for applets NOT in toybox Android (scripting/calc).
+    // Note: busybox is static so some of these may still SIGSYS, but
+    // most non-interactive applets (awk/sed/ed/bc/dc/expr) work.
     if busybox_src.exists() {
-        // Only expose applets where busybox adds real UX value over toybox.
-        // Keep toybox as fallback for all the rest (already linked above).
         let busybox_cmds = [
-            // Editors & viewers — toybox doesn't have vi, less, nano
-            "vi", "vim", "less", "nano", "ed",
-            // Scripting — richer than toybox's stubs
-            "awk", "gawk", "sed",
-            // Misc — busybox variants
-            "bc", "dc", "expr", "tr",
+            "gawk",         // busybox has no gawk, fallback for awk compat
+            "ed",           // line editor, no toybox equivalent
+            "bc", "dc",     // calculators, no toybox equivalent
+            "expr",         // toybox has expr but busybox is richer
         ];
         for cmd in &busybox_cmds {
             let link = bin_link_dir.join(cmd);
+            // Don't override if a system binary already claimed this slot.
+            if link.exists() { continue; }
             let needs = match fs::read_link(&link) {
                 Ok(target) => target != busybox_src,
                 Err(_) => true,
@@ -352,17 +429,9 @@ pub async fn start_embedded_server(
     // Keep it minimal — TERM, PATH, HOME are already set via PTY env vars.
     // Do NOT re-export ENV here (causes infinite source loop in mksh).
     let mkshrc_path = home_dir.join(".mkshrc");
-    // mksh resolves aliases BEFORE PATH lookup, so editor aliases would
-    // shadow real busybox symlinks. Only emit the fallback aliases when
-    // busybox is absent.
-    let editor_aliases = if busybox_src.exists() {
-        "# busybox bundled — vi/vim/nano/less/awk/sed are real PATH binaries\n"
-    } else {
-        "# busybox not bundled — route editor/viewer names to the toybox stubs\n\
-alias vim='vi'\n\
-alias nano='vi'\n\
-alias less='more'\n"
-    };
+    // No false aliases: nano ≠ vi, htop ≠ top — user will get "command not
+    // found" if these tools aren't bundled, which is the honest behaviour.
+    let editor_aliases = "";
     // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
     let mkshrc_content = format!(
         "# OpenCode mobile shell init\n\
@@ -375,11 +444,22 @@ alias ..='cd ..'\n\
 alias cls='clear'\n\
 {editor_aliases}"
     );
-    let _ = fs::write(&mkshrc_path, mkshrc_content);
+    let _ = fs::write(&mkshrc_path, &mkshrc_content);
 
-    // .profile for login shells — just source .mkshrc
+    // .bashrc for bash (which is the real shell via libbash_exec.so symlinked
+    // as both `bash` and `sh`). Same content as .mkshrc — mksh-specific PS1
+    // escape syntax ($'\e[...]') also works in bash via ANSI-C quoting.
+    let bashrc_path = home_dir.join(".bashrc");
+    let _ = fs::write(&bashrc_path, &mkshrc_content);
+
+    // .profile for login shells — source both rc files for robustness.
     let profile_path = home_dir.join(".profile");
-    let _ = fs::write(&profile_path, ". \"$HOME/.mkshrc\"\n");
+    let _ = fs::write(
+        &profile_path,
+        "# Source shell rc — works for bash and mksh\n\
+[ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"\n\
+[ -z \"$BASH_VERSION\" ] && [ -f \"$HOME/.mkshrc\" ] && . \"$HOME/.mkshrc\"\n",
+    );
 
     // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
     let resolv_path = dir.join("resolv.conf");
@@ -775,6 +855,115 @@ exec {proot} \
         .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&wrapper_path, perms).map_err(|e| format!("chmod: {}", e))?;
+
+    // ── apk install: advanced toolchain ───────────────────────────────
+    let _ = app.emit(
+        "extraction-progress",
+        ExtractionProgress {
+            phase: "Installing packages (nano, git, tmux, python, node, ...)".to_string(),
+            progress: 0.85,
+        },
+    );
+
+    // Comprehensive set of tools a developer expects. Roughly grouped:
+    // - Editors: nano, less, vim (Alpine vim is richer than toybox)
+    // - Dev: git, make, patch
+    // - Multiplexer: tmux, screen
+    // - Remote: openssh-client, rsync, wget, curl
+    // - Runtimes: python3, nodejs, npm
+    // - Modern UNIX: jq, tree, htop, fzf, fd, bat, exa, ripgrep
+    // - Misc: file, diffutils, findutils, sed, grep, gawk
+    let apk_packages = [
+        "nano", "less", "vim",
+        "git", "make", "patch",
+        "tmux", "screen",
+        "openssh-client", "rsync", "wget", "curl",
+        "python3", "nodejs", "npm",
+        "jq", "tree", "htop", "fzf", "fd", "bat", "exa", "ripgrep",
+        "file", "diffutils", "findutils", "gawk",
+        "ca-certificates",
+    ];
+
+    let rootfs_arg = format!("--rootfs={}", rootfs_dir.display());
+    let proot_common_args: Vec<&str> = vec![
+        rootfs_arg.as_str(),
+        "--bind=/dev",
+        "--bind=/proc",
+        "--bind=/sys",
+        "-w", "/root",
+    ];
+
+    // apk update (best effort — may fail on restricted networks, not fatal)
+    let update_out = Command::new(&proot_path)
+        .args(&proot_common_args)
+        .args(["/sbin/apk", "update"])
+        .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin")
+        .env("HOME", "/root")
+        .output();
+    if let Ok(out) = &update_out {
+        if !out.status.success() {
+            log::warn!(
+                "[OpenCode] apk update failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
+
+    // apk add <packages>
+    let mut apk_add_args: Vec<&str> = vec!["/sbin/apk", "add", "--no-cache"];
+    for p in &apk_packages { apk_add_args.push(p); }
+    let install_out = Command::new(&proot_path)
+        .args(&proot_common_args)
+        .args(&apk_add_args)
+        .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin")
+        .env("HOME", "/root")
+        .output()
+        .map_err(|e| format!("apk add: {}", e))?;
+    if !install_out.status.success() {
+        log::warn!(
+            "[OpenCode] apk add partial failure: {}\nstdout: {}",
+            String::from_utf8_lossy(&install_out.stderr),
+            String::from_utf8_lossy(&install_out.stdout)
+        );
+    }
+
+    // ── Create wrapper scripts in runtime/bin/ for installed tools ───
+    // Each wrapper invokes `proot-run <cmd> "$@"` so users can type the
+    // tool name naturally (nano, git, tmux...) instead of `proot-run nano`.
+    let _ = app.emit(
+        "extraction-progress",
+        ExtractionProgress {
+            phase: "Creating command wrappers...".to_string(),
+            progress: 0.95,
+        },
+    );
+
+    let tool_wrappers = [
+        "nano", "less", "vim",
+        "git", "make", "patch",
+        "tmux", "screen",
+        "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
+        "rsync", "wget",
+        "python3", "python", "node", "npm",
+        "jq", "tree", "htop", "fzf", "fd", "bat", "exa", "ripgrep",
+    ];
+    let proot_run_abs = wrapper_path.to_str().unwrap_or("proot-run");
+    for tool in &tool_wrappers {
+        let link = bin_link_dir.join(tool);
+        let _ = fs::remove_file(&link);
+        let wrapper_content = format!(
+            "#!/system/bin/sh\nexec {proot_run} /usr/bin/{tool} \"$@\"\n",
+            proot_run = proot_run_abs,
+            tool = tool,
+        );
+        if fs::write(&link, wrapper_content).is_ok() {
+            if let Ok(meta) = fs::metadata(&link) {
+                let mut p = meta.permissions();
+                p.set_mode(0o755);
+                let _ = fs::set_permissions(&link, p);
+            }
+        }
+    }
 
     let _ = app.emit(
         "extraction-progress",

@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup } from "solid-js"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { extractRuntime } from "../runtime"
+import { checkRuntime, extractRuntime, installExtendedEnv } from "../runtime"
 
 interface Props {
   onComplete: () => void
@@ -19,14 +19,31 @@ export function ExtractionProgress(props: Props) {
   let unlisten: UnlistenFn | undefined
 
   onMount(async () => {
-    // Listen for progress events from Rust
+    // Listen for progress events from Rust (emitted by both extract_runtime
+    // and install_extended_env)
     unlisten = await listen<ProgressEvent>("extraction-progress", (event) => {
       setPhase(event.payload.phase)
       setProgress(Math.round(event.payload.progress * 100))
     })
 
     try {
+      // Phase 1: base runtime (bun, rg, opencode-cli, tree-sitter)
       await extractRuntime()
+      // Phase 2: extended env (Alpine + proot + 30 tools via apk).
+      // Skipped if rootfs already present. Blocks UI until complete to
+      // ensure `vi`, `nano`, `git`, `tmux`, `ssh`, `python`, `node` etc.
+      // are all available at first terminal open.
+      const info = await checkRuntime()
+      if (!info.extended_env) {
+        setPhase("Installing advanced tools (nano, git, tmux, python, node, ...)")
+        setProgress(0)
+        try {
+          await installExtendedEnv()
+        } catch (e) {
+          // Non-fatal: user can still use basic toybox tools without Alpine
+          console.warn("installExtendedEnv failed (non-fatal):", e)
+        }
+      }
       props.onComplete()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -99,7 +116,7 @@ export function ExtractionProgress(props: Props) {
       )}
 
       <p style={{ color: "#444", "font-size": "12px", margin: "0", "text-align": "center" }}>
-        First launch only — this extracts Bun, Git, and tools (~15 seconds)
+        First launch only — setting up runtime, Alpine, and developer tools (~3 min, ~90MB download)
       </p>
     </div>
   )

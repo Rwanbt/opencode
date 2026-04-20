@@ -55,6 +55,19 @@ target_link_libraries(llama_jni
 add_library(rust_pty SHARED rust_pty.c)
 target_link_libraries(rust_pty android log)
 
+# ─── SIGSYS trace shim ───────────────────────────────────────────────
+# LD_PRELOAD into child processes spawned by pty_server to capture the
+# exact seccomp-blocked syscall number. Diagnostic-only; remove once
+# the blocking syscall is identified and worked around.
+add_library(sigsys_trace SHARED sigsys_trace.c)
+target_link_libraries(sigsys_trace log)
+
+# pty_server.c is NOT built here — CMake add_library produces a .so that
+# cannot be executed via ProcessBuilder (needs PIE executable). The pre-
+# built binary in jniLibs/arm64-v8a/libpty_server.so (PIE) is used as-is.
+# To instrument pty_server's children, set LD_PRELOAD in LlamaService.kt
+# before ProcessBuilder.start() — children inherit env via fork+exec.
+
 # NOTE: resolv_override.c is NOT built here. NDK compiles against Bionic,
 # but bun uses musl — a Bionic .so cannot be LD_PRELOADed into a musl process.
 # DNS is handled via dns.setServers() in mobile-entry.ts.
