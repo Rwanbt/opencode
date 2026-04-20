@@ -62,7 +62,7 @@ fn write_debug_log(app: tauri::AppHandle, message: String) {
             .unwrap_or(0);
         let _ = writeln!(f, "[{}] {}", now, message);
     }
-    log::info!("[debug.log] {}", message);
+    log::debug!("[debug.log] {}", message);
 }
 
 /// Streaming wire protocol for `fetch_private_server`. Status + headers are
@@ -137,7 +137,7 @@ async fn fetch_private_server(
         req = req.body(b);
     }
 
-    log::info!("[priv-fetch] start url={url} method={method_str}");
+    log::debug!("[priv-fetch] start url={url} method={method_str}");
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -156,7 +156,7 @@ async fn fetch_private_server(
         .unwrap_or("")
         .to_string();
     let content_length = resp.headers().get("content-length").and_then(|v| v.to_str().ok()).map(String::from);
-    log::info!(
+    log::debug!(
         "[priv-fetch] response status={status} content_type={content_type:?} content_length={content_length:?} url={url}"
     );
 
@@ -201,13 +201,13 @@ async fn fetch_private_server(
                         })
                         .is_err()
                     {
-                        log::info!(
+                        log::debug!(
                             "[priv-fetch] channel dropped at chunk #{chunk_count} url={url}"
                         );
                         return Ok(());
                     }
                     if chunk_count == 1 || chunk_count.is_multiple_of(20) {
-                        log::info!("[priv-fetch] stream chunk #{chunk_count} ({chunk_len}b) url={url}");
+                        log::debug!("[priv-fetch] stream chunk #{chunk_count} ({chunk_len}b) url={url}");
                     }
                 }
                 Err(e) => {
@@ -219,7 +219,7 @@ async fn fetch_private_server(
                 }
             }
         }
-        log::info!("[priv-fetch] stream End ({chunk_count} chunks) url={url}");
+        log::debug!("[priv-fetch] stream End ({chunk_count} chunks) url={url}");
     } else {
         match resp.bytes().await {
             Ok(body) => {
@@ -234,7 +234,7 @@ async fn fetch_private_server(
                     log::warn!("[priv-fetch] channel closed before single-shot chunk delivered url={url}");
                     return Ok(());
                 }
-                log::info!("[priv-fetch] single-shot body {len}b url={url}");
+                log::debug!("[priv-fetch] single-shot body {len}b url={url}");
             }
             Err(e) => {
                 log::warn!("[priv-fetch] body read error url={url}: {e}");
@@ -247,7 +247,7 @@ async fn fetch_private_server(
     }
 
     let _ = on_event.send(PrivateFetchMsg::End);
-    log::info!("[priv-fetch] command return Ok url={url}");
+    log::debug!("[priv-fetch] command return Ok url={url}");
     Ok(())
 }
 
