@@ -150,9 +150,19 @@ export namespace LocalLLMServer {
       (f) => f.toLowerCase() === modelIDLower || f.toLowerCase() === modelIDLower + ".gguf",
     )
 
-    // 2. Fuzzy : strip .gguf + suffixes de quantization/précision courants
+    // 2. Fuzzy : strip suffixes de quantization/précision courants.
+    //
+    // Two prior bugs combined to break this for `Q4_K_M`-class files:
+    //   - the regex anchored on `\.gguf$` but was applied after `.gguf` had
+    //     already been stripped → it never matched anything;
+    //   - `(_[a-z0-9]+)?` only allowed one trailing `_X` segment, so common
+    //     llama.cpp suffixes like `Q4_K_M`, `Q5_K_S`, `IQ2_XS` were rejected
+    //     even when the regex did fire.
+    // Now: drop the `.gguf` first, then run a regex that matches one or more
+    // trailing `_X` segments. Resolves "Runtime or model not found" for files
+    // like `gemma-4-E4B-it-Q4_K_M.gguf` keyed by `gemma-4-E4B-it`.
     if (!gguf) {
-      const QUANT_SUFFIX = /[-_](q\d+(_[a-z0-9]+)?|iq\d+(_[a-z]+)?|f16|fp16|bf16|f32|fp32)\.gguf$/i
+      const QUANT_SUFFIX = /[-_](q\d+(_[a-z0-9]+)*|iq\d+(_[a-z0-9]+)*|f16|fp16|bf16|f32|fp32)$/i
       gguf = files.find((f) => {
         const stripped = f.replace(/\.gguf$/i, "").replace(QUANT_SUFFIX, "").toLowerCase()
         return stripped === modelIDLower
