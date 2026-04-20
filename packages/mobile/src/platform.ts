@@ -63,15 +63,6 @@ async function privateFetch(url: string, init: RequestInit | undefined, input: R
     const pending: Uint8Array[] = []
     let closeMode: "open" | "end" | { error: Error } = "open"
     let headersReceived = false
-    const t0 = performance.now()
-    let chunkCount = 0
-    const tag = `[priv-js] ${url.slice(-60)}`
-    const dlog = (m: string) => {
-      try {
-        const inv = (window as any).__TAURI_INTERNALS__?.invoke
-        if (inv) inv("write_debug_log", { message: `${tag} ${m}` }).catch(() => {})
-      } catch {}
-    }
 
     const stream = new ReadableStream<Uint8Array>({
       start(c) {
@@ -82,7 +73,6 @@ async function privateFetch(url: string, init: RequestInit | undefined, input: R
         else if (typeof closeMode === "object") c.error(closeMode.error)
       },
       cancel() {
-        dlog(`stream CANCEL after ${(performance.now() - t0).toFixed(0)}ms chunks=${chunkCount}`)
         controller = null
       },
     })
@@ -91,28 +81,21 @@ async function privateFetch(url: string, init: RequestInit | undefined, input: R
       if (msg.kind === "Headers") {
         if (headersReceived) return
         headersReceived = true
-        dlog(`HEADERS status=${msg.status} t=${(performance.now() - t0).toFixed(0)}ms`)
         resolve(new Response(stream, { status: msg.status, headers: msg.headers }))
         return
       }
       if (msg.kind === "Chunk") {
         const arr = msg.data instanceof Uint8Array ? msg.data : new Uint8Array(msg.data as any)
-        chunkCount++
-        if (chunkCount === 1 || chunkCount % 25 === 0) {
-          dlog(`CHUNK #${chunkCount} (${arr.length}b) t=${(performance.now() - t0).toFixed(0)}ms`)
-        }
         if (controller) controller.enqueue(arr)
         else pending.push(arr)
         return
       }
       if (msg.kind === "End") {
-        dlog(`END t=${(performance.now() - t0).toFixed(0)}ms chunks=${chunkCount}`)
         if (controller) controller.close()
         else closeMode = "end"
         return
       }
       if (msg.kind === "Error") {
-        dlog(`ERROR ${msg.message}`)
         const err = new Error(msg.message)
         if (controller) controller.error(err)
         else closeMode = { error: err }
@@ -350,10 +333,6 @@ export async function createPlatform(): Promise<Platform> {
       //      affiche "impossible de joindre".
       const isHttps = /^https:\/\//.test(url)
       const usePrivateFetch = isHttps && (_privateFp || isPrivateHostUrl(url))
-      try {
-        const inv = (window as any).__TAURI_INTERNALS__?.invoke
-        if (inv) inv("write_debug_log", { message: `[FIX-ACTIVE-V2] fetch url=${url} usePrivate=${usePrivateFetch} fp=${!!_privateFp}` }).catch(() => {})
-      } catch {}
       if (usePrivateFetch) {
         return privateFetch(url, init, input)
       }

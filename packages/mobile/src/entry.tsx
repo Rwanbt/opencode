@@ -16,7 +16,6 @@ import { ModeSelector } from "./components/mode-selector"
 import { ExtractionProgress } from "./components/extraction-progress"
 import { ModelManager } from "./components/model-manager"
 import { createPlatform, setPrivateServerFp } from "./platform"
-import { writeDebugLog } from "./runtime"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 
@@ -89,17 +88,14 @@ function App() {
 
   async function handleRemoteConnect() {
     const url = remoteUrl().trim()
-    await writeDebugLog(`[FIX-ACTIVE-V2] handleRemoteConnect raw=${url}`)
     if (!url) return
     const normalized = (/^https?:\/\//.test(url) ? url : `http://${url}`).replace(/\/+$/, "")
     const p = await ensurePlatform()
     const username = remoteUsername().trim() || undefined
     const password = remotePassword() || undefined
-    await writeDebugLog(`[FIX-ACTIVE-V2] normalized=${normalized} user=${username} hasPass=${!!password}`)
     setError("")
     setRemoteChecking(true)
     const check = await checkServerReachable(p, normalized, username, password)
-    await writeDebugLog(`[FIX-ACTIVE-V2] preflight result ok=${check.ok} msg=${check.ok ? "OK" : check.message}`)
     setRemoteChecking(false)
     if (!check.ok) {
       setError(check.message)
