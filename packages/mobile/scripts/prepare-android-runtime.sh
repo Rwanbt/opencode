@@ -33,22 +33,31 @@ echo "[1b/6] Downloading musl libc + C++ runtime libs..."
 LIB_DIR="$RUNTIME_DIR/lib"
 mkdir -p "$LIB_DIR"
 
+# Resolve the latest apk revision from the Alpine index. Alpine bumps `-r*`
+# revisions without warning, so hardcoding breaks the download with 404.
+ALPINE_INDEX="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64"
+resolve_apk() {
+  curl -fsSL "$ALPINE_INDEX/" \
+    | grep -oE "$1-[0-9][0-9.]*-r[0-9]+\.apk" \
+    | sort -uV | tail -1
+}
+
 # musl dynamic linker (required to run musl-linked binaries on Android Bionic)
-MUSL_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r9.apk"
-curl -fsSL "$MUSL_URL" -o "$TEMP_DIR/musl.apk"
+MUSL_APK=$(resolve_apk "musl")
+curl -fsSL "$ALPINE_INDEX/$MUSL_APK" -o "$TEMP_DIR/musl.apk"
 cd "$TEMP_DIR" && tar -xzf musl.apk lib/ld-musl-aarch64.so.1 2>/dev/null
 cp "$TEMP_DIR/lib/ld-musl-aarch64.so.1" "$LIB_DIR/ld-musl-aarch64.so.1"
 chmod 755 "$LIB_DIR/ld-musl-aarch64.so.1"
-echo "  musl: $(du -sh "$LIB_DIR/ld-musl-aarch64.so.1" | cut -f1)"
+echo "  musl ($MUSL_APK): $(du -sh "$LIB_DIR/ld-musl-aarch64.so.1" | cut -f1)"
 
 # libstdc++ and libgcc_s (Bun depends on C++ runtime, not available on Android)
-LIBSTDCPP_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/libstdc++-14.2.0-r4.apk"
-LIBGCC_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/libgcc-14.2.0-r4.apk"
-curl -fsSL "$LIBSTDCPP_URL" -o "$TEMP_DIR/libstdcpp.apk"
-curl -fsSL "$LIBGCC_URL" -o "$TEMP_DIR/libgcc.apk"
-cd "$TEMP_DIR" && tar -xzf libstdcpp.apk usr/lib/libstdc++.so.6.0.33 2>/dev/null
+LIBSTDCPP_APK=$(resolve_apk "libstdc\+\+")
+LIBGCC_APK=$(resolve_apk "libgcc")
+curl -fsSL "$ALPINE_INDEX/$LIBSTDCPP_APK" -o "$TEMP_DIR/libstdcpp.apk"
+curl -fsSL "$ALPINE_INDEX/$LIBGCC_APK" -o "$TEMP_DIR/libgcc.apk"
+cd "$TEMP_DIR" && tar -xzf libstdcpp.apk --wildcards 'usr/lib/libstdc++.so.6.*' 2>/dev/null
 cd "$TEMP_DIR" && tar -xzf libgcc.apk usr/lib/libgcc_s.so.1 2>/dev/null
-cp "$TEMP_DIR/usr/lib/libstdc++.so.6.0.33" "$LIB_DIR/libstdc++.so.6"
+cp "$TEMP_DIR"/usr/lib/libstdc++.so.6.* "$LIB_DIR/libstdc++.so.6"
 cp "$TEMP_DIR/usr/lib/libgcc_s.so.1" "$LIB_DIR/libgcc_s.so.1"
 chmod 755 "$LIB_DIR/libstdc++.so.6" "$LIB_DIR/libgcc_s.so.1"
 echo "  libstdc++: $(du -sh "$LIB_DIR/libstdc++.so.6" | cut -f1)"
