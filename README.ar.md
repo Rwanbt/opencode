@@ -123,7 +123,7 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 - واجهة GPU خلفية Vulkan، تُحمَّل تلقائياً عند أول تحميل نموذج
 - **تكوين تكيُّفي أثناء التشغيل** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`، الخيوط، حجم batch/ubatch، تكميم ذاكرة KV المؤقتة وحجم السياق، كلها مُستنبطة من VRAM المكتشفة وRAM الحرة وتقسيم CPU big.LITTLE وواجهة GPU الخلفية (CUDA/ROCm/Vulkan/Metal/OpenCL) والحالة الحرارية. يحلّ محل `--n-gpu-layers 99` المُرمَّز سابقاً — جهاز Android بسعة 4 جيجابايت يعمل الآن بوضع CPU الاحتياطي بدلاً من قتله بسبب OOM، وأجهزة سطح المكتب الرائدة تحصل على batch مضبوط بدلاً من الافتراضي 512.
 - `--flash-attn on` — Flash Attention لكفاءة الذاكرة
-- `--cache-type-k/v` — ذاكرة KV المؤقتة مع دوران Hadamard؛ مستوى تكيُّفي (f16 / q8_0 / q4_0) حسب هامش VRAM
+- `--cache-type-k/v` — ذاكرة KV المؤقتة مع دوران ؛ مستوى تكيُّفي (f16 / q8_0 / q4_0) حسب هامش VRAM
 - `--fit on` — تعديل VRAM ثانوي خاص بالـfork (اختياري عبر `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - فك الترميز التخميني (`--model-draft`) مع حماية VRAM (تعطيل تلقائي عند < 1.5 جيجابايت حرة)
 - فتحة واحدة (`-np 1`) لتقليل استهلاك الذاكرة
@@ -146,7 +146,7 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 **إدارة النماذج**
 - بحث HuggingFace مع شارات توافق VRAM/RAM لكل نموذج
 - تحميل وتشغيل وإيقاف وحذف نماذج GGUF من الواجهة
-- كتالوج مُنتقى مسبقاً: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- كتالوج مُنتقى مسبقاً: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - عدد رموز إخراج ديناميكي حسب حجم النموذج
 - كشف تلقائي لنموذج المسودة (0.5B–0.8B) لفك الترميز التخميني
 
@@ -162,7 +162,6 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 - فحوصات ما قبل التنفيذ (على مستوى الكود، 0 رمز): فحص وجود الملف قبل التحرير، التحقق من محتوى old_string، فرض القراءة قبل التحرير، منع الكتابة على ملف موجود
 - كسر تلقائي لحلقة الدوران: استدعاءان متطابقان لأداة → حقن خطأ (حماية على مستوى الكود، وليس الأمر)
 - قياس أداء الأدوات: معدل نجاح/خطأ لكل جلسة مع تفصيل لكل أداة، تسجيل تلقائي
-- الهدف: >85% معدل نجاح الأدوات على نماذج 4B
 
 **متعدد المنصات**: Windows (Vulkan)، Linux، macOS، Android
 
@@ -339,7 +338,7 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | **تكوين تكيُّفي أثناء التشغيل** | Implemented | `auto-config.ts`: n_gpu_layers / الخيوط / batch / تكميم KV مستنبطة من VRAM المكتشفة وRAM وbig.LITTLE وواجهة GPU الخلفية والحالة الحرارية |
 | **إطار قياس الأداء** | Implemented | `bun run bench:llm` يقيس FTL وTPS وذروة RSS وزمن الجدار لكل نموذج؛ إخراج JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` لـ gpt-*/o1/o3/o4؛ تقدير تجريبي 3.5 حرف/رمز لـLlama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
@@ -506,7 +505,7 @@ graph TB
 - **إدارة النماذج** — تحميل نماذج GGUF من HuggingFace، تشغيل/إيقاف/حذف، 9 نماذج مُنتقاة مسبقاً
 - **تسجيل المزود** — النموذج المحلي يظهر كمزود "Local AI" في محدد النموذج
 - **Flash Attention** — `--flash-attn on` لاستدلال فعال الذاكرة
-- **تكميم ذاكرة KV المؤقتة** — `--cache-type-k/v q4_0` مع دوران Hadamard (توفير 72% من الذاكرة)
+- **تكميم ذاكرة KV المؤقتة** — `--cache-type-k/v q4_0` مع دوران  (توفير 72% من الذاكرة)
 - **فك الترميز التخميني** — كشف تلقائي لنموذج المسودة (0.5B–0.8B) مع RAM Guard عبر `/proc/meminfo`
 - **مراقبة RAM** — أداة ذاكرة الجهاز (إجمالي/مستخدم/حر) عبر `/proc/meminfo`
 - **إعدادات التكوين المسبقة** — نفس إعدادات Fast/Quality/Eco/Long Context كسطح المكتب

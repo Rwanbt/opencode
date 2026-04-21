@@ -123,9 +123,9 @@ O OpenCode executa modelos de IA localmente em hardware consumer (8 GB VRAM / 16
 - Backend GPU Vulkan, baixado automaticamente no primeiro carregamento do modelo
 - **Configuração adaptativa em runtime** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, tamanho de batch/ubatch, quantização de cache KV e tamanho do contexto derivados da VRAM detectada, RAM livre, divisão CPU big.LITTLE, backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) e estado térmico. Substitui o antigo `--n-gpu-layers 99` fixo — um Android de 4 GB agora roda em fallback CPU em vez de ser morto por OOM, desktops top obtêm batch ajustado em vez do padrão 512.
 - `--flash-attn on` — Flash Attention para eficiência de memória
-- `--cache-type-k/v` — Cache KV com rotação de Hadamard; nível adaptativo (f16 / q8_0 / q4_0) conforme a margem de VRAM
+- `--cache-type-k/v` — Cache KV com rotação de ; nível adaptativo (f16 / q8_0 / q4_0) conforme a margem de VRAM
 - `--fit on` — ajuste secundário de VRAM exclusivo do fork (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Decodificação especulativa (`--model-draft`) com VRAM Guard (desativa automaticamente se < 1.5 GB livres)
+- Decodificação especulativa (`--model-draft`) com VRAM Guard (desativa automaticamente se < 4 GB livres)
 - Slot único (`-np 1`) para minimizar o consumo de memória
 - **Harness de benchmark** (`bun run bench:llm`): medição reprodutível de FTL / TPS / pico de RSS / tempo total por modelo, por execução, com saída JSONL para arquivamento em CI
 
@@ -146,7 +146,7 @@ O OpenCode executa modelos de IA localmente em hardware consumer (8 GB VRAM / 16
 **Gerenciamento de Modelos**
 - Busca no HuggingFace com badges de compatibilidade VRAM/RAM por modelo
 - Baixar, carregar, descarregar, excluir modelos GGUF pela interface
-- Catálogo pré-curado: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Catálogo pré-curado: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Tokens de saída dinâmicos baseados no tamanho do modelo
 - Detecção automática de modelo draft (0.5B–0.8B) para decodificação especulativa
 
@@ -162,7 +162,6 @@ O OpenCode executa modelos de IA localmente em hardware consumer (8 GB VRAM / 16
 - Verificações pré-voo (nível de código, 0 tokens): verificação de existência de arquivo antes da edição, verificação de conteúdo old_string, obrigatoriedade de leitura antes da edição, prevenção de escrita em arquivo existente
 - Interrupção automática de doom loop: 2 chamadas idênticas consecutivas → erro injetado (guarda em nível de código, não apenas prompt)
 - Telemetria de ferramentas: taxa de sucesso/erro por sessão com detalhamento por ferramenta, registrado automaticamente
-- Objetivo: >85% de taxa de sucesso de ferramentas em modelos 4B
 
 **Multiplataforma**: Windows (Vulkan), Linux, macOS, Android
 
@@ -339,7 +338,7 @@ Para evitar confusão a partir de resumos gerados por IA deste projeto:
 | **Configuração adaptativa em runtime** | Implemented | `auto-config.ts`: n_gpu_layers / threads / batch / quant KV derivados de VRAM detectada, RAM, big.LITTLE, backend GPU, estado térmico |
 | **Harness de benchmark** | Implemented | `bun run bench:llm` mede FTL, TPS, pico de RSS, tempo total por modelo; saída JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` para gpt-*/o1/o3/o4; empírico 3.5 caracteres/token para Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
@@ -379,7 +378,7 @@ Para evitar confusão a partir de resumos gerados por IA deste projeto:
 ### Extensões da Plataforma (Experimentais)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: runtime embarcado, LLM no dispositivo, STT + TTS (Kokoro). iOS: modo remoto |
+| Mobile app (Tauri) | Implemented | Android: runtime embarcado, LLM no dispositivo, STT + TTS (Kokoro). iOS: planeado |
 | **Deep link de callback OAuth** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` finaliza automaticamente a troca de token; sem necessidade de copiar/colar o código de autenticação |
 | **Observador de branch upstream** | Implemented | `git fetch` periódico (aquecimento 30 s, intervalo 5 min) emite `vcs.branch.behind` quando o HEAD local diverge do upstream rastreado; exibido via `platform.notify()` no desktop e mobile |
 | **Spawn de PTY no tamanho do viewport** | Implemented | `Pty.create({cols, rows})` usa um estimador de `window.innerWidth/innerHeight` — os shells iniciam já com suas dimensões finais em vez de 80×24→36×11, corrige o bug do primeiro prompt invisível no Android em mksh/bash |
@@ -494,7 +493,7 @@ Config: `experimental.collaborative.enabled: true`
 App nativa Android/iOS via Tauri 2.0 com **runtime embarcado** — um único APK, zero dependências externas. Implementado:
 
 **Layer 1 — Runtime Embarcado (Android, 100% desempenho nativo):**
-- **Binários estáticos no APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) extraídos na primeira inicialização (~15s)
+- **Binários estáticos no APK** — Bun, Bash, Ripgrep, Toybox (aarch64-linux-musl) extraídos na primeira inicialização (~15s)
 - **CLI embarcada** — CLI do OpenCode como bundle JS executado pelo Bun embarcado, sem rede necessária para o core
 - **Spawn direto de processos** — Sem Termux, sem intents — `std::process::Command` do Rust diretamente
 - **Inicialização automática do servidor** — `bun opencode-cli.js serve` em localhost com autenticação UUID, mesmo que o sidecar desktop
@@ -503,10 +502,10 @@ App nativa Android/iOS via Tauri 2.0 com **runtime embarcado** — um único APK
 - **llama.cpp via JNI** — Kotlin LlamaEngine carrega bibliotecas nativas .so com bridge JNI
 - **IPC baseado em arquivos** — Rust escreve comandos em `llm_ipc/request`, daemon Kotlin faz polling e retorna resultados
 - **llama-server** — API HTTP compatível com OpenAI na porta 14097 para integração com provedores
-- **Gerenciamento de modelos** — Baixar modelos GGUF do HuggingFace, carregar/descarregar/excluir, 9 modelos pré-curados
+- **Gerenciamento de modelos** — Baixar modelos GGUF do HuggingFace, carregar/descarregar/excluir, 4 modelos pré-curados (Gemma 3 4B, Qwen3 4B/1.7B/0.6B)
 - **Registro de provedor** — Modelo local aparece como provedor "Local AI" no seletor de modelos
 - **Flash Attention** — `--flash-attn on` para inferência eficiente em memória
-- **Quantização de cache KV** — `--cache-type-k/v q4_0` com rotação de Hadamard (economia de 72% de memória)
+- **Quantização de cache KV** — `--cache-type-k/v q4_0` com rotação de  (economia de 72% de memória)
 - **Decodificação especulativa** — Detecção automática de modelo draft (0.5B–0.8B) com RAM Guard via `/proc/meminfo`
 - **Monitoramento de RAM** — Widget de memória do dispositivo (total/usada/livre) via `/proc/meminfo`
 - **Presets de configuração** — Mesmos presets Fast/Quality/Eco/Long Context do desktop

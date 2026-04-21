@@ -123,9 +123,9 @@ OpenCode exécute des modèles IA localement sur du matériel grand public (8 Go
 - Backend GPU Vulkan, téléchargé automatiquement au premier chargement de modèle
 - **Configuration adaptative à l'exécution** (`packages/opencode/src/local-llm-server/auto-config.ts`) : `n_gpu_layers`, threads, taille de batch/ubatch, quantification du cache KV et taille du contexte dérivées de la VRAM détectée, de la RAM libre, du découpage CPU big.LITTLE, du backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) et de l'état thermique. Remplace l'ancien `--n-gpu-layers 99` codé en dur — un Android 4 Go fonctionne désormais en repli CPU au lieu d'être tué par OOM, les desktops haut de gamme obtiennent un batch ajusté au lieu du 512 par défaut.
 - `--flash-attn on` — Flash Attention pour l'efficacité mémoire
-- `--cache-type-k/v` — Cache KV avec rotation de Hadamard ; palier adaptatif (f16 / q8_0 / q4_0) selon la marge VRAM
+- `--cache-type-k/v` — palier adaptatif de quantification llama.cpp standard (f16 / q8_0 / q4_0) selon la marge VRAM
 - `--fit on` — ajustement VRAM secondaire exclusif au fork (activation via `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Décodage spéculatif (`--model-draft`) avec garde VRAM (désactivation automatique si < 1.5 Go libre)
+- Décodage spéculatif (`--model-draft`) avec garde VRAM (désactivation automatique si < 4 Go de marge VRAM)
 - Slot unique (`-np 1`) pour minimiser l'empreinte mémoire
 - **Harnais de benchmark** (`bun run bench:llm`) : mesure reproductible de FTL / TPS / RSS de pic / temps mur par modèle, par exécution, sortie JSONL pour archivage CI
 
@@ -146,7 +146,7 @@ OpenCode exécute des modèles IA localement sur du matériel grand public (8 Go
 **Gestion des modèles**
 - Recherche HuggingFace avec badges de compatibilité VRAM/RAM par modèle
 - Télécharger, charger, décharger, supprimer des modèles GGUF depuis l'interface
-- Catalogue pré-sélectionné : Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Catalogue pré-sélectionné : Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Tokens de sortie dynamiques selon la taille du modèle
 - Détection automatique du modèle draft (0.5B-0.8B) pour le décodage spéculatif
 
@@ -162,7 +162,6 @@ OpenCode exécute des modèles IA localement sur du matériel grand public (8 Go
 - Gardes pré-vol (au niveau code, 0 token) : vérification d'existence du fichier avant édition, vérification du contenu old_string, lecture obligatoire avant édition, prévention d'écriture sur fichier existant
 - Rupture automatique de boucle infinie : 2x appels d'outils identiques → erreur injectée (garde au niveau code, pas uniquement dans le prompt)
 - Télémétrie des outils : taux de succès/erreur par session avec détail par outil, journalisé automatiquement
-- Objectif : >85% de taux de réussite des outils sur les modèles 4B
 
 **Multi-plateforme** : Windows (Vulkan), Linux, macOS, Android
 
@@ -345,10 +344,10 @@ Pour éviter toute confusion liée aux résumés générés par IA de ce projet 
 | **Configuration adaptative à l'exécution** | Implemented | `auto-config.ts` : n_gpu_layers / threads / batch / quant KV dérivés de la VRAM détectée, RAM, big.LITTLE, backend GPU, état thermique |
 | **Harnais de benchmark** | Implemented | `bun run bench:llm` mesure FTL, TPS, RSS de pic, temps mur par modèle ; sortie JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` pour gpt-*/o1/o3/o4 ; empirique 3.5 caractères/token pour Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
-| HuggingFace model search | Implemented | Réponse validée par Zod, badges VRAM, gestionnaire de téléchargement, 9 modèles pré-sélectionnés |
+| HuggingFace model search | Implemented | Réponse validée par Zod, badges VRAM, gestionnaire de téléchargement, 4 modèles pré-sélectionnés (Gemma 3 4B, Qwen3 4B/1.7B/0.6B) |
 | **Téléchargements GGUF reprenables** | Implemented | En-tête HTTP `Range` — une interruption 4G ne redémarre pas un transfert de 4 Go depuis zéro |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
 | Redémarrage avec disjoncteur | Implemented | `ensureCorrectModel` abandonne après 3 redémarrages en 120 s pour éviter les boucles burn-cycle |

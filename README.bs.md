@@ -123,7 +123,7 @@ OpenCode pokrece AI modele lokalno na potrosackom hardveru (8 GB VRAM / 16 GB RA
 - Vulkan GPU backend, automatski preuzet pri prvom ucitavanju modela
 - **Adaptivna runtime konfiguracija** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, niti, velicina batch/ubatch, kvantizacija KV cache-a i velicina konteksta izvedeni iz detektovanog VRAM-a, slobodnog RAM-a, big.LITTLE CPU podjele, GPU backend-a (CUDA/ROCm/Vulkan/Metal/OpenCL) i termalnog stanja. Zamjenjuje stari hardkodirani `--n-gpu-layers 99` — 4 GB Android sada radi u CPU fallback-u umjesto da bude ubijen OOM-om, vrhunski desktopi dobijaju podeseni batch umjesto podrazumijevanog 512.
 - `--flash-attn on` — Flash Attention za efikasnost memorije
-- `--cache-type-k/v` — KV cache sa Hadamard rotacijom; adaptivni nivo (f16 / q8_0 / q4_0) na osnovu VRAM rezerve
+- `--cache-type-k/v` — KV cache sa  rotacijom; adaptivni nivo (f16 / q8_0 / q4_0) na osnovu VRAM rezerve
 - `--fit on` — sekundarno VRAM podesavanje ekskluzivno za fork (opt-in preko `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Spekulativno dekodiranje (`--model-draft`) sa VRAM Guard (automatski deaktivira ako < 1,5 GB slobodno)
 - Jedan slot (`-np 1`) za minimiziranje memorijskog otiska
@@ -146,7 +146,7 @@ OpenCode pokrece AI modele lokalno na potrosackom hardveru (8 GB VRAM / 16 GB RA
 **Upravljanje modelima**
 - HuggingFace pretraga sa VRAM/RAM znackama kompatibilnosti po modelu
 - Preuzimanje, ucitavanje, iskljucivanje, brisanje GGUF modela iz korisnickog interfejsa
-- Unaprijed kurirani katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Unaprijed kurirani katalog: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dinamicki izlazni tokeni bazirani na velicini modela
 - Auto-detekcija draft modela (0.5B-0.8B) za spekulativno dekodiranje
 
@@ -162,7 +162,6 @@ OpenCode pokrece AI modele lokalno na potrosackom hardveru (8 GB VRAM / 16 GB RA
 - Pre-flight guards (nivo koda, 0 tokena): provjera postojanja datoteke prije uredivanja, verifikacija sadrzaja old_string, provodjenje citanja-prije-uredivanja, sprecavanje pisanja-na-postojece
 - Doom loop auto-break: 2x identicna poziva alata → greska se ubacuje (guard na nivou koda, ne samo prompt)
 - Telemetrija alata: stopa uspjeha/greske po sesiji sa razlomkom po alatu, automatski loguje
-- Cilj: >85% stopa uspjeha alata na 4B modelima
 
 **Viseplatformski**: Windows (Vulkan), Linux, macOS, Android
 
@@ -345,7 +344,7 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 | **Adaptivna runtime konfiguracija** | Implemented | `auto-config.ts`: n_gpu_layers / niti / batch / KV kvantizacija izvedeni iz detektovanog VRAM-a, RAM-a, big.LITTLE, GPU backend-a, termalnog stanja |
 | **Benchmark harness** | Implemented | `bun run bench:llm` mjeri FTL, TPS, vrhunac RSS, zidno vrijeme po modelu; JSONL izlaz |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` za gpt-*/o1/o3/o4; empirijski 3,5 znakova/token za Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | HuggingFace model search | Implemented | Zod-validiran odgovor, VRAM znackice, menadzer preuzimanja, 9 predodabranih modela |
