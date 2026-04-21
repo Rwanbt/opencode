@@ -53,7 +53,12 @@ android {
             }
         }
         getByName("release") {
-            isDebuggable = false
+            // Diagnostic-only: isDebuggable=true exposes the WebView to
+            // chrome://inspect (see MainActivity.setWebContentsDebuggingEnabled).
+            // Revert to false before shipping. Required to investigate the
+            // portrait first-prompt bug — the artefact reproduces only on
+            // release builds (minified/shrunk asset paths differ).
+            isDebuggable = true
             isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true

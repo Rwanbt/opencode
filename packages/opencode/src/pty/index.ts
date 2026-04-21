@@ -33,7 +33,26 @@ export namespace Pty {
     bufferCursor: number
     cursor: number
     subscribers: Map<unknown, Socket>
+    // Mobile portrait first-prompt fix: track the dims the shell was spawned
+    // with so we can no-op identical resize requests (the frontend's initial
+    // fit.fit() produces the same numbers as estimateTerminalSize() on matching
+    // viewports), and we record the spawn timestamp so we can delay the first
+    // SIGWINCH until after mksh has emitted its PS1 and entered its readline
+    // loop. Sending SIGWINCH during that window triggers sigwinch_redisplay()
+    // which pads the line with spaces and overwrites the prompt.
+    spawnedAt: number
+    spawnCols: number
+    spawnRows: number
+    firstOutputAt: number | undefined
+    pendingResize: { cols: number; rows: number; timer: ReturnType<typeof setTimeout> } | undefined
   }
+
+  // Hold the first post-spawn resize for this long if it arrives before any
+  // shell output — gives mksh time to source rc files, emit PS1 and initialize
+  // readline. Measured locally: PS1 arrives within ~120ms on cold boot; 800ms
+  // covers worst-case .profile sourcing. If output is seen earlier, the queued
+  // resize is flushed immediately.
+  const SPAWN_SIGWINCH_HOLD_MS = 800
 
   type State = {
     dir: string
@@ -85,6 +104,14 @@ export namespace Pty {
     cwd: z.string().optional(),
     title: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    // Optional client-provided session id. Used by the mobile frontend's
+    // lazy-create flow: the Terminal component mounts first, measures its
+    // container, calls fit() to get the *exact* grid size, and only then
+    // calls pty.create with that id + the measured dims. The shell is then
+    // born at the final size so no SIGWINCH is ever needed and readline's
+    // pad-erase redisplay never fires — fixing the portrait first-prompt
+    // bug at its root. When omitted, the server generates one as before.
+    id: z.string().startsWith("pty_").optional(),
     // Initial PTY dimensions. When omitted the platform default (80x24) is
     // used, which on mobile webviews causes the first shell prompt to be
     // dropped: the shell writes its prompt at 80x24, the frontend fit()s
@@ -140,6 +167,10 @@ export namespace Pty {
       const bus = yield* Bus.Service
       const plugin = yield* Plugin.Service
       function teardown(session: Active) {
+        if (session.pendingResize) {
+          clearTimeout(session.pendingResize.timer)
+          session.pendingResize = undefined
+        }
         try {
           session.process.kill()
         } catch {}
@@ -193,7 +224,12 @@ export namespace Pty {
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const s = yield* InstanceState.get(state)
-        const id = PtyID.ascending()
+        // Use the client-provided id if present (lazy-create flow), else mint
+        // a fresh ascending id. PtyID.ascending(given) validates the prefix.
+        if (input.id && s.sessions.has(input.id as PtyID)) {
+          return s.sessions.get(input.id as PtyID)!.info
+        }
+        const id = input.id ? PtyID.ascending(input.id) : PtyID.ascending()
         const command = input.command || Shell.preferred()
         const args = input.args || []
         if (Shell.login(command)) {
@@ -260,11 +296,35 @@ export namespace Pty {
           bufferCursor: 0,
           cursor: 0,
           subscribers: new Map(),
+          spawnedAt: Date.now(),
+          spawnCols: input.cols ?? 80,
+          spawnRows: input.rows ?? 24,
+          firstOutputAt: undefined,
+          pendingResize: undefined,
         }
         s.sessions.set(id, session)
         proc.onData(
           Instance.bind((chunk) => {
             session.cursor += chunk.length
+            if (session.firstOutputAt === undefined) {
+              session.firstOutputAt = Date.now()
+              // Flush any resize that was held while we waited for the shell
+              // to emit its prompt. Deferring until after output reaches
+              // readline means SIGWINCH lands in a state where mksh only
+              // updates its internal COLUMNS without repainting (no pad).
+              const pending = session.pendingResize
+              if (pending) {
+                clearTimeout(pending.timer)
+                session.pendingResize = undefined
+                try {
+                  session.process.resize(pending.cols, pending.rows)
+                  session.spawnCols = pending.cols
+                  session.spawnRows = pending.rows
+                } catch (err) {
+                  log.info("deferred resize failed", { id, err: String(err) })
+                }
+              }
+            }
 
             for (const [key, ws] of session.subscribers.entries()) {
               if (ws.readyState !== 1) {
@@ -310,17 +370,61 @@ export namespace Pty {
           session.info.title = input.title
         }
         if (input.size) {
-          session.process.resize(input.size.cols, input.size.rows)
+          applyResize(session, input.size.cols, input.size.rows)
         }
         yield* bus.publish(Event.Updated, { info: session.info })
         return session.info
       })
 
+      // Mobile portrait first-prompt guard. Three cases:
+      //  1. Identical to spawn dims — skip ioctl+SIGWINCH entirely. No kernel
+      //     state change needed, no signal to trigger readline pad.
+      //  2. Shell hasn't emitted output yet and we're inside the hold window —
+      //     queue the resize; it is flushed either by the first onData callback
+      //     (see create handler) or by a fallback timer at hold-deadline.
+      //  3. Anything else — resize immediately (genuine mid-session resize).
+      function applyResize(session: Active, cols: number, rows: number) {
+        if (cols === session.spawnCols && rows === session.spawnRows) {
+          if (session.pendingResize) {
+            clearTimeout(session.pendingResize.timer)
+            session.pendingResize = undefined
+          }
+          return
+        }
+        const sinceSpawn = Date.now() - session.spawnedAt
+        if (session.firstOutputAt === undefined && sinceSpawn < SPAWN_SIGWINCH_HOLD_MS) {
+          if (session.pendingResize) {
+            clearTimeout(session.pendingResize.timer)
+          }
+          const timer = setTimeout(() => {
+            const pending = session.pendingResize
+            if (!pending) return
+            session.pendingResize = undefined
+            try {
+              session.process.resize(pending.cols, pending.rows)
+              session.spawnCols = pending.cols
+              session.spawnRows = pending.rows
+            } catch (err) {
+              log.info("held resize fallback failed", { err: String(err) })
+            }
+          }, Math.max(0, SPAWN_SIGWINCH_HOLD_MS - sinceSpawn))
+          session.pendingResize = { cols, rows, timer }
+          return
+        }
+        try {
+          session.process.resize(cols, rows)
+          session.spawnCols = cols
+          session.spawnRows = rows
+        } catch (err) {
+          log.info("resize failed", { err: String(err) })
+        }
+      }
+
       const resize = Effect.fn("Pty.resize")(function* (id: PtyID, cols: number, rows: number) {
         const s = yield* InstanceState.get(state)
         const session = s.sessions.get(id)
         if (session && session.info.status === "running") {
-          session.process.resize(cols, rows)
+          applyResize(session, cols, rows)
         }
       })
 

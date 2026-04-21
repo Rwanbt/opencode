@@ -24,6 +24,7 @@ import type {
   CollabRefreshResponses,
   CollabRegisterErrors,
   CollabRegisterResponses,
+  CollabWsTicketResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -55,6 +56,10 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GdprAuditListResponses,
+  GdprDeleteErrors,
+  GdprDeleteResponses,
+  GdprExportResponses,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
@@ -384,6 +389,18 @@ export class Collab extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Issue a short-lived WebSocket ticket
+   *
+   * Consumes the current Basic/JWT session and emits a 60-second JWT usable for the WebSocket handshake. The ticket is ALSO set as `opencode_ws_ticket` HttpOnly+SameSite=Strict cookie so browser WS upgrades can authenticate without exposing the token to JS.
+   */
+  public wsTicket<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<CollabWsTicketResponses, unknown, ThrowOnError>({
+      url: "/collab/ws-ticket",
+      ...options,
     })
   }
 
@@ -920,6 +937,7 @@ export class Pty extends HeyApiClient {
       env?: {
         [key: string]: string
       }
+      id?: string
       cols?: number
       rows?: number
     },
@@ -937,6 +955,7 @@ export class Pty extends HeyApiClient {
             { in: "body", key: "cwd" },
             { in: "body", key: "title" },
             { in: "body", key: "env" },
+            { in: "body", key: "id" },
             { in: "body", key: "cols" },
             { in: "body", key: "rows" },
           ],
@@ -3483,6 +3502,115 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Audit extends HeyApiClient {
+  /**
+   * List audit log entries
+   *
+   * Paginated audit log read (default 100, max 1000).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      from?: number
+      to?: number
+      limit?: number
+      action?: string
+      actor?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "action" },
+            { in: "query", key: "actor" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GdprAuditListResponses, unknown, ThrowOnError>({
+      url: "/audit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Gdpr extends HeyApiClient {
+  /**
+   * Export user data (RGPD)
+   *
+   * Streams a JSON document containing all local sessions, messages, and non-secret config. Auth tokens are omitted by default.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GdprExportResponses, unknown, ThrowOnError>({
+      url: "/user/data/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete all user data (RGPD)
+   *
+   * Destroys all local sessions, messages, auth.json, and user config. Requires header `X-Confirm-Delete: yes`.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<GdprDeleteResponses, GdprDeleteErrors, ThrowOnError>({
+      url: "/user/data",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _audit?: Audit
+  get audit(): Audit {
+    return (this._audit ??= new Audit({ client: this.client }))
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -4789,6 +4917,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _gdpr?: Gdpr
+  get gdpr(): Gdpr {
+    return (this._gdpr ??= new Gdpr({ client: this.client }))
   }
 
   private _find?: Find
