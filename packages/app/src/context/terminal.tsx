@@ -17,6 +17,26 @@ export type LocalPTY = {
   buffer?: string
   scrollY?: number
   cursor?: number
+  // Lazy-create flag. True between the moment the user opens a terminal tab
+  // and the moment the Terminal component has mounted, measured its
+  // container, and called sdk.client.pty.create(). During this window no
+  // backend session exists yet — the shell is spawned at the exact final
+  // grid dimensions so no SIGWINCH/readline-pad is ever needed. The sweep
+  // and persist/migrate paths must skip pending entries.
+  _pending?: boolean
+}
+
+// Client-side PTY id generator. Must produce a string matching the server's
+// `pty_...` prefix validation (see Identifier.schema in opencode/src/id/id.ts).
+// Format mimics ascending ids (timestamp prefix + random suffix) so the
+// server's ordering assumptions still hold when the id reaches the backend.
+function generateClientPtyId(): string {
+  const ts = Date.now().toString(36)
+  const rand =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? (crypto as { randomUUID: () => string }).randomUUID().replace(/-/g, "")
+      : Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+  return `pty_${ts}${rand}`.slice(0, 30)
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -73,6 +93,10 @@ function pty(value: unknown): LocalPTY | undefined {
 
   const id = text(value.id)
   if (!id) return
+
+  // Drop entries that were still pending at persist time — they have no
+  // backend session to reconnect to, so keeping them only confuses sweep.
+  if (value._pending === true) return
 
   const title = text(value.title) ?? ""
   const number = num(value.titleNumber)
@@ -232,6 +256,26 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       setSweepDone(true)
       return
     }
+    // Drop any persisted pending entries — they had no backend session when
+    // persistence ran (the Terminal component never completed the lazy
+    // pty.create call), so nothing to reconnect to. Also saves us from
+    // querying the server with ids it has never seen.
+    const pendingIds = new Set(store.all.filter((pty) => pty._pending).map((pty) => pty.id))
+    if (pendingIds.size > 0) {
+      batch(() => {
+        setStore(
+          "all",
+          produce((draft) => {
+            for (let i = draft.length - 1; i >= 0; i--) {
+              if (pendingIds.has(draft[i].id)) draft.splice(i, 1)
+            }
+          }),
+        )
+        if (store.active && pendingIds.has(store.active)) {
+          setStore("active", store.all[0]?.id)
+        }
+      })
+    }
     const ids = store.all.map((pty) => pty.id)
     if (ids.length === 0) {
       setSweepDone(true)
@@ -346,29 +390,44 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     },
     new() {
       const nextNumber = pickNextTerminalNumber()
-      const estimated = estimateTerminalSize()
-
-      sdk.client.pty
-        .create({ title: defaultTitle(nextNumber), cols: estimated.cols, rows: estimated.rows })
-        .then((pty: { data?: { id?: string; title?: string } }) => {
-          const id = pty.data?.id
-          if (!id) return
-          const newTerminal = {
-            id,
-            title: pty.data?.title ?? defaultTitle(nextNumber),
-            titleNumber: nextNumber,
-          }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
-        })
-        .catch((error: unknown) => {
-          console.error("Failed to create terminal", error)
-          showToast({
-            variant: "error",
-            title: "Terminal",
-            description: error instanceof Error ? error.message : "Failed to create terminal session",
-          })
-        })
+      // Lazy-create: no backend call here. The Terminal component mounts on
+      // this _pending entry, measures its container with fit.fit(), and calls
+      // sdk.client.pty.create() with the *exact* grid dims. The shell spawns
+      // at its final size so no initial resize/SIGWINCH is needed.
+      const id = generateClientPtyId()
+      const pending: LocalPTY = {
+        id,
+        title: defaultTitle(nextNumber),
+        titleNumber: nextNumber,
+        _pending: true,
+      }
+      batch(() => {
+        setStore("all", store.all.length, pending)
+        setStore("active", id)
+      })
+    },
+    finalizePending(id: string) {
+      const index = store.all.findIndex((x) => x.id === id)
+      if (index === -1) return
+      if (!store.all[index]?._pending) return
+      setStore("all", index, (pty) => ({ ...pty, _pending: undefined }))
+    },
+    failPending(id: string) {
+      const index = store.all.findIndex((x) => x.id === id)
+      if (index === -1) return
+      if (!store.all[index]?._pending) return
+      batch(() => {
+        if (store.active === id) {
+          const fallback = index > 0 ? store.all[index - 1]?.id : store.all[1]?.id
+          setStore("active", fallback)
+        }
+        setStore(
+          "all",
+          produce((draft) => {
+            draft.splice(index, 1)
+          }),
+        )
+      })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
       update(sdk.client, pty)
@@ -524,6 +583,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
+      finalizePending: (id: string) => workspace().finalizePending(id),
+      failPending: (id: string) => workspace().failPending(id),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),

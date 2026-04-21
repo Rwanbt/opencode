@@ -13,7 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
-import type { LocalPTY } from "@/context/terminal"
+import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
@@ -232,6 +232,7 @@ const persistTerminal = (input: {
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
   const sdk = useSDK()
+  const terminalCtx = useTerminal()
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
@@ -642,6 +643,30 @@ export const Terminal = (props: TerminalProps) => {
         startResize()
       } else {
         fit.fit()
+        if (local.pty._pending) {
+          // Lazy-create: backend has no session for this id yet. Call
+          // pty.create with the *exact* grid dims measured above. The shell
+          // spawns at final size so no SIGWINCH is ever emitted and mksh's
+          // readline pad-erase redisplay never fires — fixes the portrait
+          // first-prompt bug at its root.
+          try {
+            await client.pty.create({
+              id,
+              title: local.pty.title,
+              cols: t.cols,
+              rows: t.rows,
+            })
+            // Pre-seed lastSize so the immediate scheduleSize below (and the
+            // ones from WS open / ResizeObserver if dims are still identical)
+            // are no-ops and never trigger a PUT /pty/:id.
+            lastSize = { cols: t.cols, rows: t.rows }
+            terminalCtx.finalizePending(id)
+          } catch (err) {
+            addDebug(`pty.create failed: ${err instanceof Error ? err.message : String(err)}`)
+            terminalCtx.failPending(id)
+            throw err
+          }
+        }
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)

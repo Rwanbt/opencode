@@ -1758,6 +1758,19 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Task orchestration limits (cost caps, concurrency)
+     */
+    task?: {
+      /**
+       * Cumulative USD cost cap per task session. Further /task/:id/followup calls return 429 cost_cap_exceeded once reached. Undefined = no cap.
+       */
+      cost_cap?: number
+      /**
+       * Maximum number of background tasks executing concurrently per project. Additional tasks are enqueued and started when slots free. Default: 4.
+       */
+      max_parallel?: number
+    }
+    /**
      * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
      */
     openTelemetry?: boolean
@@ -1831,6 +1844,10 @@ export type Config = {
        * Enable DLP (Data Loss Prevention) to redact secrets before sending to LLM
        */
       enabled?: boolean
+      /**
+       * Run secret + prompt-injection scanner on tool outputs before passing them to the LLM. Off by default to avoid false positives in dev.
+       */
+      scan_tool_outputs?: boolean
     }
     /**
      * Policy engine for conditional permission rules beyond allow/deny/ask
@@ -1912,6 +1929,45 @@ export type Config = {
        */
       max_memory_mb?: number
     }
+    /**
+     * Crash reporter — local-first, optional remote upload
+     */
+    crash?: {
+      /**
+       * Opt-in HTTPS endpoint where crash reports will be POSTed as JSON. Default: undefined (local file only).
+       */
+      upload_endpoint?: string
+    }
+    /**
+     * Provider-layer experimental behaviour (fallback, retry policy)
+     */
+    provider?: {
+      /**
+       * Cascading provider fallback. 'local' = on cloud error, retry via local-llm-server. 'cloud' = on local error, retry via configured cloud provider. Default: null (disabled).
+       */
+      fallback?: "local" | "cloud" | null
+      /**
+       * Override the secondary provider used when fallback='cloud'. Must match a providerID declared in `provider`. Recommended: a fast, cheap model (e.g. anthropic/claude-haiku, google/gemini-flash). Default: null (= first configured non-local provider).
+       */
+      fallback_cloud_providerID?: string | null
+    }
+    /**
+     * Audit log for security-sensitive actions
+     */
+    audit?: {
+      /**
+       * Enable audit log. Records session create/delete, auth mutations, tool permission grants, task cancellations, config writes.
+       */
+      enabled?: boolean
+      /**
+       * Days of audit entries to retain
+       */
+      retention_days?: number
+    }
+    /**
+     * Allow the legacy `?authorization=Bearer+<jwt>` query-string WS handshake. Default true in Sprint 4 for backward compat; flip to false once all clients migrate to the cookie/Sec-WebSocket-Protocol flow.
+     */
+    ws_auth_legacy?: boolean
     /**
      * AnythingLLM integration for document RAG and cross-platform AI
      */
@@ -2210,6 +2266,8 @@ export type TaskInfo = {
     directory: string | null
     branch: string | null
   }
+  costUsed?: number
+  costCap?: number
 }
 
 export type ProviderAuthMethod = {
@@ -2498,6 +2556,25 @@ export type CollabLogoutResponses = {
 }
 
 export type CollabLogoutResponse = CollabLogoutResponses[keyof CollabLogoutResponses]
+
+export type CollabWsTicketData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/collab/ws-ticket"
+}
+
+export type CollabWsTicketResponses = {
+  /**
+   * Ticket issued
+   */
+  200: {
+    ticket: string
+    expiresAt: number
+  }
+}
+
+export type CollabWsTicketResponse = CollabWsTicketResponses[keyof CollabWsTicketResponses]
 
 export type CollabMeData = {
   body?: never
@@ -2920,6 +2997,7 @@ export type PtyCreateData = {
     env?: {
       [key: string]: string
     }
+    id?: string
     cols?: number
     rows?: number
   }
@@ -5281,6 +5359,84 @@ export type CollabPresenceResponses = {
 }
 
 export type CollabPresenceResponse = CollabPresenceResponses[keyof CollabPresenceResponses]
+
+export type GdprExportData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/user/data/export"
+}
+
+export type GdprExportResponses = {
+  /**
+   * JSON stream
+   */
+  200: unknown
+}
+
+export type GdprDeleteData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/user/data"
+}
+
+export type GdprDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GdprDeleteError = GdprDeleteErrors[keyof GdprDeleteErrors]
+
+export type GdprDeleteResponses = {
+  /**
+   * Deleted
+   */
+  204: void
+}
+
+export type GdprDeleteResponse = GdprDeleteResponses[keyof GdprDeleteResponses]
+
+export type GdprAuditListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    from?: number
+    to?: number
+    limit?: number
+    action?: string
+    actor?: string
+  }
+  url: "/audit"
+}
+
+export type GdprAuditListResponses = {
+  /**
+   * Audit entries
+   */
+  200: Array<{
+    id: string
+    ts: number
+    actor?: string
+    action: string
+    target?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+  }>
+}
+
+export type GdprAuditListResponse = GdprAuditListResponses[keyof GdprAuditListResponses]
 
 export type FindTextData = {
   body?: never
