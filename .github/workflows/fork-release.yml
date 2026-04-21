@@ -84,6 +84,115 @@ jobs:
             packages/opencode/dist/opencode-windows-x64.zip
           if-no-files-found: error
 
+      # Second upload in the "opencode-cli" layout expected by
+      # packages/desktop/scripts/prepare.ts (used by build-tauri below).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli
+          path: |
+            packages/opencode/dist/opencode-linux*
+            packages/opencode/dist/opencode-darwin*
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist/opencode-windows*
+          if-no-files-found: warn
+
+  # ─── Tauri Desktop (Linux x64 + Windows x64, unsigned) ──────────────
+  build-tauri:
+    needs: build-cli
+    if: github.repository == 'Rwanbt/opencode'
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+          shared-key: fork-${{ matrix.settings.target }}
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf cmake
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Install deps
+        run: bun install
+
+      - name: Prepare sidecar
+        working-directory: packages/desktop
+        run: bun ./scripts/prepare.ts
+        env:
+          OPENCODE_VERSION: 0.0.0-fork
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
+          RUST_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
+      - name: Build Tauri bundle (unsigned)
+        working-directory: packages/desktop
+        run: cargo tauri build --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json
+        env:
+          # Omit TAURI_SIGNING_PRIVATE_KEY / APPLE_* / AZURE_* — unsigned fork build.
+          TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
+
+      - name: Collect Linux artifacts
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          OUT=packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle
+          mkdir -p dist-desktop
+          # .deb
+          cp "$OUT"/deb/*.deb dist-desktop/opencode-desktop-linux-x64.deb 2>/dev/null || true
+          # AppImage
+          cp "$OUT"/appimage/*.AppImage dist-desktop/opencode-desktop-linux-x64.AppImage 2>/dev/null || true
+          ls -lh dist-desktop/
+
+      - name: Collect Windows artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = "packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle"
+          New-Item -ItemType Directory -Force dist-desktop | Out-Null
+          Get-ChildItem "$out/nsis/*.exe" | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.exe"
+          Get-ChildItem "$out/msi/*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1 | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.msi"
+          Get-ChildItem dist-desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.settings.target }}
+          path: dist-desktop/*
+          if-no-files-found: error
+
   # ─── Android APK ────────────────────────────────────────────────────
   build-android:
     if: github.repository == 'Rwanbt/opencode'
@@ -283,7 +392,7 @@ jobs:
 
   # ─── Create GitHub Release ──────────────────────────────────────────
   release:
-    needs: [build-cli, build-android]
+    needs: [build-cli, build-tauri, build-android]
     if: github.repository == 'Rwanbt/opencode'
     runs-on: ubuntu-latest
     steps:
@@ -296,6 +405,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: cli-bundles
+          path: ./release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-x86_64-unknown-linux-gnu
+          path: ./release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-x86_64-pc-windows-msvc
           path: ./release
 
       - uses: actions/download-artifact@v4
@@ -316,4 +435,8 @@ jobs:
           files: |
             release/opencode-linux-x64.tar.gz
             release/opencode-windows-x64.zip
+            release/opencode-desktop-linux-x64.deb
+            release/opencode-desktop-linux-x64.AppImage
+            release/opencode-desktop-windows-x64.exe
+            release/opencode-desktop-windows-x64.msi
             release/opencode-mobile.apk
