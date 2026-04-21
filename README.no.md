@@ -103,6 +103,57 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+<details>
+<summary><b>⚡ Rask oversikt</b></summary>
+<br>
+
+## ⚡ Rask oversikt
+
+OpenCode (fork) — en orkestrert AI-kodingsagent som kjører på **skrivebord, server og telefon**, med lokale modeller fra ende til ende, null skyavhengighet og innebygde enterprise-grade styringsprimitiver. Fork av [anomalyco/opencode](https://github.com/anomalyco/opencode) vedlikeholdt av [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 ting bare denne forken samler
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro desktop+mobile / Pocket TTS desktop |
+| 🔒 **9-state session FSM** | 6 of 9 states persist to SQLite, audit log survives restart |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **RAG: BM25 or vector** | Selectable at index time + exponential confidence decay |
+
+### Kjør din første oppgave
+
+```bash
+opencode                                  # TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 Trenger du detaljer? Hver seksjon nedenfor er sammenslått — klikk for å åpne bare det du er interessert i.
+
+---
+
+
+</details>
+
+<details>
+<summary><b>Fork-funksjoner</b></summary>
+<br>
+
 ## Fork-funksjoner
 
 > Dette er en fork av [anomalyco/opencode](https://github.com/anomalyco/opencode) vedlikeholdt av [Rwanbt](https://github.com/Rwanbt).
@@ -234,6 +285,13 @@ Skrivebeskyttet koordineringsagent (maks 50 steg). Har tilgang til `task`- og `t
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Teknisk arkitektur</b></summary>
+<br>
+
 ## Teknisk arkitektur
 
 ### Stotte for flere leverandorer
@@ -294,6 +352,13 @@ Fullt SDK (`@opencode/plugin`) med hook-arkitektur. Dynamisk lasting fra npm-pak
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Vanlige misforstaelser</b></summary>
+<br>
+
 ## Vanlige misforstaelser
 
 For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
@@ -304,6 +369,13 @@ For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
 - Det finnes **ingen vektordatabase eller RAG-system** -- kontekst styres via LSP-symbolindeksering + auto-compact.
 - Det finnes **ingen "watch mode" som foreslar automatiske fikser** -- filvakteren eksisterer kun for infrastrukturformaal.
 - **Selvkorrigering** bruker standard agentlokke (LLM ser feil i verktoyresultater og forsoker pa nytt), ikke en spesialisert automatisk reparasjonsmekanisme.
+
+
+</details>
+
+<details>
+<summary><b>Kapabilitetsmatrise</b></summary>
+<br>
 
 ## Kapabilitetsmatrise
 
@@ -362,6 +434,13 @@ For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
 | **Sikkerhetsrevisjonssporer** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — alle funn klassifisert som S1/S2/S3 med `path:line`, status og begrunnelse for utsatt fiks |
 
 ---
+
+
+</details>
+
+<details>
+<summary><b>Future Roadmap</b></summary>
+<br>
 
 ## Future Roadmap
 
@@ -514,3 +593,6 @@ Det er veldig likt Claude Code når det gjelder funksjonalitet. Her er de viktig
 ---
 
 **Bli med i fellesskapet** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+</details>
