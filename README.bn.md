@@ -123,9 +123,9 @@ OpenCode ভোক্তা হার্ডওয়্যারে (8 GB VRAM /
 - Vulkan GPU ব্যাকএন্ড, প্রথম মডেল লোডে স্বয়ংক্রিয় ডাউনলোড
 - **রানটাইম অভিযোজিত কনফিগারেশন** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, থ্রেড, batch/ubatch সাইজ, KV ক্যাশ কোয়ান্টাইজেশন এবং কনটেক্সট সাইজ সনাক্তকৃত VRAM, ফ্রি RAM, big.LITTLE CPU বিভাজন, GPU ব্যাকএন্ড (CUDA/ROCm/Vulkan/Metal/OpenCL) এবং থার্মাল স্টেট থেকে নির্ণীত হয়। পুরানো হার্ডকোড করা `--n-gpu-layers 99`-কে প্রতিস্থাপন করে — 4 GB Android এখন OOM-কিল হওয়ার পরিবর্তে CPU ফলব্যাকে চলে, ফ্ল্যাগশিপ ডেস্কটপ ডিফল্ট 512-এর পরিবর্তে টিউন করা batch পায়।
 - `--flash-attn on` — মেমরি দক্ষতার জন্য Flash Attention
-- `--cache-type-k/v` — Hadamard রোটেশন সহ KV ক্যাশ; VRAM মার্জিনের উপর নির্ভর করে অভিযোজিত স্তর (f16 / q8_0 / q4_0)
+- `--cache-type-k/v` —  রোটেশন সহ KV ক্যাশ; VRAM মার্জিনের উপর নির্ভর করে অভিযোজিত স্তর (f16 / q8_0 / q4_0)
 - `--fit on` — কেবল ফর্কে দ্বিতীয় VRAM সমন্বয় (`OPENCODE_LLAMA_ENABLE_FIT=1` এর মাধ্যমে অপ্ট-ইন)
-- স্পেকুলেটিভ ডিকোডিং (`--model-draft`) VRAM Guard সহ (< 1.5 GB ফ্রি হলে স্বয়ংক্রিয় নিষ্ক্রিয়)
+- স্পেকুলেটিভ ডিকোডিং (`--model-draft`) VRAM Guard সহ (< 4 GB ফ্রি হলে স্বয়ংক্রিয় নিষ্ক্রিয়)
 - একক স্লট (`-np 1`) মেমরি ফুটপ্রিন্ট কমাতে
 - **বেঞ্চমার্ক হার্নেস** (`bun run bench:llm`): প্রতি মডেল, প্রতি রানে FTL / TPS / পিক RSS / ওয়াল টাইমের পুনরুৎপাদনযোগ্য পরিমাপ, CI আর্কাইভের জন্য JSONL আউটপুট
 
@@ -146,7 +146,7 @@ OpenCode ভোক্তা হার্ডওয়্যারে (8 GB VRAM /
 **মডেল ম্যানেজমেন্ট**
 - প্রতি মডেলে VRAM/RAM সামঞ্জস্যতা ব্যাজ সহ HuggingFace সার্চ
 - UI থেকে GGUF মডেল ডাউনলোড, লোড, আনলোড, ডিলিট
-- প্রি-কিউরেটেড ক্যাটালগ: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- প্রি-কিউরেটেড ক্যাটালগ: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - মডেল সাইজের উপর ভিত্তি করে ডাইনামিক আউটপুট টোকেন
 - স্পেকুলেটিভ ডিকোডিংয়ের জন্য ড্রাফট মডেল অটো-ডিটেকশন (0.5B-0.8B)
 
@@ -162,7 +162,6 @@ OpenCode ভোক্তা হার্ডওয়্যারে (8 GB VRAM /
 - Pre-flight guards (কোড-লেভেল, 0 টোকেন): এডিটের আগে ফাইল-এক্সিস্ট চেক, old_string কনটেন্ট ভেরিফিকেশন, read-before-edit এনফোর্সমেন্ট, write-on-existing প্রিভেনশন
 - Doom loop auto-break: 2x অভিন্ন টুল কল → এরর ইনজেক্ট করা হয় (কোড-লেভেল গার্ড, শুধু প্রম্পট নয়)
 - টুল টেলিমেট্রি: প্রতি-টুল ব্রেকডাউন সহ প্রতি-সেশন সাকসেস/এরর রেট, স্বয়ংক্রিয়ভাবে লগ হয়
-- লক্ষ্য: 4B মডেলে >85% টুল সাকসেস রেট
 
 **ক্রস-প্ল্যাটফর্ম**: Windows (Vulkan), Linux, macOS, Android
 
@@ -343,7 +342,7 @@ Hook আর্কিটেকচার সহ সম্পূর্ণ SDK (`@op
 | **রানটাইম অভিযোজিত কনফিগারেশন** | Implemented | `auto-config.ts`: n_gpu_layers / থ্রেড / batch / KV কোয়ান্টাইজেশন সনাক্তকৃত VRAM, RAM, big.LITTLE, GPU ব্যাকএন্ড, থার্মাল স্টেট থেকে নির্ণীত |
 | **বেঞ্চমার্ক হার্নেস** | Implemented | `bun run bench:llm` প্রতি মডেলে FTL, TPS, পিক RSS, ওয়াল টাইম পরিমাপ করে; JSONL আউটপুট |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | gpt-*/o1/o3/o4 এর জন্য `js-tiktoken`; Llama/Qwen/Gemma এর জন্য পরীক্ষামূলক 3.5 অক্ষর/টোকেন |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | HuggingFace model search | Implemented | Zod-যাচাইকৃত প্রতিক্রিয়া, VRAM ব্যাজ, ডাউনলোড ম্যানেজার, 9টি প্রাক-কিউরেটেড মডেল |

@@ -123,9 +123,9 @@ OpenCode esegue modelli IA localmente su hardware consumer (8 GB VRAM / 16 GB RA
 - Backend GPU Vulkan, scaricato automaticamente al primo caricamento del modello
 - **Configurazione adattiva a runtime** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, thread, dimensione batch/ubatch, quantizzazione cache KV e dimensione del contesto derivate da VRAM rilevata, RAM libera, split CPU big.LITTLE, backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) e stato termico. Sostituisce il vecchio `--n-gpu-layers 99` hardcoded — un Android da 4 GB ora funziona in fallback CPU invece di essere ucciso per OOM, i desktop di punta ottengono un batch ottimizzato invece del default 512.
 - `--flash-attn on` — Flash Attention per efficienza di memoria
-- `--cache-type-k/v` — Cache KV con rotazione di Hadamard; tier adattivo (f16 / q8_0 / q4_0) in base al margine VRAM
+- `--cache-type-k/v` — Cache KV con quantizzazione standard di llama.cpp; tier adattivo (f16 / q8_0 / q4_0) in base al margine VRAM
 - `--fit on` — aggiustamento secondario VRAM esclusivo del fork (opt-in tramite `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Decodifica speculativa (`--model-draft`) con VRAM Guard (disattivazione automatica se < 1.5 GB liberi)
+- Decodifica speculativa (`--model-draft`) con VRAM Guard (disattivazione automatica se < 4 GB liberi)
 - Slot singolo (`-np 1`) per minimizzare l'impronta di memoria
 - **Harness di benchmark** (`bun run bench:llm`): misurazione riproducibile di FTL / TPS / RSS di picco / tempo di esecuzione per modello, per run, output JSONL per archivio CI
 
@@ -146,7 +146,7 @@ OpenCode esegue modelli IA localmente su hardware consumer (8 GB VRAM / 16 GB RA
 **Gestione dei Modelli**
 - Ricerca HuggingFace con badge di compatibilità VRAM/RAM per modello
 - Scarica, carica, scarica, elimina modelli GGUF dall'interfaccia
-- Catalogo pre-curato: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Catalogo pre-curato: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Token di output dinamici basati sulla dimensione del modello
 - Rilevamento automatico del modello draft (0.5B–0.8B) per la decodifica speculativa
 
@@ -162,7 +162,6 @@ OpenCode esegue modelli IA localmente su hardware consumer (8 GB VRAM / 16 GB RA
 - Controlli pre-volo (a livello di codice, 0 token): verifica esistenza file prima della modifica, verifica contenuto old_string, obbligo di lettura prima della modifica, prevenzione scrittura su file esistente
 - Interruzione automatica doom loop: 2 chiamate identiche consecutive → errore iniettato (guardia a livello di codice, non solo prompt)
 - Telemetria degli strumenti: tasso di successo/errore per sessione con dettaglio per strumento, registrato automaticamente
-- Obiettivo: >85% di tasso di successo degli strumenti su modelli 4B
 
 **Multipiattaforma**: Windows (Vulkan), Linux, macOS, Android
 
@@ -339,7 +338,7 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 | **Configurazione adattiva a runtime** | Implemented | `auto-config.ts`: n_gpu_layers / thread / batch / quant KV derivati da VRAM rilevata, RAM, big.LITTLE, backend GPU, stato termico |
 | **Harness di benchmark** | Implemented | `bun run bench:llm` misura FTL, TPS, RSS di picco, tempo di esecuzione per modello; output JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` per gpt-*/o1/o3/o4; empirico 3.5 caratteri/token per Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
@@ -379,7 +378,7 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 ### Estensioni della Piattaforma (Sperimentali)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: runtime integrato, LLM on-device, STT + TTS (Kokoro). iOS: modalità remota |
+| Mobile app (Tauri) | Implemented | Android: runtime integrato, LLM on-device, STT + TTS (Kokoro). iOS: pianificato |
 | **Deep link di callback OAuth** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` finalizza automaticamente lo scambio di token; nessun copia-incolla del codice di autenticazione |
 | **Watcher del branch upstream** | Implemented | `git fetch` periodico (warm-up 30 s, intervallo 5 min) emette `vcs.branch.behind` quando HEAD locale diverge dall'upstream tracciato; mostrato tramite `platform.notify()` su desktop e mobile |
 | **Spawn PTY dimensionato sul viewport** | Implemented | `Pty.create({cols, rows})` usa uno stimatore da `window.innerWidth/innerHeight` — le shell partono con le loro dimensioni finali invece di 80×24→36×11, risolve il bug del primo prompt invisibile su Android con mksh/bash |
@@ -494,7 +493,7 @@ Config: `experimental.collaborative.enabled: true`
 App nativa Android/iOS tramite Tauri 2.0 con **runtime integrato** — un singolo APK, zero dipendenze esterne. Implementato:
 
 **Layer 1 — Runtime Integrato (Android, 100% prestazioni native):**
-- **Binari statici nell'APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) estratti al primo avvio (~15s)
+- **Binari statici nell'APK** — Bun, Bash, Ripgrep, Toybox (aarch64-linux-musl) estratti al primo avvio (~15s)
 - **CLI integrata** — CLI OpenCode come bundle JS eseguito dal Bun integrato, nessuna rete richiesta per il core
 - **Spawn diretto dei processi** — Nessun Termux, nessun intent — `std::process::Command` da Rust direttamente
 - **Avvio automatico del server** — `bun opencode-cli.js serve` su localhost con autenticazione UUID, come il sidecar desktop
@@ -506,7 +505,7 @@ App nativa Android/iOS tramite Tauri 2.0 con **runtime integrato** — un singol
 - **Gestione modelli** — Scarica modelli GGUF da HuggingFace, carica/scarica/elimina, 9 modelli pre-curati
 - **Registrazione provider** — Il modello locale appare come provider "Local AI" nel selettore modelli
 - **Flash Attention** — `--flash-attn on` per inferenza efficiente in memoria
-- **Quantizzazione cache KV** — `--cache-type-k/v q4_0` con rotazione di Hadamard (risparmio memoria del 72%)
+- **Quantizzazione cache KV** — `--cache-type-k/v q4_0` con quantizzazione standard di llama.cpp (risparmio memoria del 72%)
 - **Decodifica speculativa** — Rilevamento automatico del modello draft (0.5B–0.8B) con RAM Guard tramite `/proc/meminfo`
 - **Monitoraggio RAM** — Widget memoria del dispositivo (totale/usata/libera) tramite `/proc/meminfo`
 - **Preset di configurazione** — Stessi preset Fast/Quality/Eco/Long Context del desktop

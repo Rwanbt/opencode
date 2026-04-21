@@ -123,9 +123,9 @@ OpenCode ejecuta modelos de IA localmente en hardware de consumo (8 GB VRAM / 16
 - Backend GPU Vulkan, descargado automáticamente en la primera carga de modelo
 - **Configuración adaptativa en tiempo de ejecución** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, hilos, tamaño de batch/ubatch, cuantización de caché KV y tamaño de contexto derivados de la VRAM detectada, RAM libre, partición CPU big.LITTLE, backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) y estado térmico. Reemplaza al antiguo `--n-gpu-layers 99` fijo — un Android de 4 GB ahora funciona en modo CPU de respaldo en lugar de ser terminado por OOM, los escritorios de gama alta reciben un batch ajustado en lugar del 512 por defecto.
 - `--flash-attn on` — Flash Attention para eficiencia de memoria
-- `--cache-type-k/v` — Caché KV con rotación de Hadamard; nivel adaptativo (f16 / q8_0 / q4_0) según margen de VRAM
+- `--cache-type-k/v` — Caché KV con cuantización estándar de llama.cpp; nivel adaptativo (f16 / q8_0 / q4_0) según margen de VRAM
 - `--fit on` — ajuste secundario de VRAM exclusivo del fork (opt-in vía `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Decodificación especulativa (`--model-draft`) con guardia de VRAM (desactivación automática si < 1.5 GB libre)
+- Decodificación especulativa (`--model-draft`) con guardia de VRAM (desactivación automática si < 4 GB libre)
 - Slot único (`-np 1`) para minimizar la huella de memoria
 - **Arnés de benchmark** (`bun run bench:llm`): medición reproducible de FTL / TPS / RSS pico / tiempo total por modelo, por ejecución, salida JSONL para archivado en CI
 
@@ -146,7 +146,7 @@ OpenCode ejecuta modelos de IA localmente en hardware de consumo (8 GB VRAM / 16
 **Gestión de modelos**
 - Búsqueda en HuggingFace con insignias de compatibilidad VRAM/RAM por modelo
 - Descargar, cargar, descargar, eliminar modelos GGUF desde la interfaz
-- Catálogo pre-seleccionado: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Catálogo pre-seleccionado: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Tokens de salida dinámicos según el tamaño del modelo
 - Detección automática del modelo draft (0.5B-0.8B) para decodificación especulativa
 
@@ -162,7 +162,6 @@ OpenCode ejecuta modelos de IA localmente en hardware de consumo (8 GB VRAM / 16
 - Guardias pre-vuelo (a nivel de código, 0 tokens): verificación de existencia de archivo antes de editar, verificación del contenido de old_string, lectura obligatoria antes de edición, prevención de escritura sobre archivo existente
 - Ruptura automática de bucle infinito: 2x llamadas de herramientas idénticas → error inyectado (guardia a nivel de código, no solo en el prompt)
 - Telemetría de herramientas: tasa de éxito/error por sesión con desglose por herramienta, registrado automáticamente
-- Objetivo: >85% de tasa de éxito de herramientas en modelos 4B
 
 **Multiplataforma**: Windows (Vulkan), Linux, macOS, Android
 
@@ -345,7 +344,7 @@ Para evitar confusión por resúmenes generados por IA de este proyecto:
 | **Configuración adaptativa en tiempo de ejecución** | Implemented | `auto-config.ts`: n_gpu_layers / hilos / batch / cuant KV derivados de VRAM detectada, RAM, big.LITTLE, backend GPU, estado térmico |
 | **Arnés de benchmark** | Implemented | `bun run bench:llm` mide FTL, TPS, RSS pico, tiempo total por modelo; salida JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` para gpt-*/o1/o3/o4; empírico 3.5 caracteres/token para Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | HuggingFace model search | Implemented | Respuesta validada con Zod, insignias VRAM, gestor de descargas, 9 modelos precurados |

@@ -24,11 +24,13 @@ function listenTauri(event: string, handler: (e: any) => void): Promise<() => vo
 
 interface ModelInfo { filename: string; size: number }
 
+// Curated GGUF catalog. URLs verified against HuggingFace — no fabricated repos.
+// Every entry must be a repo that exists and resolves to a real .gguf file.
 const MODEL_CATALOG = [
-  { id: "gemma-4-e4b", name: "Gemma 4 E4B", description: "Google's latest — recommended", size: "5.0 GB", sizeBytes: 5_000_000_000, url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf", filename: "gemma-4-E4B-it-Q4_K_M.gguf", recommended: true },
-  { id: "qwen3.5-4b", name: "Qwen 3.5 4B", description: "Great multilingual model", size: "2.7 GB", sizeBytes: 2_700_000_000, url: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf", filename: "Qwen3.5-4B-Q4_K_M.gguf" },
-  { id: "qwen3.5-2b", name: "Qwen 3.5 2B", description: "Fast & lightweight", size: "1.3 GB", sizeBytes: 1_300_000_000, url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf", filename: "Qwen3.5-2B-Q4_K_M.gguf" },
-  { id: "qwen3.5-0.8b", name: "Qwen 3.5 0.8B", description: "Ultra-light for testing", size: "0.5 GB", sizeBytes: 500_000_000, url: "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf", filename: "Qwen3.5-0.8B-Q4_K_M.gguf" },
+  { id: "gemma-3-4b", name: "Gemma 3 4B", description: "Google's latest coding-capable small model — recommended", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf", filename: "gemma-3-4b-it-Q4_K_M.gguf", recommended: true },
+  { id: "qwen3-4b", name: "Qwen3 4B", description: "Great multilingual instruct model", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf", filename: "Qwen3-4B-Q4_K_M.gguf" },
+  { id: "qwen3-1.7b", name: "Qwen3 1.7B", description: "Fast & lightweight", size: "1.1 GB", sizeBytes: 1_100_000_000, url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf", filename: "Qwen3-1.7B-Q4_K_M.gguf" },
+  { id: "qwen3-0.6b", name: "Qwen3 0.6B", description: "Ultra-light — ideal as draft for speculative decoding", size: "0.5 GB", sizeBytes: 500_000_000, url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf", filename: "Qwen3-0.6B-Q4_K_M.gguf" },
 ]
 
 function formatBytes(bytes: number): string {

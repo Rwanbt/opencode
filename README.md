@@ -43,6 +43,50 @@
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+## ⚡ At a glance
+
+OpenCode (fork) — an orchestrated AI coding agent that runs on **desktop, server, and phone**, with local models end-to-end, zero cloud dependency, and enterprise-grade governance primitives baked in. Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 things this fork bundles that no other CLI does
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU / thermal state |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro / Pocket TTS + voice cloning |
+| 🔒 **9-state session FSM** | Persistent, auditable states for every session |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **Hybrid RAG** | BM25 + vector + time-decay confidence scoring |
+
+### Run your first task
+
+```bash
+opencode                                  # launch the TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 Need details? Every section below is collapsed — click to expand only the parts you care about.
+
+---
+
+<details>
+<summary><b>📊 Why this fork? — Comparison vs. Claude Code, Codex, Cursor, Aider, Cline…</b></summary>
+<br>
+
 ## Why This Fork?
 
 > **TL;DR — this is the only open-source coding agent that ships a DAG-based orchestrator, a REST task API, per-agent MCP scoping, a 9-state session FSM, a built-in vulnerability scanner, _and_ a first-class Android app with on-device LLM inference. No other CLI — proprietary or open — combines all of these.**
@@ -93,14 +137,14 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 | Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
 | -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
 | First-class **Android app**            | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
-| iOS (remote mode)                      |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| iOS (remote mode)                      |     planned   |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | Adaptive runtime (VRAM/CPU/thermal)    | ✅ **unique**  |      ❌      |     ❌     |      ❌     |      hardcoded      | hardcoded | hardcoded | hardcoded | hardcoded | n/a | hardcoded | hardcoded | hardcoded |
 | **STT** (voice-to-text, built-in)      | ✅ (Parakeet)  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial  |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **TTS** (text-to-speech + voice clone) | ✅ (Pocket/Kokoro) |  ❌       |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **OAuth deep-link callback**           |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **mDNS service discovery**             | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **Upstream branch watcher** (`vcs.branch.behind`) | ✅ **unique** | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
-| **Collaborative mode** (JWT + presence + file-lock) | ✅ | ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
+| **Collaborative mode** (JWT + presence + file-lock) | experimental | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
 | **AnythingLLM bridge**                 | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **GDPR export/erasure route**          | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | Price                                  |  free + BYOM  |  $20/mo sub |$20/mo sub |  1000/day free | free + BYOM    | free + BYOM | free + BYOM | free + BYOM | free + BYOM | $20/mo sub | free + BYOM | free + BYOM | free + BYOM |
@@ -183,6 +227,12 @@ Kick off 5 tasks in isolated worktrees from a laptop. Check their progress from 
 
 ---
 
+</details>
+
+<details>
+<summary><b>🧠 Fork Features — Local AI, teams, task API, MCP scoping, vuln scanner</b></summary>
+<br>
+
 ## Fork Features
 
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
@@ -201,10 +251,10 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 **Inference Engine (llama.cpp b8731)**
 - Vulkan GPU backend, auto-downloaded on first model load
 - **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
-- `--flash-attn on` — Flash Attention for memory efficiency
-- `--cache-type-k/v` — Hadamard rotation KV cache; adaptive tier (f16 / q8_0 / q4_0) based on VRAM headroom
+- `--flash-attn on` — Flash Attention for memory efficiency (desktop; mobile auto-disables when GPU is off or KV is unquantized)
+- `--cache-type-k/v` — standard llama.cpp KV-cache quantization; adaptive tier (f16 / q8_0 / q4_0) selected from detected VRAM headroom
 - `--fit on` — fork-only secondary VRAM adjustment (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables if < 1.5 GB free)
+- Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables when < 4 GB VRAM headroom)
 - Single slot (`-np 1`) to minimize memory footprint
 - **Benchmark harness** (`bun run bench:llm`): reproducible FTL / TPS / peak RSS / wall-time measurement per model, per run, JSONL output for CI archival
 
@@ -225,7 +275,7 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 **Model Management**
 - HuggingFace search with VRAM/RAM compatibility badges per model
 - Download, load, unload, delete GGUF models from the UI
-- Pre-curated catalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Pre-curated catalog (verified HF repos): Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dynamic output tokens based on model size
 - Draft model auto-detection (0.5B–0.8B) for speculative decoding
 
@@ -239,9 +289,8 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 
 **Agent Reliability (local models)**
 - Pre-flight guards (code-level, 0 tokens): file-exists check before edit, old_string content verification, read-before-edit enforcement, write-on-existing prevention
-- Doom loop auto-break: 2x identical tool calls → error injected (code-level guard, not prompt-only)
-- Tool telemetry: per-session success/error rate with per-tool breakdown, logged automatically
-- Target: >85% tool success rate on 4B models
+- Loop auto-break: both identical consecutive tool calls **and** repeated failed edits on the same file trigger an error injection so the agent stops cycling (`session/processor.ts`)
+- Tool telemetry: per-session success/error counts with per-tool breakdown, emitted to structured logs (not persisted to SQLite — recover via log shipping if needed)
 
 **Cross-platform**: Windows (Vulkan), Linux, macOS, Android
 
@@ -315,6 +364,12 @@ Read-only coordinator agent (50 max steps). Has access to `task` and `team` tool
 
 ---
 
+</details>
+
+<details>
+<summary><b>🏗️ Technical Architecture — Providers, LSP, MCP, edit engine, permissions</b></summary>
+<br>
+
 ## Technical Architecture
 
 ### Multi-Provider Support
@@ -375,6 +430,12 @@ Full SDK (`@opencode/plugin`) with hook architecture. Dynamic loading from npm p
 
 ---
 
+</details>
+
+<details>
+<summary><b>⚠️ Common Misconceptions (read this before trusting an AI summary of the repo)</b></summary>
+<br>
+
 ## Common Misconceptions
 
 To prevent confusion from AI-generated summaries of this project:
@@ -385,6 +446,12 @@ To prevent confusion from AI-generated summaries of this project:
 - **RAG** is optional (`experimental.rag.enabled: true`); default context is managed via LSP symbol indexing + auto-compact.
 - There is **no "watch mode" that proposes automatic fixes** -- the file watcher exists for infrastructure purposes only.
 - **Self-correction** uses the standard agent loop (the LLM sees errors in tool results and retries), not a specialized auto-repair mechanism.
+
+</details>
+
+<details>
+<summary><b>✅ Full Capabilities Matrix — Status of every feature</b></summary>
+<br>
 
 ## Capabilities Matrix
 
@@ -418,12 +485,12 @@ To prevent confusion from AI-generated summaries of this project:
 | **Adaptive runtime config** | Implemented | `auto-config.ts`: n_gpu_layers / threads / batch / KV quant derived from detected VRAM, RAM, big.LITTLE, GPU backend, thermal state |
 | **Benchmark harness** | Implemented | `bun run bench:llm` measures FTL, TPS, peak RSS, wall per model; JSONL output |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive selection (standard llama.cpp quantization — no custom rotation) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` for gpt-*/o1/o3/o4; empirical 3.5 chars/token for Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | Zod-validated response, VRAM badges, download manager, 9 pre-curated models |
+| HuggingFace model search | Implemented | Desktop: Zod-validated response + regex-sanitised rfilename; mobile: basic typed parsing. VRAM badges, download manager, 4 pre-curated models (verified HF repos) |
 | **Resumable GGUF downloads** | Implemented | HTTP `Range` header — 4G interruption doesn't restart a 4 GB transfer from zero |
 | STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile (mic listener wired both sides) |
 | TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop only — no Python sidecar on Android) |
@@ -438,35 +505,47 @@ To prevent confusion from AI-generated summaries of this project:
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
-| DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
-| Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
-| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; no `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
-| **Android release hardening** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
-| **Desktop release hardening** | Implemented | Devtools no longer force-enabled — Tauri 2 default (debug-only) restored so an XSS foothold cannot attach to `__TAURI__` in production |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns (does not intercept external file writes) |
+| Docker sandbox | Opt-in (bash only) | `experimental.sandbox.type: "docker"` routes `bash` executions through a container. `edit`/`write` tools still touch the host filesystem — not full isolation |
+| DLP / AgentShield | Opt-in | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
+| Policy engine | Opt-in | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; `script-src` permits `'wasm-unsafe-eval'` (needed by llama.cpp WASM shims), `object-src 'none'`, `frame-ancestors 'none'` |
+| **Android release hardening** | Implemented | `isDebuggable=false`, `isMinifyEnabled=true`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE`; WebView inspector gated on `ApplicationInfo.FLAG_DEBUGGABLE` |
+| **Desktop release hardening** | Implemented | `devtools` Tauri feature removed from `Cargo.toml` default set — release builds no longer expose the devtools surface; debug builds retain the webview inspector Tauri auto-enables |
 | **Tauri command input validation** | Implemented | `download_model` / `load_llm_model` / `delete_model` guards: filename charset, HTTPS allowlist to `huggingface.co` / `hf.co` |
 | **Rust logging chain** | Implemented | `log` + `android_logger` on mobile; no `eprintln!` in release → no path/URL leaks to logcat |
 | **Security audit tracker** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — all findings classified S1/S2/S3 with `path:line`, status, and deferred fix rationale |
 
+> **Threat model caveat:** the permission system and sandbox toggle are UX primitives, **not a security boundary**. Host-mode bash, all edit/write tools, and MCP servers run with the user's own privileges. If you need true isolation, run OpenCode inside a VM or a full-environment container. See [`SECURITY.md`](SECURITY.md).
+
 ### Knowledge & Memory
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
-| Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+| Vector DB / RAG | Opt-in | `experimental.rag.enabled: true`, SQLite + cosine similarity |
+| Hybrid RAG (BM25 + vector) | Implemented | `rag/bm25.ts` + `rag/vector.ts`; sparse + dense retrieval combined inside the index |
+| Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay (`rag/confidence.ts`) |
+| Memory conflict resolution | **Experimental — not wired** | `rag/conflict.ts` exists and is unit-tested but is not yet invoked by the RAG index in production. Wiring in progress |
 
-### Platform Extensions (Experimental)
+### Platform Extensions
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT + TTS (Kokoro). iOS: remote mode |
+| Mobile app — Android (Tauri) | Implemented | Embedded runtime (Bun + bash + ripgrep + toybox), on-device LLM via llama.cpp JNI, STT (Parakeet), TTS (Kokoro) |
+| Mobile app — iOS | Planned | Tauri iOS target not generated yet — `scripts/build-ios.sh` exists but no `gen/ios/` project |
 | **OAuth callback deep link** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` auto-finalises the token exchange; no copy-paste of the auth code required |
-| **Upstream branch watcher** | Implemented | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind` when local HEAD diverges from tracked upstream; surfaced via `platform.notify()` on desktop and mobile |
-| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions instead of 80×24→36×11, fixes the Android first-prompt-invisible bug on mksh/bash |
-| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
-| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
+| **Upstream branch watcher** | Opt-in | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind`; surfaced via `platform.notify()` on desktop and mobile |
+| **mDNS service discovery** | Opt-in | `server/mdns.ts` publishes the server; requires explicit enable via `shouldPublishMDNS` |
+| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions, fixes the Android first-prompt-invisible bug on mksh/bash |
+| Collaborative mode | Experimental (opt-in) | `experimental.collaborative.enabled: true`. JWT auth, presence, file locking, WebSocket broadcast — feature-complete, low field exposure |
+| AnythingLLM bridge | Experimental (opt-in) | `experimental.anythingllm.enabled: true`. 4 MCP tools + plugin context injection + Agent-Skills HTTP API |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
+
+</details>
+
+<details>
+<summary><b>🧭 Architecture diagram</b></summary>
+<br>
 
 ## Architecture
 
@@ -530,6 +609,12 @@ graph TB
 | LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
 | TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
+</details>
+
+<details>
+<summary><b>🔐 Security & Governance (sandbox, permissions, DLP, policy, privacy)</b></summary>
+<br>
+
 ## Security & Governance
 
 | Feature | Description |
@@ -539,6 +624,12 @@ graph TB
 | **DLP** | Data Loss Prevention (`experimental.dlp`) redacts secrets, API keys, and credentials before sending to LLM providers |
 | **Policy Engine** | Conditional rules (`experimental.policy`) with `block` or `warn` actions. Protect paths, limit edit size, custom regex patterns |
 | **Privacy** | Local-first: all data in SQLite on disk. No telemetry by default. Secrets never logged. No data sent to third parties beyond the configured LLM provider |
+
+</details>
+
+<details>
+<summary><b>🔗 Intelligence Interface (MCP, providers, RAG, AnythingLLM)</b></summary>
+<br>
 
 ## Intelligence Interface
 
@@ -551,6 +642,12 @@ graph TB
 | **AnythingLLM Bridge** | Optional integration (`experimental.anythingllm`) — context injection, MCP server adapter, vector store bridge, Agent Skills HTTP API |
 
 ---
+
+</details>
+
+<details>
+<summary><b>🌿 Feature branches — Collaborative mode, Mobile, AnythingLLM</b></summary>
+<br>
 
 ## Feature Branches (Implemented on `dev`)
 
@@ -570,10 +667,10 @@ Config: `experimental.collaborative.enabled: true`
 
 ### Mobile Version (`dev_mobile`)
 
-Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. Implemented:
+Native Android app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. iOS target is planned. Implemented:
 
 **Layer 1 — Embedded Runtime (Android, 100% native performance):**
-- **Static binaries in APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) extracted at first launch (~15s)
+- **Static binaries in APK** — Bun, Bash, Ripgrep, Toybox (aarch64, packaged as `.so` libraries) extracted at first launch (~15s). `git` is intentionally not bundled — source projects are expected to be mounted from `/sdcard/` (see external storage below)
 - **Bundled CLI** — OpenCode CLI as a JS bundle run by the embedded Bun, no network required for core
 - **Direct process spawning** — No Termux, no intents — `std::process::Command` from Rust directly
 - **Auto-start server** — `bun opencode-cli.js serve` on localhost with UUID auth, same as desktop sidecar
@@ -582,10 +679,10 @@ Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK,
 - **llama.cpp via JNI** — Kotlin LlamaEngine loads native .so libraries with JNI bridge
 - **File-based IPC** — Rust writes commands to `llm_ipc/request`, Kotlin daemon polls and returns results
 - **llama-server** — OpenAI-compatible HTTP API on port 14097 for provider integration
-- **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 9 pre-curated models
+- **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 4 pre-curated models (Gemma 3 4B, Qwen3 4B/1.7B/0.6B)
 - **Provider registration** — Local model appears as "Local AI" provider in model selector
-- **Flash Attention** — `--flash-attn on` for memory-efficient inference
-- **KV cache quantization** — `--cache-type-k/v q4_0` with Hadamard rotation (72% memory savings)
+- **Flash Attention** — `--flash-attn on` when GPU offload is active and KV cache is quantized (auto-disabled for CPU fallback)
+- **KV cache quantization** — `--cache-type-k/v q4_0` via standard llama.cpp quantization (~50% KV memory savings at q4_0)
 - **Speculative decoding** — Auto-detects draft model (0.5B–0.8B) with RAM Guard via `/proc/meminfo`
 - **RAM monitoring** — Device memory widget (total/used/free) via `/proc/meminfo`
 - **Configuration presets** — Same Fast/Quality/Eco/Long Context presets as desktop
@@ -623,6 +720,10 @@ Bridge between OpenCode and AnythingLLM's document RAG platform. Implemented:
 - **Docker Compose** — Ready-to-use `docker-compose.anythingllm.yml` with shared network
 
 Config: `experimental.anythingllm.enabled: true`
+
+---
+
+</details>
 
 ---
 
@@ -707,6 +808,10 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+<details>
+<summary><b>❓ FAQ</b></summary>
+<br>
+
 ### FAQ
 
 #### How is this different from Claude Code?
@@ -719,6 +824,8 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 - A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
 - A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
 
+
+</details>
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)

@@ -123,9 +123,9 @@ OpenCode uruchamia modele AI lokalnie na sprzęcie konsumenckim (8 GB VRAM / 16 
 - Backend GPU Vulkan, automatycznie pobierany przy pierwszym ładowaniu modelu
 - **Adaptacyjna konfiguracja runtime** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, wątki, rozmiar batch/ubatch, kwantyzacja cache KV i rozmiar kontekstu wyprowadzane z wykrytej VRAM, wolnej RAM, podziału CPU big.LITTLE, backendu GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) oraz stanu termicznego. Zastępuje dawne zakodowane na stałe `--n-gpu-layers 99` — 4 GB Android działa teraz w trybie awaryjnym CPU zamiast być zabijany przez OOM, flagowe desktopy otrzymują dostrojony batch zamiast domyślnego 512.
 - `--flash-attn on` — Flash Attention dla efektywności pamięci
-- `--cache-type-k/v` — Cache KV z rotacją Hadamarda; adaptacyjny poziom (f16 / q8_0 / q4_0) w zależności od zapasu VRAM
+- `--cache-type-k/v` — Cache KV z rotacją a; adaptacyjny poziom (f16 / q8_0 / q4_0) w zależności od zapasu VRAM
 - `--fit on` — wtórna korekta VRAM dostępna tylko w forku (opt-in przez `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Dekodowanie spekulatywne (`--model-draft`) z VRAM Guard (automatyczna dezaktywacja jeśli < 1.5 GB wolnych)
+- Dekodowanie spekulatywne (`--model-draft`) z VRAM Guard (automatyczna dezaktywacja jeśli < 4 GB wolnych)
 - Pojedynczy slot (`-np 1`) dla minimalizacji zużycia pamięci
 - **Harness benchmarkowy** (`bun run bench:llm`): powtarzalny pomiar FTL / TPS / szczytowego RSS / czasu ściennego dla modelu i na uruchomienie, wyjście JSONL do archiwizacji w CI
 
@@ -146,7 +146,7 @@ OpenCode uruchamia modele AI lokalnie na sprzęcie konsumenckim (8 GB VRAM / 16 
 **Zarządzanie Modelami**
 - Wyszukiwanie HuggingFace z odznakimi kompatybilności VRAM/RAM per model
 - Pobieranie, ładowanie, odładowywanie, usuwanie modeli GGUF z interfejsu
-- Prekurowany katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Prekurowany katalog: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dynamiczne tokeny wyjściowe w zależności od rozmiaru modelu
 - Automatyczne wykrywanie modelu draft (0.5B–0.8B) do dekodowania spekulatywnego
 
@@ -162,7 +162,6 @@ OpenCode uruchamia modele AI lokalnie na sprzęcie konsumenckim (8 GB VRAM / 16 
 - Kontrole pre-flight (na poziomie kodu, 0 tokenów): sprawdzenie istnienia pliku przed edycją, weryfikacja zawartości old_string, wymuszenie odczytu przed edycją, zapobieganie nadpisywaniu istniejącego pliku
 - Automatyczne przerwanie doom loop: 2 identyczne wywołania narzędzi → wstrzyknięty błąd (ochrona na poziomie kodu, nie tylko prompt)
 - Telemetria narzędzi: wskaźnik sukcesu/błędów per sesja z rozbiciem per narzędzie, rejestrowane automatycznie
-- Cel: >85% wskaźnik sukcesu narzędzi na modelach 4B
 
 **Wieloplatformowość**: Windows (Vulkan), Linux, macOS, Android
 
@@ -339,7 +338,7 @@ Aby zapobiec dezinformacji z podsumowań tego projektu generowanych przez AI:
 | **Adaptacyjna konfiguracja runtime** | Implemented | `auto-config.ts`: n_gpu_layers / wątki / batch / kwantyzacja KV wyprowadzone z wykrytej VRAM, RAM, big.LITTLE, backendu GPU, stanu termicznego |
 | **Harness benchmarkowy** | Implemented | `bun run bench:llm` mierzy FTL, TPS, szczytowy RSS, czas ścienny dla modelu; wyjście JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` dla gpt-*/o1/o3/o4; empiryczne 3.5 znaków/token dla Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
@@ -494,7 +493,7 @@ Config: `experimental.collaborative.enabled: true`
 Natywna aplikacja Android/iOS przez Tauri 2.0 z **wbudowanym runtime** — jeden APK, zero zewnętrznych zależności. Zaimplementowano:
 
 **Layer 1 — Wbudowany Runtime (Android, 100% natywna wydajność):**
-- **Statyczne binaria w APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) wyodrębniane przy pierwszym uruchomieniu (~15s)
+- **Statyczne binaria w APK** — Bun, Bash, Ripgrep, Toybox (aarch64-linux-musl) wyodrębniane przy pierwszym uruchomieniu (~15s)
 - **Dołączone CLI** — CLI OpenCode jako bundle JS uruchamiany przez wbudowany Bun, bez sieci wymaganej dla core
 - **Bezpośredni spawn procesów** — Bez Termux, bez intentów — `std::process::Command` z Rusta bezpośrednio
 - **Automatyczny start serwera** — `bun opencode-cli.js serve` na localhost z uwierzytelnianiem UUID, tak samo jak sidecar desktopowy
@@ -506,7 +505,7 @@ Natywna aplikacja Android/iOS przez Tauri 2.0 z **wbudowanym runtime** — jeden
 - **Zarządzanie modelami** — Pobieranie modeli GGUF z HuggingFace, ładowanie/odładowywanie/usuwanie, 9 prekurowanych modeli
 - **Rejestracja dostawcy** — Model lokalny pojawia się jako dostawca "Local AI" w selektorze modeli
 - **Flash Attention** — `--flash-attn on` dla efektywnej pamięciowo inferencji
-- **Kwantyzacja cache KV** — `--cache-type-k/v q4_0` z rotacją Hadamarda (oszczędność 72% pamięci)
+- **Kwantyzacja cache KV** — `--cache-type-k/v q4_0` z rotacją a (oszczędność 72% pamięci)
 - **Dekodowanie spekulatywne** — Automatyczne wykrywanie modelu draft (0.5B–0.8B) z RAM Guard przez `/proc/meminfo`
 - **Monitorowanie RAM** — Widget pamięci urządzenia (total/used/free) przez `/proc/meminfo`
 - **Presety konfiguracji** — Te same presety Fast/Quality/Eco/Long Context co na desktopie

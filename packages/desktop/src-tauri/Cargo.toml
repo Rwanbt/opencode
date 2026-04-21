@@ -22,7 +22,11 @@ onnx = ["dep:ort", "dep:ndarray", "dep:bincode"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset", "devtools"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset"] }
+# Devtools intentionally NOT in default features. Tauri enables the webview
+# devtools automatically in debug builds; omitting the `devtools` feature
+# here means release builds do NOT ship the devtools surface, which would
+# otherwise let an XSS foothold attach to `__TAURI__` IPC in production.
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
