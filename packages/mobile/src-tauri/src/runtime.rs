@@ -41,7 +41,16 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
     } else {
         false
     };
-    let extended_env = dir.join("rootfs").exists();
+    // extended_env is only considered ready if the rootfs exists AND at least
+    // one of the apk-installed tools is present. Checking only rootfs existence
+    // is not enough: `apk add` may fail silently (network issue, stale proot
+    // binary, permission errors) leaving a base-only Alpine with apk-tools but
+    // none of the user-facing tools (git, nano, tmux, python, node). We pick
+    // `git` as the sentinel because it's the most frequently requested tool
+    // and its absence is the clearest signal that install_extended_env didn't
+    // finish. If this check fails, the frontend re-runs installExtendedEnv.
+    let rootfs_dir = dir.join("rootfs");
+    let extended_env = rootfs_dir.exists() && rootfs_dir.join("usr/bin/git").exists();
 
     // Log debug info
     if let Some(nlib) = native_lib_dir(&dir) {
@@ -465,6 +474,49 @@ alias cls='clear'\n\
     let resolv_path = dir.join("resolv.conf");
     let _ = fs::write(&resolv_path, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n");
 
+    // Regenerate proot-run every launch when the Alpine rootfs is present.
+    // The wrapper bakes in the APK install path (nativeLibraryDir) which
+    // rotates on every upgrade — a stale wrapper points at a path that no
+    // longer exists and causes every proot invocation (git, nano, tmux…)
+    // to fail silently. install_extended_env writes this same file but is
+    // only called once per device; we need it to stay fresh after upgrades.
+    let rootfs_dir = dir.join("rootfs");
+    if rootfs_dir.exists() {
+        let proot_path = bin_link_dir.join("proot");
+        let proot_run_path = bin_link_dir.join("proot-run");
+        let proot_tmp_dir = dir.join("tmp");
+        let _ = fs::create_dir_all(&proot_tmp_dir);
+        // Also refresh the rootfs DNS config — if the user cleared /tmp or a
+        // prior install shipped with no /etc/resolv.conf, apk/git/etc will
+        // fail with "bad address" errors. Idempotent.
+        let rootfs_etc = rootfs_dir.join("etc");
+        let _ = fs::create_dir_all(&rootfs_etc);
+        let _ = fs::write(
+            rootfs_etc.join("resolv.conf"),
+            "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
+        );
+        let proot_run_content = format!(
+            "#!/bin/sh\n\
+export LD_LIBRARY_PATH=\"{lib_links}:{nlib}\"\n\
+export PROOT_TMP_DIR=\"{tmp}\"\n\
+mkdir -p \"$PROOT_TMP_DIR\"\n\
+exec {proot} \\\n  --rootfs={rootfs} \\\n  --bind={bin}:/usr/local/bin \\\n  --bind={nlib}:/usr/local/lib \\\n  --bind=/dev:/dev \\\n  --bind=/proc:/proc \\\n  --bind=/sys:/sys \\\n  -w /root \\\n  \"$@\"\n",
+            proot = proot_path.display(),
+            rootfs = rootfs_dir.display(),
+            bin = bin_link_dir.display(),
+            nlib = nlib_dir.display(),
+            lib_links = lib_link_dir.display(),
+            tmp = proot_tmp_dir.display(),
+        );
+        if fs::write(&proot_run_path, proot_run_content).is_ok() {
+            if let Ok(meta) = fs::metadata(&proot_run_path) {
+                let mut p = meta.permissions();
+                p.set_mode(0o755);
+                let _ = fs::set_permissions(&proot_run_path, p);
+            }
+        }
+    }
+
     // Concatenate Android CA certificates into a single PEM file for TLS.
     // musl-linked Bun/BoringSSL can't find Android's certs at /system/etc/security/cacerts/.
     let ca_bundle_path = dir.join("ca-certificates.crt");
@@ -746,8 +798,15 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
         },
     );
 
-    // Download proot static binary
-    let proot_url = "https://proot.gitlab.io/proot/bin/proot-aarch64-static";
+    // Download proot static binary. The original gitlab pages URL
+    // (proot.gitlab.io/proot/bin/proot-aarch64-static) is dead and returns
+    // HTML — the resulting "proot" binary is an HTML blob that syntax-errors
+    // when sh tries to exec it, causing every subsequent apk invocation to
+    // fail silently (proot error leaks as sh error, apk add reports "partial
+    // failure", rootfs stays base-only). Use the proot-me/proot GitHub
+    // releases which host real statically-linked binaries.
+    let proot_url =
+        "https://github.com/proot-me/proot/releases/download/v5.3.0/proot-v5.3.0-aarch64-static";
     let proot_path = bin_link_dir.join("proot");
 
     let client = reqwest::Client::builder()
@@ -827,10 +886,33 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
 
     fs::remove_file(&alpine_path).ok();
 
-    // Create proot-run wrapper script
+    // Seed the rootfs with a working /etc/resolv.conf so apk, git-http, wget,
+    // ssh etc. can resolve DNS inside proot. Alpine minirootfs ships without
+    // one, and proot's sandbox hides the Android /etc tree — resulting in
+    // "bad address" errors during apk update / package fetch. We reuse the
+    // same public resolvers we wrote to the parent runtime's resolv.conf
+    // (see extract_runtime, line ~466) so both the host bun sidecar and
+    // the chrooted Alpine agree on name resolution.
+    let rootfs_etc = rootfs_dir.join("etc");
+    let _ = fs::create_dir_all(&rootfs_etc);
+    let _ = fs::write(
+        rootfs_etc.join("resolv.conf"),
+        "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
+    );
+
+    // Create proot-run wrapper script. Notes:
+    //  - PROOT_TMP_DIR must be exported: proot needs a writable tmp dir for
+    //    its shadow filesystem; without it every invocation errors with
+    //    "can't create temporary file: No such file or directory".
+    //  - mkdir -p is idempotent and cheap; keeps the wrapper self-healing
+    //    when /data/.../runtime/tmp gets cleaned.
+    //  - Copy host resolv.conf into the rootfs so apk/git/etc. can resolve
+    //    DNS — Alpine minirootfs ships without /etc/resolv.conf.
     let wrapper = format!(
         r#"#!/bin/sh
 export LD_LIBRARY_PATH="{lib_links}:{nlib}"
+export PROOT_TMP_DIR="{tmp}"
+mkdir -p "$PROOT_TMP_DIR"
 exec {proot} \
   --rootfs={rootfs} \
   --bind={bin}:/usr/local/bin \
@@ -846,6 +928,7 @@ exec {proot} \
         bin = bin_link_dir.display(),
         nlib = nlib_dir.display(),
         lib_links = lib_link_dir.display(),
+        tmp = dir.join("tmp").display(),
     );
 
     let wrapper_path = bin_link_dir.join("proot-run");
