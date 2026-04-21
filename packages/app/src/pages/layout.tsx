@@ -32,7 +32,7 @@ import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import { useProviders } from "@/hooks/use-providers"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
@@ -74,9 +74,11 @@ import {
 } from "./layout/helpers"
 import {
   collectNewSessionDeepLinks,
+  collectOAuthCallbackDeepLinks,
   collectOpenProjectDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
+  oauthCallbackEvent,
 } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
@@ -1362,6 +1364,30 @@ export default function Layout(props: ParentProps) {
   }
 
   const handleDeepLinks = (urls: string[]) => {
+    // OAuth callbacks are routed even in non-local mode (e.g. an admin using
+    // a remote server still needs to finish auth when redirected back to the
+    // desktop app by the provider). Handle them first, then the local-only
+    // project links.
+    for (const callback of collectOAuthCallbackDeepLinks(urls)) {
+      // S2.A2: validate providerID against the live provider registry.
+      // The shape guard in parseOAuthCallbackDeepLink prevents XSS via the
+      // ID alone, but a hostile QR could still dispatch a callback for an
+      // ID we don't know — which at best wastes a dialog wake-up, at worst
+      // confuses the dialog subscriber. `popularProviders` is our static
+      // fallback for first-launch (registry not yet loaded from the server).
+      const known = new Set<string>([
+        ...providers.all().map((p) => p.id),
+        ...popularProviders,
+      ])
+      if (!known.has(callback.providerID)) {
+        console.warn("[deep-link] oauth callback for unknown providerID, dropping", {
+          providerID: callback.providerID,
+        })
+        continue
+      }
+      window.dispatchEvent(new CustomEvent(oauthCallbackEvent, { detail: callback }))
+    }
+
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {

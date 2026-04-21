@@ -41,6 +41,67 @@
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
+<!-- WHY-FORK-MATRIX -->
+## لماذا هذا الفورك؟
+
+> **باختصار** — وكيل البرمجة مفتوح المصدر الوحيد الذي يقدّم منسِّق تنفيذ مبني على DAG، وواجهة REST لإدارة المهام، ونطاق MCP لكل وكيل، وآلة حالات جلسة بـ 9 حالات، وماسح ثغرات مدمجًا، *إضافةً* إلى تطبيق Android من الدرجة الأولى مع استدلال LLM على الجهاز. لا يجمع أيّ CLI آخر — مملوك أو مفتوح — كل هذه الميزات.
+
+> See the English [README.md](README.md) for the full positioning prose (vs. vendor-locked CLIs, vs. BYOM peers, vs. specialized CLIs) and architecture diagram.
+
+### Capability matrix — this fork vs. the 2026 landscape
+
+Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* via community add-on · *paid* behind a subscription tier.
+
+#### Orchestration, API surface, governance
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| Open source                            |       ✅       |      ❌      |  partial  |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ❌    |     ✅     |   ✅   |     ✅     |
+| BYOM (bring your own model)            |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |  partial |     ✅     |   ✅   |   partial  |
+| Local models (llama.cpp / Ollama)      |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ❌    |     ✅     |   ✅   |     ✅     |
+| Parallel agents in isolated worktrees  |    ✅ native   |  ✅ (Teams)  |  partial  |      ❌     |      via plugin     |   ❌   | partial | ✅ (v3.58) | partial | ❌ | ❌ | ❌ |     ❌     |
+| Explicit **DAG orchestration**         | ✅ **unique**  |    ad-hoc   |     ❌     |      ❌     |          ❌          |   ❌   | recipes (linear) | ❌ | ❌ | ❌ |     ❌     |   ❌   |     ❌     |
+| **REST task API** (programmable)       | ✅ **unique**  | partial (SDK) |  ❌    |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **TUI task dashboard**                 |       ✅       |      ❌      |     ❌     |      ❌     |       partial       |   ❌   |   ❌   |   ❌   |    ❌     |   n/a   |    n/a    |   ❌   |   partial  |
+| MCP support                            | ✅ + **per-agent scoping** | ✅ | ✅ | ✅ | ✅ | via plugins | ✅ | ✅ | ✅ | partial | ✅ |   ❌   |     ✅     |
+| **9-state session FSM (persistent)**   | ✅ **unique**  |      ❌      |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Built-in **vulnerability scanner**     | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **DLP / secret redaction** before LLM call | ✅         |   partial    |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Per-agent tool allow/deny**          |       ✅       |   partial    |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |  partial  |    ❌    |     ❌     |   ❌   |     ❌     |
+| Docker sandboxing (opt-in)             |       ✅       |      ❌      |     ✅     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Git auto-commits / rollback            |       ✅       |      ✅      |     ✅     |      ✅     |      ✅ (signed)     |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ✅   |     ✅     |
+
+#### Intelligence, context, developer UX
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| LSP integration (go-to-def, diagnostics) | ✅           |   partial    |  partial  |   partial   |          ✅          | partial | partial | ✅   |    ✅     |    ✅    |     ✅     | partial |  partial  |
+| Plugin SDK (`@opencode/plugin`)        |       ✅       |   partial    |     ❌     |      ❌     |          ✅          |   ❌   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ❌   |     ❌     |
+| Prompt caching (cloud + local KV)      |       ✅       |      ✅      |     ✅     |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ✅   |     ✅     |
+| **Hybrid RAG (BM25 + vector + decay)** | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial | ❌      |  vector only |  vector only |  ❌   |     ❌     |
+| **Memory conflict resolution**         | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Auto-learn** (lesson extraction)     | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Auto-compact (AI summarization)        |       ✅       |      ✅      |     ✅     |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     | partial |     ✅     |
+| Unified-diff edit engine               |       ✅       |      ✅      |     ✅     |   partial   |          ✅          |   ✅   | partial | partial |    ✅     | partial |  partial  | partial |  partial  |
+| ACP (Agent Client Protocol) layer      |       ✅       |      ❌      |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+
+#### Platform reach & multimodal
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| First-class **Android app**            | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| iOS (remote mode)                      |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Adaptive runtime (VRAM/CPU/thermal)    | ✅ **unique**  |      ❌      |     ❌     |      ❌     |      hardcoded      | hardcoded | hardcoded | hardcoded | hardcoded | n/a | hardcoded | hardcoded | hardcoded |
+| **STT** (voice-to-text, built-in)      | ✅ (Parakeet)  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial  |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **TTS** (text-to-speech + voice clone) | ✅ (Pocket/Kokoro) |  ❌       |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **OAuth deep-link callback**           |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **mDNS service discovery**             | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Upstream branch watcher** (`vcs.branch.behind`) | ✅ **unique** | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Collaborative mode** (JWT + presence + file-lock) | ✅ | ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
+| **AnythingLLM bridge**                 | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **GDPR export/erasure route**          | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Price                                  |  free + BYOM  |  $20/mo sub |$20/mo sub |  1000/day free | free + BYOM    | free + BYOM | free + BYOM | free + BYOM | free + BYOM | $20/mo sub | free + BYOM | free + BYOM | free + BYOM |
+
 ---
 
 ## ميزات الفورك
@@ -60,11 +121,13 @@
 
 **محرك الاستدلال (llama.cpp b8731)**
 - واجهة GPU خلفية Vulkan، تُحمَّل تلقائياً عند أول تحميل نموذج
+- **تكوين تكيُّفي أثناء التشغيل** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`، الخيوط، حجم batch/ubatch، تكميم ذاكرة KV المؤقتة وحجم السياق، كلها مُستنبطة من VRAM المكتشفة وRAM الحرة وتقسيم CPU big.LITTLE وواجهة GPU الخلفية (CUDA/ROCm/Vulkan/Metal/OpenCL) والحالة الحرارية. يحلّ محل `--n-gpu-layers 99` المُرمَّز سابقاً — جهاز Android بسعة 4 جيجابايت يعمل الآن بوضع CPU الاحتياطي بدلاً من قتله بسبب OOM، وأجهزة سطح المكتب الرائدة تحصل على batch مضبوط بدلاً من الافتراضي 512.
 - `--flash-attn on` — Flash Attention لكفاءة الذاكرة
-- `--cache-type-k/v q4_0` — ذاكرة KV المؤقتة مع دوران Hadamard (توفير 72% من الذاكرة)
-- `--fit on` — ضبط تلقائي لحجم السياق وتوزيع طبقات GPU حسب VRAM المتاحة
+- `--cache-type-k/v` — ذاكرة KV المؤقتة مع دوران Hadamard؛ مستوى تكيُّفي (f16 / q8_0 / q4_0) حسب هامش VRAM
+- `--fit on` — تعديل VRAM ثانوي خاص بالـfork (اختياري عبر `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - فك الترميز التخميني (`--model-draft`) مع حماية VRAM (تعطيل تلقائي عند < 1.5 جيجابايت حرة)
 - فتحة واحدة (`-np 1`) لتقليل استهلاك الذاكرة
+- **إطار قياس الأداء** (`bun run bench:llm`): قياس قابل للتكرار لـFTL / TPS / ذروة RSS / زمن الجدار لكل نموذج ولكل تشغيل، مع إخراج JSONL للأرشفة في CI
 
 **تحويل الكلام إلى نص (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet عبر ONNX Runtime — ~300 مللي ثانية لـ 5 ثوانٍ من الصوت (18x الوقت الفعلي)
@@ -273,19 +336,24 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **تكوين تكيُّفي أثناء التشغيل** | Implemented | `auto-config.ts`: n_gpu_layers / الخيوط / batch / تكميم KV مستنبطة من VRAM المكتشفة وRAM وbig.LITTLE وواجهة GPU الخلفية والحالة الحرارية |
+| **إطار قياس الأداء** | Implemented | `bun run bench:llm` يقيس FTL وTPS وذروة RSS وزمن الجدار لكل نموذج؛ إخراج JSONL |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` لـ gpt-*/o1/o3/o4؛ تقدير تجريبي 3.5 حرف/رمز لـLlama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| HuggingFace model search | Implemented | استجابة مُتحقَّق منها عبر Zod، شارات VRAM، مدير التنزيل، 9 نماذج مُنتقاة مسبقاً |
+| **تنزيلات GGUF قابلة للاستئناف** | Implemented | رأس HTTP `Range` — انقطاع 4G لا يُعيد تشغيل نقل 4 جيجابايت من الصفر |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime، ~300ms/5s، 25 لغة، سطح المكتب + الجوال (مستمع الميكروفون موصول من الجانبين) |
+| TTS (Pocket TTS) | Implemented | 8 أصوات، استنساخ صوت zero-shot، أصلي فرنسي (سطح المكتب فقط — لا يوجد Python sidecar على Android) |
+| TTS (Kokoro) | Implemented | 54 صوتاً، 9 لغات، ONNX على **سطح المكتب + Android** (6 أوامر Tauri موصولة في `speech.rs` للجوال، CPUExecutionProvider) |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| إعادة تشغيل قاطع التيار | Implemented | `ensureCorrectModel` يتوقف بعد 3 إعادات تشغيل خلال 120 ثانية لتفادي حلقات الاحتراق |
 
 ### الأمان والحوكمة
 | Capability | Status | Notes |
@@ -294,6 +362,12 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **CSP صارمة (سطح المكتب + الجوال)** | Implemented | `connect-src` مقصورة على loopback + HuggingFace + مزوّدات HTTPS؛ بدون `unsafe-eval`، `object-src 'none'`، `frame-ancestors 'none'` |
+| **تقوية إصدار Android** | Implemented | `isDebuggable=false`، `allowBackup=false`، `isShrinkResources=true`، `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **تقوية إصدار سطح المكتب** | Implemented | لم تعد أدوات المطور مفعّلة بالقوة — تمّت استعادة افتراضي Tauri 2 (وضع تصحيح فقط) حتى لا تتمكن ثغرة XSS من الارتباط بـ `__TAURI__` في الإنتاج |
+| **التحقق من مدخلات أوامر Tauri** | Implemented | حُرّاس `download_model` / `load_llm_model` / `delete_model`: charset اسم الملف، قائمة سماح HTTPS لـ `huggingface.co` / `hf.co` |
+| **سلسلة تسجيل Rust** | Implemented | `log` + `android_logger` على الجوال؛ لا `eprintln!` في الإصدار → لا تسرّب مسار/URL إلى logcat |
+| **متتبّع تدقيق الأمان** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — جميع النتائج مصنّفة S1/S2/S3 مع `path:line`، الحالة، وتعليل التأجيل للإصلاح |
 
 ### المعرفة والذاكرة
 | Capability | Status | Notes |
@@ -305,7 +379,10 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 ### امتدادات المنصة (تجريبية)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android: وقت تشغيل مدمج، LLM على الجهاز، STT + TTS (Kokoro). iOS: وضع عن بُعد |
+| **رابط عميق لعودة OAuth** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` يُنهي تبادل الرمز تلقائياً؛ لا حاجة لنسخ/لصق رمز المصادقة |
+| **مراقب فرع upstream** | Implemented | `git fetch` دوري (إحماء 30 ثانية، فاصل 5 دقائق) يُطلق `vcs.branch.behind` عندما يتباعد HEAD المحلي عن upstream المتتبع؛ يُعرض عبر `platform.notify()` على سطح المكتب والجوال |
+| **إطلاق PTY بحجم viewport** | Implemented | `Pty.create({cols, rows})` يستخدم مُقدِّراً من `window.innerWidth/innerHeight` — تبدأ الصَّدفات بأبعادها النهائية بدلاً من 80×24→36×11، يُصلح خطأ عدم ظهور أول موجه أوامر على Android لـ mksh/bash |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

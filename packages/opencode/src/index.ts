@@ -38,6 +38,11 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { InitCommand } from "./cli/cmd/init"
 import { DoctorCommand } from "./cli/cmd/doctor"
 import { Heap } from "./cli/heap"
+import { CrashReporter } from "./observability/crash-reporter"
+
+// Install crash reporter before any other code can throw — writes to
+// <datadir>/crashes/*.json, rotates at 50, opt-in upload via config.
+CrashReporter.init()
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {

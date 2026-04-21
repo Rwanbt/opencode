@@ -511,6 +511,11 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   const theme: TuiPluginApi["theme"] = Object.assign(Object.create(api.theme), {
     install: createThemeInstaller(load.origin, load.theme_root, load.spec, plugin),
+    has: hasTheme,  // use real store — fixture's has = () => false is always wrong post-upsert
+    set(name: string) {
+      if (!hasTheme(name)) return false
+      return api.theme.set(name)  // delegate selection state to host API
+    },
   })
 
   const event: TuiPluginApi["event"] = {

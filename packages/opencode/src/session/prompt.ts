@@ -18,6 +18,7 @@ import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
+import { Token } from "../util/token"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -71,12 +72,32 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-// RAG indexing guard: index project files once per directory per process
-const ragIndexedDirs = new Set<string>()
+// RAG indexing guard: bounded LRU map so long-lived processes don't leak memory
+// as users switch between many workspaces. Map iteration preserves insertion
+// order, so keys().next() yields the least-recently-inserted entry.
+const RAG_INDEX_MAX = 64
+const RAG_INDEX_TTL_MS = 30 * 60 * 1000
+const ragIndexedDirs = new Map<string, number>()
+
 async function ensureRagIndexed() {
   const dir = Instance.directory
-  if (ragIndexedDirs.has(dir)) return
-  ragIndexedDirs.add(dir)
+  const now = Date.now()
+  // Drop stale entries so directories reachable after a TTL re-index freshly.
+  for (const [k, t] of ragIndexedDirs) {
+    if (now - t > RAG_INDEX_TTL_MS) ragIndexedDirs.delete(k)
+  }
+  if (ragIndexedDirs.has(dir)) {
+    // Refresh recency so active directories are kept over idle ones.
+    ragIndexedDirs.delete(dir)
+    ragIndexedDirs.set(dir, now)
+    return
+  }
+  while (ragIndexedDirs.size >= RAG_INDEX_MAX) {
+    const oldest = ragIndexedDirs.keys().next().value
+    if (oldest === undefined) break
+    ragIndexedDirs.delete(oldest)
+  }
+  ragIndexedDirs.set(dir, now)
   if (!(await RAG.isEnabled())) return
   try {
     const files = await ProjectContext.scanFiles(dir)
@@ -160,7 +181,9 @@ export namespace SessionPrompt {
             }).pipe(
               Effect.provide(Agent.defaultLayer),
               Effect.provide(Provider.defaultLayer),
-              Effect.ignore,
+              Effect.catch((err: unknown) =>
+                Effect.sync(() => log.warn("SessionLearn failed", { err: String(err) })),
+              ),
               Effect.forkIn(scope),
             )
           }),
@@ -222,7 +245,10 @@ export namespace SessionPrompt {
               mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
             })
           }),
-          { concurrency: "unbounded", discard: true },
+          // Bound parallel fs stats / agent lookups for the same reason
+          // as resolvePart below — @-mention heavy messages shouldn't
+          // serialize, but 100 parallel stats is pointless.
+          { concurrency: 8, discard: true },
         )
         return parts
       })
@@ -1365,7 +1391,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
         })
 
-        const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+        // Cap concurrency: resolvePart can call back into plugins, the file
+        // system, or provider lookups for each attached part. "unbounded"
+        // worked fine for the usual 1–3 attachments, but a user attaching
+        // 100 files (e.g. via drag-and-drop of a folder) would hammer all
+        // of those paths in parallel and potentially trip provider rate
+        // limits or starve the event loop.
+        const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: 8 }).pipe(
           Effect.map((x) => x.flat().map(assign)),
         )
 
@@ -1619,7 +1651,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 // Inject project context — budget is calculated from actual system tokens used
-                const systemTokensUsed = Math.ceil(system.join("\n").length / 4)
+                const systemTokensUsed = Token.estimate(system.join("\n"))
                 const projectCtx = yield* Effect.promise(() => ProjectContext.build(Instance.directory, model, systemTokensUsed))
                 if (projectCtx) system.push(projectCtx)
                 // Inject RAG context (semantic search based on user's message)

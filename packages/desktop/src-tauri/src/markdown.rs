@@ -59,5 +59,9 @@ pub fn parse_markdown(input: &str) -> String {
 #[tauri::command]
 #[specta::specta]
 pub async fn parse_markdown_command(markdown: String) -> Result<String, String> {
+    // Defence in depth: cap the input at 8 MiB of UTF-8 to prevent an XSS
+    // from pinning the process by feeding an unbounded string. Real message
+    // payloads are tiny (a few KiB); 8 MiB leaves ample headroom.
+    crate::validate::validate_bounded_text(&markdown, 8 * 1024 * 1024, "markdown")?;
     Ok(parse_markdown(&markdown))
 }

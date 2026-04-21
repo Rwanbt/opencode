@@ -4,6 +4,9 @@ import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
   AgentPartInput,
+  AgentSkillsExecuteErrors,
+  AgentSkillsExecuteResponses,
+  AgentSkillsListResponses,
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
@@ -13,6 +16,15 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  CollabListUsersResponses,
+  CollabLoginResponses,
+  CollabLogoutResponses,
+  CollabMeResponses,
+  CollabPresenceResponses,
+  CollabRefreshResponses,
+  CollabRegisterErrors,
+  CollabRegisterResponses,
+  CollabWsTicketResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -35,6 +47,7 @@ import type {
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
   FileListResponses,
+  FileMkdirResponses,
   FilePartInput,
   FilePartSource,
   FileReadResponses,
@@ -43,6 +56,10 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GdprAuditListResponses,
+  GdprDeleteErrors,
+  GdprDeleteResponses,
+  GdprExportResponses,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
@@ -156,6 +173,21 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  TaskCancelErrors,
+  TaskCancelResponses,
+  TaskFollowupErrors,
+  TaskFollowupResponses,
+  TaskGetErrors,
+  TaskGetResponses,
+  TaskListResponses,
+  TaskMessagesErrors,
+  TaskMessagesResponses,
+  TaskPromoteErrors,
+  TaskPromoteResponses,
+  TaskResumeErrors,
+  TaskResumeResponses,
+  TaskTeamErrors,
+  TaskTeamResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -232,6 +264,198 @@ class HeyApiRegistry<T> {
 
   set(value: T, key?: string): void {
     this.instances.set(key ?? this.defaultKey, value)
+  }
+}
+
+export class Collab extends HeyApiClient {
+  /**
+   * Register user
+   *
+   * Register a new collaborative user. First user becomes admin, subsequent users require admin privileges.
+   */
+  public register<ThrowOnError extends boolean = false>(
+    parameters?: {
+      username?: string
+      password?: string
+      email?: string
+      displayName?: string
+      role?: "admin" | "member" | "viewer"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "username" },
+            { in: "body", key: "password" },
+            { in: "body", key: "email" },
+            { in: "body", key: "displayName" },
+            { in: "body", key: "role" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CollabRegisterResponses, CollabRegisterErrors, ThrowOnError>({
+      url: "/collab/register",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Login
+   *
+   * Authenticate with username and password, receive JWT tokens.
+   */
+  public login<ThrowOnError extends boolean = false>(
+    parameters?: {
+      username?: string
+      password?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "username" },
+            { in: "body", key: "password" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CollabLoginResponses, unknown, ThrowOnError>({
+      url: "/collab/login",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Refresh token
+   *
+   * Exchange a refresh token for new access and refresh tokens (token rotation).
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      refreshToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "refreshToken" }] }])
+    return (options?.client ?? this.client).post<CollabRefreshResponses, unknown, ThrowOnError>({
+      url: "/collab/refresh",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Logout
+   *
+   * Revoke a refresh token.
+   */
+  public logout<ThrowOnError extends boolean = false>(
+    parameters?: {
+      refreshToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "refreshToken" }] }])
+    return (options?.client ?? this.client).post<CollabLogoutResponses, unknown, ThrowOnError>({
+      url: "/collab/logout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Issue a short-lived WebSocket ticket
+   *
+   * Consumes the current Basic/JWT session and emits a 60-second JWT usable for the WebSocket handshake. The ticket is ALSO set as `opencode_ws_ticket` HttpOnly+SameSite=Strict cookie so browser WS upgrades can authenticate without exposing the token to JS.
+   */
+  public wsTicket<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<CollabWsTicketResponses, unknown, ThrowOnError>({
+      url: "/collab/ws-ticket",
+      ...options,
+    })
+  }
+
+  /**
+   * Get current user
+   *
+   * Get the authenticated user's information.
+   */
+  public me<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<CollabMeResponses, unknown, ThrowOnError>({
+      url: "/collab/me",
+      ...options,
+    })
+  }
+
+  /**
+   * List users
+   *
+   * List all collaborative users. Requires admin role.
+   */
+  public listUsers<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<CollabListUsersResponses, unknown, ThrowOnError>({
+      url: "/collab/users",
+      ...options,
+    })
+  }
+
+  /**
+   * Get presence
+   *
+   * Get list of online users and their current activity.
+   */
+  public presence<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CollabPresenceResponses, unknown, ThrowOnError>({
+      url: "/presence",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -713,6 +937,9 @@ export class Pty extends HeyApiClient {
       env?: {
         [key: string]: string
       }
+      id?: string
+      cols?: number
+      rows?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -728,6 +955,9 @@ export class Pty extends HeyApiClient {
             { in: "body", key: "cwd" },
             { in: "body", key: "title" },
             { in: "body", key: "env" },
+            { in: "body", key: "id" },
+            { in: "body", key: "cols" },
+            { in: "body", key: "rows" },
           ],
         },
       ],
@@ -2646,6 +2876,368 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Task extends HeyApiClient {
+  /**
+   * List tasks
+   *
+   * List all tasks (child sessions) sorted by most recently updated. Optionally filter by parent session or status.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      parentID?: string
+      status?:
+        | "idle"
+        | "busy"
+        | "retry"
+        | "queued"
+        | "blocked"
+        | "awaiting_input"
+        | "completed"
+        | "failed"
+        | "cancelled"
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "parentID" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TaskListResponses, unknown, ThrowOnError>({
+      url: "/task",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get task
+   *
+   * Get detailed information about a specific task including its current status.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TaskGetResponses, TaskGetErrors, ThrowOnError>({
+      url: "/task/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get task messages
+   *
+   * Retrieve all messages from a task session to see its output and progress.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TaskMessagesResponses, TaskMessagesErrors, ThrowOnError>({
+      url: "/task/{id}/messages",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel task
+   *
+   * Cancel a running or queued task.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TaskCancelResponses, TaskCancelErrors, ThrowOnError>({
+      url: "/task/{id}/cancel",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Resume task
+   *
+   * Resume a completed, failed, blocked, or awaiting_input task with an optional follow-up prompt.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      prompt?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "prompt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TaskResumeResponses, TaskResumeErrors, ThrowOnError>({
+      url: "/task/{id}/resume",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Send follow-up to task
+   *
+   * Send a follow-up message to a task session. The task must be in a non-busy state. Returns immediately while the task processes the message.
+   */
+  public followup<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      prompt?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "prompt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TaskFollowupResponses, TaskFollowupErrors, ThrowOnError>({
+      url: "/task/{id}/followup",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Promote task to foreground
+   *
+   * Promote a background task to foreground by streaming its session messages. The response streams until the task completes or is cancelled.
+   */
+  public promote<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TaskPromoteResponses, TaskPromoteErrors, ThrowOnError>({
+      url: "/task/{id}/promote",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get team view
+   *
+   * Get an aggregated view of a task and all its child tasks (team members), including cost, status, and file changes for each.
+   */
+  public team<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TaskTeamResponses, TaskTeamErrors, ThrowOnError>({
+      url: "/task/{id}/team",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class AgentSkills extends HeyApiClient {
+  /**
+   * List agent skills
+   *
+   * List available OpenCode tools in AnythingLLM Agent Skill format.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AgentSkillsListResponses, unknown, ThrowOnError>({
+      url: "/agent-skills",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Execute agent skill
+   *
+   * Execute an OpenCode tool by ID. Returns the tool output.
+   */
+  public execute<ThrowOnError extends boolean = false>(
+    parameters: {
+      toolId: string
+      directory?: string
+      workspace?: string
+      args?: {
+        [key: string]: unknown
+      }
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "toolId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "args" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AgentSkillsExecuteResponses, AgentSkillsExecuteErrors, ThrowOnError>({
+      url: "/agent-skills/{toolId}/execute",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Question extends HeyApiClient {
   /**
    * List pending questions
@@ -2910,6 +3502,115 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Audit extends HeyApiClient {
+  /**
+   * List audit log entries
+   *
+   * Paginated audit log read (default 100, max 1000).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      from?: number
+      to?: number
+      limit?: number
+      action?: string
+      actor?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "action" },
+            { in: "query", key: "actor" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GdprAuditListResponses, unknown, ThrowOnError>({
+      url: "/audit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Gdpr extends HeyApiClient {
+  /**
+   * Export user data (RGPD)
+   *
+   * Streams a JSON document containing all local sessions, messages, and non-secret config. Auth tokens are omitted by default.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GdprExportResponses, unknown, ThrowOnError>({
+      url: "/user/data/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete all user data (RGPD)
+   *
+   * Destroys all local sessions, messages, auth.json, and user config. Requires header `X-Confirm-Delete: yes`.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<GdprDeleteResponses, GdprDeleteErrors, ThrowOnError>({
+      url: "/user/data",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _audit?: Audit
+  get audit(): Audit {
+    return (this._audit ??= new Audit({ client: this.client }))
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3106,6 +3807,43 @@ export class File extends HeyApiClient {
       url: "/file/status",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Create directory
+   *
+   * Create a directory (recursive) at the specified path.
+   */
+  public mkdir<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileMkdirResponses, unknown, ThrowOnError>({
+      url: "/file/mkdir",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -4096,6 +4834,11 @@ export class OpencodeClient extends HeyApiClient {
     OpencodeClient.__registry.set(this, args?.key)
   }
 
+  private _collab?: Collab
+  get collab(): Collab {
+    return (this._collab ??= new Collab({ client: this.client }))
+  }
+
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
@@ -4156,6 +4899,16 @@ export class OpencodeClient extends HeyApiClient {
     return (this._permission ??= new Permission({ client: this.client }))
   }
 
+  private _task?: Task
+  get task(): Task {
+    return (this._task ??= new Task({ client: this.client }))
+  }
+
+  private _agentSkills?: AgentSkills
+  get agentSkills(): AgentSkills {
+    return (this._agentSkills ??= new AgentSkills({ client: this.client }))
+  }
+
   private _question?: Question
   get question(): Question {
     return (this._question ??= new Question({ client: this.client }))
@@ -4164,6 +4917,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _gdpr?: Gdpr
+  get gdpr(): Gdpr {
+    return (this._gdpr ??= new Gdpr({ client: this.client }))
   }
 
   private _find?: Find

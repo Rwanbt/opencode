@@ -1,5 +1,141 @@
 import type { Platform } from "@opencode-ai/app"
-import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal } from "./runtime"
+import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal, writeDebugLog } from "./runtime"
+
+// Fingerprint du serveur privé (reçu via QR en mode Internet).
+// Quand défini, les requêtes HTTPS passent par la commande Rust
+// fetch_private_server qui accepte les certs self-signed.
+let _privateFp: string | null = null
+
+export function setPrivateServerFp(fp: string | null) {
+  _privateFp = fp
+}
+
+// IPs RFC1918 + loopback + IPv6 ULA. Utilisé comme fallback quand l'utilisateur
+// arrive sur une URL HTTPS LAN sans avoir transité par le deep link `opencode://`
+// (cas typique : scan via Google Lens / scanner tiers qui ne route pas les
+// schemes custom — l'utilisateur copie-colle l'URL HTTPS à la main, donc fp
+// jamais transmis). Sans cette détection, le tauri-plugin-http rejette le cert
+// self-signed et l'erreur affichée est un opaque "impossible de joindre".
+function isPrivateHostUrl(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase()
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost$|::1$|fc|fd)/.test(h)
+  } catch {
+    return false
+  }
+}
+
+type PrivateFetchMsg =
+  | { kind: "Headers"; status: number; headers: Record<string, string> }
+  | { kind: "Chunk"; data: number[] | Uint8Array }
+  | { kind: "End" }
+  | { kind: "Error"; message: string }
+
+// Fetch routed through the Rust `fetch_private_server` command, which accepts
+// self-signed TLS certs. Body is streamed back chunk-by-chunk via a Tauri
+// `Channel`, then plumbed into a `ReadableStream` so SSE / chat tokens flow
+// incrementally — a buffered text() variant starved the SDK reader and chat
+// responses never appeared even though POST /prompt_async returned 200.
+async function privateFetch(url: string, init: RequestInit | undefined, input: RequestInfo | URL): Promise<Response> {
+  const { invoke, Channel } = await import("@tauri-apps/api/core")
+  const channel = new Channel<PrivateFetchMsg>()
+  const requestHeaders = Object.fromEntries(
+    new Headers(init?.headers ?? (input instanceof Request ? input.headers : {})).entries(),
+  )
+  const method = init?.method ?? (input instanceof Request ? input.method : "GET")
+  // Body extraction must handle both init.body (raw fetch(url, init) calls)
+  // AND Request.body (the SDK builds a `new Request(url, fetchOptions)` and
+  // calls fetch(request) — in that case `init` is undefined). Without the
+  // Request branch, every POST went through with an empty body and the
+  // server replied 400 — the chat send "échoue" came from this.
+  let body: string | undefined
+  if (typeof init?.body === "string") {
+    body = init.body
+  } else if (input instanceof Request) {
+    try {
+      const t = await input.clone().text()
+      if (t.length > 0) body = t
+    } catch {}
+  }
+
+  return await new Promise<Response>((resolve, reject) => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null
+    const pending: Uint8Array[] = []
+    let closeMode: "open" | "end" | { error: Error } = "open"
+    let headersReceived = false
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c
+        for (const chunk of pending) c.enqueue(chunk)
+        pending.length = 0
+        if (closeMode === "end") c.close()
+        else if (typeof closeMode === "object") c.error(closeMode.error)
+      },
+      cancel() {
+        controller = null
+      },
+    })
+
+    channel.onmessage = (msg) => {
+      if (msg.kind === "Headers") {
+        if (headersReceived) return
+        headersReceived = true
+        resolve(new Response(stream, { status: msg.status, headers: msg.headers }))
+        return
+      }
+      if (msg.kind === "Chunk") {
+        const arr = msg.data instanceof Uint8Array ? msg.data : new Uint8Array(msg.data as any)
+        if (controller) controller.enqueue(arr)
+        else pending.push(arr)
+        return
+      }
+      if (msg.kind === "End") {
+        if (controller) controller.close()
+        else closeMode = "end"
+        return
+      }
+      if (msg.kind === "Error") {
+        const err = new Error(msg.message)
+        if (controller) controller.error(err)
+        else closeMode = { error: err }
+        if (!headersReceived) {
+          headersReceived = true
+          reject(err)
+        }
+      }
+    }
+
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+    if (signal) {
+      const onAbort = () => {
+        if (!headersReceived) {
+          headersReceived = true
+          reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+        }
+        try { controller?.error(signal.reason ?? new DOMException("Aborted", "AbortError")) } catch {}
+        controller = null
+      }
+      if (signal.aborted) onAbort()
+      else signal.addEventListener("abort", onAbort, { once: true })
+    }
+
+    invoke("fetch_private_server", {
+      url,
+      method,
+      headers: requestHeaders,
+      body,
+      onEvent: channel,
+    }).catch((e: unknown) => {
+      const err = e instanceof Error ? e : new Error(String(e))
+      if (!headersReceived) {
+        headersReceived = true
+        reject(err)
+      }
+      try { controller?.error(err) } catch {}
+    })
+  })
+}
 
 const pkg = { version: "0.1.0" }
 
@@ -61,6 +197,10 @@ export async function createPlatform(): Promise<Platform> {
   }
 
   const settings = makeStorage(settingsStore)
+
+  // Capture la référence fetch une seule fois, exactement comme l'original.
+  // Cela préserve le binding et le contexte du plugin Tauri HTTP.
+  const _baseFetch = (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window)
 
   return {
     platform: "mobile" as any,
@@ -177,7 +317,29 @@ export async function createPlatform(): Promise<Platform> {
       return makeStorage(name ? createStore(name) : settingsStore)
     },
 
-    fetch: (plugins?.http?.fetch as unknown as typeof fetch) ?? window.fetch.bind(window),
+    fetch: (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url
+      // Routage via la commande Rust fetch_private_server (accept_invalid_certs)
+      // dans deux cas :
+      //   1. fp pinning explicite reçu via deep link `opencode://...&fp=...`
+      //   2. fallback HTTPS vers IP privée RFC1918 sans fp (scan QR via scanner
+      //      tiers qui ne route pas les schemes custom — l'utilisateur a copié
+      //      l'URL à la main). Sans ce fallback, l'erreur est silencieuse et
+      //      affiche "impossible de joindre".
+      const isHttps = /^https:\/\//.test(url)
+      const usePrivateFetch = isHttps && (_privateFp || isPrivateHostUrl(url))
+      if (usePrivateFetch) {
+        return privateFetch(url, init, input)
+      }
+      // Chemin normal : utilise la référence _baseFetch capturée à la création
+      // du platform (identique au code original avant les modifications C1).
+      return _baseFetch(input as any, init)
+    },
 
     async getDefaultServer() {
       return ((await settings.getItem("defaultServerUrl")) ?? null) as any
@@ -201,53 +363,60 @@ export async function createPlatform(): Promise<Platform> {
 
     async startLocalServer() {
       if (os !== "android") return null
-      console.log("[OpenCode] startLocalServer: checking runtime...")
+      await writeDebugLog("startLocalServer: checking runtime...")
       const info = await checkRuntime()
-      console.log("[OpenCode] runtime info:", JSON.stringify(info))
+      await writeDebugLog(`checkRuntime: ready=${info.ready} server_running=${info.server_running} port=${info.port}`)
 
       if (!info.ready) {
-        console.log("[OpenCode] runtime not ready, extracting...")
+        await writeDebugLog("runtime not ready, extracting...")
         try { await extractRuntime() } catch (e) {
-          console.error("[OpenCode] extract failed:", e)
+          await writeDebugLog(`extract failed: ${e}`)
           throw new Error(`Extract failed: ${e}`)
         }
       }
+
+      // Note: installExtendedEnv (Alpine rootfs + advanced tools) is
+      // handled by ExtractionProgress component at first launch, so it's
+      // done before this point when needed. No action here.
 
       const port = info.port
 
       if (info.server_running) {
         const savedPw = await settings.getItem("localServerPassword")
+        await writeDebugLog(`server_running=true savedPw=${savedPw ? savedPw.slice(0,8)+"..." : "null"}`)
         if (savedPw) {
-          console.log("[OpenCode] server already running, reusing saved password")
+          await writeDebugLog(`returning cached: url=http://127.0.0.1:${port} pw=${savedPw.slice(0,8)}...`)
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw }
         }
-        // Server running but no saved password — stop and restart with a fresh one
-        console.log("[OpenCode] server running but no saved password, restarting...")
+        await writeDebugLog("server running but no saved password, restarting...")
         try { await stopLocal(port) } catch {}
       }
 
       const password = crypto.randomUUID()
+      await writeDebugLog(`fresh start: port=${port} pw=${password.slice(0,8)}...`)
       // Save password BEFORE starting server to avoid race conditions
       await settings.setItem("localServerPassword", password)
       await settings.setItem("localServerPort", String(port))
 
-      console.log("[OpenCode] starting embedded server on port", port)
       try {
         await startEmbeddedServer(port, password)
+        await writeDebugLog("startEmbeddedServer OK")
       } catch (e) {
-        console.error("[OpenCode] startEmbeddedServer failed:", e)
+        await writeDebugLog(`startEmbeddedServer FAILED: ${e}`)
         throw new Error(`Server start failed: ${e}`)
       }
 
-      console.log("[OpenCode] waiting for health check...")
+      await writeDebugLog("waiting for health check (30s)...")
       for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 1000))
-        if (await checkLocalHealth(port, password)) {
-          console.log("[OpenCode] server healthy!")
+        const healthy = await checkLocalHealth(port, password)
+        await writeDebugLog(`checkLocalHealth(${i+1}): ${healthy}`)
+        if (healthy) {
+          await writeDebugLog(`returning: url=http://127.0.0.1:${port} pw=${password.slice(0,8)}...`)
           return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
         }
       }
-      console.error("[OpenCode] health check timed out after 30s")
+      await writeDebugLog("health check timed out after 30s")
       return null
     },
 

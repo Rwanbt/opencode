@@ -13,6 +13,7 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
+  useGlobalSDK,
 } from "@opencode-ai/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -27,7 +28,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
 import { createResource, onCleanup, onMount, Show } from "solid-js"
-import { ensureLocalLLMLoaded, autoStartLocalLLM } from "./hooks/use-auto-start-llm"
+import { ensureLocalLLMLoaded, autoStartLocalLLM, setupLLMIdleUnload } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
@@ -36,7 +37,11 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { commands, type InitStep } from "./bindings"
+import { commands, type InitStep, type RemoteConnectionInfo } from "./bindings"
+
+function toRemoteAccessInfo(info: RemoteConnectionInfo) {
+  return { ...info, tlsFingerprint: info.tlsFingerprint ?? undefined }
+}
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -338,10 +343,14 @@ const createPlatform = (): Platform => {
     },
 
     fetch: (input, init) => {
+      // Accept self-signed certs for loopback HTTPS (local sidecar in TLS/Internet mode).
+      // The sidecar cert is generated locally; no MITM is possible on 127.0.0.1.
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url
+      const isLoopbackHttps = /^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?($|\/)/i.test(url)
       if (input instanceof Request) {
-        return tauriFetch(input)
+        return tauriFetch(input, isLoopbackHttps ? ({ danger: { acceptInvalidCerts: true, acceptInvalidHostnames: false } } as any) : undefined)
       } else {
-        return tauriFetch(input, init)
+        return tauriFetch(input, isLoopbackHttps ? { ...init, danger: { acceptInvalidCerts: true, acceptInvalidHostnames: false } } as any : init)
       }
     },
 
@@ -356,15 +365,31 @@ const createPlatform = (): Platform => {
     },
 
     getRemoteAccess: async () => {
-      return commands.getRemoteConfig()
+      return toRemoteAccessInfo(await commands.getRemoteConfig())
     },
 
     setRemoteAccessEnabled: async (enabled) => {
-      return commands.setRemoteEnabled(enabled)
+      return toRemoteAccessInfo(await commands.setRemoteEnabled(enabled))
     },
 
     resetRemoteAccessPassword: async () => {
-      return commands.resetRemotePassword()
+      return toRemoteAccessInfo(await commands.resetRemotePassword())
+    },
+
+    setRemoteCredentials: async (username: string, password: string) => {
+      return toRemoteAccessInfo(await commands.setRemoteCredentials(username, password))
+    },
+
+    setInternetModeEnabled: async (enabled) => {
+      return toRemoteAccessInfo(await commands.setInternetMode(enabled))
+    },
+
+    exportTlsCert: async () => {
+      return commands.exportTlsCert()
+    },
+
+    rotateTlsCert: async () => {
+      return toRemoteAccessInfo(await commands.rotateTlsCert())
     },
 
     getDefaultServer: async () => {
@@ -482,6 +507,7 @@ render(() => {
   function Inner() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
+    const globalSDK = useGlobalSDK()
 
     // Auto-start local LLM on model selection events
     onMount(() => {
@@ -496,6 +522,12 @@ render(() => {
     // Auto-start on launch: if models exist, preload the first one
     onMount(() => {
       autoStartLocalLLM()
+    })
+
+    // Auto-unload: release VRAM 30s after all sessions go idle
+    onMount(() => {
+      const cleanup = setupLLMIdleUnload(globalSDK.event.listen)
+      onCleanup(cleanup)
     })
 
     // Initialize speech listeners (STT/TTS)

@@ -13,7 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
-import type { LocalPTY } from "@/context/terminal"
+import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
@@ -27,6 +27,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
+  onSend?: (fn: ((data: string) => void) | undefined) => void
 }
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty | undefined }> | undefined
@@ -231,6 +232,7 @@ const persistTerminal = (input: {
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
   const sdk = useSDK()
+  const terminalCtx = useTerminal()
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
@@ -251,10 +253,14 @@ export const Terminal = (props: TerminalProps) => {
   }
   const MAX_CONNECT_TRIES = 5
   const addDebug = (msg: string) => {
-    if (import.meta.env.DEV) console.info("[terminal-debug]", msg)
+    // Always log (was gated on import.meta.env.DEV). v5 diagnostic build:
+    // we need these checkpoints visible in production DevTools (F12) to
+    // trace where the terminal mount fails when the pane is empty. Revert
+    // the unconditional log once the terminal regression is resolved.
+    console.info("[terminal-debug]", msg)
   }
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError", "onSend"])
   const id = local.pty.id
   const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
@@ -552,6 +558,71 @@ export const Terminal = (props: TerminalProps) => {
         handleResize = scheduleFit
         window.addEventListener("resize", handleResize)
         cleanups.push(() => window.removeEventListener("resize", handleResize))
+
+        // Android portrait bug: at mount time, the container dimensions
+        // reported by getBoundingClientRect() can be stale — the viewport is
+        // still settling (soft keyboard animation, safe-area inset, address
+        // bar collapse). This leaves the terminal initialised with too-small
+        // cols/rows, the cursor lands outside the visible area, and the
+        // first prompt is invisible until the user types (which triggers a
+        // SIGWINCH → correct repaint).
+        //
+        // Two guards:
+        //   1. ResizeObserver on the container — catches every dimension
+        //      change, including post-mount viewport settling and keyboard
+        //      toggle. `fit.observeResize()` already watches the terminal
+        //      internal element but not the outer container we control.
+        //   2. A few delayed refits covering the window where the viewport
+        //      stabilizes (50ms / 200ms / 500ms). Cheap, idempotent.
+        if (typeof ResizeObserver !== "undefined") {
+          const ro = new ResizeObserver(() => scheduleFit())
+          ro.observe(container)
+          cleanups.push(() => ro.disconnect())
+        }
+        const refreshTimers: ReturnType<typeof setTimeout>[] = []
+        for (const delay of [50, 200, 500]) {
+          refreshTimers.push(
+            setTimeout(() => {
+              if (disposed) return
+              try {
+                fit.fit()
+                // After `fit.fit()` only the renderer is reshaped — the
+                // Rust-side PTY stays on whatever dims we sent last time.
+                // Force-push the current cols/rows so the shell gets a
+                // SIGWINCH with real dims and re-emits the prompt.
+                // `scheduleSize` is idempotent via `lastSize` guard.
+                scheduleSize(t.cols, t.rows)
+                // Force a full repaint so the first prompt (already received
+                // from the PTY) becomes visible even if the terminal
+                // internals think the screen is unchanged. `refresh` is an
+                // xterm.js-compatible method not guaranteed on ghostty-web,
+                // hence the optional chain.
+                const refresh = (t as unknown as { refresh?: (s: number, e: number) => void }).refresh
+                refresh?.call(t, 0, Math.max(0, t.rows - 1))
+              } catch {
+                // ignore — disposed or not yet fully open
+              }
+            }, delay),
+          )
+        }
+        cleanups.push(() => {
+          for (const timer of refreshTimers) clearTimeout(timer)
+        })
+
+        // `orientationchange` fires before the viewport resizes on Android;
+        // chain a post-event refit so the PTY is notified once the new
+        // dimensions settle.
+        const handleOrientation = () => {
+          setTimeout(() => {
+            if (disposed) return
+            try {
+              fit.fit()
+              scheduleSize(t.cols, t.rows)
+            } catch { /* ignore */ }
+          }, 200)
+        }
+        window.addEventListener("orientationchange", handleOrientation)
+        cleanups.push(() => window.removeEventListener("orientationchange", handleOrientation))
       }
 
       const write = (data: string) =>
@@ -572,6 +643,30 @@ export const Terminal = (props: TerminalProps) => {
         startResize()
       } else {
         fit.fit()
+        if (local.pty._pending) {
+          // Lazy-create: backend has no session for this id yet. Call
+          // pty.create with the *exact* grid dims measured above. The shell
+          // spawns at final size so no SIGWINCH is ever emitted and mksh's
+          // readline pad-erase redisplay never fires — fixes the portrait
+          // first-prompt bug at its root.
+          try {
+            await client.pty.create({
+              id,
+              title: local.pty.title,
+              cols: t.cols,
+              rows: t.rows,
+            })
+            // Pre-seed lastSize so the immediate scheduleSize below (and the
+            // ones from WS open / ResizeObserver if dims are still identical)
+            // are no-ops and never trigger a PUT /pty/:id.
+            lastSize = { cols: t.cols, rows: t.rows }
+            terminalCtx.finalizePending(id)
+          } catch (err) {
+            addDebug(`pty.create failed: ${err instanceof Error ? err.message : String(err)}`)
+            terminalCtx.failPending(id)
+            throw err
+          }
+        }
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
@@ -635,18 +730,27 @@ export const Terminal = (props: TerminalProps) => {
           return
         }
 
+        // Synchronous WebSocket construction + listener attachment.
+        // Sprint 4-6 tried to route this through createAuthenticatedWebSocket
+        // (async ticket fetch with legacy fallback) but the async boundary
+        // between `new WebSocket()` and the `.then()` that wires handlers lets
+        // the `open` event fire first on fast loopback — `handleOpen` never
+        // runs, terminal stays silent. Back to the e22886176 pattern: open +
+        // attach in the same microtask, auth via `?authorization=Basic` query
+        // string (Chromium/WebView2 drops URL userinfo + can't set the
+        // Authorization header on WS upgrades, so query param is the only
+        // browser-reachable legacy auth). The server-side ticket endpoint and
+        // middleware (Sprints 4-6) stay wired for the next WS client migration.
+        const basicToken = btoa(`${auth.username}:${auth.password}`)
         const next = new URL(auth.url + `/pty/${id}/connect`)
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
-        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        // Browsers strip userinfo from WebSocket URLs — Chromium/WebView2
-        // silently drops url.username/url.password so the Authorization
-        // header is never sent. Pass credentials as a query parameter instead.
-        const basicToken = btoa(`${auth.username}:${auth.password}`)
         next.searchParams.set("authorization", `Basic ${basicToken}`)
+        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
 
         const redactedParams = next.searchParams.toString().replace(/authorization=[^&]+/, "authorization=REDACTED")
         addDebug(`WS url: ${next.protocol}//${next.hostname}:${next.port}${next.pathname} params=${redactedParams}`)
+
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"
         ws = socket
@@ -674,10 +778,10 @@ export const Terminal = (props: TerminalProps) => {
             const json = decoder.decode(bytes.subarray(1))
             try {
               const meta = JSON.parse(json) as { cursor?: unknown }
-              const next = meta?.cursor
-              if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
-                cursor = next
-                seek = next
+              const nextCursor = meta?.cursor
+              if (typeof nextCursor === "number" && Number.isSafeInteger(nextCursor) && nextCursor >= 0) {
+                cursor = nextCursor
+                seek = nextCursor
               }
             } catch (err) {
               debugTerminal("invalid websocket control frame", err)
@@ -733,6 +837,12 @@ export const Terminal = (props: TerminalProps) => {
           ws.close(4_000, "e2e")
         },
       })
+
+      const sendBytes = (data: string) => {
+        if (ws?.readyState === WebSocket.OPEN) ws.send(data)
+      }
+      local.onSend?.(sendBytes)
+      cleanups.push(() => local.onSend?.(undefined))
 
       open()
     }

@@ -10,7 +10,13 @@ import {
   type ModelInfo,
   type ModelDownloadProgress,
 } from "../llm"
-import { MODEL_CATALOG, type CatalogModel } from "../model-catalog"
+import {
+  MODEL_CATALOG,
+  type CatalogModel,
+  detectDeviceProfile,
+  fitsOnDevice,
+  isRecommendedFor,
+} from "../model-catalog"
 
 interface Props {
   onClose: () => void
@@ -32,6 +38,10 @@ export function ModelManager(props: Props) {
   const [downloadProgress, setDownloadProgress] = createSignal<Record<string, ModelDownloadProgress>>({})
   const [customUrl, setCustomUrl] = createSignal("")
   const [error, setError] = createSignal("")
+
+  // Device profile is frozen at first render — RAM doesn't change and the
+  // overhead of re-reading per frame would be wasted.
+  const deviceProfile = detectDeviceProfile()
 
   let unlisten: UnlistenFn | undefined
 
@@ -379,6 +389,18 @@ export function ModelManager(props: Props) {
       {/* Download Models from Catalog */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Available Models</div>
+        <div style={{
+          "font-size": "12px",
+          color: "#666",
+          "margin-bottom": "12px",
+          padding: "8px 10px",
+          "border-radius": "6px",
+          background: "#111",
+          border: "1px solid #2a2a2a",
+        }}>
+          Device: {deviceProfile.ramGB} GB RAM, {deviceProfile.cores} cores ({deviceProfile.tier}) —
+          green badge = best fit, yellow = may OOM or run very slow.
+        </div>
         <For each={MODEL_CATALOG}>
           {(catalog) => {
             const downloaded = () => isDownloaded(catalog.filename)
@@ -389,18 +411,34 @@ export function ModelManager(props: Props) {
               <div style={cardStyle}>
                 <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between" }}>
                   <div style={{ flex: "1", "min-width": "0" }}>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
                       <span style={{ "font-size": "15px", "font-weight": "600" }}>{catalog.name}</span>
-                      <Show when={catalog.recommended}>
+                      <Show when={isRecommendedFor(catalog, deviceProfile)}>
                         <span style={{
                           "font-size": "10px",
                           "font-weight": "700",
                           padding: "2px 6px",
                           "border-radius": "4px",
-                          background: "#1e3a5f",
-                          color: "#93c5fd",
+                          background: "#0a2f0a",
+                          color: "#86efac",
+                          border: "1px solid #22c55e66",
                         }}>
-                          Recommended
+                          Recommended for this device
+                        </span>
+                      </Show>
+                      <Show when={!fitsOnDevice(catalog, deviceProfile)}>
+                        <span style={{
+                          "font-size": "10px",
+                          "font-weight": "700",
+                          padding: "2px 6px",
+                          "border-radius": "4px",
+                          background: "#3f2a0a",
+                          color: "#fcd34d",
+                          border: "1px solid #f59e0b66",
+                        }}
+                        title={`Needs ~${catalog.minRamGB} GB RAM, this device reports ${deviceProfile.ramGB} GB`}
+                        >
+                          Heavy for this device
                         </span>
                       </Show>
                     </div>

@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, ServiceMap, Stream } from "effect"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -113,6 +113,18 @@ export namespace Vcs {
         branch: z.string().optional(),
       }),
     ),
+    // Emitted when a periodic `git fetch` reveals the local branch has
+    // diverged from its upstream — the UI surfaces this as a notification
+    // so the user knows to pull before they keep working.
+    BranchBehind: BusEvent.define(
+      "vcs.branch.behind",
+      z.object({
+        branch: z.string(),
+        upstream: z.string(),
+        behind: z.number().int().nonnegative(),
+        ahead: z.number().int().nonnegative(),
+      }),
+    ),
   }
 
   export const Info = z
@@ -135,7 +147,18 @@ export namespace Vcs {
   interface State {
     current: string | undefined
     root: Git.Base | undefined
+    // Last emitted upstream-divergence snapshot. Kept here so the watcher
+    // can dedupe BranchBehind events (only publish when the counts change).
+    lastBehind?: { branch: string; upstream: string; behind: number; ahead: number }
   }
+
+  // How often the watcher probes the remote for updates. 5 minutes is a
+  // pragmatic default: short enough for the notification to feel timely,
+  // long enough to avoid beating on the network for laptops on mobile
+  // tethering. The first probe runs after a 30s warm-up so cold-start
+  // doesn't spike during the already-busy boot window.
+  const WATCH_INTERVAL = Duration.minutes(5)
+  const WATCH_INITIAL_DELAY = Duration.seconds(30)
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
 
@@ -159,7 +182,7 @@ export namespace Vcs {
             const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
               concurrency: 2,
             })
-            const value = { current, root }
+            const value: State = { current, root }
             log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
             yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
@@ -174,6 +197,49 @@ export namespace Vcs {
                   }
                 }),
               ),
+              Effect.forkScoped,
+            )
+
+            // Periodic upstream probe — non-fatal, swallows any failure
+            // (offline, detached HEAD, no remote) so a transient network
+            // hiccup doesn't tear down the VCS service.
+            const probe = Effect.fnUntraced(function* () {
+              const current = yield* git.branch(ctx.directory)
+              if (!current) return
+              const upstreamRef = yield* git.upstream(ctx.directory, current)
+              if (!upstreamRef) return
+
+              const remote = upstreamRef.includes("/") ? upstreamRef.split("/", 1)[0] : "origin"
+              const fetched = yield* git.fetch(ctx.directory, remote)
+              if (!fetched) return
+
+              const [behind, ahead] = yield* Effect.all(
+                [
+                  git.revCount(ctx.directory, `HEAD..${upstreamRef}`),
+                  git.revCount(ctx.directory, `${upstreamRef}..HEAD`),
+                ],
+                { concurrency: 2 },
+              )
+
+              const last = value.lastBehind
+              if (last && last.branch === current && last.upstream === upstreamRef && last.behind === behind && last.ahead === ahead) {
+                return
+              }
+              value.lastBehind = { branch: current, upstream: upstreamRef, behind, ahead }
+
+              if (behind > 0 || ahead > 0) {
+                log.info("branch diverged from upstream", { branch: current, upstream: upstreamRef, behind, ahead })
+                yield* bus.publish(Event.BranchBehind, { branch: current, upstream: upstreamRef, behind, ahead })
+              }
+            })
+
+            yield* probe().pipe(
+              Effect.catchCause((cause) => {
+                log.warn("upstream probe failed", { cause: Cause.pretty(cause) })
+                return Effect.void
+              }),
+              Effect.repeat(Schedule.spaced(WATCH_INTERVAL)),
+              Effect.delay(WATCH_INITIAL_DELAY),
               Effect.forkScoped,
             )
 

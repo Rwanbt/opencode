@@ -229,7 +229,12 @@ export namespace ToolRegistry {
           // (explicit "allow" permission) — privacy: local models must never reach the network
           // unless the user explicitly opts in for this session.
           if (isLocal) {
-            if (!LOCAL_TOOLS.has(tool.id)) return false
+            // Allow tools explicitly permitted by agent config (opt-in bypass of the local whitelist).
+            // This lets power users enable e.g. "task" or "lsp" for local models via agent config.
+            const isExplicitlyAllowed = (permission ?? []).some(
+              (r) => r.permission === tool.id && r.action === "allow",
+            )
+            if (!LOCAL_TOOLS.has(tool.id) && !isExplicitlyAllowed) return false
             if (tool.id === "websearch" || tool.id === "webfetch") {
               // Privacy strict: require an explicit rule named after the tool.
               // Do NOT trust wildcard "*": "allow" from the build agent defaults.

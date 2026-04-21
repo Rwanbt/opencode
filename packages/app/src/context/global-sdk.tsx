@@ -26,7 +26,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       try {
         const url = new URL(server.current.http.url)
         const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+        // RFC1918 hosts: any private LAN IPv4. We need to route through
+        // platform.fetch for HTTPS on these because the desktop sidecar uses
+        // a self-signed cert that the WebView's native fetch will reject.
+        const privateLan = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|fc|fd)/.test(url.hostname.toLowerCase())
         if (url.protocol === "http:" && !loopback) return platform.fetch
+        if (url.protocol === "https:" && loopback) return platform.fetch
+        if (url.protocol === "https:" && privateLan) return platform.fetch
       } catch {
         return
       }

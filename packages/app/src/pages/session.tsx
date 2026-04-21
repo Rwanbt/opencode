@@ -1089,6 +1089,23 @@ export default function Page() {
     void loadVcs(mode)
   })
 
+  // Eager prefetch of the git diff so the first panel toggle is instant.
+  // Without this, opening the changes panel cold-fetches `git diff` +
+  // reads every modified file's before/after contents (1–2s on a ~100
+  // file repo). Waiting until after the session initial render buys us
+  // a free warm cache at negligible interaction cost. `loadVcs` is
+  // idempotent + gated by `vcs.ready[mode]`, so repeat calls are no-ops.
+  createEffect(() => {
+    const mode = vcsMode()
+    if (!mode) return
+    if (sync.project?.vcs !== "git") return
+    if (vcs.ready[mode]) return
+    const timer = window.setTimeout(() => {
+      void loadVcs(mode)
+    }, 800)
+    onCleanup(() => window.clearTimeout(timer))
+  })
+
   createEffect(
     on(
       () => sync.data.session_status[params.id ?? ""]?.type,

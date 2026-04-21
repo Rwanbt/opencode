@@ -59,7 +59,7 @@ describe("preflight guards", () => {
               { filePath: filepath, content: "overwrite" },
               ctx,
             ),
-          ).rejects.toThrow("File already exists. Use edit instead of write.")
+          ).rejects.toThrow("File already exists. Read the file first with the read tool, then use edit with a small unique oldString snippet to modify it.")
         },
       })
     })
@@ -122,7 +122,7 @@ describe("preflight guards", () => {
               { filePath: "relative.txt", content: "overwrite" },
               ctx,
             ),
-          ).rejects.toThrow("File already exists. Use edit instead of write.")
+          ).rejects.toThrow("File already exists. Read the file first with the read tool, then use edit with a small unique oldString snippet to modify it.")
         },
       })
     })

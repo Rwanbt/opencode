@@ -30,6 +30,7 @@ import { TaskRoutes } from "./routes/task"
 import { WsEventRoutes } from "./routes/ws-event"
 import { Presence } from "./presence"
 import { AgentSkillRoutes } from "./routes/agent-skills"
+import { GdprRoutes } from "./routes/gdpr"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -92,6 +93,7 @@ export const InstanceRoutes = (app?: Hono) =>
         return c.json(Presence.list())
       },
     )
+    .route("/", GdprRoutes())
     .route("/", FileRoutes())
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())

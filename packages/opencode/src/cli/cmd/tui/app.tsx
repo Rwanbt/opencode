@@ -384,6 +384,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
+        // Same rationale as dialog-model.tsx onSelect: warm up llama-server
+        // now so the first user prompt doesn't block on weight load.
+        if (providerID === "local-llm") {
+          void import("@/local-llm-server").then(({ LocalLLMServer }) =>
+            LocalLLMServer.ensureRunning(modelID).catch(() => {}),
+          )
+        }
       }
       // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {

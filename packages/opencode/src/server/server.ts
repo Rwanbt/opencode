@@ -75,10 +75,17 @@ export namespace Server {
             )
               return input
 
-            // *.opencode.ai (https only, adjust if needed)
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-              return input
-            }
+            // Explicit opencode.ai origins we actually use — narrower than
+            // the previous *.opencode.ai regex, which would accept anything
+            // user-controlled at a hostile subdomain (e.g. evil.opencode.ai).
+            const ALLOWED_OPENCODE_ORIGINS = [
+              "https://opencode.ai",
+              "https://www.opencode.ai",
+              "https://docs.opencode.ai",
+              "https://console.opencode.ai",
+            ]
+            if (ALLOWED_OPENCODE_ORIGINS.includes(input)) return input
+
             if (opts?.cors?.includes(input)) {
               return input
             }
@@ -266,13 +273,24 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
-    url = new URL(`http://${opts.hostname}:${opts.port}`)
+    // TLS (Internet mode): cert and key paths are passed via env vars by the Tauri sidecar.
+    const tlsCertPath = process.env.OPENCODE_TLS_CERT_PATH
+    const tlsKeyPath = process.env.OPENCODE_TLS_KEY_PATH
+    const tls =
+      tlsCertPath && tlsKeyPath
+        ? { cert: Bun.file(tlsCertPath), key: Bun.file(tlsKeyPath) }
+        : undefined
+
+    const scheme = tls ? "https" : "http"
+    url = new URL(`${scheme}://${opts.hostname}:${opts.port}`)
+
     const app = ControlPlaneRoutes({ cors: opts.cors })
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: app.fetch,
       websocket: websocket,
+      ...(tls ? { tls } : {}),
     } as const
     const tryServe = (port: number) => {
       try {

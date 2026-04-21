@@ -7,6 +7,8 @@ on:
 
 jobs:
   close:
+    # Script cible anomalyco/opencode : ne rien tenter depuis un fork (GITHUB_TOKEN → 403).
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     permissions:
       contents: read

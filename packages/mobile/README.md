@@ -10,10 +10,36 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 
 ### Local LLM Inference
 - On-device inference via llama.cpp with JNI bridge (GPU optional: OpenCL/Vulkan)
+- Adaptive runtime config: `n_gpu_layers` / threads / batch size derived from
+  device profile (RAM, big.LITTLE CPU, GPU backend, thermal state) via
+  `packages/opencode/src/local-llm-server/auto-config.ts`
 - Model management: download GGUF models from HuggingFace, load/unload/delete
+- **Resumable downloads**: HTTP `Range` header picks up where a 4G interruption
+  left off (4 GB GGUF doesn't restart from zero when signal drops)
 - OpenAI-compatible HTTP API via llama-server on port 14097
 - File-based IPC between Rust backend and Kotlin LlamaEngine
-- HuggingFace search for additional GGUF models
+- HuggingFace search for additional GGUF models (Zod-validated response)
+
+### Foreground Service (`LlamaService.kt`)
+- `startForegroundService()` invoked from `MainActivity.onCreate()` keeps
+  the whole process tree at `adj=0`, exempting it from Android 12+
+  PhantomProcessKiller and MIUI SmartPower
+- `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` declared (required on API 34+)
+- Persistent notification with `POST_NOTIFICATIONS` permission request
+- `LlamaService.waitForInstance()` + `spawnServer()` / `stopChildProcess()`
+  used by `LlamaEngine` and the PTY server
+
+### Hardened Release Build
+- `isDebuggable = false`, `isJniDebuggable = false`,
+  `isShrinkResources = true` on release `buildType`
+- `android:allowBackup="false"` + `android:fullBackupContent="false"` on
+  `<application>` — blocks `adb backup` data exfiltration
+- `android:windowSoftInputMode="adjustResize"` — chat input stays visible
+  above the keyboard on mid-range devices
+- Strict CSP on `tauri.conf.json` (`connect-src` limited to loopback +
+  HuggingFace + Tauri IPC; `object-src 'none'`; `frame-ancestors 'none'`)
+- All Rust logs routed through `log` + `android_logger` (no more raw
+  `eprintln!` leaking paths/URLs to logcat in release)
 
 ### Speech-to-Text (STT)
 - NVIDIA Parakeet TDT 0.6B v3 (INT8) via ONNX Runtime (same engine as desktop)
@@ -21,6 +47,30 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 - 25 European languages supported
 - Auto-download model (~460 MB) on first use
 - Waveform animation during recording
+- **Mic listener wired** (`packages/mobile/src/hooks/use-speech.ts`): the
+  prompt-input mic button dispatches `stt-start`/`stt-stop`, the hook
+  records via `MediaRecorder` (webm/opus → 16 kHz WAV base64) and calls
+  `stt_transcribe`. Runtime permission flow is handled automatically by
+  the auto-generated `RustWebChromeClient` once `RECORD_AUDIO` +
+  `MODIFY_AUDIO_SETTINGS` are declared in the manifest.
+
+### Text-to-Speech (TTS) — Kokoro ONNX
+- **Kokoro v1.0 (Apache-2.0)** is the only on-device TTS engine on
+  Android (Pocket TTS needs a Python sidecar, not viable on mobile).
+  54+ pre-defined voices, 9 languages, ONNX CPUExecutionProvider.
+- Six Tauri commands exposed from `speech.rs`: `kokoro_available`,
+  `kokoro_download_model`, `kokoro_load`, `kokoro_loaded`,
+  `kokoro_voices`, `kokoro_synthesize`. The stubbed `tts_speak` /
+  `tts_available` now delegate to these.
+- ~336 MB download on first use (model + voices bundle from
+  `thewh1teagle/kokoro-onnx` v1.0 release).
+- Chunked streaming playback with parallel C0/C1 synth (same algorithm
+  as the desktop hook) for a fast time-to-first-audio.
+- `Mutex` access through the `lock_safe` helper (B.A5) — a poisoned
+  lock is recovered with a warning instead of panicking the TTS stack.
+- **No voice cloning on mobile**: Kokoro's fixed `[1,256]` style
+  embeddings cannot encode arbitrary speakers, and the VoiceClone
+  section of Settings is hidden on mobile via `usePlatform()`.
 
 ### External Storage Access
 - Symlinks from server HOME to `/sdcard/` directories (Documents, Downloads, projects, etc.)
@@ -33,6 +83,11 @@ Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports b
 - Ghostty WASM terminal renderer with canvas fallback for unsupported WebViews
 - WebSocket connection to embedded server `/pty/{id}/connect` endpoint
 - Multiple terminal tabs with drag-to-reorder
+- **Viewport-sized spawn**: `Pty.create` now accepts `cols`/`rows`; the
+  frontend (`context/terminal.tsx::estimateTerminalSize`) derives them
+  from `window.innerWidth/innerHeight` before creating the session, so
+  the shell is born close to its final dimensions and mksh/bash don't
+  drop their first prompt in reaction to the post-spawn SIGWINCH.
 
 ### Native File Picker
 - Native Android file/directory picker via `tauri-plugin-dialog`
@@ -138,6 +193,13 @@ Packaged as JNI libs in `jniLibs/arm64-v8a/`:
 - `libllama_server.so` — OpenAI-compatible HTTP server
 - `librg_exec.so` — ripgrep for code search
 - `libbash_exec.so` — Bash shell
+- `libtoybox_exec.so` — toybox multicall (ls/cat/grep/sed/…)
+- `libbusybox_exec.so` — *(optional)* busybox-static for full-featured
+  `vi`/`vim`/`less`/`nano`/`awk`/`sed`. Toybox does not include `vi`, so
+  without this library `vim file` returns `toybox: unknown command vi`.
+  Fetch with `scripts/fetch-busybox.sh` (pulls from Alpine Linux apk
+  repository, SHA256-pinnable). `runtime.rs` creates the symlinks
+  automatically if the library is present.
 - `libstdcpp_compat.so`, `libgcc_compat.so` — C++ runtime for musl binaries
 
 ## Remote Connection

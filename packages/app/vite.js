@@ -33,6 +33,22 @@ export default [
       )
     },
   },
+  {
+    // KaTeX ships its fonts as WOFF2 + WOFF + TTF for legacy browsers. Every
+    // WebView we target (Tauri mobile WebView, Electron desktop) loads WOFF2
+    // natively, so the ~150 KB of TTF files just bloat the APK/installer
+    // without ever being fetched. Drop them from the final bundle.
+    name: "opencode-desktop:drop-katex-ttf",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      for (const key of Object.keys(bundle)) {
+        const asset = bundle[key]
+        if (asset.type === "asset" && /^.*KaTeX_.*\.ttf$/i.test(asset.fileName)) {
+          delete bundle[key]
+        }
+      }
+    },
+  },
   tailwindcss(),
   solidPlugin(),
 ]

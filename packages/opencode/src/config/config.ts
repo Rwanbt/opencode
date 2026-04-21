@@ -1028,6 +1028,26 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          task: z
+            .object({
+              cost_cap: z
+                .number()
+                .positive()
+                .optional()
+                .describe(
+                  "Cumulative USD cost cap per task session. Further /task/:id/followup calls return 429 cost_cap_exceeded once reached. Undefined = no cap.",
+                ),
+              max_parallel: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe(
+                  "Maximum number of background tasks executing concurrently per project. Additional tasks are enqueued and started when slots free. Default: 4.",
+                ),
+            })
+            .optional()
+            .describe("Task orchestration limits (cost caps, concurrency)"),
           openTelemetry: z
             .boolean()
             .optional()
@@ -1070,6 +1090,12 @@ export namespace Config {
           dlp: z
             .object({
               enabled: z.boolean().default(false).describe("Enable DLP (Data Loss Prevention) to redact secrets before sending to LLM"),
+              scan_tool_outputs: z
+                .boolean()
+                .default(false)
+                .describe(
+                  "Run secret + prompt-injection scanner on tool outputs before passing them to the LLM. Off by default to avoid false positives in dev.",
+                ),
             })
             .optional()
             .describe("Data Loss Prevention - redacts secrets, keys, and tokens from content sent to LLM providers"),
@@ -1125,6 +1151,60 @@ export namespace Config {
             })
             .optional()
             .describe("Memory management for LSP servers (idle timeout, max concurrent, LRU eviction)"),
+          crash: z
+            .object({
+              upload_endpoint: z
+                .string()
+                .url()
+                .optional()
+                .describe(
+                  "Opt-in HTTPS endpoint where crash reports will be POSTed as JSON. Default: undefined (local file only).",
+                ),
+            })
+            .optional()
+            .describe("Crash reporter — local-first, optional remote upload"),
+          provider: z
+            .object({
+              fallback: z
+                .enum(["local", "cloud"])
+                .nullable()
+                .optional()
+                .describe(
+                  "Cascading provider fallback. 'local' = on cloud error, retry via local-llm-server. 'cloud' = on local error, retry via configured cloud provider. Default: null (disabled).",
+                ),
+              fallback_cloud_providerID: z
+                .string()
+                .nullable()
+                .optional()
+                .describe(
+                  "Override the secondary provider used when fallback='cloud'. Must match a providerID declared in `provider`. Recommended: a fast, cheap model (e.g. anthropic/claude-haiku, google/gemini-flash). Default: null (= first configured non-local provider).",
+                ),
+            })
+            .optional()
+            .describe("Provider-layer experimental behaviour (fallback, retry policy)"),
+          audit: z
+            .object({
+              enabled: z
+                .boolean()
+                .default(false)
+                .describe(
+                  "Enable audit log. Records session create/delete, auth mutations, tool permission grants, task cancellations, config writes.",
+                ),
+              retention_days: z
+                .number()
+                .int()
+                .positive()
+                .default(90)
+                .describe("Days of audit entries to retain"),
+            })
+            .optional()
+            .describe("Audit log for security-sensitive actions"),
+          ws_auth_legacy: z
+            .boolean()
+            .optional()
+            .describe(
+              "Allow the legacy `?authorization=Bearer+<jwt>` query-string WS handshake. Default true in Sprint 4 for backward compat; flip to false once all clients migrate to the cookie/Sec-WebSocket-Protocol flow.",
+            ),
           anythingllm: z
             .object({
               enabled: z.boolean().default(false).describe("Enable AnythingLLM integration"),

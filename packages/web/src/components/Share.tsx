@@ -107,7 +107,9 @@ export default function Share(props: {
       // Always use secure WebSocket protocol (wss)
       const wsBaseUrl = apiUrl.replace(/^https?:\/\//, "wss://")
       const wsUrl = `${wsBaseUrl}/share_poll?id=${props.id}`
-      // Create WebSocket connection
+      // Sprint 6 item 3 — NOT migrated to createAuthenticatedWebSocket.
+      // Rationale: /share_poll is a public, read-only endpoint (anonymous
+      // shared-session viewer). No credentials to pass, no ws-ticket needed.
       socket = new WebSocket(wsUrl)
 
       // Handle connection opening

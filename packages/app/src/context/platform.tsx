@@ -88,6 +88,18 @@ export type Platform = {
   /** Regenerate the remote-access password; takes effect on next launch (desktop only) */
   resetRemoteAccessPassword?(): Promise<RemoteAccessInfo>
 
+  /** Set a custom username and/or password; takes effect on next launch (desktop only) */
+  setRemoteCredentials?(username: string, password: string): Promise<RemoteAccessInfo>
+
+  /** Enable or disable Internet (TLS) mode; generates the cert if needed; takes effect on next launch */
+  setInternetModeEnabled?(enabled: boolean): Promise<RemoteAccessInfo>
+
+  /** Export the TLS certificate PEM to Downloads and return the file path */
+  exportTlsCert?(): Promise<string>
+
+  /** Rotate (regenerate) the TLS certificate; takes effect on next launch */
+  rotateTlsCert?(): Promise<RemoteAccessInfo>
+
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
 
@@ -121,8 +133,11 @@ export type DisplayBackend = "auto" | "wayland"
 export type RemoteAccessInfo = {
   enabled: boolean
   password: string
+  username: string
   port: number
   lanIp: string | null
+  tlsEnabled: boolean
+  tlsFingerprint?: string
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

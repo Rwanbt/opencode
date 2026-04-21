@@ -22,7 +22,7 @@ onnx = ["dep:ort", "dep:ndarray", "dep:bincode"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset", "devtools"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -32,13 +32,13 @@ tauri-plugin-process = "2"
 tauri-plugin-store = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-http = "2.5.6"
+tauri-plugin-http = { version = "2.5.6", features = ["dangerous-settings"] }
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1.48.0", features = ["process", "rt", "macros"] }
+tokio = { version = "1.48.0", features = ["process", "rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 listeners = "0.3"
 tauri-plugin-os = "2"
 futures = "0.3.31"
@@ -51,6 +51,11 @@ specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 dirs = "6.0.0"
+# B1 (Sprint 4) — OS keychain for auth token storage.
+#   - apple-native      : Security.framework (macOS)
+#   - windows-native    : wincred (Windows)
+#   - sync-secret-service + vendored : libsecret (Linux, vendored openssl-sys)
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored"] }
 ort = { version = "=2.0.0-rc.10", features = ["download-binaries"], optional = true }
 bincode = { version = "2.0", features = ["std", "derive", "serde"], optional = true }
 ndarray = { version = "0.16.1", optional = true }
@@ -62,6 +67,11 @@ tracing-appender = "0.2"
 chrono = "0.4"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 process-wrap = { version = "9.0.3", features = ["tokio1"] }
+rcgen = { version = "0.13", features = ["pem"] }
+sha2 = "0.10"
+base64 = "0.21"
+url = "2"
+opencode-kokoro-shared = { path = "../../../crates/opencode-kokoro-shared" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading", "Win32_System_Registry"] }

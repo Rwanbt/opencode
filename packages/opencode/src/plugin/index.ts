@@ -40,6 +40,7 @@ export namespace Plugin {
       output: Output,
     ) => Effect.Effect<Output>
     readonly list: () => Effect.Effect<Hooks[]>
+    readonly has: (name: keyof Hooks) => Effect.Effect<boolean>
     readonly init: () => Effect.Effect<void>
   }
 
@@ -268,11 +269,19 @@ export namespace Plugin {
         return s.hooks
       })
 
+      const has = Effect.fn("Plugin.has")(function* (name: keyof Hooks) {
+        const s = yield* InstanceState.get(state)
+        for (const hook of s.hooks) {
+          if (typeof hook[name] === "function") return true
+        }
+        return false
+      })
+
       const init = Effect.fn("Plugin.init")(function* () {
         yield* InstanceState.get(state)
       })
 
-      return Service.of({ trigger, list, init })
+      return Service.of({ trigger, list, has, init })
     }),
   )
 

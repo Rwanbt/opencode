@@ -5,9 +5,10 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
-import { DialogCustomProvider } from "./dialog-custom-provider"
+// DialogConnectProvider / DialogCustomProvider imported on-demand to avoid
+// a static cycle (connect ↔ select ↔ custom) and to keep each out of the
+// main bundle.
 
 const CUSTOM_ID = "_custom"
 
@@ -55,10 +56,14 @@ export const DialogSelectProvider: Component = () => {
         onSelect={(x) => {
           if (!x) return
           if (x.id === CUSTOM_ID) {
-            dialog.show(() => <DialogCustomProvider back="providers" />)
+            void import("./dialog-custom-provider").then((m) => {
+              dialog.show(() => <m.DialogCustomProvider back="providers" />)
+            })
             return
           }
-          dialog.show(() => <DialogConnectProvider provider={x.id} />)
+          void import("./dialog-connect-provider").then((m) => {
+            dialog.show(() => <m.DialogConnectProvider provider={x.id} />)
+          })
         }}
       >
         {(i) => (

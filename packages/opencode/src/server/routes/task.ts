@@ -8,19 +8,57 @@ import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionStatus } from "@/session/status"
 import { Workspace } from "../../control-plane/workspace"
+import { WorkspaceID } from "../../control-plane/schema"
 import { Bus } from "../../bus"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Log } from "../../util/log"
+import { Config } from "../../config/config"
+import { AuditLog } from "../../session/audit"
 
 const log = Log.create({ service: "server.task" })
 
-async function getWorktreeInfo(session: { workspaceID?: string }) {
+async function getWorktreeInfo(session: { workspaceID?: WorkspaceID | string }) {
   if (!session.workspaceID) return undefined
   try {
-    const ws = await Workspace.get(session.workspaceID as any)
+    // Session.Info.workspaceID is a branded WorkspaceID, but some callers
+    // pass a narrower shape (e.g. { workspaceID?: string } from older DTOs).
+    const id = session.workspaceID as WorkspaceID
+    const ws = await Workspace.get(id)
     if (!ws || ws.type !== "worktree") return undefined
     return { id: ws.id, directory: ws.directory, branch: ws.branch }
+  } catch (err) {
+    log.warn("getWorktreeInfo failed", {
+      workspaceID: session.workspaceID,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return undefined
+  }
+}
+
+/**
+ * Extract the cost of an assistant message with a discriminated narrowing.
+ * Returns 0 for non-assistant messages.
+ */
+function getMessageCost(msg: MessageV2.Info): number {
+  if (msg.role !== "assistant") return 0
+  return typeof msg.cost === "number" ? msg.cost : 0
+}
+
+/**
+ * Compute the cumulative USD cost of a task session from its assistant messages.
+ */
+async function getSessionCostUsed(sessionID: SessionID): Promise<number> {
+  const messages = await Session.messages({ sessionID })
+  return messages.reduce((sum, m) => sum + getMessageCost(m.info), 0)
+}
+
+/** Resolve the per-session cost cap from config (undefined => no cap). */
+async function getSessionCostCap(): Promise<number | undefined> {
+  try {
+    const cfg = await Config.get()
+    const cap = cfg.experimental?.task?.cost_cap
+    return typeof cap === "number" && cap > 0 ? cap : undefined
   } catch {
     return undefined
   }
@@ -40,6 +78,8 @@ const TaskInfo = z
     status: SessionStatus.Info,
     childCount: z.number().optional(),
     worktree: WorktreeInfo,
+    costUsed: z.number().optional(),
+    costCap: z.number().optional(),
   })
   .meta({ ref: "TaskInfo" })
 
@@ -146,7 +186,9 @@ export const TaskRoutes = lazy(() =>
         const status = await SessionStatus.get(id)
         const children = await Session.children(id)
         const worktree = await getWorktreeInfo(session)
-        return c.json({ session, status, childCount: children.length, worktree })
+        const costUsed = await getSessionCostUsed(id)
+        const costCap = await getSessionCostCap()
+        return c.json({ session, status, childCount: children.length, worktree, costUsed, costCap })
       },
     )
     .get(
@@ -224,6 +266,7 @@ export const TaskRoutes = lazy(() =>
         await SessionPrompt.cancel(id)
         await SessionStatus.set(id, { type: "cancelled" })
         await Bus.publish(SessionStatus.Event.TaskCancelled, { sessionID: id })
+        AuditLog.recordAsync({ action: "task.cancel", target: id })
         return c.json(true)
       },
     )
@@ -354,6 +397,20 @@ export const TaskRoutes = lazy(() =>
 
         if (status.type === "busy") {
           throw new Error("Task is currently busy. Wait for it to finish or cancel it first.")
+        }
+
+        // Per-session cost cap guard (W1). Blocks further followups once the
+        // cumulative USD cost of the task has reached the configured cap.
+        const costCap = await getSessionCostCap()
+        if (costCap !== undefined) {
+          const costUsed = await getSessionCostUsed(id)
+          if (costUsed >= costCap) {
+            log.warn("cost cap exceeded", { sessionID: id, costUsed, costCap })
+            return c.json(
+              { error: "cost_cap_exceeded", used: costUsed, cap: costCap },
+              429,
+            )
+          }
         }
 
         await SessionStatus.set(id, { type: "busy" })
@@ -501,10 +558,7 @@ export const TaskRoutes = lazy(() =>
 
             // Calculate cost from messages
             const messages = await Session.messages({ sessionID: child.id })
-            const cost = messages.reduce((sum, msg) => {
-              if (msg.info.role === "assistant") return sum + ((msg.info as any).cost ?? 0)
-              return sum
-            }, 0)
+            const cost = messages.reduce((sum, msg) => sum + getMessageCost(msg.info), 0)
             totalCost += cost
 
             if (child.summary) {

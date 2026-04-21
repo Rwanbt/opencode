@@ -21,6 +21,48 @@ import { SessionTable } from "../session/session.sql"
 
 const log = Log.create({ service: "task" })
 
+// ── Background task concurrency semaphore (W6) ─────────────────────────────
+// One slot budget per project. Tasks beyond `max_parallel` stay in `queued`
+// and are dequeued as slots are freed by TaskCompleted/Failed/Cancelled.
+const DEFAULT_MAX_PARALLEL = 4
+type ProjectSlots = { running: number; queue: Array<() => void> }
+const projectSlots = new Map<string, ProjectSlots>()
+
+function getSlots(projectID: string): ProjectSlots {
+  let s = projectSlots.get(projectID)
+  if (!s) {
+    s = { running: 0, queue: [] }
+    projectSlots.set(projectID, s)
+  }
+  return s
+}
+
+/**
+ * Acquire a slot for `projectID`. Resolves immediately if capacity is
+ * available; otherwise queues and resolves once a slot is released.
+ */
+function acquireBackgroundSlot(projectID: string, max: number): Promise<void> {
+  const slots = getSlots(projectID)
+  if (slots.running < max) {
+    slots.running += 1
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    slots.queue.push(() => {
+      slots.running += 1
+      resolve()
+    })
+  })
+}
+
+function releaseBackgroundSlot(projectID: string) {
+  const slots = projectSlots.get(projectID)
+  if (!slots) return
+  slots.running = Math.max(0, slots.running - 1)
+  const next = slots.queue.shift()
+  if (next) next()
+}
+
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
@@ -202,8 +244,31 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
         await SessionStatus.set(session.id, { type: "queued" })
 
+        // Semaphore (W6): gate concurrency per project.
+        const projectID = (() => {
+          try {
+            return Instance.current.project.id
+          } catch {
+            return "__default__"
+          }
+        })()
+        const maxParallel = config.experimental?.task?.max_parallel ?? DEFAULT_MAX_PARALLEL
+
+        let slotHeld = false
+        const ensureSlotReleased = () => {
+          if (slotHeld) {
+            slotHeld = false
+            releaseBackgroundSlot(projectID)
+          }
+        }
+
         // Run the prompt in the worktree context if available
         const runPrompt = async () => {
+          // Wait for a concurrency slot. While waiting the session stays `queued`.
+          await acquireBackgroundSlot(projectID, maxParallel)
+          slotHeld = true
+          // Transition queued -> busy now that we're actively running.
+          await SessionStatus.set(session.id, { type: "busy" }).catch(() => {})
           if (workspace?.directory) {
             return Instance.provide({
               directory: workspace.directory,
@@ -268,6 +333,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             } catch (catchErr) {
               log.error("background task error handler failed", { sessionID: session.id, error: catchErr })
             }
+          })
+          .finally(() => {
+            // Always release the semaphore slot so queued tasks can proceed
+            // (regardless of TaskCompleted / TaskFailed / TaskCancelled path).
+            ensureSlotReleased()
           })
 
         return {

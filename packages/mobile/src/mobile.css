@@ -155,20 +155,40 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
   gap: 6px !important;
 }
 
-/* ─── 7. SEARCH BAR — responsive width ───────────────────────────────────── */
+/* ─── 7. SEARCH BAR + HEADER GRID — portrait responsive ───────────────────── */
 
-@media (max-width: 479px) {
-  /* Narrow phones: compact search */
+/* En portrait, la colonne centrale devient flexible (remplace "auto" du grid) */
+@media (max-width: 767px) {
+  header.h-10 {
+    grid-template-columns: auto 1fr auto !important;
+  }
+
+  #opencode-titlebar-center {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* Le bouton de recherche remplit tout l'espace disponible entre hamburger et boutons droits */
+  #opencode-titlebar-center .hidden.md\:flex {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
   #opencode-titlebar-center .w-\[240px\] {
-    width: 140px !important;
-    min-width: 100px;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
   }
 }
 
-@media (min-width: 480px) and (max-width: 767px) {
-  #opencode-titlebar-center .w-\[240px\] {
-    width: 180px !important;
-  }
+/* Portrait très étroit : réduire les gaps pour libérer de l'espace */
+@media (max-width: 479px) {
+  #opencode-titlebar-right .gap-1 { gap: 2px !important; }
+  #opencode-titlebar-right .gap-2 { gap: 3px !important; }
 }
 
 /* ─── 8. MOBILE SIDEBAR — clamp to 85vw ─────────────────────────────────── */
