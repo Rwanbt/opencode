@@ -123,7 +123,7 @@ OpenCode kører AI-modeller lokalt på forbrugerhardware (8 GB VRAM / 16 GB RAM)
 - Vulkan GPU-backend, auto-downloadet ved første modelindlæsning
 - **Adaptiv runtime-konfiguration** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, tråde, batch/ubatch-størrelse, KV-cache-kvantisering og kontekststørrelse udledes fra detekteret VRAM, ledig RAM, big.LITTLE CPU-opdeling, GPU-backend (CUDA/ROCm/Vulkan/Metal/OpenCL) og termisk tilstand. Erstatter den gamle hardkodede `--n-gpu-layers 99` — en 4 GB Android kører nu i CPU-fallback i stedet for at blive OOM-dræbt, flagskib-desktops får et tunet batch i stedet for standard 512.
 - `--flash-attn on` — Flash Attention for hukommelseseffektivitet
-- `--cache-type-k/v` — KV-cache med Hadamard-rotation; adaptivt niveau (f16 / q8_0 / q4_0) baseret på VRAM-margen
+- `--cache-type-k/v` — KV-cache med -rotation; adaptivt niveau (f16 / q8_0 / q4_0) baseret på VRAM-margen
 - `--fit on` — fork-kun sekundær VRAM-justering (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Spekulativ dekodning (`--model-draft`) med VRAM Guard (auto-deaktiverer hvis < 1,5 GB ledig)
 - Enkelt slot (`-np 1`) for at minimere hukommelsesfodaftryk
@@ -146,7 +146,7 @@ OpenCode kører AI-modeller lokalt på forbrugerhardware (8 GB VRAM / 16 GB RAM)
 **Modelstyring**
 - HuggingFace-søgning med VRAM/RAM-kompatibilitetsmærker per model
 - Download, indlæs, aflæs, slet GGUF-modeller fra brugergrænsefladen
-- Forkureret katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Forkureret katalog: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dynamiske output-tokens baseret på modelstørrelse
 - Auto-detektering af draft-model (0.5B-0.8B) til spekulativ dekodning
 
@@ -162,7 +162,6 @@ OpenCode kører AI-modeller lokalt på forbrugerhardware (8 GB VRAM / 16 GB RAM)
 - Pre-flight guards (kodeniveau, 0 tokens): fil-eksistens-tjek før redigering, old_string indholdsverifikation, læs-før-redigering håndhævelse, skriv-på-eksisterende forebyggelse
 - Doom loop auto-break: 2x identiske værktøjskald → fejl injiceres (kodeniveau guard, ikke kun prompt)
 - Værktøjstelemetri: per-session succes/fejlrate med per-værktøj nedbrydning, logges automatisk
-- Mål: >85% værktøjssuccesrate på 4B-modeller
 
 **Tværplatform**: Windows (Vulkan), Linux, macOS, Android
 
@@ -345,7 +344,7 @@ For at undgå forvirring fra AI-genererede opsummeringer af dette projekt:
 | **Adaptiv runtime-konfiguration** | Implemented | `auto-config.ts`: n_gpu_layers / tråde / batch / KV-kvantisering udledes fra detekteret VRAM, RAM, big.LITTLE, GPU-backend, termisk tilstand |
 | **Benchmark-harness** | Implemented | `bun run bench:llm` måler FTL, TPS, peak RSS, vægtid pr. model; JSONL-output |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` til gpt-*/o1/o3/o4; empirisk 3,5 tegn/token til Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | HuggingFace model search | Implemented | Zod-valideret respons, VRAM-badges, downloadmanager, 9 prækurerede modeller |

@@ -123,7 +123,7 @@ OpenCode kjorer AI-modeller lokalt pa forbrukermaskinvare (8 GB VRAM / 16 GB RAM
 - Vulkan GPU-backend, auto-nedlastet ved forste modellasting
 - **Adaptiv runtime-konfigurasjon** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, trader, batch/ubatch-storrelse, KV-cache-kvantisering og kontekststorrelse utledes fra detektert VRAM, ledig RAM, big.LITTLE CPU-oppdeling, GPU-backend (CUDA/ROCm/Vulkan/Metal/OpenCL) og termisk tilstand. Erstatter den gamle hardkodet `--n-gpu-layers 99` — en 4 GB Android kjorer na i CPU-fallback istedenfor a bli OOM-drept, flaggskip-skriveborder far et tunet batch istedenfor standard 512.
 - `--flash-attn on` — Flash Attention for minneeffektivitet
-- `--cache-type-k/v` — KV-cache med Hadamard-rotasjon; adaptivt niva (f16 / q8_0 / q4_0) basert pa VRAM-margin
+- `--cache-type-k/v` — KV-cache med -rotasjon; adaptivt niva (f16 / q8_0 / q4_0) basert pa VRAM-margin
 - `--fit on` — fork-kun sekundaer VRAM-justering (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Spekulativ dekoding (`--model-draft`) med VRAM Guard (auto-deaktiverer hvis < 1,5 GB ledig)
 - Enkelt slot (`-np 1`) for a minimere minneavtrykk
@@ -146,7 +146,7 @@ OpenCode kjorer AI-modeller lokalt pa forbrukermaskinvare (8 GB VRAM / 16 GB RAM
 **Modellhaandtering**
 - HuggingFace-sok med VRAM/RAM-kompatibilitetsmerker per modell
 - Last ned, last inn, last ut, slett GGUF-modeller fra brukergrensesnittet
-- Forkurert katalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Forkurert katalog: Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dynamiske output-tokens basert pa modellstorrelse
 - Auto-deteksjon av draft-modell (0.5B-0.8B) for spekulativ dekoding
 
@@ -162,7 +162,6 @@ OpenCode kjorer AI-modeller lokalt pa forbrukermaskinvare (8 GB VRAM / 16 GB RAM
 - Pre-flight guards (kodeniva, 0 tokens): fil-eksistens-sjekk for redigering, old_string innholdsverifisering, les-for-redigering haandheving, skriv-pa-eksisterende forebygging
 - Doom loop auto-break: 2x identiske verktoykall → feil injiseres (kodeniva guard, ikke kun prompt)
 - Verktoytelemetri: per-sesjon suksess/feilrate med per-verktoy nedbrytning, logges automatisk
-- Maal: >85% verktoyvsuksessrate pa 4B-modeller
 
 **Tverrplattform**: Windows (Vulkan), Linux, macOS, Android
 
@@ -345,7 +344,7 @@ For a forhindre forvirring fra AI-genererte sammendrag av dette prosjektet:
 | **Adaptiv runtime-konfigurasjon** | Implemented | `auto-config.ts`: n_gpu_layers / trader / batch / KV-kvantisering utledes fra detektert VRAM, RAM, big.LITTLE, GPU-backend, termisk tilstand |
 | **Benchmark-harness** | Implemented | `bun run bench:llm` maler FTL, TPS, peak RSS, veggtid per modell; JSONL-utdata |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with standard llama.cpp quantization (~50% KV memory savings at q4_0) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` for gpt-*/o1/o3/o4; empirisk 3,5 tegn/token for Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | HuggingFace model search | Implemented | Zod-validert respons, VRAM-merker, nedlastingsbehandler, 9 forhandsvalgte modeller |

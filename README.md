@@ -93,14 +93,14 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 | Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
 | -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
 | First-class **Android app**            | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
-| iOS (remote mode)                      |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| iOS (remote mode)                      |     planned   |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | Adaptive runtime (VRAM/CPU/thermal)    | ✅ **unique**  |      ❌      |     ❌     |      ❌     |      hardcoded      | hardcoded | hardcoded | hardcoded | hardcoded | n/a | hardcoded | hardcoded | hardcoded |
 | **STT** (voice-to-text, built-in)      | ✅ (Parakeet)  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial  |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **TTS** (text-to-speech + voice clone) | ✅ (Pocket/Kokoro) |  ❌       |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **OAuth deep-link callback**           |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **mDNS service discovery**             | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **Upstream branch watcher** (`vcs.branch.behind`) | ✅ **unique** | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
-| **Collaborative mode** (JWT + presence + file-lock) | ✅ | ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
+| **Collaborative mode** (JWT + presence + file-lock) | experimental | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
 | **AnythingLLM bridge**                 | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | **GDPR export/erasure route**          | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | Price                                  |  free + BYOM  |  $20/mo sub |$20/mo sub |  1000/day free | free + BYOM    | free + BYOM | free + BYOM | free + BYOM | free + BYOM | $20/mo sub | free + BYOM | free + BYOM | free + BYOM |
@@ -201,10 +201,10 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 **Inference Engine (llama.cpp b8731)**
 - Vulkan GPU backend, auto-downloaded on first model load
 - **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
-- `--flash-attn on` — Flash Attention for memory efficiency
-- `--cache-type-k/v` — Hadamard rotation KV cache; adaptive tier (f16 / q8_0 / q4_0) based on VRAM headroom
+- `--flash-attn on` — Flash Attention for memory efficiency (desktop; mobile auto-disables when GPU is off or KV is unquantized)
+- `--cache-type-k/v` — standard llama.cpp KV-cache quantization; adaptive tier (f16 / q8_0 / q4_0) selected from detected VRAM headroom
 - `--fit on` — fork-only secondary VRAM adjustment (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
-- Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables if < 1.5 GB free)
+- Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables when < 4 GB VRAM headroom)
 - Single slot (`-np 1`) to minimize memory footprint
 - **Benchmark harness** (`bun run bench:llm`): reproducible FTL / TPS / peak RSS / wall-time measurement per model, per run, JSONL output for CI archival
 
@@ -225,7 +225,7 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 **Model Management**
 - HuggingFace search with VRAM/RAM compatibility badges per model
 - Download, load, unload, delete GGUF models from the UI
-- Pre-curated catalog: Gemma 4 E4B, Qwen 3.5 (4B/2B/0.8B), Phi-4 Mini, Llama 3.2
+- Pre-curated catalog (verified HF repos): Gemma 3 4B, Qwen3 4B/1.7B/0.6B
 - Dynamic output tokens based on model size
 - Draft model auto-detection (0.5B–0.8B) for speculative decoding
 
@@ -239,9 +239,8 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 
 **Agent Reliability (local models)**
 - Pre-flight guards (code-level, 0 tokens): file-exists check before edit, old_string content verification, read-before-edit enforcement, write-on-existing prevention
-- Doom loop auto-break: 2x identical tool calls → error injected (code-level guard, not prompt-only)
-- Tool telemetry: per-session success/error rate with per-tool breakdown, logged automatically
-- Target: >85% tool success rate on 4B models
+- Loop auto-break: both identical consecutive tool calls **and** repeated failed edits on the same file trigger an error injection so the agent stops cycling (`session/processor.ts`)
+- Tool telemetry: per-session success/error counts with per-tool breakdown, emitted to structured logs (not persisted to SQLite — recover via log shipping if needed)
 
 **Cross-platform**: Windows (Vulkan), Linux, macOS, Android
 
@@ -418,12 +417,12 @@ To prevent confusion from AI-generated summaries of this project:
 | **Adaptive runtime config** | Implemented | `auto-config.ts`: n_gpu_layers / threads / batch / KV quant derived from detected VRAM, RAM, big.LITTLE, GPU backend, thermal state |
 | **Benchmark harness** | Implemented | `bun run bench:llm` measures FTL, TPS, peak RSS, wall per model; JSONL output |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive selection (standard llama.cpp quantization — no custom rotation) |
 | Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` for gpt-*/o1/o3/o4; empirical 3.5 chars/token for Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | Zod-validated response, VRAM badges, download manager, 9 pre-curated models |
+| HuggingFace model search | Implemented | Desktop: Zod-validated response + regex-sanitised rfilename; mobile: basic typed parsing. VRAM badges, download manager, 4 pre-curated models (verified HF repos) |
 | **Resumable GGUF downloads** | Implemented | HTTP `Range` header — 4G interruption doesn't restart a 4 GB transfer from zero |
 | STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile (mic listener wired both sides) |
 | TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop only — no Python sidecar on Android) |
@@ -438,32 +437,38 @@ To prevent confusion from AI-generated summaries of this project:
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Docker sandboxing | Implemented | Optional via `experimental.sandbox.type: "docker"` |
-| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
-| DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
-| Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
-| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; no `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
-| **Android release hardening** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
-| **Desktop release hardening** | Implemented | Devtools no longer force-enabled — Tauri 2 default (debug-only) restored so an XSS foothold cannot attach to `__TAURI__` in production |
+| Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns (does not intercept external file writes) |
+| Docker sandbox | Opt-in (bash only) | `experimental.sandbox.type: "docker"` routes `bash` executions through a container. `edit`/`write` tools still touch the host filesystem — not full isolation |
+| DLP / AgentShield | Opt-in | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
+| Policy engine | Opt-in | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; `script-src` permits `'wasm-unsafe-eval'` (needed by llama.cpp WASM shims), `object-src 'none'`, `frame-ancestors 'none'` |
+| **Android release hardening** | Implemented | `isDebuggable=false`, `isMinifyEnabled=true`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE`; WebView inspector gated on `ApplicationInfo.FLAG_DEBUGGABLE` |
+| **Desktop release hardening** | Implemented | `devtools` Tauri feature removed from `Cargo.toml` default set — release builds no longer expose the devtools surface; debug builds retain the webview inspector Tauri auto-enables |
 | **Tauri command input validation** | Implemented | `download_model` / `load_llm_model` / `delete_model` guards: filename charset, HTTPS allowlist to `huggingface.co` / `hf.co` |
 | **Rust logging chain** | Implemented | `log` + `android_logger` on mobile; no `eprintln!` in release → no path/URL leaks to logcat |
 | **Security audit tracker** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — all findings classified S1/S2/S3 with `path:line`, status, and deferred fix rationale |
 
+> **Threat model caveat:** the permission system and sandbox toggle are UX primitives, **not a security boundary**. Host-mode bash, all edit/write tools, and MCP servers run with the user's own privileges. If you need true isolation, run OpenCode inside a VM or a full-environment container. See [`SECURITY.md`](SECURITY.md).
+
 ### Knowledge & Memory
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Vector DB / RAG | Implemented | `experimental.rag.enabled: true`, SQLite + cosine similarity |
-| Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay |
-| Memory conflict resolution | Implemented | Detects and resolves duplicate/contradictory embeddings |
+| Vector DB / RAG | Opt-in | `experimental.rag.enabled: true`, SQLite + cosine similarity |
+| Hybrid RAG (BM25 + vector) | Implemented | `rag/bm25.ts` + `rag/vector.ts`; sparse + dense retrieval combined inside the index |
+| Confidence/decay | Implemented | Time-based scoring for RAG embeddings, exponential decay (`rag/confidence.ts`) |
+| Memory conflict resolution | **Experimental — not wired** | `rag/conflict.ts` exists and is unit-tested but is not yet invoked by the RAG index in production. Wiring in progress |
 
-### Platform Extensions (Experimental)
+### Platform Extensions
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT + TTS (Kokoro). iOS: remote mode |
+| Mobile app — Android (Tauri) | Implemented | Embedded runtime (Bun + bash + ripgrep + toybox), on-device LLM via llama.cpp JNI, STT (Parakeet), TTS (Kokoro) |
+| Mobile app — iOS | Planned | Tauri iOS target not generated yet — `scripts/build-ios.sh` exists but no `gen/ios/` project |
 | **OAuth callback deep link** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` auto-finalises the token exchange; no copy-paste of the auth code required |
-| **Upstream branch watcher** | Implemented | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind` when local HEAD diverges from tracked upstream; surfaced via `platform.notify()` on desktop and mobile |
-| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions instead of 80×24→36×11, fixes the Android first-prompt-invisible bug on mksh/bash |
-| Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
-| AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
+| **Upstream branch watcher** | Opt-in | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind`; surfaced via `platform.notify()` on desktop and mobile |
+| **mDNS service discovery** | Opt-in | `server/mdns.ts` publishes the server; requires explicit enable via `shouldPublishMDNS` |
+| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions, fixes the Android first-prompt-invisible bug on mksh/bash |
+| Collaborative mode | Experimental (opt-in) | `experimental.collaborative.enabled: true`. JWT auth, presence, file locking, WebSocket broadcast — feature-complete, low field exposure |
+| AnythingLLM bridge | Experimental (opt-in) | `experimental.anythingllm.enabled: true`. 4 MCP tools + plugin context injection + Agent-Skills HTTP API |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |
 
 ---
@@ -570,10 +575,10 @@ Config: `experimental.collaborative.enabled: true`
 
 ### Mobile Version (`dev_mobile`)
 
-Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. Implemented:
+Native Android app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. iOS target is planned. Implemented:
 
 **Layer 1 — Embedded Runtime (Android, 100% native performance):**
-- **Static binaries in APK** — Bun, Git, Bash, Ripgrep (aarch64-linux-musl) extracted at first launch (~15s)
+- **Static binaries in APK** — Bun, Bash, Ripgrep, Toybox (aarch64, packaged as `.so` libraries) extracted at first launch (~15s). `git` is intentionally not bundled — source projects are expected to be mounted from `/sdcard/` (see external storage below)
 - **Bundled CLI** — OpenCode CLI as a JS bundle run by the embedded Bun, no network required for core
 - **Direct process spawning** — No Termux, no intents — `std::process::Command` from Rust directly
 - **Auto-start server** — `bun opencode-cli.js serve` on localhost with UUID auth, same as desktop sidecar
@@ -582,10 +587,10 @@ Native Android/iOS app via Tauri 2.0 with **embedded runtime** — a single APK,
 - **llama.cpp via JNI** — Kotlin LlamaEngine loads native .so libraries with JNI bridge
 - **File-based IPC** — Rust writes commands to `llm_ipc/request`, Kotlin daemon polls and returns results
 - **llama-server** — OpenAI-compatible HTTP API on port 14097 for provider integration
-- **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 9 pre-curated models
+- **Model management** — Download GGUF models from HuggingFace, load/unload/delete, 4 pre-curated models (Gemma 3 4B, Qwen3 4B/1.7B/0.6B)
 - **Provider registration** — Local model appears as "Local AI" provider in model selector
-- **Flash Attention** — `--flash-attn on` for memory-efficient inference
-- **KV cache quantization** — `--cache-type-k/v q4_0` with Hadamard rotation (72% memory savings)
+- **Flash Attention** — `--flash-attn on` when GPU offload is active and KV cache is quantized (auto-disabled for CPU fallback)
+- **KV cache quantization** — `--cache-type-k/v q4_0` via standard llama.cpp quantization (~50% KV memory savings at q4_0)
 - **Speculative decoding** — Auto-detects draft model (0.5B–0.8B) with RAM Guard via `/proc/meminfo`
 - **RAM monitoring** — Device memory widget (total/used/free) via `/proc/meminfo`
 - **Configuration presets** — Same Fast/Quality/Eco/Long Context presets as desktop
