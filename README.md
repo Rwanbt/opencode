@@ -43,6 +43,50 @@
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+## ⚡ At a glance
+
+OpenCode (fork) — an orchestrated AI coding agent that runs on **desktop, server, and phone**, with local models end-to-end, zero cloud dependency, and enterprise-grade governance primitives baked in. Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 things this fork bundles that no other CLI does
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU / thermal state |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro / Pocket TTS + voice cloning |
+| 🔒 **9-state session FSM** | Persistent, auditable states for every session |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **Hybrid RAG** | BM25 + vector + time-decay confidence scoring |
+
+### Run your first task
+
+```bash
+opencode                                  # launch the TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 Need details? Every section below is collapsed — click to expand only the parts you care about.
+
+---
+
+<details>
+<summary><b>📊 Why this fork? — Comparison vs. Claude Code, Codex, Cursor, Aider, Cline…</b></summary>
+<br>
+
 ## Why This Fork?
 
 > **TL;DR — this is the only open-source coding agent that ships a DAG-based orchestrator, a REST task API, per-agent MCP scoping, a 9-state session FSM, a built-in vulnerability scanner, _and_ a first-class Android app with on-device LLM inference. No other CLI — proprietary or open — combines all of these.**
@@ -183,6 +227,12 @@ Kick off 5 tasks in isolated worktrees from a laptop. Check their progress from 
 
 ---
 
+</details>
+
+<details>
+<summary><b>🧠 Fork Features — Local AI, teams, task API, MCP scoping, vuln scanner</b></summary>
+<br>
+
 ## Fork Features
 
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
@@ -314,6 +364,12 @@ Read-only coordinator agent (50 max steps). Has access to `task` and `team` tool
 
 ---
 
+</details>
+
+<details>
+<summary><b>🏗️ Technical Architecture — Providers, LSP, MCP, edit engine, permissions</b></summary>
+<br>
+
 ## Technical Architecture
 
 ### Multi-Provider Support
@@ -374,6 +430,12 @@ Full SDK (`@opencode/plugin`) with hook architecture. Dynamic loading from npm p
 
 ---
 
+</details>
+
+<details>
+<summary><b>⚠️ Common Misconceptions (read this before trusting an AI summary of the repo)</b></summary>
+<br>
+
 ## Common Misconceptions
 
 To prevent confusion from AI-generated summaries of this project:
@@ -384,6 +446,12 @@ To prevent confusion from AI-generated summaries of this project:
 - **RAG** is optional (`experimental.rag.enabled: true`); default context is managed via LSP symbol indexing + auto-compact.
 - There is **no "watch mode" that proposes automatic fixes** -- the file watcher exists for infrastructure purposes only.
 - **Self-correction** uses the standard agent loop (the LLM sees errors in tool results and retries), not a specialized auto-repair mechanism.
+
+</details>
+
+<details>
+<summary><b>✅ Full Capabilities Matrix — Status of every feature</b></summary>
+<br>
 
 ## Capabilities Matrix
 
@@ -473,6 +541,12 @@ To prevent confusion from AI-generated summaries of this project:
 
 ---
 
+</details>
+
+<details>
+<summary><b>🧭 Architecture diagram</b></summary>
+<br>
+
 ## Architecture
 
 ```mermaid
@@ -535,6 +609,12 @@ graph TB
 | LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
 | TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
+</details>
+
+<details>
+<summary><b>🔐 Security & Governance (sandbox, permissions, DLP, policy, privacy)</b></summary>
+<br>
+
 ## Security & Governance
 
 | Feature | Description |
@@ -544,6 +624,12 @@ graph TB
 | **DLP** | Data Loss Prevention (`experimental.dlp`) redacts secrets, API keys, and credentials before sending to LLM providers |
 | **Policy Engine** | Conditional rules (`experimental.policy`) with `block` or `warn` actions. Protect paths, limit edit size, custom regex patterns |
 | **Privacy** | Local-first: all data in SQLite on disk. No telemetry by default. Secrets never logged. No data sent to third parties beyond the configured LLM provider |
+
+</details>
+
+<details>
+<summary><b>🔗 Intelligence Interface (MCP, providers, RAG, AnythingLLM)</b></summary>
+<br>
 
 ## Intelligence Interface
 
@@ -556,6 +642,12 @@ graph TB
 | **AnythingLLM Bridge** | Optional integration (`experimental.anythingllm`) — context injection, MCP server adapter, vector store bridge, Agent Skills HTTP API |
 
 ---
+
+</details>
+
+<details>
+<summary><b>🌿 Feature branches — Collaborative mode, Mobile, AnythingLLM</b></summary>
+<br>
 
 ## Feature Branches (Implemented on `dev`)
 
@@ -628,6 +720,10 @@ Bridge between OpenCode and AnythingLLM's document RAG platform. Implemented:
 - **Docker Compose** — Ready-to-use `docker-compose.anythingllm.yml` with shared network
 
 Config: `experimental.anythingllm.enabled: true`
+
+---
+
+</details>
 
 ---
 
@@ -712,6 +808,10 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+<details>
+<summary><b>❓ FAQ</b></summary>
+<br>
+
 ### FAQ
 
 #### How is this different from Claude Code?
@@ -724,6 +824,8 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 - A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
 - A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
 
+
+</details>
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
