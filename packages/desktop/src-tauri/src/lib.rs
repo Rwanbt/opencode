@@ -1,6 +1,9 @@
+mod auth_storage;
 mod cli;
 mod constants;
 mod llm;
+mod util;
+mod validate;
 // pub for examples/test_kokoro.rs — revert to `mod` if examples are removed
 pub mod kokoro;
 mod parakeet;
@@ -13,6 +16,7 @@ mod logging;
 mod markdown;
 mod os;
 mod server;
+mod tls;
 mod window_customizer;
 mod windows;
 
@@ -136,6 +140,12 @@ async fn await_initialization(
 #[tauri::command]
 #[specta::specta]
 fn check_app_exists(app_name: &str) -> bool {
+    // Refuse traversal / shell / path separators: both check paths below
+    // interpret the name as a registry key (Windows) or a filename (macOS)
+    // and feed it to `which` (Linux).
+    if crate::validate::validate_open_app_name(app_name).is_err() {
+        return false;
+    }
     #[cfg(target_os = "windows")]
     {
         os::windows::check_windows_app(app_name)
@@ -155,6 +165,9 @@ fn check_app_exists(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn resolve_app_path(app_name: &str) -> Option<String> {
+    // Same guard as `check_app_exists`: refuse anything that isn't a bare
+    // app alias before it reaches the Windows registry lookup.
+    crate::validate::validate_open_app_name(app_name).ok()?;
     #[cfg(target_os = "windows")]
     {
         os::windows::resolve_windows_app_path(app_name)
@@ -171,10 +184,19 @@ fn resolve_app_path(app_name: &str) -> Option<String> {
 #[tauri::command]
 #[specta::specta]
 fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<(), String> {
+    // Validate target path / URL before it reaches any plugin or OS call.
+    let safe_path = crate::validate::validate_open_target(&path)?;
+    let safe_app = match app_name.as_deref() {
+        Some(name) => Some(crate::validate::validate_open_app_name(name)?.to_string()),
+        None => None,
+    };
+
     #[cfg(target_os = "windows")]
     {
-        let app_name = app_name.map(|v| os::windows::resolve_windows_app_path(&v).unwrap_or(v));
-        let is_powershell = app_name.as_ref().is_some_and(|v| {
+        let resolved_app = safe_app
+            .as_deref()
+            .map(|v| os::windows::resolve_windows_app_path(v).unwrap_or_else(|| v.to_string()));
+        let is_powershell = resolved_app.as_ref().is_some_and(|v| {
             std::path::Path::new(v)
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -185,15 +207,15 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         });
 
         if is_powershell {
-            return os::windows::open_in_powershell(path);
+            return os::windows::open_in_powershell(safe_path);
         }
 
-        return tauri_plugin_opener::open_path(path, app_name.as_deref())
-            .map_err(|e| format!("Failed to open path: {e}"));
+        tauri_plugin_opener::open_path(safe_path, resolved_app.as_deref())
+            .map_err(|e| format!("Failed to open path: {e}"))
     }
 
     #[cfg(not(target_os = "windows"))]
-    tauri_plugin_opener::open_path(path, app_name.as_deref())
+    tauri_plugin_opener::open_path(safe_path, safe_app.as_deref())
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
@@ -268,6 +290,13 @@ fn check_linux_app(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
+    // Defence in depth: bound the input before handing it to an external
+    // command. A null byte would confuse both Windows and wsl.exe argument
+    // parsing; overly long inputs have no legitimate use (MAX_PATH ≈ 260).
+    crate::validate::validate_bounded_text(&path, 4096, "wsl path")?;
+    if path.contains('\r') || path.contains('\n') {
+        return Err("wsl path contains control characters".into());
+    }
     if !cfg!(windows) {
         return Ok(path);
     }
@@ -367,6 +396,20 @@ pub fn run() {
             handle.manage(speech::SpeechState::new());
 
             builder.mount_events(&handle);
+            // Start the localhost keychain endpoint before the sidecar is spawned.
+            // Failure is non-fatal — the sidecar will fall back to FileStorage.
+            {
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    match auth_storage::start_keychain_endpoint(handle).await {
+                        Ok(e) => tracing::info!(
+                            "keychain endpoint listening at {} (token redacted)",
+                            e.url
+                        ),
+                        Err(e) => tracing::warn!("keychain endpoint failed to start: {e}"),
+                    }
+                });
+            }
             tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())
@@ -384,13 +427,11 @@ pub fn run() {
                 tracing::info!("Received Exit");
 
                 // Kill LLM server if running
-                if let Some(state) = app.try_state::<llm::LlmServerState>() {
-                    if let Ok(mut guard) = state.child.lock() {
-                        if let Some(ref mut child) = *guard {
+                if let Some(state) = app.try_state::<llm::LlmServerState>()
+                    && let Ok(mut guard) = state.child.lock()
+                        && let Some(ref mut child) = *guard {
                             let _ = child.start_kill();
                         }
-                    }
-                }
 
                 // FIX: kill_sidecar() sends a message to an async channel, but
                 // the tokio runtime may shut down before the background task can
@@ -400,16 +441,20 @@ pub fn run() {
                 #[cfg(windows)]
                 {
                     use std::os::windows::process::CommandExt;
-                    let _ = std::process::Command::new("taskkill")
-                        .args(["/F", "/IM", "opencode-cli.exe"])
-                        .creation_flags(0x08000000)
-                        .output();
+                    for process in ["opencode-cli.exe", "llama-server.exe"] {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/F", "/IM", process])
+                            .creation_flags(0x08000000)
+                            .output();
+                    }
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = std::process::Command::new("killall")
-                        .arg("opencode-cli")
-                        .output();
+                    for process in ["opencode-cli", "llama-server"] {
+                        let _ = std::process::Command::new("killall")
+                            .arg(process)
+                            .output();
+                    }
                 }
             }
         });
@@ -430,6 +475,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::get_remote_config,
             server::set_remote_enabled,
             server::reset_remote_password,
+            server::set_remote_credentials,
+            server::set_internet_mode,
+            server::export_tls_cert,
+            server::rotate_tls_cert,
             get_display_backend,
             set_display_backend,
             markdown::parse_markdown_command,
@@ -463,6 +512,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             speech::kokoro_loaded,
             speech::kokoro_voices,
             speech::kokoro_synthesize,
+            auth_storage::auth_storage_get,
+            auth_storage::auth_storage_set,
+            auth_storage::auth_storage_delete,
+            auth_storage::auth_storage_list,
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
@@ -471,6 +524,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
 
+#[cfg(any(debug_assertions, test))]
 fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
     builder
         .export(
@@ -492,6 +546,29 @@ struct LoadingWindowComplete;
 
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
+
+    // Defensive cleanup: nuke any stray opencode-cli / llama-server processes
+    // left by a previous app instance that didn't exit cleanly (Tauri
+    // `RunEvent::Exit` can skip firing on abrupt close, crash, or
+    // close-via-tray-menu with state preserved). Without this, the new
+    // sidecar fails to bind its port and the app hangs at startup. Counterpart
+    // of the shutdown taskkill in the `RunEvent::Exit` arm below.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        for process in ["opencode-cli.exe", "llama-server.exe"] {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", process])
+                .creation_flags(0x08000000)
+                .output();
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for process in ["opencode-cli", "llama-server"] {
+            let _ = std::process::Command::new("killall").arg(process).output();
+        }
+    }
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -515,18 +592,28 @@ async fn initialize(app: AppHandle) {
     // The self-reported URL always uses loopback so the app's own SDK
     // connects locally regardless of whether the sidecar is bound to
     // 0.0.0.0 for LAN access.
-    let url = format!("http://127.0.0.1:{port}");
+    // In TLS/Internet mode the sidecar serves HTTPS, so we use https:// here.
+    let scheme = if remote_config.tls_enabled { "https" } else { "http" };
+    let url = format!("{scheme}://127.0.0.1:{port}");
+    let username = remote_config.username.clone();
     let password = remote_config.password.clone();
+    let tls_enabled = remote_config.tls_enabled;
 
     tracing::info!("Spawning sidecar on {url}");
-    let (child, health_check) =
-        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+    let (child, health_check) = server::spawn_local_server(
+        app.clone(),
+        hostname.to_string(),
+        port,
+        username.clone(),
+        password.clone(),
+        tls_enabled,
+    );
 
     // Make sidecar credentials available immediately (before health check completes)
     let (ready_tx, ready_rx) = oneshot::channel();
     let _ = ready_tx.send(ServerReadyData {
         url: url.clone(),
-        username: Some("opencode".to_string()),
+        username: Some(username),
         password: Some(password),
     });
     app.manage(SidecarReady(ready_rx.shared()));
@@ -554,16 +641,21 @@ async fn initialize(app: AppHandle) {
             let _ = init_tx.send(InitStep::SqliteWaiting);
 
             if matches!(e.payload, SqliteMigrationProgress::Done)
-                && let Some(done_tx) = done_tx.lock().unwrap().take()
+                && let Some(done_tx) = crate::util::MutexSafe::lock_safe(done_tx.as_ref()).take()
             {
                 let _ = done_tx.send(());
             }
         });
 
         let app = app.clone();
-        tokio::spawn(done_rx.map(async move |_| {
+        // Await the oneshot inside the task rather than pairing FutureExt::map
+        // with an async closure — the latter yields Future<Future<()>> which
+        // tokio::spawn cannot drive, and triggers an internal clippy panic on
+        // the current toolchain (clippy 0.1.90 type_op_prove_predicate).
+        tokio::spawn(async move {
+            let _ = done_rx.await;
             app.unlisten(id);
-        }))
+        })
     });
 
     // The loading task waits for SQLite migration (if needed) then for the sidecar health check.

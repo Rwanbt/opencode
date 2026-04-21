@@ -196,12 +196,16 @@ object LlamaEngine {
                             "loaded" -> if (loaded()) "true" else "false"
                             "stop" -> { stop(); "ok" }
                             "generate" -> {
+                                // Protocol: "{max}|{temp}|{prompt}". Prompt is LAST so that
+                                // any `|` in user text is preserved (split with limit=3 keeps
+                                // the third slot as the uncut tail). Older layout put prompt
+                                // first and got corrupted the moment the user typed a `|`.
                                 val genParts = arg.split("|", limit = 3)
-                                val prompt = genParts.getOrElse(0) { "" }
+                                val maxTokens = genParts.getOrElse(0) { "512" }.toIntOrNull() ?: 512
+                                val temp = genParts.getOrElse(1) { "0.7" }.toFloatOrNull() ?: 0.7f
+                                val prompt = genParts.getOrElse(2) { "" }
                                 if (prompt.isEmpty()) "error:Empty prompt"
                                 else {
-                                    val maxTokens = genParts.getOrElse(1) { "512" }.toIntOrNull() ?: 512
-                                    val temp = genParts.getOrElse(2) { "0.7" }.toFloatOrNull() ?: 0.7f
                                     chat(prompt, maxTokens, temp)
                                 }
                             }

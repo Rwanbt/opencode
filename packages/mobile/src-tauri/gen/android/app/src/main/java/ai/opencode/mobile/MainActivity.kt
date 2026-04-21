@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.view.WindowManager
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -18,6 +19,13 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+
+    // Diagnostic-only: expose the WebView to `chrome://inspect` on the host
+    // PC so we can live-inspect DOM / console / WebSocket frames. Required to
+    // investigate the portrait first-prompt bug (see plan doc). Remove before
+    // shipping to end users — this is not a debug-only build guard because
+    // release builds are where the bug reproduces.
+    WebView.setWebContentsDebuggingEnabled(true)
 
     // Start LlamaService (Foreground Service) FIRST so it's alive before any
     // llama-server spawn. LlamaService keeps the whole process tree at adj=0

@@ -7,6 +7,7 @@ import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { AuditLog } from "../../session/audit"
 
 const log = Log.create({ service: "server" })
 
@@ -55,6 +56,12 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         const config = c.req.valid("json")
         await Config.update(config)
+        // Record top-level keys only — never the values (may contain secrets
+        // like jwt_secret, api_key, upload_endpoint URLs, etc.).
+        AuditLog.recordAsync({
+          action: "config.update",
+          metadata: { changedKeys: Object.keys(config ?? {}) },
+        })
         return c.json(config)
       },
     )

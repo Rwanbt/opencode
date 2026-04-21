@@ -1,3 +1,5 @@
+@D:\Documents\Obsidian\IA Dev\OpenCode\CLAUDE.md
+
 # Rules
 
 - ALWAYS fix ALL errors, including pre-existing ones. Never dismiss an error as "pre-existing" or "not related to our changes". If you encounter it, you fix it.

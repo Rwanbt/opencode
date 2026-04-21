@@ -32,6 +32,7 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
+import { AuditLog } from "./audit"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Scope, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
@@ -274,7 +275,19 @@ export namespace Session {
     // AI SDK v6 normalized inputTokens to include cached tokens across all providers
     // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
     // tokens to get the non-cached input count for separate cost calculation.
-    const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+    //
+    // Clamp to 0: some providers (Bedrock, older Vertex) occasionally report
+    // cache counts that exceed inputTokens due to dedup — a negative adjusted
+    // count would multiply by cost to produce a credit and skew billing.
+    const cacheSum = cacheReadInputTokens + cacheWriteInputTokens
+    if (cacheSum > inputTokens) {
+      log.warn("usage: cache tokens exceed input", {
+        inputTokens,
+        cacheReadInputTokens,
+        cacheWriteInputTokens,
+      })
+    }
+    const adjustedInputTokens = Math.max(0, safe(inputTokens - cacheSum))
 
     const total = input.usage.totalTokens
 
@@ -420,6 +433,17 @@ export namespace Session {
           })
         }
 
+        // Audit — fire-and-forget, gated by experimental.audit.enabled.
+        AuditLog.recordAsync({
+          action: "session.create",
+          target: result.id,
+          metadata: {
+            projectID: result.projectID,
+            workspaceID: result.workspaceID,
+            parentID: result.parentID,
+          },
+        })
+
         return result
       })
 
@@ -472,6 +496,7 @@ export namespace Session {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
+          AuditLog.recordAsync({ action: "session.remove", target: sessionID })
         } catch (e) {
           log.error(e)
         }

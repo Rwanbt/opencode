@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::runtime::runtime_dir;
 
@@ -35,7 +35,7 @@ fn llm_command(app: &AppHandle, cmd: &str, timeout_secs: u64) -> Result<String, 
 
     // Write command
     fs::write(&request_file, cmd).map_err(|e| format!("Write request: {}", e))?;
-    eprintln!("[LLM] Sent command: {}", &cmd[..cmd.len().min(100)]);
+    log::debug!("[LLM] Sent command: {}", &cmd[..cmd.len().min(100)]);
 
     // Poll for result
     let start = Instant::now();
@@ -47,8 +47,8 @@ fn llm_command(app: &AppHandle, cmd: &str, timeout_secs: u64) -> Result<String, 
         if result_file.exists() {
             let result = fs::read_to_string(&result_file).unwrap_or_default();
             let _ = fs::remove_file(&result_file);
-            if result.starts_with("error:") {
-                return Err(result[6..].to_string());
+            if let Some(msg) = result.strip_prefix("error:") {
+                return Err(msg.to_string());
             }
             return Ok(result);
         }
@@ -80,21 +80,62 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
 
 #[tauri::command]
 pub async fn download_model(app: AppHandle, url: String, filename: String) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
+    crate::validate::validate_url(&url).map_err(|e| e.to_string())?;
     let dir = runtime_dir(&app).join("models");
     let _ = fs::create_dir_all(&dir);
     let target = dir.join(&filename);
     let part = dir.join(format!("{}.part", &filename));
 
-    eprintln!("[LLM] Downloading {} -> {}", url, target.display());
+    // Resume support: if a .part file already exists, ask the server for bytes
+    // from the existing offset. This covers the common case where a mobile
+    // user lost signal mid-download — otherwise a 4 GB GGUF restarts at zero.
+    let existing_bytes = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    let mut downloaded: u64 = existing_bytes;
+
+    log::info!(
+        "[LLM] Downloading {} -> {} (resume from {})",
+        url,
+        target.display(),
+        existing_bytes,
+    );
 
     let client = reqwest::Client::new();
-    let resp = client.get(&url).send().await.map_err(|e| format!("Download error: {}", e))?;
-    let total = resp.content_length().unwrap_or(0);
-    let mut downloaded: u64 = 0;
+    let mut req = client.get(&url);
+    if existing_bytes > 0 {
+        req = req.header("Range", format!("bytes={}-", existing_bytes));
+    }
+    let resp = req.send().await.map_err(|e| format!("Download error: {}", e))?;
+
+    let status = resp.status();
+    // If we asked for a range but the server returned a full body, it doesn't
+    // support Range — fall back to a clean restart rather than concatenating
+    // the old partial with a fresh stream (which would corrupt the file).
+    let is_resume = existing_bytes > 0 && status.as_u16() == 206;
+    if existing_bytes > 0 && !is_resume {
+        log::warn!("[LLM] Server does not support Range; restarting full download");
+        let _ = fs::remove_file(&part);
+        downloaded = 0;
+    }
+
+    let content_length = resp.content_length().unwrap_or(0);
+    // Content-Length on a 206 response is the remaining bytes — add the existing
+    // offset so progress UI can show percentage of the whole file.
+    let total = if is_resume { content_length + existing_bytes } else { content_length };
 
     use futures_util::StreamExt;
     let mut stream = resp.bytes_stream();
-    let mut file = tokio::fs::File::create(&part).await.map_err(|e| format!("File create: {}", e))?;
+    let mut file = if is_resume {
+        tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&part)
+            .await
+            .map_err(|e| format!("File open (resume): {}", e))?
+    } else {
+        tokio::fs::File::create(&part)
+            .await
+            .map_err(|e| format!("File create: {}", e))?
+    };
 
     let mut last_emit = std::time::Instant::now();
     while let Some(chunk) = stream.next().await {
@@ -118,12 +159,13 @@ pub async fn download_model(app: AppHandle, url: String, filename: String) -> Re
         filename: filename.clone(), downloaded: total, total, progress: 1.0,
     });
 
-    eprintln!("[LLM] Download complete: {}", filename);
+    log::info!("[LLM] Download complete: {}", filename);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
     let path = runtime_dir(&app).join("models").join(&filename);
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
     let part = runtime_dir(&app).join("models").join(format!("{}.part", &filename));
@@ -156,20 +198,21 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     );
 
     match fs::write(&config_file, &config) {
-        Ok(_) => eprintln!("[LLM] Config written: kv={}, flash={}, offload={}, mmap={}", kv_cache_type, flash_attn, offload_mode, mmap_mode),
-        Err(e) => eprintln!("[LLM] Failed to write config: {}", e),
+        Ok(_) => log::debug!("[LLM] Config written: kv={}, flash={}, offload={}, mmap={}", kv_cache_type, flash_attn, offload_mode, mmap_mode),
+        Err(e) => log::warn!("[LLM] Failed to write config: {}", e),
     }
 }
 
 /// Load a GGUF model via Kotlin LlamaEngine (file IPC).
 #[tauri::command]
 pub async fn load_llm_model(app: AppHandle, filename: String, _draft_model: Option<String>) -> Result<(), String> {
+    crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;
     let model_path = runtime_dir(&app).join("models").join(&filename);
     if !model_path.exists() {
         return Err(format!("Model not found: {}", filename));
     }
     let path_str = model_path.to_string_lossy().to_string();
-    eprintln!("[LLM] Loading model: {}", path_str);
+    log::info!("[LLM] Loading model: {}", path_str);
 
     // Auto-detect draft model for speculative decoding
     let draft_model = find_draft_model(&app, &filename);
@@ -199,7 +242,7 @@ fn find_draft_model(app: &AppHandle, main_model: &str) -> Option<String> {
                 // Verify file size is small enough (<1GB)
                 if let Ok(meta) = entry.metadata() {
                     if meta.len() < 1_000_000_000 {
-                        eprintln!("[LLM] Found draft model: {}", name);
+                        log::debug!("[LLM] Found draft model: {}", name);
                         return Some(name);
                     }
                 }
@@ -227,6 +270,12 @@ pub async fn abort_llm(app: AppHandle) -> Result<(), String> {
 }
 
 /// Generate text via Kotlin LlamaEngine (file IPC).
+///
+/// Protocol: `generate|{max}|{temp}|{prompt}`.
+/// `prompt` is placed LAST on purpose so a prompt containing `|` is kept
+/// intact — the Kotlin side calls `split("|", limit = 3)` on the argument
+/// tail, which stops after the third token. An older layout put prompt
+/// first and any `|` in user text would corrupt max / temp parsing.
 #[tauri::command]
 pub async fn generate_llm(
     app: AppHandle,
@@ -237,8 +286,14 @@ pub async fn generate_llm(
     let max = max_tokens.unwrap_or(512);
     let temp = temperature.unwrap_or(0.7);
 
-    // Send generate command — timeout 300s for generation
-    let cmd = format!("generate|{}|{}|{}", prompt, max, temp);
+    // Defensive: drop \0 / CR / LF that could break the request-file parser.
+    let clean_prompt: String = prompt
+        .chars()
+        .filter(|c| *c != '\0' && *c != '\r' && *c != '\n')
+        .collect();
+
+    // Send generate command — timeout 300s for generation.
+    let cmd = format!("generate|{}|{}|{}", max, temp, clean_prompt);
     let result = llm_command(&app, &cmd, 300)?;
 
     // Emit full result as token event
@@ -250,6 +305,12 @@ pub async fn generate_llm(
 #[tauri::command]
 pub async fn check_llm_health(app: AppHandle) -> bool {
     is_llm_loaded(app).await
+}
+
+#[tauri::command]
+pub async fn llm_idle_tick() -> Result<(), String> {
+    log::debug!("[LLM] llm_idle_tick: app went background");
+    Ok(())
 }
 
 /// Set LLM configuration env vars (called by frontend before load)
@@ -272,7 +333,7 @@ pub async fn set_llm_config(
     if let Some(mm) = mmap_mode {
         std::env::set_var("OPENCODE_MMAP_MODE", &mm);
     }
-    eprintln!("[LLM] Config updated via set_llm_config");
+    log::debug!("[LLM] Config updated via set_llm_config");
     Ok(())
 }
 

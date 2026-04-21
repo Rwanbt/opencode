@@ -35,6 +35,13 @@ export async function checkLocalHealth(port: number, password?: string): Promise
   }
 }
 
+/** Append a line to runtime/logs/debug.log (Android only). */
+export async function writeDebugLog(message: string): Promise<void> {
+  try {
+    await invoke("write_debug_log", { message })
+  } catch {}
+}
+
 /** Stop the local server. */
 export async function stopLocalServer(port: number, password?: string): Promise<void> {
   return invoke("stop_local_server", { port, password: password ?? null })

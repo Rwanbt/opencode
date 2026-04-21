@@ -6,6 +6,11 @@
     "jsxImportSource": "@opentui/solid",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
+    // TODO: flip to true. The @tsconfig/bun base sets this to true (and
+    // strict is already on), but the sidecar has ~300 indexed-access sites
+    // (session/prompt.ts, provider/*) that need auditing first. Tracking
+    // in the ultra-review punch list — leaving explicit so it doesn't get
+    // silently re-enabled before the cleanup.
     "noUncheckedIndexedAccess": false,
     "customConditions": ["browser"],
     "paths": {

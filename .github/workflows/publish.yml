@@ -436,6 +436,16 @@ jobs:
         if: runner.os == 'macOS'
         run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/Library/Caches/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('packages/desktop-electron/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - uses: ./.github/actions/setup-bun
 
       - name: Azure login

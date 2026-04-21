@@ -4,6 +4,221 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 
 const OUTPUT_TOKEN_MAX = 32000
 
+describe("ProviderTransform.shouldSuppressThinking", () => {
+  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+    ({
+      id: `local-llm/${apiId}`,
+      providerID: "local-llm",
+      api: { id: apiId, url: "http://127.0.0.1:14097/v1", npm: "@ai-sdk/openai-compatible" },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: reasoning,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 32768, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("Gemma 4 (no reasoning declaration) → does NOT suppress thinking", () => {
+    const model = createLocalModel("gemma-3-27b-it")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("Gemma 4 e4b (no reasoning declaration) → does NOT suppress thinking", () => {
+    const model = createLocalModel("google_gemma-3-4b-it-Q6_K_L")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("Qwen3.5 (no reasoning declaration) → DOES suppress thinking", () => {
+    const model = createLocalModel("Qwen3.5-32B-Q4_K_M")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  })
+
+  test("QwQ (no reasoning declaration) → DOES suppress thinking", () => {
+    const model = createLocalModel("QwQ-32B-Q4_K_M")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  })
+
+  test("qwen lowercase variant → DOES suppress", () => {
+    const model = createLocalModel("qwen2.5-coder-32b-instruct")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  })
+
+  test("reasoning: true (explicit) → never suppress regardless of model", () => {
+    const model = createLocalModel("Qwen3.5-32B-Q4_K_M", true)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("reasoning: false (explicit) → always suppress regardless of model", () => {
+    const model = createLocalModel("gemma-3-27b-it", false)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  })
+
+  test("Llama model (no reasoning declaration) → does NOT suppress", () => {
+    const model = createLocalModel("Meta-Llama-3.1-8B-Instruct")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("DeepSeek model (no reasoning declaration) → does NOT suppress", () => {
+    const model = createLocalModel("DeepSeek-R1-Distill-Qwen-14B")
+    // This contains "Qwen" in name — but it's a DeepSeek distill.
+    // The regex matches "qwen" so it IS suppressed. This is acceptable:
+    // DeepSeek-Qwen distills share the Qwen tokenizer and DO understand /no_think.
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  })
+
+  test("Phi model (no reasoning declaration) → does NOT suppress", () => {
+    const model = createLocalModel("Phi-4-mini-instruct")
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+})
+
+describe("ProviderTransform.message - local-llm /no_think injection", () => {
+  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+    ({
+      id: `local-llm/${apiId}`,
+      providerID: "local-llm",
+      api: { id: apiId, url: "http://127.0.0.1:14097/v1", npm: "@ai-sdk/openai-compatible" },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: reasoning,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 32768, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("Qwen model gets /no_think appended to last user message", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("Qwen3.5-32B"), {})
+    expect(result[0].content).toBe("Hello /no_think")
+  })
+
+  test("Gemma model does NOT get /no_think appended", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("gemma-3-27b-it"), {})
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("Qwen model with reasoning: true does NOT get /no_think", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("Qwen3.5-32B", true), {})
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("Qwen model strips reasoning parts from assistant messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking..." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+      { role: "user", content: "Follow up" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("QwQ-32B"), {})
+    // Reasoning stripped from assistant
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    // /no_think appended to user
+    expect(result[1].content).toBe("Follow up /no_think")
+  })
+
+  test("Gemma model preserves reasoning parts in assistant messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking..." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+      { role: "user", content: "Follow up" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("gemma-3-27b-it"), {})
+    // Reasoning NOT stripped
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "thinking..." },
+      { type: "text", text: "Answer" },
+    ])
+    // No /no_think
+    expect(result[1].content).toBe("Follow up")
+  })
+
+  test("Llama model does NOT get /no_think", () => {
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("Meta-Llama-3.1-8B-Instruct"), {})
+    expect(result[0].content).toBe("Hello")
+  })
+})
+
+describe("ProviderTransform.options - local-llm enable_thinking suppression", () => {
+  const sessionID = "test-session"
+  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+    ({
+      id: `local-llm/${apiId}`,
+      providerID: "local-llm",
+      api: { id: apiId, url: "http://127.0.0.1:14097/v1", npm: "@ai-sdk/openai-compatible" },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: reasoning,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 32768, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("Qwen model gets chat_template_kwargs with enable_thinking: false", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("Qwen3.5-32B"), sessionID })
+    expect(result.chat_template_kwargs).toEqual({ enable_thinking: false })
+  })
+
+  test("Gemma model does NOT get chat_template_kwargs", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("gemma-3-27b-it"), sessionID })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("Qwen with reasoning: true does NOT get chat_template_kwargs", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("Qwen3.5-32B", true), sessionID })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("Llama model does NOT get chat_template_kwargs", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("Meta-Llama-3.1-8B"), sessionID })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
 

@@ -1,7 +1,8 @@
+use crate::util::MutexSafe;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
@@ -12,10 +13,66 @@ const LLM_PORT: u16 = 14097;
 // Latest llama.cpp with Hadamard rotation for KV cache (PR #21038)
 const LLAMA_RELEASE_TAG: &str = "b8731";
 
+// ─── Inter-process lifecycle coordination ─────────────────────────────
+//
+// The TypeScript sidecar (LocalLLMServer) manages llama-server lifetime via
+// ref files in {tmpdir}/opencode-llm-14097/. Tauri participates in the same
+// protocol so the sidecar respects the "owner alive → don't kill" invariant.
+//
+// owner.pid  : "{owner_pid}:{child_pid}" — written atomically via tmp+rename
+// refs/{pid} : presence of an active consumer (written by each process)
+
+fn llm_base_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("opencode-llm-{}", LLM_PORT))
+}
+fn llm_ref_dir() -> std::path::PathBuf {
+    llm_base_dir().join("refs")
+}
+fn llm_owner_file() -> std::path::PathBuf {
+    llm_base_dir().join("owner.pid")
+}
+
+fn write_llm_ref(pid: u32) {
+    let dir = llm_ref_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let _ = std::fs::write(
+        dir.join(format!("{}.ref", pid)),
+        format!(r#"{{"pid":{},"since":{}}}"#, pid, since),
+    );
+}
+
+fn remove_llm_ref(pid: u32) {
+    let _ = std::fs::remove_file(llm_ref_dir().join(format!("{}.ref", pid)));
+}
+
+fn write_llm_owner(owner_pid: u32, child_pid: u32) {
+    let path = llm_owner_file();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = path.with_extension("pid.tmp");
+    if std::fs::write(&tmp, format!("{}:{}", owner_pid, child_pid)).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
+fn remove_llm_owner_and_ref() {
+    let pid = std::process::id();
+    remove_llm_ref(pid);
+    let _ = std::fs::remove_file(llm_owner_file());
+}
+
 fn llama_asset_name() -> String {
     let tag = LLAMA_RELEASE_TAG;
+    // CUDA 12.4 instead of Vulkan: fixes Gemma 4 <unused> token infinite loop
+    // on Vulkan backend (llama.cpp issue #21516, still open). CUDA build has
+    // partial fix for the same issue (PR #21506, issue #21321 closed).
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    { format!("llama-{tag}-bin-win-vulkan-x64.zip") }
+    { format!("llama-{tag}-bin-win-cuda-12.4-x64.zip") }
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     { format!("llama-{tag}-bin-ubuntu-x64.tar.gz") }
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
@@ -24,6 +81,16 @@ fn llama_asset_name() -> String {
     { format!("llama-{tag}-bin-macos-arm64.tar.gz") }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     { format!("llama-{tag}-bin-macos-x64.tar.gz") }
+}
+
+/// Backend identifier stored in runtime_dir/backend.txt.
+/// If it changes (e.g. vulkan → cuda), the runtime is purged and re-downloaded
+/// to avoid mixing DLLs from different backends.
+fn backend_marker() -> &'static str {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    { "cuda-12.4" }
+    #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+    { "default" }
 }
 
 fn llama_server_exe() -> &'static str {
@@ -115,8 +182,8 @@ async fn download_file(
             .map_err(|e| format!("Write: {}", e))?;
         downloaded += chunk.len() as u64;
 
-        if let Some(fname) = event_filename {
-            if last_emit.elapsed().as_millis() > 200 {
+        if let Some(fname) = event_filename
+            && last_emit.elapsed().as_millis() > 200 {
                 let _ = app.emit(
                     "model-download-progress",
                     ModelDownloadProgress {
@@ -132,7 +199,6 @@ async fn download_file(
                 );
                 last_emit = std::time::Instant::now();
             }
-        }
     }
 
     file.flush().await.map_err(|e| format!("Flush: {}", e))?;
@@ -157,43 +223,19 @@ async fn download_file(
     Ok(())
 }
 
-async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
-    let server = llama_server_path(app);
-    if server.exists() {
-        return Ok(server);
-    }
-
-    tracing::info!("[LLM] Downloading llama.cpp runtime...");
-
-    let rt_dir = runtime_dir(app);
-    let _ = fs::create_dir_all(&rt_dir);
-
-    let zip_url = format!(
-        "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-        LLAMA_RELEASE_TAG, llama_asset_name()
-    );
-    let zip_path = rt_dir.join("llama-runtime.zip");
-
-    download_file(app, &zip_url, &zip_path, None).await?;
-
-    // Extract zip
-    tracing::info!("[LLM] Extracting runtime...");
-    let zip_path_clone = zip_path.clone();
-    let rt_dir_clone = rt_dir.clone();
+/// Extract a zip archive, flattening all entries into `target_dir`.
+async fn extract_zip_to_dir(zip_path: &Path, target_dir: &Path) -> Result<(), String> {
+    let zip_path = zip_path.to_path_buf();
+    let target_dir = target_dir.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        let file = fs::File::open(&zip_path_clone).map_err(|e| format!("Open zip: {}", e))?;
-        let mut archive =
-            zip::ZipArchive::new(file).map_err(|e| format!("Read zip: {}", e))?;
+        let file = fs::File::open(&zip_path).map_err(|e| format!("Open zip: {}", e))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Read zip: {}", e))?;
         for i in 0..archive.len() {
-            let mut entry = archive
-                .by_index(i)
-                .map_err(|e| format!("Zip entry: {}", e))?;
-            let name = entry.name().to_string();
+            let mut entry = archive.by_index(i).map_err(|e| format!("Zip entry: {}", e))?;
             if entry.is_dir() {
                 continue;
             }
-            // Extract just the filename (flatten directory structure)
-            let fname = std::path::Path::new(&name)
+            let fname = std::path::Path::new(entry.name())
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
@@ -201,7 +243,7 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
             if fname.is_empty() {
                 continue;
             }
-            let out_path = rt_dir_clone.join(&fname);
+            let out_path = target_dir.join(&fname);
             let mut out = fs::File::create(&out_path)
                 .map_err(|e| format!("Create {}: {}", fname, e))?;
             std::io::copy(&mut entry, &mut out)
@@ -211,10 +253,67 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     })
     .await
     .map_err(|e| format!("Extract task: {}", e))?
-    .map_err(|e| format!("Extract: {}", e))?;
+    .map_err(|e| format!("Extract: {}", e))
+}
 
-    // Clean up zip
+async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    let server = llama_server_path(app);
+    let rt_dir = runtime_dir(app);
+    let marker_path = rt_dir.join("backend.txt");
+    let expected_backend = backend_marker();
+
+    // Return early only if binary exists AND backend marker matches.
+    // If the backend changed (e.g. vulkan → cuda), purge the old runtime to
+    // avoid mixing DLLs from different backends.
+    if server.exists() {
+        let current = fs::read_to_string(&marker_path).unwrap_or_default();
+        if current.trim() == expected_backend {
+            return Ok(server);
+        }
+        tracing::info!(
+            "[LLM] Backend changed ({} → {}), clearing runtime dir...",
+            current.trim(), expected_backend
+        );
+        let _ = fs::remove_dir_all(&rt_dir);
+    }
+
+    tracing::info!("[LLM] Downloading llama.cpp runtime ({})...", expected_backend);
+    let _ = fs::create_dir_all(&rt_dir);
+
+    let zip_url = format!(
+        "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
+        LLAMA_RELEASE_TAG, llama_asset_name()
+    );
+    let zip_path = rt_dir.join("llama-runtime.zip");
+
+    download_file(app, &zip_url, &zip_path, None).await?;
+    tracing::info!("[LLM] Extracting runtime...");
+    extract_zip_to_dir(&zip_path, &rt_dir).await?;
     let _ = fs::remove_file(&zip_path);
+
+    // On Windows CUDA builds: also download the CUDA runtime DLLs (cudart) so
+    // llama-server.exe starts without requiring the full CUDA Toolkit installed.
+    // Failure is non-fatal: modern NVIDIA drivers already bundle cudart 12.x.
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    if expected_backend.starts_with("cuda") {
+        let cudart_url = format!(
+            "https://github.com/ggml-org/llama.cpp/releases/download/{}/cudart-llama-bin-win-cuda-12.4-x64.zip",
+            LLAMA_RELEASE_TAG
+        );
+        let cudart_path = rt_dir.join("cudart.zip");
+        tracing::info!("[LLM] Downloading CUDA runtime DLLs...");
+        match download_file(app, &cudart_url, &cudart_path, None).await {
+            Ok(_) => {
+                if let Err(e) = extract_zip_to_dir(&cudart_path, &rt_dir).await {
+                    tracing::warn!("[LLM] cudart extraction failed (driver-bundled cudart may be used): {}", e);
+                }
+                let _ = fs::remove_file(&cudart_path);
+            }
+            Err(e) => {
+                tracing::warn!("[LLM] cudart download failed (driver-bundled cudart may be used): {}", e);
+            }
+        }
+    }
 
     if !server.exists() {
         return Err(format!("{} not found after extraction", llama_server_exe()));
@@ -226,6 +325,9 @@ async fn ensure_llama_runtime(app: &AppHandle) -> Result<PathBuf, String> {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&server, fs::Permissions::from_mode(0o755));
     }
+
+    // Stamp the backend marker so future runs skip re-download
+    let _ = fs::write(&marker_path, expected_backend);
 
     tracing::info!("[LLM] Runtime ready at {}", server.display());
     Ok(server)
@@ -241,14 +343,13 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map(|e| e == "gguf").unwrap_or(false) {
-                if let Ok(meta) = fs::metadata(&path) {
+            if path.extension().map(|e| e == "gguf").unwrap_or(false)
+                && let Ok(meta) = fs::metadata(&path) {
                     models.push(ModelInfo {
                         filename: path.file_name().unwrap().to_string_lossy().to_string(),
                         size: meta.len(),
                     });
                 }
-            }
         }
     }
     models
@@ -261,22 +362,25 @@ pub async fn download_model(
     url: String,
     filename: String,
 ) -> Result<(), String> {
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let safe_url = crate::validate::validate_url(&url)?.to_string();
     let dir = models_dir(&app);
     let _ = fs::create_dir_all(&dir);
-    let target = dir.join(&filename);
+    let target = dir.join(&safe_name);
 
-    tracing::info!("[LLM] Downloading model {} -> {}", url, target.display());
-    download_file(&app, &url, &target, Some(&filename)).await?;
-    tracing::info!("[LLM] Model download complete: {}", filename);
+    tracing::info!("[LLM] Downloading model {} -> {}", safe_url, target.display());
+    download_file(&app, &safe_url, &target, Some(&safe_name)).await?;
+    tracing::info!("[LLM] Model download complete: {}", safe_name);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String> {
-    let path = models_dir(&app).join(&filename);
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let path = models_dir(&app).join(&safe_name);
     fs::remove_file(&path).map_err(|e| format!("Delete: {}", e))?;
-    let part = models_dir(&app).join(format!("{}.part", &filename));
+    let part = models_dir(&app).join(format!("{}.part", &safe_name));
     let _ = fs::remove_file(&part);
     Ok(())
 }
@@ -284,58 +388,82 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 #[tauri::command]
 #[specta::specta]
 pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Option<String>) -> Result<(), String> {
-    let model_path = models_dir(&app).join(&filename);
+    let safe_name = crate::validate::validate_filename(&filename)?.to_string();
+    let safe_draft = match draft_model.as_deref() {
+        Some(d) => Some(crate::validate::validate_filename(d)?.to_string()),
+        None => None,
+    };
+    let model_path = models_dir(&app).join(&safe_name);
     if !model_path.exists() {
-        return Err(format!("Model not found: {}", filename));
+        return Err(format!("Model not found: {}", safe_name));
     }
 
     // Unload any existing model managed by this app
     {
         let state = app.state::<LlmServerState>();
-        let mut child_guard = state.child.lock().unwrap();
+        let mut child_guard = state.child.lock_safe();
         if let Some(ref mut child) = *child_guard {
             let _ = child.start_kill();
         }
         *child_guard = None;
-        *state.active_model.lock().unwrap() = None;
+        *state.active_model.lock_safe() = None;
     }
 
-    // Check for orphaned llama-server on our port (e.g. from a crash or external launch)
+    // Check for orphaned llama-server on our port (e.g. from a crash or force-kill).
+    // Reuse it only if: same model AND slot is idle (not stuck in an infinite generation).
+    // Any other state (wrong model, slot processing) → kill the orphan and restart.
     let client = reqwest::Client::new();
+    let mut need_kill = false;
     if let Ok(resp) = client
         .get(format!("http://127.0.0.1:{}/props", LLM_PORT))
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await
-    {
-        if resp.status().is_success() {
-            // A server is already running — check if it has the right model
+        && resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();
-            if body.contains(&filename) {
-                tracing::info!("[LLM] Reusing existing llama-server with {}", filename);
-                let state = app.state::<LlmServerState>();
-                *state.active_model.lock().unwrap() = Some(filename.clone());
-                return Ok(());
+            if body.contains(&safe_name) {
+                // Same model — check whether the slot is idle or stuck processing
+                let slot_idle = match client
+                    .get(format!("http://127.0.0.1:{}/slots", LLM_PORT))
+                    .timeout(std::time::Duration::from_secs(2))
+                    .send()
+                    .await
+                {
+                    Ok(r) => match r.text().await {
+                        Ok(t) => !t.contains("\"is_processing\":true"),
+                        Err(_) => false,
+                    },
+                    Err(_) => false,
+                };
+
+                if slot_idle {
+                    tracing::info!("[LLM] Reusing existing llama-server (idle slot) with {}", safe_name);
+                    let state = app.state::<LlmServerState>();
+                    *state.active_model.lock_safe() = Some(safe_name.clone());
+                    return Ok(());
+                }
+                tracing::warn!("[LLM] Orphaned llama-server is stuck (slot processing) — killing it");
+            } else {
+                tracing::warn!("[LLM] Killing orphaned llama-server (wrong model) on port {}", LLM_PORT);
             }
-            // Wrong model — kill the orphan via OS
-            tracing::warn!("[LLM] Killing orphaned llama-server (wrong model) on port {}", LLM_PORT);
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", &format!(
-                        "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr \"0.0.0.0:{}\" ^| findstr LISTENING') do taskkill /PID %a /F",
-                        LLM_PORT
-                    )])
-                    .output();
-            }
-            #[cfg(unix)]
-            {
-                let _ = std::process::Command::new("sh")
-                    .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
-                    .output();
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            need_kill = true;
         }
+    if need_kill {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", "llama-server.exe"])
+                .creation_flags(0x08000000)
+                .output();
+        }
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("sh")
+                .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
+                .output();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     }
 
     // Ensure llama-server runtime is available
@@ -343,21 +471,57 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
 
     tracing::info!(
         "[LLM] Starting llama-server with {} on port {}",
-        filename,
+        safe_name,
         LLM_PORT
     );
 
-    // Read settings from env vars (set by frontend via auto-start hook)
-    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE").unwrap_or_else(|_| "q4_0".to_string());
+    // Read settings. Precedence: explicit env var > shared adaptive config file
+    // (written by the TS sidecar's auto-config) > fallback default. This keeps
+    // Tauri's standalone spawn path in sync with the sidecar's deriveConfig()
+    // instead of hard-coding `--n-gpu-layers 99` and a half-best thread count.
+    let adaptive = read_shared_llm_config();
+
+    let kv_cache_type = std::env::var("OPENCODE_KV_CACHE_TYPE")
+        .ok()
+        .or_else(|| adaptive.as_ref().and_then(|c| c.kv_cache_type.clone()))
+        .unwrap_or_else(|| "q4_0".to_string());
     let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
     let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
-    tracing::info!("[LLM] Config: kv={}, offload={}, mmap={}", kv_cache_type, offload_mode, mmap_mode);
 
-    // Detect physical CPU cores for thread count
-    let n_threads = std::thread::available_parallelism()
-        .map(|n| n.get() / 2) // use physical cores, not hyperthreads
-        .unwrap_or(4)
-        .max(2);
+    // n_gpu_layers: env > shared file > 99 (the historic "offload everything"
+    // sentinel; llama.cpp silently caps it to the real layer count).
+    let n_gpu_layers = std::env::var("OPENCODE_N_GPU_LAYERS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.n_gpu_layers))
+        .unwrap_or(99);
+
+    // Threads: env > shared file > physical cores heuristic.
+    let n_threads = std::env::var("OPENCODE_N_THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.n_threads))
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get() / 2)
+                .unwrap_or(4)
+                .max(2)
+        });
+
+    // Batch / ubatch: env > shared file > llama.cpp default (skipped).
+    let batch_size = std::env::var("OPENCODE_BATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.batch_size));
+    let ubatch_size = std::env::var("OPENCODE_UBATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.ubatch_size));
+
+    tracing::info!(
+        "[LLM] Config: kv={}, offload={}, mmap={}, ngl={}, threads={}, batch={:?}, ubatch={:?}",
+        kv_cache_type, offload_mode, mmap_mode, n_gpu_layers, n_threads, batch_size, ubatch_size
+    );
 
     let mut cmd = tokio::process::Command::new(&server_exe);
     cmd.arg("--model")
@@ -366,9 +530,10 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .arg(LLM_PORT.to_string())
         .arg("--host")
         .arg("127.0.0.1")
-        // GPU: offload all layers, let --fit adjust if VRAM is tight
+        // GPU layers: adaptive (env / shared config / 99 fallback); --fit
+        // will still clamp to available VRAM via the embedded fork.
         .arg("--n-gpu-layers")
-        .arg("99")
+        .arg(n_gpu_layers.to_string())
         // --fit auto-adjusts ctx_size and layer placement to available VRAM
         .arg("--fit")
         .arg("on")
@@ -379,8 +544,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // Flash Attention for memory efficiency
         .arg("--flash-attn")
         .arg("on")
-        // KV cache quantization — read from user settings or default to q8_0
-        // With llama.cpp b8731+, Hadamard rotation is auto-applied for better quality
+        // KV cache quantization — read from user settings or default to q4_0
         .arg("--cache-type-k")
         .arg(&kv_cache_type)
         .arg("--cache-type-v")
@@ -391,6 +555,13 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // CPU threads
         .arg("--threads")
         .arg(n_threads.to_string());
+
+    if let Some(bs) = batch_size {
+        cmd.arg("--batch-size").arg(bs.to_string());
+    }
+    if let Some(ubs) = ubatch_size {
+        cmd.arg("--ubatch-size").arg(ubs.to_string());
+    }
 
     // Memory mapping control
     match mmap_mode.as_str() {
@@ -413,10 +584,21 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     }
 
     // Speculative decoding: use a small draft model for 2-3x speedup
-    // Prefer the argument from frontend UI, fallback to env var for CLI usage
-    let draft_model = draft_model
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("OPENCODE_DRAFT_MODEL").ok());
+    // Prefer the argument from frontend UI, fallback to env var for CLI usage.
+    // Env var path is validated here (same allowlist as IPC) to avoid injection via env.
+    let draft_model = match safe_draft.filter(|s| !s.is_empty()) {
+        Some(d) => Some(d),
+        None => match std::env::var("OPENCODE_DRAFT_MODEL").ok() {
+            Some(env_draft) => match crate::validate::validate_filename(&env_draft) {
+                Ok(v) => Some(v.to_string()),
+                Err(e) => {
+                    tracing::warn!("[LLM] Ignoring invalid OPENCODE_DRAFT_MODEL env: {}", e);
+                    None
+                }
+            },
+            None => None,
+        },
+    };
     if let Some(ref draft) = draft_model {
         let draft_path = models_dir(&app).join(draft);
         if draft_path.exists() {
@@ -452,10 +634,18 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .spawn()
         .map_err(|e| format!("Failed to start llama-server: {}", e))?;
 
+    // Participate in the inter-process ref protocol so the TypeScript sidecar
+    // (LocalLLMServer) knows Tauri is the owner and won't kill the server on
+    // its own exit. Must happen BEFORE child is moved into the Mutex.
+    let own_pid = std::process::id();
+    let child_pid = child.id().unwrap_or(0);
+    write_llm_owner(own_pid, child_pid);
+    write_llm_ref(own_pid);
+
     {
         let state = app.state::<LlmServerState>();
-        *state.child.lock().unwrap() = Some(child);
-        *state.active_model.lock().unwrap() = Some(filename.clone());
+        *state.child.lock_safe() = Some(child);
+        *state.active_model.lock_safe() = Some(safe_name.clone());
     }
 
     // Wait for server to become healthy (up to 120s for large models)
@@ -466,19 +656,19 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         if start.elapsed().as_secs() > 120 {
             // Timeout - kill server
             let state = app.state::<LlmServerState>();
-            let mut guard = state.child.lock().unwrap();
+            let mut guard = state.child.lock_safe();
             if let Some(ref mut c) = *guard {
                 let _ = c.start_kill();
             }
             *guard = None;
-            *state.active_model.lock().unwrap() = None;
+            *state.active_model.lock_safe() = None;
             return Err("Server failed to start within 120s".to_string());
         }
 
         // Check if process is still alive
         {
             let state = app.state::<LlmServerState>();
-            let mut guard = state.child.lock().unwrap();
+            let mut guard = state.child.lock_safe();
             if let Some(ref mut c) = *guard {
                 match c.try_wait() {
                     Ok(Some(status)) => {
@@ -516,15 +706,18 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
 pub async fn unload_llm_model(app: AppHandle) -> Result<(), String> {
     let child_opt = {
         let state = app.state::<LlmServerState>();
-        let mut guard = state.child.lock().unwrap();
+        let mut guard = state.child.lock_safe();
         let child = guard.take();
-        *state.active_model.lock().unwrap() = None;
+        *state.active_model.lock_safe() = None;
         child
     };
     if let Some(mut child) = child_opt {
         tracing::info!("[LLM] Stopping llama-server");
         let _ = child.kill().await;
         let _ = child.wait().await;
+        // Remove Tauri's owner.pid and ref file so the TypeScript sidecar
+        // won't see a live owner and incorrectly skip orphan recovery.
+        remove_llm_owner_and_ref();
     }
     Ok(())
 }
@@ -548,13 +741,49 @@ pub async fn check_llm_health(app: AppHandle, _port: Option<u16>) -> bool {
     }
 }
 
+/// Adaptive llama-server config written by the TypeScript sidecar
+/// (packages/opencode/src/local-llm-server/auto-config.ts) into
+/// `{tmpdir}/opencode-llm-14097/llm_config.json`. All fields optional —
+/// we only override defaults when the sidecar has something to say.
+#[derive(Debug, Default, serde::Deserialize)]
+struct SharedLlmConfig {
+    #[serde(default)]
+    n_gpu_layers: Option<u32>,
+    #[serde(default)]
+    n_threads: Option<usize>,
+    #[serde(default)]
+    batch_size: Option<u32>,
+    #[serde(default)]
+    ubatch_size: Option<u32>,
+    #[serde(default)]
+    kv_cache_type: Option<String>,
+}
+
+fn read_shared_llm_config() -> Option<SharedLlmConfig> {
+    let path = llm_base_dir().join("llm_config.json");
+    let bytes = std::fs::read(&path).ok()?;
+    match serde_json::from_slice::<SharedLlmConfig>(&bytes) {
+        Ok(c) => {
+            tracing::info!("[LLM] Loaded adaptive config from {}", path.display());
+            Some(c)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "[LLM] Failed to parse {} ({}), falling back to defaults",
+                path.display(),
+                e
+            );
+            None
+        }
+    }
+}
+
 /// Check if enough free VRAM is available (for speculative decoding guard)
 fn check_vram_free(min_mib: u64) -> bool {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let free: u64 = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .lines()
@@ -564,7 +793,6 @@ fn check_vram_free(min_mib: u64) -> bool {
                 .unwrap_or(0);
             return free >= min_mib;
         }
-    }
     // Fallback: if can't detect, enable anyway (OOM rare with --fit on)
     true
 }
@@ -585,8 +813,7 @@ pub async fn get_vram_info() -> Result<VramInfo, String> {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total,memory.used,memory.free,name", "--format=csv,noheader,nounits"])
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some(line) = stdout.lines().next() {
                 let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
@@ -600,7 +827,6 @@ pub async fn get_vram_info() -> Result<VramInfo, String> {
                 }
             }
         }
-    }
     Err("GPU not detected (nvidia-smi not available)".to_string())
 }
 

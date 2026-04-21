@@ -43,6 +43,146 @@
 
 ---
 
+## Why This Fork?
+
+> **TL;DR — this is the only open-source coding agent that ships a DAG-based orchestrator, a REST task API, per-agent MCP scoping, a 9-state session FSM, a built-in vulnerability scanner, _and_ a first-class Android app with on-device LLM inference. No other CLI — proprietary or open — combines all of these.**
+
+### The one-sentence pitch
+
+> An orchestrated coding agent that runs on desktop, server, _and_ phone, with local models end-to-end, zero cloud dependency, and enterprise-grade governance primitives baked in — not bolted on.
+
+### Capability matrix — this fork vs. the 2026 landscape
+
+Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* via community add-on · *paid* behind a subscription tier.
+
+#### Orchestration, API surface, governance
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| Open source                            |       ✅       |      ❌      |  partial  |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ❌    |     ✅     |   ✅   |     ✅     |
+| BYOM (bring your own model)            |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |  partial |     ✅     |   ✅   |   partial  |
+| Local models (llama.cpp / Ollama)      |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ❌    |     ✅     |   ✅   |     ✅     |
+| Parallel agents in isolated worktrees  |    ✅ native   |  ✅ (Teams)  |  partial  |      ❌     |      via plugin     |   ❌   | partial | ✅ (v3.58) | partial | ❌ | ❌ | ❌ |     ❌     |
+| Explicit **DAG orchestration**         | ✅ **unique**  |    ad-hoc   |     ❌     |      ❌     |          ❌          |   ❌   | recipes (linear) | ❌ | ❌ | ❌ |     ❌     |   ❌   |     ❌     |
+| **REST task API** (programmable)       | ✅ **unique**  | partial (SDK) |  ❌    |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **TUI task dashboard**                 |       ✅       |      ❌      |     ❌     |      ❌     |       partial       |   ❌   |   ❌   |   ❌   |    ❌     |   n/a   |    n/a    |   ❌   |   partial  |
+| MCP support                            | ✅ + **per-agent scoping** | ✅ | ✅ | ✅ | ✅ | via plugins | ✅ | ✅ | ✅ | partial | ✅ |   ❌   |     ✅     |
+| **9-state session FSM (persistent)**   | ✅ **unique**  |      ❌      |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Built-in **vulnerability scanner**     | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **DLP / secret redaction** before LLM call | ✅         |   partial    |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Per-agent tool allow/deny**          |       ✅       |   partial    |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |  partial  |    ❌    |     ❌     |   ❌   |     ❌     |
+| Docker sandboxing (opt-in)             |       ✅       |      ❌      |     ✅     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Git auto-commits / rollback            |       ✅       |      ✅      |     ✅     |      ✅     |      ✅ (signed)     |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ✅   |     ✅     |
+
+#### Intelligence, context, developer UX
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| LSP integration (go-to-def, diagnostics) | ✅           |   partial    |  partial  |   partial   |          ✅          | partial | partial | ✅   |    ✅     |    ✅    |     ✅     | partial |  partial  |
+| Plugin SDK (`@opencode/plugin`)        |       ✅       |   partial    |     ❌     |      ❌     |          ✅          |   ❌   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ❌   |     ❌     |
+| Prompt caching (cloud + local KV)      |       ✅       |      ✅      |     ✅     |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ✅   |     ✅     |
+| **Hybrid RAG (BM25 + vector + decay)** | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial | ❌      |  vector only |  vector only |  ❌   |     ❌     |
+| **Memory conflict resolution**         | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Auto-learn** (lesson extraction)     | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Auto-compact (AI summarization)        |       ✅       |      ✅      |     ✅     |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     | partial |     ✅     |
+| Unified-diff edit engine               |       ✅       |      ✅      |     ✅     |   partial   |          ✅          |   ✅   | partial | partial |    ✅     | partial |  partial  | partial |  partial  |
+| ACP (Agent Client Protocol) layer      |       ✅       |      ❌      |     ❌     |      ❌     |        basic        |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+
+#### Platform reach & multimodal
+
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
+| First-class **Android app**            | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| iOS (remote mode)                      |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Adaptive runtime (VRAM/CPU/thermal)    | ✅ **unique**  |      ❌      |     ❌     |      ❌     |      hardcoded      | hardcoded | hardcoded | hardcoded | hardcoded | n/a | hardcoded | hardcoded | hardcoded |
+| **STT** (voice-to-text, built-in)      | ✅ (Parakeet)  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   | partial  |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **TTS** (text-to-speech + voice clone) | ✅ (Pocket/Kokoro) |  ❌       |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **OAuth deep-link callback**           |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **mDNS service discovery**             | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Upstream branch watcher** (`vcs.branch.behind`) | ✅ **unique** | ❌ |    ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **Collaborative mode** (JWT + presence + file-lock) | ✅ | ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     | partial |     ❌     |   ❌   |     ❌     |
+| **AnythingLLM bridge**                 | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| **GDPR export/erasure route**          | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
+| Price                                  |  free + BYOM  |  $20/mo sub |$20/mo sub |  1000/day free | free + BYOM    | free + BYOM | free + BYOM | free + BYOM | free + BYOM | $20/mo sub | free + BYOM | free + BYOM | free + BYOM |
+
+### Positioning by category
+
+#### vs. vendor-locked premium CLIs (Claude Code, Codex, Amazon Q)
+
+Their strength: a proprietary frontier model deeply integrated. Claude Opus 4.6 sits at 80.8 % on SWE-bench Verified. Their ceiling: no BYOM, no local model, no open core, no mobile.
+
+- **We lose**: the raw quality of a locked-in frontier model. If you run this fork against a weaker backend, you inherit that backend's limits.
+- **We win**: sovereignty, zero marginal cost on local models, open architecture (DAG, REST, MCP scoping), and — the card nobody else holds — **the phone in your pocket**.
+
+> Plug Opus 4.6 / Sonnet 4.6 into this fork via BYOM and you get parity on raw reasoning _plus_ everything they can't give you.
+
+#### vs. open-source BYOM peers (opencode upstream, Aider, Cline, Continue, Roo Code)
+
+Same philosophy. What sets this fork apart is **five engineering decisions competitors don't match**:
+
+1. **Native DAG orchestration** — declarative sub-tasks with dependency edges and wave-based parallel execution. The rest of the field either has ad-hoc sub-agents (Claude Code), linear recipes (Goose), or nothing. A DAG lets you model real dependencies (fan-out then join) instead of scripting them.
+2. **REST task API** — 8 endpoints for the full task lifecycle (`list / get / cancel / resume / followup / promote / team / messages`). Turns the agent into a **platform**: cron, Temporal, Airflow, or another agent can drive it. No other open CLI exposes this.
+3. **Explicit 9-state session FSM** (`idle · busy · retry · queued · blocked · awaiting_input · completed · failed · cancelled`) — persistent states survive DB restarts. Competitors have implicit `running/done/error` at best. An explicit FSM = better debugging, better crash recovery, and an **audit log enterprises can actually reason about**.
+4. **Per-agent MCP scoping** — principle of least privilege applied to tools. Others scope MCP globally (every agent sees every server) or not at all. When you hand an agent a shell, you shouldn't also hand it the production database.
+5. **Built-in vulnerability scanner** — auto-scans edits/writes for secrets, injection sinks, unsafe patterns. Normally outsourced to Snyk/Semgrep; shipping it in-band closes the loop before the bad diff is even committed.
+
+- **We lose**: maturity and discoverability. Aider has 39 k stars, 4.1 M installs, 15 B tokens/week. This fork starts from zero on that axis.
+- **We win**: on architecture. Every item above is a _shipped feature_, not a roadmap item.
+
+#### vs. specialized CLIs (Warp 2.0, Crush, Plandex, Kimi CLI, Qwen Code)
+
+Different category. Those tools bet on terminal UX (Warp, Crush), XXL context (Plandex = 2 M tokens), or a niche model (Qwen3-Coder 480B, Kimi). This fork is **platform/infrastructure**, not a single-angle product. If you want a prettier prompt, go elsewhere. If you want to run 10 agents in parallel across worktrees and query them from another service, start here.
+
+### The card nobody else holds: mobile
+
+**None of the 30+ serious coding CLIs shipping in 2026 has a mobile app.** PocketPal and MLC Chat run models on-device but they are chats, not coding agents.
+
+This fork + the Android app are **architecturally unified** — same agent model, same session format, same MCP surface. That yields a proposition no one else can make:
+
+> An orchestrated coding agent executable on desktop, server, _or_ phone, with local models end-to-end.
+
+Kick off 5 tasks in isolated worktrees from a laptop. Check their progress from a phone, on the subway, offline, on an on-device 4B model. Consolidate results via the DAG. That scenario exists here and nowhere else.
+
+### What this fork does **not** claim
+
+- We do **not** outperform Claude Opus on SWE-bench when you run this fork against a weaker backend. Quality-of-model is decoupled from quality-of-orchestration — pick both.
+- We do **not** have the adoption of Aider or Cline yet. If you need the biggest plugin registry today, they win.
+- We do **not** position against niche specialists (Warp's UX, Plandex's 2 M context). Different sport.
+
+### Diagram — where the fork adds value
+
+```
+                   ┌──────────────────────────────────────────┐
+                   │            Your orchestrator             │
+                   │  (cron, Temporal, Airflow, another LLM)  │
+                   └────────────────┬─────────────────────────┘
+                                    │ REST /task/* (fork-only)
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        OpenCode (this fork)                               │
+│                                                                           │
+│  ┌─────────────┐   DAG waves    ┌──────────────┐                          │
+│  │ Orchestrator│ ─────────────▶ │  Agent pool  │ ──▶ isolated worktrees   │
+│  │ (read-only) │                │  (5 parallel)│      (git, no Docker)    │
+│  └─────────────┘                └──────┬───────┘                          │
+│         │                              │                                  │
+│         ▼                              ▼                                  │
+│   9-state FSM              per-agent MCP scoping                          │
+│   (persistent)             (least-privilege tools)                        │
+│         │                              │                                  │
+│         ▼                              ▼                                  │
+│   vulnerability scanner on every edit/write                               │
+│                                                                           │
+└───────────────┬───────────────────────────────────────────┬───────────────┘
+                │                                           │
+                ▼                                           ▼
+   Local LLM (llama.cpp b8731)                  Cloud providers (25+)
+   + adaptive runtime (auto-config.ts)          with ephemeral prompt cache
+   desktop + **Android**                        Anthropic, OpenAI, Gemini…
+```
+
+---
+
 ## Fork Features
 
 > This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
@@ -60,11 +200,13 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 
 **Inference Engine (llama.cpp b8731)**
 - Vulkan GPU backend, auto-downloaded on first model load
+- **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
 - `--flash-attn on` — Flash Attention for memory efficiency
-- `--cache-type-k/v q4_0` — Hadamard rotation KV cache (72% memory savings)
-- `--fit on` — auto-adjusts context size and GPU layer placement to available VRAM
+- `--cache-type-k/v` — Hadamard rotation KV cache; adaptive tier (f16 / q8_0 / q4_0) based on VRAM headroom
+- `--fit on` — fork-only secondary VRAM adjustment (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
 - Speculative decoding (`--model-draft`) with VRAM Guard (auto-disables if < 1.5 GB free)
 - Single slot (`-np 1`) to minimize memory footprint
+- **Benchmark harness** (`bun run bench:llm`): reproducible FTL / TPS / peak RSS / wall-time measurement per model, per run, JSONL output for CI archival
 
 **Speech-to-Text (Parakeet TDT 0.6B v3 INT8)**
 - NVIDIA Parakeet via ONNX Runtime — ~300ms for 5s of audio (18x real-time)
@@ -273,19 +415,24 @@ To prevent confusion from AI-generated summaries of this project:
 | Capability | Status | Notes |
 |-----------|--------|-------|
 | Local LLM (llama.cpp b8731) | Implemented | Vulkan GPU, auto-download runtime, `--fit` auto-VRAM |
+| **Adaptive runtime config** | Implemented | `auto-config.ts`: n_gpu_layers / threads / batch / KV quant derived from detected VRAM, RAM, big.LITTLE, GPU backend, thermal state |
+| **Benchmark harness** | Implemented | `bun run bench:llm` measures FTL, TPS, peak RSS, wall per model; JSONL output |
 | Flash Attention | Implemented | `--flash-attn on` on desktop and mobile |
-| KV cache quantization | Implemented | q4_0 with Hadamard rotation (72% memory savings) |
+| KV cache quantization | Implemented | q4_0 / q8_0 / f16 adaptive with Hadamard rotation (72% memory savings) |
+| Exact tokenizer (OpenAI) | Implemented | `js-tiktoken` for gpt-*/o1/o3/o4; empirical 3.5 chars/token for Llama/Qwen/Gemma |
 | Speculative decoding | Implemented | VRAM Guard (desktop) / RAM Guard (mobile), draft model auto-detection |
 | VRAM / RAM monitoring | Implemented | Desktop: nvidia-smi, Mobile: `/proc/meminfo` |
 | Configuration presets | Implemented | Fast / Quality / Eco / Long Context |
-| HuggingFace model search | Implemented | VRAM badges, download manager, 9 pre-curated models |
-| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile |
-| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop) |
-| TTS (Kokoro fallback) | Implemented | 54 voices, 9 languages, ONNX (desktop) |
+| HuggingFace model search | Implemented | Zod-validated response, VRAM badges, download manager, 9 pre-curated models |
+| **Resumable GGUF downloads** | Implemented | HTTP `Range` header — 4G interruption doesn't restart a 4 GB transfer from zero |
+| STT (Parakeet TDT 0.6B) | Implemented | ONNX Runtime, ~300ms/5s, 25 languages, desktop + mobile (mic listener wired both sides) |
+| TTS (Pocket TTS) | Implemented | 8 voices, zero-shot voice cloning, French-native (desktop only — no Python sidecar on Android) |
+| TTS (Kokoro) | Implemented | 54 voices, 9 languages, ONNX on **desktop + Android** (6 Tauri commands wired in `speech.rs` mobile, CPUExecutionProvider) |
 | Prompt reduction (94%) | Implemented | ~1K tokens vs ~16K for cloud, skeleton tool schemas |
 | Pre-flight guards | Implemented | File-exists, old_string verification, read-before-edit, write-on-existing (code-level, 0 tokens) |
 | Doom loop auto-break | Implemented | Auto-injects error on 2x identical calls (code-level, not prompt) |
 | Tool telemetry | Implemented | Per-session success/error rate logging with per-tool breakdown |
+| Circuit breaker restart | Implemented | `ensureCorrectModel` bails after 3 restarts in 120 s to avoid burn-cycle loops |
 
 ### Security & Governance
 | Capability | Status | Notes |
@@ -294,6 +441,12 @@ To prevent confusion from AI-generated summaries of this project:
 | Vulnerability scanner | Implemented | Auto-scan on edit/write for secrets, injections, unsafe patterns |
 | DLP / AgentShield | Implemented | `experimental.dlp.enabled: true`, redacts secrets before LLM calls |
 | Policy engine | Implemented | `experimental.policy.enabled: true`, conditional rules + custom policies |
+| **Strict CSP (desktop + mobile)** | Implemented | `connect-src` scoped to loopback + HuggingFace + HTTPS providers; no `unsafe-eval`, `object-src 'none'`, `frame-ancestors 'none'` |
+| **Android release hardening** | Implemented | `isDebuggable=false`, `allowBackup=false`, `isShrinkResources=true`, `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` |
+| **Desktop release hardening** | Implemented | Devtools no longer force-enabled — Tauri 2 default (debug-only) restored so an XSS foothold cannot attach to `__TAURI__` in production |
+| **Tauri command input validation** | Implemented | `download_model` / `load_llm_model` / `delete_model` guards: filename charset, HTTPS allowlist to `huggingface.co` / `hf.co` |
+| **Rust logging chain** | Implemented | `log` + `android_logger` on mobile; no `eprintln!` in release → no path/URL leaks to logcat |
+| **Security audit tracker** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — all findings classified S1/S2/S3 with `path:line`, status, and deferred fix rationale |
 
 ### Knowledge & Memory
 | Capability | Status | Notes |
@@ -305,7 +458,10 @@ To prevent confusion from AI-generated summaries of this project:
 ### Platform Extensions (Experimental)
 | Capability | Status | Notes |
 |-----------|--------|-------|
-| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT. iOS: remote mode |
+| Mobile app (Tauri) | Implemented | Android: embedded runtime, on-device LLM, STT + TTS (Kokoro). iOS: remote mode |
+| **OAuth callback deep link** | Implemented | `opencode://oauth/callback?providerID=…&code=…&state=…` auto-finalises the token exchange; no copy-paste of the auth code required |
+| **Upstream branch watcher** | Implemented | Periodic `git fetch` (warm-up 30 s, interval 5 min) emits `vcs.branch.behind` when local HEAD diverges from tracked upstream; surfaced via `platform.notify()` on desktop and mobile |
+| **Viewport-sized PTY spawn** | Implemented | `Pty.create({cols, rows})` uses an estimator from `window.innerWidth/innerHeight` — shells start at their final dimensions instead of 80×24→36×11, fixes the Android first-prompt-invisible bug on mksh/bash |
 | Collaborative mode | Experimental | JWT auth, presence, file locking, WebSocket broadcast |
 | AnythingLLM bridge | Experimental | MCP adapter, context injection, vector store bridge |
 | Per-message token display | Partial | Stored in DB, shown as session aggregate |

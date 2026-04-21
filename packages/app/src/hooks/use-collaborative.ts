@@ -35,6 +35,12 @@ export function useCollaborative(config: () => CollaborativeConfig | null) {
 
     const wsUrl = cfg.serverUrl.replace(/^http/, "ws") + `/ws/events?${params}`
 
+    // Sprint 6 item 3 — NOT migrated to createAuthenticatedWebSocket.
+    // Rationale: this endpoint lives on the collaborative *tenant* server
+    // (SST, not the local opencode daemon) and authenticates via an opaque
+    // `token` query param (tenant access token), not Basic/Bearer credentials
+    // consumable by /auth/ws-ticket. The ws-ticket flow on the local daemon
+    // is a different auth domain and would not help here.
     try {
       ws = new WebSocket(wsUrl)
 

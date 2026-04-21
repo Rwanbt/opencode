@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./vite": "./vite.js",
-    "./index.css": "./src/index.css"
+    "./index.css": "./src/index.css",
+    "./hooks/speech-tauri-adapter": "./src/hooks/speech-tauri-adapter.ts"
   },
   "scripts": {
     "typecheck": "tsgo -b",

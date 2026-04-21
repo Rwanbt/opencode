@@ -233,7 +233,12 @@ When constructing the summary, try to stick to this template:
 ---`
 
         const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-        const msgs = structuredClone(messages)
+        // Only deep-clone when a transform plugin is registered; otherwise we
+        // pass the original array through (toModelMessagesEffect below treats
+        // its input as read-only) and save multi-MB allocations per compaction
+        // on long sessions, which otherwise OOM on 4 GB Android devices.
+        const needsClone = yield* plugin.has("experimental.chat.messages.transform")
+        const msgs = needsClone ? structuredClone(messages) : messages
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
         const ctx = yield* InstanceState.context

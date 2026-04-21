@@ -9,8 +9,13 @@ fn configure_display_backend() -> Option<String> {
 
     let set_env_if_absent = |key: &str, value: &str| {
         if env::var_os(key).is_none() {
-            // Safety: called during startup before any threads are spawned, so mutating the
-            // process environment is safe.
+            // SAFETY: `env::set_var` is only unsound when another thread is
+            // concurrently reading or writing the process environment (the
+            // underlying libc `setenv`/`getenv` are not thread-safe). This
+            // helper is invoked exclusively from `configure_display_backend`,
+            // which runs at the very top of `main()` before `tauri::Builder`
+            // is constructed and before any tokio / rayon / plugin thread is
+            // spawned — so no concurrent access is possible.
             unsafe { env::set_var(key, value) };
         }
     };
@@ -60,7 +65,10 @@ fn main() {
             items.push(host.to_string());
         }
 
-        // Safety: called during startup before any threads are spawned.
+        // SAFETY: the `upsert` closure runs at the top of `main()` before any
+        // Tauri / tokio thread is spawned, so no other thread can be reading
+        // or writing the environment. `env::set_var` is only unsound under
+        // concurrent env access (libc `setenv`/`getenv` are not thread-safe).
         unsafe { std::env::set_var(key, items.join(",")) };
     };
 

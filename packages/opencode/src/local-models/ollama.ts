@@ -15,7 +15,7 @@ export namespace Ollama {
   }
 
   export async function listModels(baseUrl = DEFAULT_URL): Promise<OllamaModel[]> {
-    const res = await fetch(`${baseUrl}/api/tags`)
+    const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) throw new Error(`Ollama API error: ${res.status} ${res.statusText}`)
     const data = OllamaModelList.parse(await res.json())
     return data.models
@@ -26,6 +26,7 @@ export namespace Ollama {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
+      signal: AbortSignal.timeout(15000),
     })
     if (!res.ok) throw new Error(`Ollama API error: ${res.status} ${res.statusText}`)
     return OllamaModelInfo.parse(await res.json())
@@ -41,6 +42,10 @@ export namespace Ollama {
     const baseUrl = opts?.baseUrl ?? DEFAULT_URL
     log.info("pulling model", { name, baseUrl })
 
+    // No top-level timeout: /api/pull is a long-running NDJSON stream that
+    // can take minutes on large models. Per-chunk liveness is implicit via
+    // reader.read() — a stalled TCP connection will surface as no data and
+    // the caller should abort via its own AbortSignal if needed.
     const res = await fetch(`${baseUrl}/api/pull`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -83,6 +88,7 @@ export namespace Ollama {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
+      signal: AbortSignal.timeout(15000),
     })
     if (!res.ok) throw new Error(`Ollama API error: ${res.status} ${res.statusText}`)
     log.info("model removed", { name })

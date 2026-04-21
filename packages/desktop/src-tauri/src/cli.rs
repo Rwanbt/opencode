@@ -44,12 +44,16 @@ const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
+// Config surface kept for future UI that surfaces the resolved CLI config.
+// Not wired yet; `#[allow(dead_code)]` prevents stale warnings on a stable API.
+#[allow(dead_code)]
 #[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
     pub hostname: Option<String>,
     pub port: Option<u32>,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
@@ -82,6 +86,7 @@ impl CommandChild {
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
     let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
 
@@ -351,11 +356,55 @@ fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
     None
 }
 
+// Exact-match allowlist of env vars from the user's interactive shell that
+// we forward to the sidecar. Anything else (notably *_API_KEY, *_TOKEN,
+// *_SECRET) is dropped — the sidecar reads credentials from auth.json, not
+// from inherited env, so forwarding arbitrary secrets only widens the blast
+// radius of a compromised sidecar.
+const SHELL_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LANGUAGE",
+    "TERM",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "NO_COLOR",
+    "FORCE_COLOR",
+    "NODE_ENV",
+    "BUN_INSTALL",
+    "SHELL",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+];
+
+// Prefix-match allowlist (LC_* locales, OPENCODE_* config).
+const SHELL_ENV_ALLOWED_PREFIXES: &[&str] = &["LC_", "OPENCODE_"];
+
+fn is_shell_env_allowed(key: &str) -> bool {
+    if SHELL_ENV_ALLOWLIST.contains(&key) {
+        return true;
+    }
+    SHELL_ENV_ALLOWED_PREFIXES
+        .iter()
+        .any(|p| key.starts_with(p))
+}
+
 fn merge_shell_env(
     shell_env: Option<HashMap<String, String>>,
     envs: Vec<(String, String)>,
 ) -> Vec<(String, String)> {
-    let mut merged = shell_env.unwrap_or_default();
+    let mut merged: HashMap<String, String> = shell_env
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(k, _)| is_shell_env_allowed(k))
+        .collect();
+    // Explicit envs from the caller (opencode-internal) always win and
+    // bypass the allowlist — they are not user-controlled.
     for (key, value) in envs {
         merged.insert(key, value);
     }
@@ -373,6 +422,7 @@ pub fn spawn_command(
         .resolve("", BaseDirectory::AppLocalData)
         .expect("Failed to resolve app local data dir");
 
+    let app_data = app.path().app_data_dir().expect("app data dir");
     let mut envs = vec![
         (
             "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(),
@@ -387,12 +437,32 @@ pub fn spawn_command(
             "XDG_STATE_HOME".to_string(),
             state_dir.to_string_lossy().to_string(),
         ),
+        // Paths for the sidecar's LocalLLMServer to find the runtime and models
+        // without scanning candidate directories — the sidecar's candidateDirs() would
+        // pick the right app-data folder anyway, but explicit vars are faster and
+        // eliminate any ambiguity in multi-install scenarios (dev + stable installed).
+        (
+            "OPENCODE_LLAMA_RUNTIME_DIR".to_string(),
+            app_data.join("llama-runtime").to_string_lossy().to_string(),
+        ),
+        (
+            "OPENCODE_LLAMA_MODELS_DIR".to_string(),
+            app_data.join("models").to_string_lossy().to_string(),
+        ),
     ];
     envs.extend(
         extra_env
             .iter()
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
+
+    // Sprint 5 item 4 — expose the localhost keychain endpoint to the sidecar.
+    // If the endpoint did not start (boot failure or feature disabled), these
+    // vars are omitted and the sidecar falls back to FileStorage.
+    if let Some(ep) = crate::auth_storage::endpoint() {
+        envs.push(("OPENCODE_KEYCHAIN_URL".to_string(), ep.url.clone()));
+        envs.push(("OPENCODE_KEYCHAIN_TOKEN".to_string(), ep.token.clone()));
+    }
 
     let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
@@ -553,16 +623,28 @@ pub fn serve(
     app: &AppHandle,
     hostname: &str,
     port: u32,
+    username: &str,
     password: &str,
+    tls_enabled: bool,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
-    tracing::info!(port, "Spawning sidecar");
+    tracing::info!(port, tls_enabled, "Spawning sidecar");
 
-    let envs = [
-        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+    let mut envs = vec![
+        ("OPENCODE_SERVER_USERNAME", username.to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
+
+    // Pass TLS cert/key paths to the sidecar when Internet mode is active.
+    if tls_enabled {
+        if let Ok(certs) = crate::tls::ensure_cert(app) {
+            envs.push(("OPENCODE_TLS_CERT_PATH", certs.cert_path.to_string_lossy().into_owned()));
+            envs.push(("OPENCODE_TLS_KEY_PATH", certs.key_path.to_string_lossy().into_owned()));
+        } else {
+            tracing::warn!("TLS enabled but failed to load/generate certificate; falling back to plain HTTP");
+        }
+    }
 
     let (events, child) = spawn_command(
         app,

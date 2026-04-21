@@ -20,6 +20,21 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  /**
+   * Returns true if thinking should be suppressed for this model.
+   * /no_think and enable_thinking:false are Qwen/QwQ-specific mechanisms —
+   * injecting them into non-Qwen models (e.g. Gemma 4) adds junk to the prompt.
+   * Rules (in priority order):
+   *   reasoning === true  → never suppress (explicit opt-in)
+   *   reasoning === false → always suppress (explicit opt-out)
+   *   no declaration      → suppress only for Qwen/QwQ family (by model ID)
+   */
+  export function shouldSuppressThinking(model: Provider.Model): boolean {
+    if (model.capabilities.reasoning === true) return false
+    if (model.capabilities.reasoning === false) return true
+    return /qwen|qwq/i.test(model.api.id)
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -29,6 +44,10 @@ export namespace ProviderTransform {
         return "azure"
       case "@ai-sdk/openai":
         return "openai"
+      // NOTE: @ai-sdk/openai-compatible is intentionally omitted.
+      // createOpenAICompatible() uses `name` (= model.providerID) as providerOptionsName,
+      // so the key must stay as model.providerID (undefined here → falls back to model.providerID)
+      // to match the passthrough in the AI SDK: providerOptions[providerOptionsName].
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
@@ -52,8 +71,9 @@ export namespace ProviderTransform {
     options: Record<string, unknown>,
   ): ModelMessage[] {
     // Local LLM: strip reasoning parts from history and append /no_think to suppress
-    // Qwen/DeepSeek thinking tags that llama.cpp can't disable via API
-    if (model.providerID === "local-llm" && !model.capabilities.reasoning) {
+    // Qwen/DeepSeek thinking tags that llama.cpp can't disable via API.
+    // shouldSuppressThinking uses model ID detection — only Qwen/QwQ family get /no_think.
+    if (model.providerID === "local-llm" && shouldSuppressThinking(model)) {
       msgs = msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           return { ...msg, content: msg.content.filter((part: any) => part.type !== "reasoning") }
@@ -791,9 +811,10 @@ export namespace ProviderTransform {
       result["store"] = false
     }
 
-    // Disable thinking for local LLM models (llama.cpp Qwen etc. generate <think> tags otherwise)
-    if (input.model.providerID === "local-llm" && !input.model.capabilities.reasoning) {
-      result["chat_template_args"] = { enable_thinking: false }
+    // Disable thinking for local LLM models (llama.cpp Qwen etc. generate <think> tags otherwise).
+    // Only applies to Qwen/QwQ family — enable_thinking is a Qwen-specific chat template kwarg.
+    if (input.model.providerID === "local-llm" && shouldSuppressThinking(input.model)) {
+      result["chat_template_kwargs"] = { enable_thinking: false }
     }
 
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
@@ -809,7 +830,7 @@ export namespace ProviderTransform {
       input.model.providerID === "baseten" ||
       (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
     ) {
-      result["chat_template_args"] = { enable_thinking: true }
+      result["chat_template_kwargs"] = { enable_thinking: true }
     }
 
     if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {

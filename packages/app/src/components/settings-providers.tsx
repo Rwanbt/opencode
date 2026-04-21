@@ -8,9 +8,8 @@ import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { DialogConnectProvider } from "./dialog-connect-provider"
-import { DialogSelectProvider } from "./dialog-select-provider"
-import { DialogCustomProvider } from "./dialog-custom-provider"
+// Dialog modules below are loaded on-demand (see dialog.show() callers) to keep
+// the main chunk lean — each of them pulls its own form/validation tree.
 import { SettingsList } from "./settings-list"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
@@ -229,7 +228,9 @@ export const SettingsProviders: Component = () => {
                       if (item.id === "local-llm") {
                         window.dispatchEvent(new CustomEvent("open-model-manager"))
                       } else {
-                        dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                        void import("./dialog-connect-provider").then((x) => {
+                          dialog.show(() => <x.DialogConnectProvider provider={item.id} />)
+                        })
                       }
                     }}
                   >
@@ -258,7 +259,9 @@ export const SettingsProviders: Component = () => {
                 variant="secondary"
                 icon="plus-small"
                 onClick={() => {
-                  dialog.show(() => <DialogCustomProvider back="close" />)
+                  void import("./dialog-custom-provider").then((x) => {
+                    dialog.show(() => <x.DialogCustomProvider back="close" />)
+                  })
                 }}
               >
                 {language.t("common.connect")}
@@ -270,7 +273,9 @@ export const SettingsProviders: Component = () => {
             variant="ghost"
             class="px-0 py-0 mt-5 text-14-medium text-text-interactive-base text-left justify-start hover:bg-transparent active:bg-transparent"
             onClick={() => {
-              dialog.show(() => <DialogSelectProvider />)
+              void import("./dialog-select-provider").then((x) => {
+                dialog.show(() => <x.DialogSelectProvider />)
+              })
             }}
           >
             {language.t("dialog.provider.viewAll")}
