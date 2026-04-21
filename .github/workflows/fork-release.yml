@@ -1,0 +1,319 @@
+name: fork-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0-fork)"
+        required: true
+        type: string
+      draft:
+        description: "Create release as draft"
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*-fork*'
+
+concurrency:
+  group: fork-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ─── CLI (Linux x64 + Windows x64) ──────────────────────────────────
+  build-cli:
+    if: github.repository == 'Rwanbt/opencode'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        run: bun install
+
+      - name: Resolve version
+        id: ver
+        run: |
+          RAW="${{ inputs.tag || github.ref_name }}"
+          # strip leading v and trailing -fork* → x.y.z
+          VER="${RAW#v}"
+          VER="${VER%%-fork*}"
+          # Must be semver-like; fallback to 0.0.0 if weird
+          if ! echo "$VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            VER="0.0.0"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=$RAW" >> "$GITHUB_OUTPUT"
+
+      - name: Build CLI (cross-compile all targets via Bun)
+        working-directory: packages/opencode
+        run: bun run script/build.ts --skip-embed-web-ui
+        env:
+          OPENCODE_VERSION: ${{ steps.ver.outputs.version }}
+          OPENCODE_CHANNEL: fork
+
+      - name: Package artifacts
+        working-directory: packages/opencode/dist
+        run: |
+          set -e
+          echo "dist contents:"
+          ls -la
+          # Linux x64 (glibc)
+          if [ -d opencode-linux-x64 ]; then
+            tar czf opencode-linux-x64.tar.gz -C opencode-linux-x64 .
+          fi
+          # Windows x64
+          if [ -d opencode-windows-x64 ]; then
+            (cd opencode-windows-x64 && zip -qr ../opencode-windows-x64.zip .)
+          fi
+          ls -lh *.tar.gz *.zip 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-bundles
+          path: |
+            packages/opencode/dist/opencode-linux-x64.tar.gz
+            packages/opencode/dist/opencode-windows-x64.zip
+          if-no-files-found: error
+
+  # ─── Android APK ────────────────────────────────────────────────────
+  build-android:
+    if: github.repository == 'Rwanbt/opencode'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK + CMake
+        run: |
+          rm -rf $ANDROID_HOME/ndk/* 2>/dev/null || true
+          sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/mobile/src-tauri
+          cache-targets: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download runtime binaries
+        run: |
+          JNIDIR="packages/mobile/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          ASSETS="packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime"
+          RUNTIME="packages/mobile/src-tauri/assets/runtime"
+          mkdir -p "$JNIDIR" "$ASSETS" "$RUNTIME/node_modules/@parcel/watcher"
+
+          curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64-musl.zip -o /tmp/bun.zip
+          unzip -o -q /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-linux-aarch64-musl/bun "$JNIDIR/libbun_exec.so"
+
+          ALPINE_INDEX="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64"
+          resolve_apk() {
+            curl -fsSL "$ALPINE_INDEX/" \
+              | grep -oE "$1-[0-9][0-9.]*-r[0-9]+\.apk" \
+              | sort -uV | tail -1
+          }
+
+          MUSL_APK=$(resolve_apk "musl")
+          curl -fsSL "$ALPINE_INDEX/$MUSL_APK" -o /tmp/musl.apk
+          cd /tmp && tar -xzf musl.apk lib/ld-musl-aarch64.so.1
+          cp /tmp/lib/ld-musl-aarch64.so.1 "$GITHUB_WORKSPACE/$JNIDIR/libmusl_linker.so"
+          cd "$GITHUB_WORKSPACE"
+
+          LIBSTDCPP_APK=$(resolve_apk "libstdc\+\+")
+          LIBGCC_APK=$(resolve_apk "libgcc")
+          curl -fsSL "$ALPINE_INDEX/$LIBSTDCPP_APK" -o /tmp/libstdcpp.apk
+          curl -fsSL "$ALPINE_INDEX/$LIBGCC_APK" -o /tmp/libgcc.apk
+          cd /tmp && tar -xzf libstdcpp.apk --wildcards 'usr/lib/libstdc++.so.6.*'
+          cd /tmp && tar -xzf libgcc.apk usr/lib/libgcc_s.so.1
+          cp /tmp/usr/lib/libstdc++.so.6.* "$GITHUB_WORKSPACE/$JNIDIR/libstdcpp_compat.so"
+          cp /tmp/usr/lib/libgcc_s.so.1 "$GITHUB_WORKSPACE/$JNIDIR/libgcc_compat.so"
+          cd "$GITHUB_WORKSPACE"
+
+          curl -fsSL https://github.com/robxu9/bash-static/releases/latest/download/bash-linux-aarch64 -o "$JNIDIR/libbash_exec.so"
+
+          RG_VERSION=$(curl -fsSL "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" | jq -r '.tag_name')
+          curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-aarch64-unknown-linux-gnu.tar.gz" -o /tmp/rg.tar.gz
+          tar -xzf /tmp/rg.tar.gz -C /tmp
+          find /tmp -name "rg" -type f | head -1 | xargs -I{} cp {} "$JNIDIR/librg_exec.so"
+
+          curl -fsSL "https://landley.net/toybox/bin/toybox-aarch64" -o "$JNIDIR/libtoybox_exec.so"
+
+          NDK=$ANDROID_HOME/ndk/27.0.12077973
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang \
+            -o "$JNIDIR/libpty_server.so" \
+            packages/mobile/src-tauri/gen/android/pty_server.c \
+            -O2 -Wall -Wextra -Wno-unused-parameter
+
+          chmod 755 "$JNIDIR"/*
+
+      - name: Build llama.cpp for Android
+        run: |
+          JNIDIR="packages/mobile/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          HEADERS="packages/mobile/src-tauri/gen/android/llama-headers"
+          NDK=$ANDROID_HOME/ndk/27.0.12077973
+
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp
+
+          cmake -B /tmp/llama.cpp/build-android \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DCMAKE_C_FLAGS="-march=armv8.2-a+dotprod+fp16" \
+            -DCMAKE_CXX_FLAGS="-march=armv8.2-a+dotprod+fp16" \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -S /tmp/llama.cpp
+          cmake --build /tmp/llama.cpp/build-android --config Release -j$(nproc)
+
+          cp /tmp/llama.cpp/build-android/bin/libllama.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml-base.so "$JNIDIR/"
+          cp /tmp/llama.cpp/build-android/bin/libggml-cpu.so "$JNIDIR/"
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip "$JNIDIR"/libllama.so "$JNIDIR"/libggml*.so
+
+          cmake -B /tmp/llama.cpp/build-static \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang \
+            -DCMAKE_CXX_COMPILER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++ \
+            -DCMAKE_C_FLAGS="-march=armv8.2-a" \
+            -DCMAKE_CXX_FLAGS="-march=armv8.2-a" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -S /tmp/llama.cpp
+          cmake --build /tmp/llama.cpp/build-static --config Release --target llama-server -j$(nproc)
+          cp /tmp/llama.cpp/build-static/bin/llama-server "$JNIDIR/libllama_server.so"
+          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip "$JNIDIR/libllama_server.so"
+
+          mkdir -p "$HEADERS"
+          cp /tmp/llama.cpp/include/*.h "$HEADERS/"
+          cp /tmp/llama.cpp/ggml/include/*.h "$HEADERS/"
+
+      - name: Bundle OpenCode CLI
+        run: |
+          RUNTIME="packages/mobile/src-tauri/assets/runtime"
+          ASSETS="packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime"
+          mkdir -p "$RUNTIME/node_modules/@parcel/watcher" "$ASSETS/node_modules/@parcel/watcher"
+          node scripts/bundle-mobile.mjs --outdir "$RUNTIME"
+          echo 'export function createWrapper() { return undefined }' > "$RUNTIME/node_modules/@parcel/watcher/wrapper.js"
+          echo '{"name":"@parcel/watcher","version":"0.0.0","main":"wrapper.js"}' > "$RUNTIME/node_modules/@parcel/watcher/package.json"
+          cp "$RUNTIME/opencode-cli.js" "$ASSETS/opencode-cli.js"
+          cp -r "$RUNTIME/node_modules" "$ASSETS/"
+          cp "$RUNTIME"/*.wasm "$ASSETS/" 2>/dev/null || true
+
+      - name: Install Tauri CLI
+        run: |
+          bun add -g @tauri-apps/cli
+          cargo install tauri-cli --version "^2" --locked || true
+
+      - name: Build frontend
+        working-directory: packages/mobile
+        run: bun run build
+
+      - name: Clear cargo config
+        run: rm -f packages/mobile/src-tauri/.cargo/config.toml
+
+      - name: Download ONNX Runtime for Android
+        run: |
+          ORT_VERSION="1.22.0"
+          curl -fsSL "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" -o /tmp/ort.aar
+          cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
+          mkdir -p /tmp/ort-android/lib
+          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/lib/
+          echo "ORT_LIB_LOCATION=/tmp/ort-android" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Build APK
+        working-directory: packages/mobile
+        run: bunx tauri android build --target aarch64
+
+      - name: Sign APK (debug keystore)
+        run: |
+          APK="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          SIGNED="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk"
+          keytool -genkey -v \
+            -keystore /tmp/ci.keystore \
+            -alias opencode -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=OpenCode CI, OU=Dev, O=OpenCode, L=Paris, ST=IDF, C=FR"
+          cp "$APK" "$SIGNED"
+          java -jar "$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | tail -1)/lib/apksigner.jar" sign \
+            --ks /tmp/ci.keystore --ks-pass pass:android --key-pass pass:android \
+            "$SIGNED"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk
+          if-no-files-found: error
+
+  # ─── Create GitHub Release ──────────────────────────────────────────
+  release:
+    needs: [build-cli, build-android]
+    if: github.repository == 'Rwanbt/opencode'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli-bundles
+          path: ./release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: ./release
+
+      - name: List artifacts
+        run: ls -lh ./release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          draft: ${{ inputs.draft || false }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/opencode-linux-x64.tar.gz
+            release/opencode-windows-x64.zip
+            release/opencode-mobile.apk
