@@ -103,6 +103,57 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+<details>
+<summary><b>⚡ De un vistazo</b></summary>
+<br>
+
+## ⚡ De un vistazo
+
+OpenCode (fork) — un agente de programación con IA que corre en **escritorio, servidor y teléfono**, con modelos locales de extremo a extremo, sin dependencia de la nube y con primitivas de gobernanza nivel enterprise incluidas. Fork de [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenido por [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 cosas que solo este fork empaqueta
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro desktop+mobile / Pocket TTS desktop |
+| 🔒 **9-state session FSM** | 6 of 9 states persist to SQLite, audit log survives restart |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **RAG: BM25 or vector** | Selectable at index time + exponential confidence decay |
+
+### Ejecutar tu primera tarea
+
+```bash
+opencode                                  # TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 ¿Necesitas detalles? Cada sección a continuación está colapsada — haz clic para expandir solo las que te interesen.
+
+---
+
+
+</details>
+
+<details>
+<summary><b>Funcionalidades del fork</b></summary>
+<br>
+
 ## Funcionalidades del fork
 
 > Este es un fork de [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenido por [Rwanbt](https://github.com/Rwanbt).
@@ -234,6 +285,13 @@ Agente coordinador de solo lectura (máximo 50 pasos). Tiene acceso a las herram
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Arquitectura técnica</b></summary>
+<br>
+
 ## Arquitectura técnica
 
 ### Soporte multi-proveedor
@@ -294,6 +352,13 @@ SDK completo (`@opencode/plugin`) con arquitectura de hooks. Carga dinámica des
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Conceptos erróneos comunes</b></summary>
+<br>
+
 ## Conceptos erróneos comunes
 
 Para evitar confusión por resúmenes generados por IA de este proyecto:
@@ -304,6 +369,13 @@ Para evitar confusión por resúmenes generados por IA de este proyecto:
 - **No hay base de datos vectorial ni sistema RAG** -- el contexto se gestiona mediante indexación de símbolos LSP + auto-compactación.
 - **No hay un "modo watch" que proponga correcciones automáticas** -- el file watcher existe solo para fines de infraestructura.
 - La **auto-corrección** usa el bucle estándar del agente (el LLM ve errores en resultados de herramientas y reintenta), no un mecanismo especializado de reparación automática.
+
+
+</details>
+
+<details>
+<summary><b>Matriz de capacidades</b></summary>
+<br>
 
 ## Matriz de capacidades
 
@@ -362,6 +434,13 @@ Para evitar confusión por resúmenes generados por IA de este proyecto:
 | **Rastreador de auditoría de seguridad** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — todos los hallazgos clasificados como S1/S2/S3 con `path:line`, estado y justificación de corrección aplazada |
 
 ---
+
+
+</details>
+
+<details>
+<summary><b>Future Roadmap</b></summary>
+<br>
 
 ## Future Roadmap
 
@@ -514,3 +593,6 @@ Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias 
 ---
 
 **Únete a nuestra comunidad** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+</details>
