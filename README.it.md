@@ -103,6 +103,57 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+<details>
+<summary><b>⚡ A colpo d'occhio</b></summary>
+<br>
+
+## ⚡ A colpo d'occhio
+
+OpenCode (fork) — un agente di coding IA orchestrato che gira su **desktop, server e telefono**, con modelli locali end-to-end, zero dipendenze cloud e primitive di governance enterprise integrate. Fork di [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenuto da [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 cose che solo questo fork raccoglie
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro desktop+mobile / Pocket TTS desktop |
+| 🔒 **9-state session FSM** | 6 of 9 states persist to SQLite, audit log survives restart |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **RAG: BM25 or vector** | Selectable at index time + exponential confidence decay |
+
+### Esegui il tuo primo task
+
+```bash
+opencode                                  # TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 Servono dettagli? Ogni sezione sotto è chiusa — clicca per aprire solo ciò che ti interessa.
+
+---
+
+
+</details>
+
+<details>
+<summary><b>Funzionalità del Fork</b></summary>
+<br>
+
 ## Funzionalità del Fork
 
 > Questo è un fork di [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenuto da [Rwanbt](https://github.com/Rwanbt).
@@ -234,6 +285,13 @@ Agente coordinatore in sola lettura (massimo 50 passaggi). Ha accesso agli strum
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Architettura Tecnica</b></summary>
+<br>
+
 ## Architettura Tecnica
 
 ### Supporto Multi-Provider
@@ -294,6 +352,13 @@ SDK completo (`@opencode/plugin`) con architettura a hook. Caricamento dinamico 
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Idee Sbagliate Comuni</b></summary>
+<br>
+
 ## Idee Sbagliate Comuni
 
 Per evitare confusione da riassunti generati dall'IA di questo progetto:
@@ -304,6 +369,13 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 - Il **RAG** è opzionale (`experimental.rag.enabled: true`); il contesto predefinito è gestito tramite indicizzazione dei simboli LSP + auto-compact.
 - **Non c'è una "modalità watch" che propone correzioni automatiche** -- il file watcher esiste solo per scopi infrastrutturali.
 - L'**auto-correzione** usa il loop standard dell'agente (l'LLM vede gli errori nei risultati degli strumenti e riprova), non un meccanismo specializzato di auto-riparazione.
+
+
+</details>
+
+<details>
+<summary><b>Matrice delle Capacità</b></summary>
+<br>
 
 ## Matrice delle Capacità
 
@@ -387,6 +459,13 @@ Per evitare confusione da riassunti generati dall'IA di questo progetto:
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Architettura</b></summary>
+<br>
+
 ## Architettura
 
 ```mermaid
@@ -449,6 +528,13 @@ graph TB
 | LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
 | TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
+
+</details>
+
+<details>
+<summary><b>Sicurezza e Governance</b></summary>
+<br>
+
 ## Sicurezza e Governance
 
 | Feature | Description |
@@ -458,6 +544,13 @@ graph TB
 | **DLP** | Data Loss Prevention (`experimental.dlp`) redige segreti, chiavi API e credenziali prima dell'invio ai provider LLM |
 | **Policy Engine** | Regole condizionali (`experimental.policy`) con azioni `block` o `warn`. Protezione dei percorsi, limite dimensione modifiche, pattern regex personalizzati |
 | **Privacy** | Locale per primo: tutti i dati in SQLite su disco. Nessuna telemetria per impostazione predefinita. I segreti non vengono mai registrati. Nessun dato inviato a terze parti oltre al provider LLM configurato |
+
+
+</details>
+
+<details>
+<summary><b>Interfaccia di Intelligenza</b></summary>
+<br>
 
 ## Interfaccia di Intelligenza
 
@@ -470,6 +563,13 @@ graph TB
 | **Bridge AnythingLLM** | Integrazione opzionale (`experimental.anythingllm`) — iniezione di contesto, adattatore server MCP, bridge vector store, API HTTP Agent Skills |
 
 ---
+
+
+</details>
+
+<details>
+<summary><b>Branch delle Funzionalità (Implementati su dev)</b></summary>
+<br>
 
 ## Branch delle Funzionalità (Implementati su `dev`)
 
@@ -639,3 +739,6 @@ Se stai lavorando a un progetto correlato a OpenCode e che utilizza “opencode�
 ---
 
 **Unisciti alla nostra community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+</details>

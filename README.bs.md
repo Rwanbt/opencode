@@ -103,6 +103,57 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+<details>
+<summary><b>⚡ Brzi pregled</b></summary>
+<br>
+
+## ⚡ Brzi pregled
+
+OpenCode (fork) — orkestrirani AI coding agent koji radi na **desktopu, serveru i telefonu**, s lokalnim modelima od kraja do kraja, bez ovisnosti o oblaku i s ugrađenim primitivama upravljanja enterprise nivoa. Fork [anomalyco/opencode](https://github.com/anomalyco/opencode) koji održava [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### 8 stvari koje samo ovaj fork objedinjuje
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro desktop+mobile / Pocket TTS desktop |
+| 🔒 **9-state session FSM** | 6 of 9 states persist to SQLite, audit log survives restart |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **RAG: BM25 or vector** | Selectable at index time + exponential confidence decay |
+
+### Pokreni prvi zadatak
+
+```bash
+opencode                                  # TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 Trebaju vam detalji? Svaki odjeljak ispod je sklopljen — kliknite da otvorite samo ono što vas zanima.
+
+---
+
+
+</details>
+
+<details>
+<summary><b>Funkcionalnosti forka</b></summary>
+<br>
+
 ## Funkcionalnosti forka
 
 > Ovo je fork projekta [anomalyco/opencode](https://github.com/anomalyco/opencode) koji održava [Rwanbt](https://github.com/Rwanbt).
@@ -234,6 +285,13 @@ Koordinacioni agent samo za čitanje (maksimalno 50 koraka). Ima pristup alatima
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Tehnička arhitektura</b></summary>
+<br>
+
 ## Tehnička arhitektura
 
 ### Podrška za više provajdera
@@ -294,6 +352,13 @@ Potpuni SDK (`@opencode/plugin`) sa arhitekturom hookova. Dinamičko učitavanje
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>Česta pogrešna uvjerenja</b></summary>
+<br>
+
 ## Česta pogrešna uvjerenja
 
 Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
@@ -304,6 +369,13 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 - **Nema vektorske baze podataka ili RAG sistema** -- kontekst se upravlja putem LSP indeksiranja simbola + auto-kompaktiranja.
 - **Nema "watch mode-a" koji predlaže automatske ispravke** -- file watcher postoji samo za infrastrukturne potrebe.
 - **Samokorekcija** koristi standardnu petlju agenta (LLM vidi greške u rezultatima alata i ponovo pokušava), ne specijalizirani mehanizam za automatsku popravku.
+
+
+</details>
+
+<details>
+<summary><b>Matrica mogućnosti</b></summary>
+<br>
 
 ## Matrica mogućnosti
 
@@ -362,6 +434,13 @@ Da bi se spriječila zabuna od AI-generisanih sažetaka ovog projekta:
 | **Tracker sigurnosne revizije** | Implemented | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — sva otkrica klasifikovana kao S1/S2/S3 sa `path:line`, statusom i obrazlozenjem odlozenog popravka |
 
 ---
+
+
+</details>
+
+<details>
+<summary><b>Future Roadmap</b></summary>
+<br>
 
 ## Future Roadmap
 
@@ -514,3 +593,6 @@ Po mogućnostima je vrlo sličan Claude Code-u. Ključne razlike su:
 ---
 
 **Pridruži se našoj zajednici** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+</details>

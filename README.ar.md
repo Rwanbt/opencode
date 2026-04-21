@@ -103,6 +103,57 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ---
 
+<!-- ACCORDION-APPLIED -->
+
+<details>
+<summary><b>⚡ لمحة سريعة</b></summary>
+<br>
+
+## ⚡ لمحة سريعة
+
+OpenCode (الفورك) — وكيل برمجة مدعوم بالذكاء الاصطناعي يعمل على **الحاسوب المكتبي والخادم والهاتف**، بنماذج محلية من البداية إلى النهاية، دون أي اعتماد على السحابة، مع بدائل حوكمة بمستوى المؤسسات مدمجة. فورك لـ [anomalyco/opencode](https://github.com/anomalyco/opencode) يحافظ عليه [Rwanbt](https://github.com/Rwanbt).
+
+### Install
+
+```bash
+# CLI (macOS / Linux / Windows)
+curl -fsSL https://opencode.ai/install | bash
+
+# Desktop app + Android APK
+# → https://github.com/Rwanbt/opencode/releases/latest
+```
+
+### ٨ أشياء يجمعها هذا الفورك فقط
+
+|   |   |
+| - | - |
+| 🤖 **DAG orchestration** | Wave-based parallel agents, up to 5 concurrent |
+| 🧠 **Local LLM end-to-end** | llama.cpp + runtime that auto-tunes to your VRAM / CPU |
+| 📱 **Android app** | On-device inference, terminal, PTY — single APK |
+| 🎙️ **Voice STT / TTS** | Parakeet (25 languages) + Kokoro desktop+mobile / Pocket TTS desktop |
+| 🔒 **9-state session FSM** | 6 of 9 states persist to SQLite, audit log survives restart |
+| 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
+| 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
+| 🔍 **RAG: BM25 or vector** | Selectable at index time + exponential confidence decay |
+
+### شغّل أول مهمّة
+
+```bash
+opencode                                  # TUI
+opencode run "fix the failing test in src/"   # one-shot
+```
+
+> 💡 تحتاج المزيد من التفاصيل؟ كل قسم أدناه مطويّ — انقر لفتح ما يهمّك فقط.
+
+---
+
+
+</details>
+
+<details>
+<summary><b>ميزات الفورك</b></summary>
+<br>
+
 ## ميزات الفورك
 
 > هذا فورك من [anomalyco/opencode](https://github.com/anomalyco/opencode) يديره [Rwanbt](https://github.com/Rwanbt).
@@ -234,6 +285,13 @@ REST API كامل لإدارة دورة حياة المهام:
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>البنية التقنية</b></summary>
+<br>
+
 ## البنية التقنية
 
 ### دعم مزودين متعددين
@@ -294,6 +352,13 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>المفاهيم الخاطئة الشائعة</b></summary>
+<br>
+
 ## المفاهيم الخاطئة الشائعة
 
 لمنع الالتباس من الملخصات المولّدة بالذكاء الاصطناعي لهذا المشروع:
@@ -304,6 +369,13 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 - **RAG** اختياري (`experimental.rag.enabled: true`)؛ إدارة السياق الافتراضية عبر فهرسة رموز LSP + الضغط التلقائي.
 - **لا يوجد "وضع مراقبة" يقترح إصلاحات تلقائية** -- مراقب الملفات موجود لأغراض البنية التحتية فقط.
 - **التصحيح الذاتي** يستخدم حلقة الوكيل القياسية (يرى LLM الأخطاء في نتائج الأدوات ويعيد المحاولة)، وليس آلية إصلاح تلقائي متخصصة.
+
+
+</details>
+
+<details>
+<summary><b>مصفوفة القدرات</b></summary>
+<br>
 
 ## مصفوفة القدرات
 
@@ -387,6 +459,13 @@ SDK كامل (`@opencode/plugin`) مع بنية hooks. تحميل ديناميك
 
 ---
 
+
+</details>
+
+<details>
+<summary><b>البنية المعمارية</b></summary>
+<br>
+
 ## البنية المعمارية
 
 ```mermaid
@@ -449,6 +528,13 @@ graph TB
 | LLM (llama-server) | 14097 | HTTP (OpenAI-compatible) |
 | TTS (pocket-tts) | 14100 | HTTP (FastAPI) |
 
+
+</details>
+
+<details>
+<summary><b>الأمان والحوكمة</b></summary>
+<br>
+
 ## الأمان والحوكمة
 
 | Feature | Description |
@@ -458,6 +544,13 @@ graph TB
 | **DLP** | منع فقدان البيانات (`experimental.dlp`) — إخفاء المفاتيح السرية ومفاتيح API وبيانات الاعتماد قبل إرسالها لمزودي LLM |
 | **Policy Engine** | قواعد شرطية (`experimental.policy`) مع إجراءات `block` أو `warn`. حماية المسارات، تحديد حجم التحرير، أنماط regex مخصصة |
 | **Privacy** | المحلي أولاً: جميع البيانات في SQLite على القرص. لا قياس عن بُعد افتراضياً. المفاتيح السرية لا تُسجَّل أبداً. لا تُرسل بيانات لأطراف ثالثة باستثناء مزود LLM المُعدّ |
+
+
+</details>
+
+<details>
+<summary><b>واجهة الذكاء</b></summary>
+<br>
 
 ## واجهة الذكاء
 
@@ -470,6 +563,13 @@ graph TB
 | **AnythingLLM Bridge** | تكامل اختياري (`experimental.anythingllm`) — حقن السياق، محول خادم MCP، جسر مخزن المتجهات، Agent Skills HTTP API |
 
 ---
+
+
+</details>
+
+<details>
+<summary><b>فروع الميزات (مُنفَّذة على dev)</b></summary>
+<br>
 
 ## فروع الميزات (مُنفَّذة على `dev`)
 
@@ -639,3 +739,6 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ---
 
 **انضم الى مجتمعنا** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+
+</details>
