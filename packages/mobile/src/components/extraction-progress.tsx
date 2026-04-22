@@ -30,9 +30,9 @@ export function ExtractionProgress(props: Props) {
       // Phase 1: base runtime (bun, rg, opencode-cli, tree-sitter)
       await extractRuntime()
       // Phase 2: extended env (Alpine + proot + 30 tools via apk).
-      // Skipped if rootfs already present. Blocks UI until complete to
-      // ensure `vi`, `nano`, `git`, `tmux`, `ssh`, `python`, `node` etc.
-      // are all available at first terminal open.
+      // Skipped if rootfs is COMPLETE (rootfs + git binary present). If a
+      // previous install partially failed, this re-runs the apk add step
+      // (idempotent — see install_extended_env in runtime.rs).
       const info = await checkRuntime()
       if (!info.extended_env) {
         setPhase("Installing advanced tools (nano, git, tmux, python, node, ...)")
@@ -40,8 +40,17 @@ export function ExtractionProgress(props: Props) {
         try {
           await installExtendedEnv()
         } catch (e) {
-          // Non-fatal: user can still use basic toybox tools without Alpine
-          console.warn("installExtendedEnv failed (non-fatal):", e)
+          // Surface the failure: the user expects git/nano/etc. to work
+          // automatically. Logging to console alone is invisible in release
+          // builds. Set an error state so the user sees what went wrong and
+          // can be told to retry (or check network).
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error("installExtendedEnv failed:", msg)
+          setError(`Advanced tools install failed: ${msg}`)
+          // Do NOT call onComplete() — let the user see the error. They can
+          // tap "Retry" (handled at parent level via onError → mode reset).
+          props.onError(msg)
+          return
         }
       }
       props.onComplete()
