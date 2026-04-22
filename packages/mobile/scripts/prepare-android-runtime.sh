@@ -64,17 +64,29 @@ echo "  libstdc++: $(du -sh "$LIB_DIR/libstdc++.so.6" | cut -f1)"
 echo "  libgcc_s: $(du -sh "$LIB_DIR/libgcc_s.so.1" | cut -f1)"
 
 # ─── Git (static musl) ──────────────────────────────────────────────
-echo "[2/6] Downloading Git (aarch64-linux-musl static)..."
-GIT_URL="https://github.com/nicedoc/git-static/releases/latest/download/git-aarch64-linux-musl.tar.gz"
-if curl -fsSL "$GIT_URL" -o "$TEMP_DIR/git.tar.gz" 2>/dev/null; then
-  tar -xzf "$TEMP_DIR/git.tar.gz" -C "$TEMP_DIR"
-  # The archive may contain git in various locations
-  find "$TEMP_DIR" -name "git" -type f -executable | head -1 | xargs -I{} cp {} "$BIN_DIR/git"
-  chmod 755 "$BIN_DIR/git"
-  echo "  Git: $(du -sh "$BIN_DIR/git" | cut -f1)"
+# Historically downloaded from nicedoc/git-static which is now 404/empty.
+# Replaced with apk add git inside the rootfs at runtime (install_extended_env)
+# which produces the same result without a second download path.
+# Kept as a no-op; the rootfs install is the source of truth.
+echo "[2/6] Git: bundled via Alpine apk in install_extended_env (skipped here)"
+
+# ─── proot static binary (SELinux-safe via jniLibs extraction) ──────
+# Android 13+ SELinux denies exec for files in app_data_file label. Runtime-
+# downloaded proot (to runtime/bin/) hits EACCES. Bundling proot as a JNI lib
+# lets Android extract it to nativeLibraryDir which has same_process_app_data_file
+# label (exec-allowed). The Rust bin_links block in runtime.rs creates a symlink
+# bin/proot → nlib/libproot_exec.so so scripts/proot-run continue to work.
+echo "[2b/6] Downloading proot v5.3.0 (aarch64 static) as libproot_exec.so..."
+PROOT_URL="https://github.com/proot-me/proot/releases/download/v5.3.0/proot-v5.3.0-aarch64-static"
+JNILIBS_DIR="$MOBILE_DIR/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+mkdir -p "$JNILIBS_DIR"
+PROOT_DEST="$JNILIBS_DIR/libproot_exec.so"
+if [ ! -f "$PROOT_DEST" ]; then
+  curl -fsSL "$PROOT_URL" -o "$PROOT_DEST"
+  chmod 755 "$PROOT_DEST"
+  echo "  proot: $(du -sh "$PROOT_DEST" | cut -f1)"
 else
-  echo "  WARNING: Git static binary not available, skipping."
-  echo "  Git operations will not be available on mobile."
+  echo "  proot already present: $(du -sh "$PROOT_DEST" | cut -f1)"
 fi
 
 # ─── Ripgrep (aarch64-linux-musl) ───────────────────────────────────
