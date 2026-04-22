@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -50,7 +49,22 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
     // and its absence is the clearest signal that install_extended_env didn't
     // finish. If this check fails, the frontend re-runs installExtendedEnv.
     let rootfs_dir = dir.join("rootfs");
-    let extended_env = rootfs_dir.exists() && rootfs_dir.join("usr/bin/git").exists();
+    // Health criteria: git + musl linker + libmusl_exec.so (sub-fork hook).
+    // The libmusl_exec.so sentinel distinguishes the pre-built rootfs bundle
+    // (which includes the hook) from older proot-based installs that lack it.
+    // Absence of libmusl_exec.so → wipe + re-extract from the new rootfs.tar.gz.
+    let extended_env = rootfs_dir.exists()
+        && rootfs_dir.join("usr/bin/git").exists()
+        && rootfs_dir.join("lib/ld-musl-aarch64.so.1").exists()
+        && rootfs_dir.join("usr/lib/libmusl_exec.so").exists();
+    log::info!(
+        "[check_runtime] ready={} extended_env={} rootfs_exists={} git={} musl={}",
+        ready,
+        extended_env,
+        rootfs_dir.exists(),
+        rootfs_dir.join("usr/bin/git").exists(),
+        rootfs_dir.join("lib/ld-musl-aarch64.so.1").exists()
+    );
 
     // Log debug info
     if let Some(nlib) = native_lib_dir(&dir) {
@@ -171,26 +185,10 @@ pub async fn start_embedded_server(
     let _ = fs::create_dir_all(&home_dir);
     let _ = fs::create_dir_all(home_dir.join(".opencode"));
 
-    // Expose external storage to the server via symlinks
-    // Android apps can access /sdcard with READ/WRITE_EXTERNAL_STORAGE permissions
-    let external_storage = PathBuf::from("/sdcard");
-    if external_storage.exists() {
-        // Symlink common user directories into HOME so the server can browse them
-        for dir_name in &["Documents", "Downloads", "projects", "Projects", "dev", "code"] {
-            let target = external_storage.join(dir_name);
-            let link = home_dir.join(dir_name);
-            if target.exists() && !link.exists() {
-                let _ = std::os::unix::fs::symlink(&target, &link);
-                log::debug!("[OpenCode] Symlinked {} -> {}", link.display(), target.display());
-            }
-        }
-        // Also create a "storage" link to the full /sdcard
-        let storage_link = home_dir.join("storage");
-        if !storage_link.exists() {
-            let _ = std::os::unix::fs::symlink(&external_storage, &storage_link);
-            log::debug!("[OpenCode] Symlinked {} -> {}", storage_link.display(), external_storage.display());
-        }
-    }
+    // External-storage symlinks live under $HOME/storage/ and are set up by
+    // MainActivity.setupStorageSymlinks() in Java via Os.symlink(). Doing it
+    // Java-side ensures the process FUSE mount namespace is the one resolving
+    // the targets, which matters once MANAGE_EXTERNAL_STORAGE is granted.
 
     // Kill any existing server
     if let Ok(mut guard) = SERVER_PROCESS.lock() {
@@ -262,6 +260,12 @@ pub async fn start_embedded_server(
         // toybox continues to provide ls/cat/etc. Busybox's added value is
         // richer applets (vi, nano, awk, sed implementations, less, etc.).
         ("libbusybox_exec.so", "busybox"),
+        // proot is bundled as a JNI lib so it benefits from nativeLibraryDir
+        // exec permission. Downloading proot at runtime to runtime/bin/ fails
+        // with EACCES because Android SELinux (targetSdk 29+) blocks exec of
+        // files written to app private data dir. Only .so files extracted to
+        // nativeLibraryDir by the installer get the exec label.
+        ("libproot_exec.so", "proot"),
     ];
     for (src_name, link_name) in &bin_links {
         let src = nlib_dir.join(src_name);
@@ -438,9 +442,76 @@ pub async fn start_embedded_server(
     // Keep it minimal — TERM, PATH, HOME are already set via PTY env vars.
     // Do NOT re-export ENV here (causes infinite source loop in mksh).
     let mkshrc_path = home_dir.join(".mkshrc");
-    // No false aliases: nano ≠ vi, htop ≠ top — user will get "command not
-    // found" if these tools aren't bundled, which is the honest behaviour.
-    let editor_aliases = "";
+
+    // Rootfs tool invocation via direct ld-musl loader — NOT proot.
+    //
+    // Why not proot: Android 13+ SELinux denies `execute_no_trans` on any
+    // file under `app_data_file` label. proot copies its internal helper
+    // (`prooted-XXX`) to PROOT_TMP_DIR (runtime/tmp, which has app_data_file
+    // label) and exec's it via ptrace → EACCES. Termux patches proot to
+    // work around this but that binary isn't in an easy-to-consume form.
+    //
+    // Alternative: invoke binaries via the musl dynamic linker directly.
+    // libmusl_linker.so is bundled in nativeLibraryDir (JNI lib) which has
+    // the `same_process_app_data_file` label and IS exec-allowed. The ld
+    // loader then mmap's (not exec's) the target binary from the rootfs,
+    // and mmap only needs READ — allowed under app_data_file for same UID.
+    //
+    // Syntax:
+    //   LD_LIBRARY_PATH=$rootfs/lib:$rootfs/usr/lib  libmusl_linker.so  $rootfs/usr/bin/git  "$@"
+    //
+    // Caveat: binaries that fork sub-binaries via execve (e.g. `git clone`
+    // → `git-remote-https`) still hit the same EACCES. Basic git (init,
+    // status, add, commit, log, diff, branch, checkout) uses internal
+    // functions only and works. Clone/push/fetch need additional work
+    // (bundle git-core binaries individually via the same trick, or ship
+    // a patched Termux proot later).
+    let ld_musl_path = nlib_dir.join("libmusl_linker.so");
+    let rootfs_path = dir.join("rootfs");
+    let rootfs_lib_path = format!(
+        "{}/lib:{}/usr/lib:{}/usr/libexec/git-core",
+        rootfs_path.display(),
+        rootfs_path.display(),
+        rootfs_path.display()
+    );
+    let musl_exec_path = rootfs_path.join("usr/lib/libmusl_exec.so");
+    let tools = [
+        "git", "nano", "less", "vim",
+        "make", "patch",
+        "tmux", "screen",
+        "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
+        "rsync", "wget",
+        "python3", "python", "node", "npm",
+        "jq", "tree", "htop", "fzf", "fd", "bat", "exa",
+    ];
+    let mut tool_fns = String::new();
+    // GIT_EXEC_PATH: git uses this to locate sub-binaries (git-remote-https etc.)
+    tool_fns.push_str(&format!(
+        "export GIT_EXEC_PATH=\"{rootfs}/usr/libexec/git-core\"\n",
+        rootfs = rootfs_path.display()
+    ));
+    for t in &tools {
+        // Top-level invocation: exec via musl linker (exec-allowed from nativeLibraryDir).
+        // LD_PRELOAD=libmusl_exec.so (musl-compiled, lives in rootfs) is injected so
+        // sub-forks (git-remote-https, pip subprocesses, npm scripts) also get
+        // redirected through the musl linker instead of hitting SELinux execute_no_trans.
+        // MUSL_LINKER env var tells libmusl_exec where to redirect execve calls.
+        // LD_LIBRARY_PATH lets the musl linker find Alpine shared libs at runtime.
+        tool_fns.push_str(&format!(
+            "{t}() {{ \
+                LD_LIBRARY_PATH=\"{libs}\" \
+                LD_PRELOAD=\"{musl_exec}\" \
+                MUSL_LINKER=\"{ld}\" \
+                \"{ld}\" \"{rootfs}/usr/bin/{t}\" \"$@\"; \
+            }}\n",
+            t = t,
+            ld = ld_musl_path.display(),
+            rootfs = rootfs_path.display(),
+            libs = rootfs_lib_path,
+            musl_exec = musl_exec_path.display(),
+        ));
+    }
+
     // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
     let mkshrc_content = format!(
         "# OpenCode mobile shell init\n\
@@ -451,7 +522,7 @@ alias la='ls -A --color=auto'\n\
 alias grep='grep --color=auto'\n\
 alias ..='cd ..'\n\
 alias cls='clear'\n\
-{editor_aliases}"
+{tool_fns}"
     );
     let _ = fs::write(&mkshrc_path, &mkshrc_content);
 
@@ -474,47 +545,15 @@ alias cls='clear'\n\
     let resolv_path = dir.join("resolv.conf");
     let _ = fs::write(&resolv_path, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n");
 
-    // Regenerate proot-run every launch when the Alpine rootfs is present.
-    // The wrapper bakes in the APK install path (nativeLibraryDir) which
-    // rotates on every upgrade — a stale wrapper points at a path that no
-    // longer exists and causes every proot invocation (git, nano, tmux…)
-    // to fail silently. install_extended_env writes this same file but is
-    // only called once per device; we need it to stay fresh after upgrades.
+    // Refresh rootfs /etc/resolv.conf every launch so git-http / wget / pip
+    // keep working after network changes or /tmp cleanup.
     let rootfs_dir = dir.join("rootfs");
     if rootfs_dir.exists() {
-        let proot_path = bin_link_dir.join("proot");
-        let proot_run_path = bin_link_dir.join("proot-run");
-        let proot_tmp_dir = dir.join("tmp");
-        let _ = fs::create_dir_all(&proot_tmp_dir);
-        // Also refresh the rootfs DNS config — if the user cleared /tmp or a
-        // prior install shipped with no /etc/resolv.conf, apk/git/etc will
-        // fail with "bad address" errors. Idempotent.
-        let rootfs_etc = rootfs_dir.join("etc");
-        let _ = fs::create_dir_all(&rootfs_etc);
+        let _ = fs::create_dir_all(rootfs_dir.join("etc"));
         let _ = fs::write(
-            rootfs_etc.join("resolv.conf"),
+            rootfs_dir.join("etc/resolv.conf"),
             "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
         );
-        let proot_run_content = format!(
-            "#!/bin/sh\n\
-export LD_LIBRARY_PATH=\"{lib_links}:{nlib}\"\n\
-export PROOT_TMP_DIR=\"{tmp}\"\n\
-mkdir -p \"$PROOT_TMP_DIR\"\n\
-exec {proot} \\\n  --rootfs={rootfs} \\\n  --bind={bin}:/usr/local/bin \\\n  --bind={nlib}:/usr/local/lib \\\n  --bind=/dev:/dev \\\n  --bind=/proc:/proc \\\n  --bind=/sys:/sys \\\n  -w /root \\\n  \"$@\"\n",
-            proot = proot_path.display(),
-            rootfs = rootfs_dir.display(),
-            bin = bin_link_dir.display(),
-            nlib = nlib_dir.display(),
-            lib_links = lib_link_dir.display(),
-            tmp = proot_tmp_dir.display(),
-        );
-        if fs::write(&proot_run_path, proot_run_content).is_ok() {
-            if let Ok(meta) = fs::metadata(&proot_run_path) {
-                let mut p = meta.permissions();
-                p.set_mode(0o755);
-                let _ = fs::set_permissions(&proot_run_path, p);
-            }
-        }
     }
 
     // Concatenate Android CA certificates into a single PEM file for TLS.
@@ -773,280 +812,100 @@ pub async fn stop_local_server(port: u32, password: Option<String>) -> Result<()
     Ok(())
 }
 
-/// Download and install the extended environment (proot + Alpine rootfs).
-/// This enables `apt install` for additional packages.
+/// Extract the pre-built Alpine rootfs from the bundled APK asset.
+/// Replaces the previous proot + runtime `apk add` approach which failed on
+/// Android 15 / HyperOS (SDK 36 strict SELinux: execute_no_trans denied on
+/// app_data_file for untrusted_app). The pre-built rootfs includes all dev
+/// tools + libmusl_exec.so (musl-compiled LD_PRELOAD hook for sub-fork fix).
 #[tauri::command]
 pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
+    log::info!("[install_ext] ENTRY");
     let dir = runtime_dir(&app);
     let rootfs_dir = dir.join("rootfs");
 
-    if rootfs_dir.exists() {
-        return Ok(()); // Already installed
+    // Health sentinels — all three must be present for a complete install:
+    //   git        : confirms apk packages were installed
+    //   ld-musl-*  : musl dynamic linker present (required to exec Alpine ELFs)
+    //   libmusl_exec.so : LD_PRELOAD sub-fork hook (absent in proot-era rootfs)
+    let git_bin   = rootfs_dir.join("usr/bin/git");
+    let ld_musl   = rootfs_dir.join("lib/ld-musl-aarch64.so.1");
+    let musl_exec = rootfs_dir.join("usr/lib/libmusl_exec.so");
+    let rootfs_exists = rootfs_dir.exists();
+    let complete = rootfs_exists && git_bin.exists() && ld_musl.exists() && musl_exec.exists();
+
+    log::info!(
+        "[install_ext] rootfs_exists={} git={} musl={} musl_exec={}",
+        rootfs_exists, git_bin.exists(), ld_musl.exists(), musl_exec.exists()
+    );
+
+    if complete {
+        log::info!("[install_ext] rootfs already complete, skip");
+        return Ok(());
     }
 
-    let nlib_dir = native_lib_dir(&dir)
-        .ok_or_else(|| "nativeLibraryDir not found".to_string())?;
-    let lib_link_dir = dir.join("lib_links");
-    let bin_link_dir = dir.join("bin");
-    let _ = fs::create_dir_all(&bin_link_dir);
+    // Wipe unhealthy/stale rootfs (proot-era or partial extract) and
+    // re-extract from the pre-built tar.gz. Safe: rootfs has no user state.
+    if rootfs_exists {
+        log::warn!("[install_ext] rootfs unhealthy or stale — wiping for fresh extract");
+        if let Err(e) = fs::remove_dir_all(&rootfs_dir) {
+            log::warn!("[install_ext] wipe failed: {} (continuing anyway)", e);
+        }
+    }
 
     let _ = app.emit(
         "extraction-progress",
         ExtractionProgress {
-            phase: "Downloading Alpine Linux rootfs...".to_string(),
+            phase: "Preparing rootfs...".to_string(),
             progress: 0.1,
         },
     );
 
-    // Download proot static binary. The original gitlab pages URL
-    // (proot.gitlab.io/proot/bin/proot-aarch64-static) is dead and returns
-    // HTML — the resulting "proot" binary is an HTML blob that syntax-errors
-    // when sh tries to exec it, causing every subsequent apk invocation to
-    // fail silently (proot error leaks as sh error, apk add reports "partial
-    // failure", rootfs stays base-only). Use the proot-me/proot GitHub
-    // releases which host real statically-linked binaries.
-    let proot_url =
-        "https://github.com/proot-me/proot/releases/download/v5.3.0/proot-v5.3.0-aarch64-static";
-    let proot_path = bin_link_dir.join("proot");
+    // rootfs.tar.gz is copied from APK assets by RuntimeExtractor.kt on first launch.
+    let rootfs_tar = dir.join("rootfs.tar.gz");
+    if !rootfs_tar.exists() {
+        return Err(
+            "rootfs.tar.gz not found in runtime dir. Reinstall the app.".to_string()
+        );
+    }
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .map_err(|e| format!("HTTP client: {}", e))?;
-
-    let proot_bytes = client
-        .get(proot_url)
-        .send()
-        .await
-        .map_err(|e| format!("Download proot: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Read proot: {}", e))?;
-
-    fs::write(&proot_path, &proot_bytes).map_err(|e| format!("Write proot: {}", e))?;
-    let mut perms = fs::metadata(&proot_path)
-        .map_err(|e| format!("metadata: {}", e))?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&proot_path, perms).map_err(|e| format!("chmod: {}", e))?;
-
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Downloading Alpine rootfs...".to_string(),
-            progress: 0.4,
-        },
-    );
-
-    // Download Alpine minirootfs
-    let alpine_url =
-        "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.3-aarch64.tar.gz";
-    let alpine_path = dir.join("alpine-rootfs.tar.gz");
-
-    let alpine_bytes = client
-        .get(alpine_url)
-        .send()
-        .await
-        .map_err(|e| format!("Download Alpine: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Read Alpine: {}", e))?;
-
-    fs::write(&alpine_path, &alpine_bytes).map_err(|e| format!("Write Alpine: {}", e))?;
-
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Extracting rootfs...".to_string(),
-            progress: 0.7,
-        },
-    );
-
-    // Extract rootfs — try system tar, then busybox
     fs::create_dir_all(&rootfs_dir).map_err(|e| format!("mkdir rootfs: {}", e))?;
 
+    let _ = app.emit(
+        "extraction-progress",
+        ExtractionProgress {
+            phase: "Unpacking pre-built rootfs (~80 MB, 30-60 s)...".to_string(),
+            progress: 0.3,
+        },
+    );
+
+    // Extract: entries in rootfs.tar.gz are relative (./usr/bin/git etc.)
+    // so tar extracts directly into rootfs_dir without needing --strip-components.
     let tar_bin = if Path::new("/system/bin/tar").exists() {
         "/system/bin/tar"
     } else {
         "tar"
     };
+    log::info!("[install_ext] extracting {} via {}", rootfs_tar.display(), tar_bin);
 
     let output = Command::new(tar_bin)
-        .args(["-xzf", alpine_path.to_str().unwrap_or("")])
+        .args(["-xzf", rootfs_tar.to_str().unwrap_or("")])
         .current_dir(&rootfs_dir)
         .output()
-        .map_err(|e| format!("Extract rootfs: {}", e))?;
+        .map_err(|e| format!("tar spawn: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "tar failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::info!("[install_ext] tar FAILED: {}", stderr);
+        return Err(format!("tar failed: {}", stderr));
     }
+    log::info!("[install_ext] rootfs extracted to {}", rootfs_dir.display());
 
-    fs::remove_file(&alpine_path).ok();
-
-    // Seed the rootfs with a working /etc/resolv.conf so apk, git-http, wget,
-    // ssh etc. can resolve DNS inside proot. Alpine minirootfs ships without
-    // one, and proot's sandbox hides the Android /etc tree — resulting in
-    // "bad address" errors during apk update / package fetch. We reuse the
-    // same public resolvers we wrote to the parent runtime's resolv.conf
-    // (see extract_runtime, line ~466) so both the host bun sidecar and
-    // the chrooted Alpine agree on name resolution.
-    let rootfs_etc = rootfs_dir.join("etc");
-    let _ = fs::create_dir_all(&rootfs_etc);
+    // Seed /etc/resolv.conf so git-http, wget, pip etc. can resolve DNS.
+    let _ = fs::create_dir_all(rootfs_dir.join("etc"));
     let _ = fs::write(
-        rootfs_etc.join("resolv.conf"),
+        rootfs_dir.join("etc/resolv.conf"),
         "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
     );
-
-    // Create proot-run wrapper script. Notes:
-    //  - PROOT_TMP_DIR must be exported: proot needs a writable tmp dir for
-    //    its shadow filesystem; without it every invocation errors with
-    //    "can't create temporary file: No such file or directory".
-    //  - mkdir -p is idempotent and cheap; keeps the wrapper self-healing
-    //    when /data/.../runtime/tmp gets cleaned.
-    //  - Copy host resolv.conf into the rootfs so apk/git/etc. can resolve
-    //    DNS — Alpine minirootfs ships without /etc/resolv.conf.
-    let wrapper = format!(
-        r#"#!/bin/sh
-export LD_LIBRARY_PATH="{lib_links}:{nlib}"
-export PROOT_TMP_DIR="{tmp}"
-mkdir -p "$PROOT_TMP_DIR"
-exec {proot} \
-  --rootfs={rootfs} \
-  --bind={bin}:/usr/local/bin \
-  --bind={nlib}:/usr/local/lib \
-  --bind=/dev:/dev \
-  --bind=/proc:/proc \
-  --bind=/sys:/sys \
-  -w /root \
-  "$@"
-"#,
-        proot = proot_path.display(),
-        rootfs = rootfs_dir.display(),
-        bin = bin_link_dir.display(),
-        nlib = nlib_dir.display(),
-        lib_links = lib_link_dir.display(),
-        tmp = dir.join("tmp").display(),
-    );
-
-    let wrapper_path = bin_link_dir.join("proot-run");
-    fs::write(&wrapper_path, wrapper).map_err(|e| format!("Write wrapper: {}", e))?;
-    let mut perms = fs::metadata(&wrapper_path)
-        .map_err(|e| format!("metadata: {}", e))?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&wrapper_path, perms).map_err(|e| format!("chmod: {}", e))?;
-
-    // ── apk install: advanced toolchain ───────────────────────────────
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Installing packages (nano, git, tmux, python, node, ...)".to_string(),
-            progress: 0.85,
-        },
-    );
-
-    // Comprehensive set of tools a developer expects. Roughly grouped:
-    // - Editors: nano, less, vim (Alpine vim is richer than toybox)
-    // - Dev: git, make, patch
-    // - Multiplexer: tmux, screen
-    // - Remote: openssh-client, rsync, wget, curl
-    // - Runtimes: python3, nodejs, npm
-    // - Modern UNIX: jq, tree, htop, fzf, fd, bat, exa, ripgrep
-    // - Misc: file, diffutils, findutils, sed, grep, gawk
-    let apk_packages = [
-        "nano", "less", "vim",
-        "git", "make", "patch",
-        "tmux", "screen",
-        "openssh-client", "rsync", "wget", "curl",
-        "python3", "nodejs", "npm",
-        "jq", "tree", "htop", "fzf", "fd", "bat", "exa", "ripgrep",
-        "file", "diffutils", "findutils", "gawk",
-        "ca-certificates",
-    ];
-
-    let rootfs_arg = format!("--rootfs={}", rootfs_dir.display());
-    let proot_common_args: Vec<&str> = vec![
-        rootfs_arg.as_str(),
-        "--bind=/dev",
-        "--bind=/proc",
-        "--bind=/sys",
-        "-w", "/root",
-    ];
-
-    // apk update (best effort — may fail on restricted networks, not fatal)
-    let update_out = Command::new(&proot_path)
-        .args(&proot_common_args)
-        .args(["/sbin/apk", "update"])
-        .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin")
-        .env("HOME", "/root")
-        .output();
-    if let Ok(out) = &update_out {
-        if !out.status.success() {
-            log::warn!(
-                "[OpenCode] apk update failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
-    }
-
-    // apk add <packages>
-    let mut apk_add_args: Vec<&str> = vec!["/sbin/apk", "add", "--no-cache"];
-    for p in &apk_packages { apk_add_args.push(p); }
-    let install_out = Command::new(&proot_path)
-        .args(&proot_common_args)
-        .args(&apk_add_args)
-        .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin")
-        .env("HOME", "/root")
-        .output()
-        .map_err(|e| format!("apk add: {}", e))?;
-    if !install_out.status.success() {
-        log::warn!(
-            "[OpenCode] apk add partial failure: {}\nstdout: {}",
-            String::from_utf8_lossy(&install_out.stderr),
-            String::from_utf8_lossy(&install_out.stdout)
-        );
-    }
-
-    // ── Create wrapper scripts in runtime/bin/ for installed tools ───
-    // Each wrapper invokes `proot-run <cmd> "$@"` so users can type the
-    // tool name naturally (nano, git, tmux...) instead of `proot-run nano`.
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Creating command wrappers...".to_string(),
-            progress: 0.95,
-        },
-    );
-
-    let tool_wrappers = [
-        "nano", "less", "vim",
-        "git", "make", "patch",
-        "tmux", "screen",
-        "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
-        "rsync", "wget",
-        "python3", "python", "node", "npm",
-        "jq", "tree", "htop", "fzf", "fd", "bat", "exa", "ripgrep",
-    ];
-    let proot_run_abs = wrapper_path.to_str().unwrap_or("proot-run");
-    for tool in &tool_wrappers {
-        let link = bin_link_dir.join(tool);
-        let _ = fs::remove_file(&link);
-        let wrapper_content = format!(
-            "#!/system/bin/sh\nexec {proot_run} /usr/bin/{tool} \"$@\"\n",
-            proot_run = proot_run_abs,
-            tool = tool,
-        );
-        if fs::write(&link, wrapper_content).is_ok() {
-            if let Ok(meta) = fs::metadata(&link) {
-                let mut p = meta.permissions();
-                p.set_mode(0o755);
-                let _ = fs::set_permissions(&link, p);
-            }
-        }
-    }
 
     let _ = app.emit(
         "extraction-progress",
@@ -1055,6 +914,24 @@ exec {proot} \
             progress: 1.0,
         },
     );
+
+    let final_git = git_bin.exists();
+    let final_exec = musl_exec.exists();
+    log::info!(
+        "[install_ext] DONE git={} libmusl_exec={}",
+        final_git, final_exec
+    );
+
+    if !final_git {
+        return Err(
+            "rootfs extracted but git is missing — rebuild APK with a fresh rootfs.tar.gz.".to_string()
+        );
+    }
+    if !final_exec {
+        return Err(
+            "rootfs extracted but libmusl_exec.so is missing — rebuild rootfs with build-alpine-rootfs.sh.".to_string()
+        );
+    }
 
     Ok(())
 }

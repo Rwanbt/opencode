@@ -15,13 +15,18 @@ else
   echo "Runtime binaries already prepared. Use prepare-android-runtime.sh to refresh."
 fi
 
-# Ensure ONNX Runtime shared library is available for Kokoro TTS
+# Ensure ONNX Runtime shared library is available for Kokoro TTS.
+# Version MUST match the one the Rust `ort` crate was built against. The
+# pinned crate version 2.0.0-rc.10 targets ORT 1.19.x — bundling 1.22.0
+# causes `dlopen failed: cannot locate symbol OrtGetApiBase` at launch
+# because the Android bionic linker doesn't resolve versioned symbols
+# across a DT_NEEDED gap (the .so exports OrtGetApiBase@@VERS_1.22.0 but
+# libopencode_mobile_lib.so's undefined reference is VERS_1.19.2).
 JNILIBS="$SCRIPT_DIR/../src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
-ORT_VERSION="1.22.0"
+ORT_VERSION="1.19.2"
 ORT_SO="$JNILIBS/libonnxruntime.so"
 if [ ! -f "$ORT_SO" ]; then
   echo "Downloading ONNX Runtime $ORT_VERSION for Android arm64..."
-  ORT_URL="https://github.com/nickel-org/nickel.rs/files/onnxruntime-android-arm64-v8a-${ORT_VERSION}.tar.gz"
   # Try Maven Central (official Qualcomm/Microsoft distribution)
   ORT_AAR_URL="https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar"
   mkdir -p "$JNILIBS"

@@ -19,6 +19,35 @@ echo "=== Preparing Android Runtime Binaries ==="
 echo "Output: $RUNTIME_DIR"
 echo ""
 
+# ─── Pre-built Alpine rootfs (via WSL) ───────────────────────────────
+# Chantier A: build a pre-populated Alpine aarch64 rootfs with all dev tools
+# + libmusl_exec.so (LD_PRELOAD hook for sub-fork SELinux bypass).
+# The tar.gz is bundled as an APK asset and extracted at first launch.
+echo "[0/5] Building pre-built Alpine rootfs (via WSL)..."
+ROOTFS_TAR="$RUNTIME_DIR/rootfs.tgz"
+if command -v wsl.exe &>/dev/null; then
+  # Running on Windows — delegate to WSL
+  SCRIPT_WSL="$(wsl.exe wslpath -a "$SCRIPT_DIR/build-alpine-rootfs.sh" 2>/dev/null || echo "")"
+  if [ -n "$SCRIPT_WSL" ]; then
+    wsl.exe bash "$SCRIPT_WSL"
+  else
+    echo "  WARNING: Could not resolve WSL path for build-alpine-rootfs.sh"
+    echo "  Run manually: wsl bash /mnt/d/App/OpenCode/opencode/packages/mobile/scripts/build-alpine-rootfs.sh"
+  fi
+elif command -v wsl &>/dev/null; then
+  # Running inside WSL directly
+  bash "$SCRIPT_DIR/build-alpine-rootfs.sh"
+else
+  echo "  WARNING: WSL not available. Build rootfs manually and place at:"
+  echo "    $ROOTFS_TAR"
+fi
+if [ -f "$ROOTFS_TAR" ]; then
+  echo "  rootfs.tar.gz: $(du -sh "$ROOTFS_TAR" | cut -f1)"
+else
+  echo "  WARNING: rootfs.tar.gz not found — APK will lack offline dev tools."
+fi
+echo ""
+
 # ─── Bun (aarch64-linux-musl, for Android Bionic compatibility) ──────
 echo "[1/6] Downloading Bun (aarch64-linux-musl)..."
 BUN_URL="https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64-musl.zip"
@@ -64,18 +93,15 @@ echo "  libstdc++: $(du -sh "$LIB_DIR/libstdc++.so.6" | cut -f1)"
 echo "  libgcc_s: $(du -sh "$LIB_DIR/libgcc_s.so.1" | cut -f1)"
 
 # ─── Git (static musl) ──────────────────────────────────────────────
-echo "[2/6] Downloading Git (aarch64-linux-musl static)..."
-GIT_URL="https://github.com/nicedoc/git-static/releases/latest/download/git-aarch64-linux-musl.tar.gz"
-if curl -fsSL "$GIT_URL" -o "$TEMP_DIR/git.tar.gz" 2>/dev/null; then
-  tar -xzf "$TEMP_DIR/git.tar.gz" -C "$TEMP_DIR"
-  # The archive may contain git in various locations
-  find "$TEMP_DIR" -name "git" -type f -executable | head -1 | xargs -I{} cp {} "$BIN_DIR/git"
-  chmod 755 "$BIN_DIR/git"
-  echo "  Git: $(du -sh "$BIN_DIR/git" | cut -f1)"
-else
-  echo "  WARNING: Git static binary not available, skipping."
-  echo "  Git operations will not be available on mobile."
-fi
+# Historically downloaded from nicedoc/git-static which is now 404/empty.
+# Replaced with apk add git inside the rootfs at runtime (install_extended_env)
+# which produces the same result without a second download path.
+# Kept as a no-op; the rootfs install is the source of truth.
+echo "[2/6] Git: bundled via Alpine apk in install_extended_env (skipped here)"
+
+# proot no longer bundled: replaced by pre-built rootfs + libmusl_exec.so
+# (LD_PRELOAD interposer compiled inside Alpine chroot).
+# libmusl_exec.so is included in rootfs.tar.gz at /usr/lib/libmusl_exec.so.
 
 # ─── Ripgrep (aarch64-linux-musl) ───────────────────────────────────
 echo "[3/6] Downloading Ripgrep (aarch64-linux-musl)..."
@@ -151,4 +177,21 @@ echo "=== Runtime Prepared ==="
 echo "Total size: $(du -sh "$RUNTIME_DIR" | cut -f1)"
 ls -lh "$BIN_DIR/"
 echo ""
-echo "Ready for: cargo tauri android build"
+
+# ─── Sync rootfs assets to Android assets dir ────────────────────────
+# tauri_build::build() only runs when Rust is recompiled (not on every
+# Gradle-only rebuild), so rootfs.tar.gz and rootfs_version.txt must be
+# copied manually to gen/android/app/src/main/assets/runtime/.
+ANDROID_ASSETS_DIR="$MOBILE_DIR/src-tauri/gen/android/app/src/main/assets/runtime"
+if [ -d "$ANDROID_ASSETS_DIR" ]; then
+  if [ -f "$RUNTIME_DIR/rootfs.tgz" ]; then
+    cp "$RUNTIME_DIR/rootfs.tgz" "$ANDROID_ASSETS_DIR/rootfs.tgz"
+    echo "Synced rootfs.tgz → Android assets ($(du -sh "$ANDROID_ASSETS_DIR/rootfs.tgz" | cut -f1))"
+  fi
+  if [ -f "$RUNTIME_DIR/rootfs_version.txt" ]; then
+    cp "$RUNTIME_DIR/rootfs_version.txt" "$ANDROID_ASSETS_DIR/rootfs_version.txt"
+    echo "Synced rootfs_version.txt → Android assets"
+  fi
+fi
+
+echo "Ready for: ORT_LIB_LOCATION=D:/tmp/ort-android bun tauri android build --target aarch64"
