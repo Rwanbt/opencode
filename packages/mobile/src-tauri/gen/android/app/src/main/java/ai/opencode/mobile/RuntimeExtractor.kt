@@ -64,9 +64,9 @@ object RuntimeExtractor {
 
     /**
      * Extract non-executable runtime files from APK assets.
-     * Executables (bun, bash, rg, musl libs) are now packaged as JNI libs
+     * Executables (bun, bash, rg, musl libs) are packaged as JNI libs
      * and installed by Android to nativeLibraryDir with execute permission.
-     * We only need to extract: opencode-cli.js, node_modules shims.
+     * We extract: opencode-cli.js, node_modules shims, wasm files, rootfs.tar.gz.
      * Returns empty string on success, error message on failure.
      */
     @JvmStatic
@@ -102,10 +102,56 @@ object RuntimeExtractor {
                 }
             } catch (_: Exception) {}
 
+            // Extract pre-built Alpine rootfs.tar.gz (version-guarded).
+            // The tar.gz (~80 MB) is only copied when the asset version changes,
+            // avoiding an expensive re-copy on every app start.
+            // Actual decompression into rootfs/ is done by install_extended_env (Rust)
+            // which checks health sentinels and skips if the rootfs is already complete.
+            extractRootfs(context, targetDir)
 
             return "" // success
         } catch (e: Exception) {
             return "Extraction failed: ${e.message}"
+        }
+    }
+
+    /**
+     * Copy rootfs.tgz from assets to targetDir as rootfs.tar.gz, guarded by a version file.
+     * The asset is named .tgz to avoid AAPT2 gunzipping .gz files during packaging.
+     * Version is read from assets/runtime/rootfs_version.txt (single line integer).
+     * Skips the copy if targetDir/.rootfs_version already matches.
+     */
+    @JvmStatic
+    private fun extractRootfs(context: Context, targetDir: String) {
+        val assetVersion = try {
+            context.assets.open("runtime/rootfs_version.txt").bufferedReader().readLine()?.trim() ?: "0"
+        } catch (_: Exception) {
+            android.util.Log.w("RuntimeExtractor", "rootfs_version.txt not found in assets, skipping rootfs extract")
+            return
+        }
+
+        val versionFile = File(targetDir, ".rootfs_version")
+        val installedVersion = if (versionFile.exists()) versionFile.readText().trim() else ""
+
+        if (installedVersion == assetVersion) {
+            android.util.Log.i("RuntimeExtractor", "rootfs.tgz up-to-date (v$assetVersion), skipping copy")
+            return
+        }
+
+        android.util.Log.i("RuntimeExtractor", "Copying rootfs.tgz (asset v$assetVersion, installed '$installedVersion')...")
+        val tarTarget = File(targetDir, "rootfs.tar.gz")
+        try {
+            context.assets.open("runtime/rootfs.tgz").use { input ->
+                tarTarget.outputStream().use { output ->
+                    input.copyTo(output, bufferSize = 1024 * 256) // 256 KB chunks
+                }
+            }
+            // Write version stamp AFTER successful copy so partial copies are re-tried.
+            versionFile.writeText(assetVersion)
+            android.util.Log.i("RuntimeExtractor", "rootfs.tgz copied (${tarTarget.length() / 1_048_576} MB)")
+        } catch (e: Exception) {
+            android.util.Log.e("RuntimeExtractor", "Failed to copy rootfs.tgz: ${e.message}")
+            // Non-fatal: install_extended_env will surface the error to the user.
         }
     }
 }

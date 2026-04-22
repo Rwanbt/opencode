@@ -82,7 +82,9 @@ android {
         // Don't compress runtime binaries — they're large ELF executables.
         // AAPT2 compresses assets by default; binaries don't compress well and
         // decompressing them at extract time wastes CPU.
-        noCompress += listOf("so.1", "so.6", "js")
+        // "tgz" = rootfs archive (renamed from .tar.gz to avoid AAPT2 gunzipping
+        // .gz assets and renaming them — .tgz is unknown to AAPT2 so it's stored intact).
+        noCompress += listOf("so.1", "so.6", "js", "tgz")
     }
 }
 
