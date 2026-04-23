@@ -185,6 +185,13 @@ pub async fn start_embedded_server(
     let _ = fs::create_dir_all(&home_dir);
     let _ = fs::create_dir_all(home_dir.join(".opencode"));
 
+    // App-private tmp dir for Node/Bun's os.tmpdir(). Android's rootfs `/` is
+    // read-only for sandboxed apps, so any module calling mkdirSync(os.tmpdir()
+    // + '/…') hits EROFS. Exporting TMPDIR (+ TMP/TEMP for cross-platform
+    // libs) redirects every tmpdir consumer into the app's writable cache.
+    let app_tmp_dir = home_dir.join(".cache").join("tmp");
+    let _ = fs::create_dir_all(&app_tmp_dir);
+
     // External-storage symlinks live under $HOME/storage/ and are set up by
     // MainActivity.setupStorageSymlinks() in Java via Os.symlink(). Doing it
     // Java-side ensures the process FUSE mount namespace is the one resolving
@@ -600,10 +607,11 @@ alias cls='clear'\n\
     // mobile-entry.ts reads this file and applies env vars at startup.
     let env_file = dir.join(".env_vars");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
         home = home_dir.display(),
         cert = ca_bundle_path.display(),
         resolv = resolv_path.display(),
+        tmp = app_tmp_dir.display(),
         // Use /system/bin/sh (Android's mksh, bionic-compiled) instead of the
         // statically-linked bash binary. Static bash uses its own libc fork()
         // which triggers Android's seccomp filter (SIGSYS/exitCode=159).
@@ -680,6 +688,9 @@ alias cls='clear'\n\
         .env("PATH", &path)
         .env("LD_LIBRARY_PATH", &lib_path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
+        .env("TMPDIR", app_tmp_dir.to_str().unwrap_or(""))
+        .env("TMP", app_tmp_dir.to_str().unwrap_or(""))
+        .env("TEMP", app_tmp_dir.to_str().unwrap_or(""))
         .env("EXTERNAL_STORAGE", "/sdcard")
         .env("OPENCODE_HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")

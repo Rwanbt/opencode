@@ -19,7 +19,20 @@ import { detectProfile, deriveConfig } from "./auto-config"
 const log = Log.create({ service: "local-llm-server" })
 
 const PORT = 14097
-const BASE_DIR = path.join(os.tmpdir(), `opencode-llm-${PORT}`)
+
+// Resolve the tmp base dir in a way that works on Android, where `/` is
+// read-only for sandboxed apps and `os.tmpdir()` returns the bionic default
+// "/tmp" regardless of environment. We honor TMPDIR/TMP/TEMP first (the
+// mobile runtime.rs sets these to an app-private cache), fall back to
+// $HOME/.cache/tmp when only HOME is set, and only use os.tmpdir() on
+// desktop where /tmp is writable.
+function resolveTmpDir(): string {
+  const envTmp = process.env.TMPDIR || process.env.TMP || process.env.TEMP
+  if (envTmp && envTmp.trim()) return envTmp.trim()
+  if (process.env.HOME) return path.join(process.env.HOME, ".cache", "tmp")
+  return os.tmpdir()
+}
+const BASE_DIR = path.join(resolveTmpDir(), `opencode-llm-${PORT}`)
 const REF_DIR = path.join(BASE_DIR, "refs")
 const OWNER_FILE = path.join(BASE_DIR, "owner.pid")
 const LOCK_FILE = path.join(BASE_DIR, "start.lock")
