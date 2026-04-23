@@ -187,6 +187,91 @@ const useTerminalUiBindings = (input: {
   input.container.addEventListener("pointerdown", input.handlePointerDown)
   input.cleanups.push(() => input.container.removeEventListener("pointerdown", input.handlePointerDown))
 
+  // --- mobile touch: drag-to-scroll (pointermove swipe detection) ---
+  // We do NOT intercept touchend or pointerup — Ghostty's internal
+  // `canvas.addEventListener("touchend", …)` handler is allowed to fire
+  // (it calls `textarea.focus()` which is the ONLY reliable way to attach
+  // the Android softkeyboard IME to the hidden textarea). Tap therefore
+  // behaves exactly as on HEAD (opens keyboard), and we only add a new
+  // pointermove-driven swipe gesture that scrolls the scrollback in place.
+  const MOBILE_SWIPE_THRESHOLD_PX = 8
+
+  type TouchMode = "pending" | "swipe"
+  let currentTouch: { id: number; x: number; y: number; mode: TouchMode; scrollApplied: number } | null = null
+
+  const mobileCharHeight = () => {
+    const rows = input.term.rows || 24
+    return Math.max(8, input.container.clientHeight / rows)
+  }
+
+  const onTouchDownCapture = (e: PointerEvent) => {
+    if (e.pointerType !== "touch" || currentTouch) return
+    currentTouch = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: "pending", scrollApplied: 0 }
+  }
+
+  const onTouchMoveCapture = (e: PointerEvent) => {
+    if (!currentTouch || e.pointerId !== currentTouch.id) return
+    const dy = e.clientY - currentTouch.y
+
+    if (currentTouch.mode === "pending") {
+      if (Math.hypot(e.clientX - currentTouch.x, dy) < MOBILE_SWIPE_THRESHOLD_PX) return
+      currentTouch.mode = "swipe"
+    }
+
+    // Swipe mode: consume the event so the surrounding app scroller does
+    // not also pan. ghostty clamps scrollLines at the buffer edges.
+    e.preventDefault()
+    e.stopPropagation()
+    // Drag-down = walking back in history = scroll UP (negative delta).
+    const targetRowsFromStart = Math.round(-dy / mobileCharHeight())
+    const delta = targetRowsFromStart - currentTouch.scrollApplied
+    if (delta === 0) return
+    input.term.scrollLines(delta)
+    currentTouch.scrollApplied = targetRowsFromStart
+  }
+
+  const onTouchEndOrCancel = (e: PointerEvent) => {
+    if (!currentTouch || e.pointerId !== currentTouch.id) return
+    currentTouch = null
+    // DO NOT preventDefault/stopPropagation here — Ghostty's native
+    // touchend handler on the canvas must still fire so the IME attaches
+    // correctly to the textarea. This is the lesson from the 2026-04-23
+    // regression where blocking touchend left the softkeyboard visually
+    // open but keystrokes never reached the textarea.
+  }
+
+  const touchCaptureOptions: AddEventListenerOptions = { capture: true }
+  const touchMoveOptions: AddEventListenerOptions = { capture: true, passive: false }
+  input.container.addEventListener("pointerdown", onTouchDownCapture, touchCaptureOptions)
+  input.container.addEventListener("pointermove", onTouchMoveCapture, touchMoveOptions)
+  input.container.addEventListener("pointerup", onTouchEndOrCancel, touchCaptureOptions)
+  input.container.addEventListener("pointercancel", onTouchEndOrCancel, touchCaptureOptions)
+  input.cleanups.push(() => {
+    input.container.removeEventListener("pointerdown", onTouchDownCapture, touchCaptureOptions)
+    input.container.removeEventListener("pointermove", onTouchMoveCapture, touchMoveOptions)
+    input.container.removeEventListener("pointerup", onTouchEndOrCancel, touchCaptureOptions)
+    input.container.removeEventListener("pointercancel", onTouchEndOrCancel, touchCaptureOptions)
+  })
+
+  // Prevent Ghostty's `canvas.addEventListener("touchend", g.focus())` ONLY
+  // when the gesture was a swipe — so scrolling never toggles the
+  // softkeyboard state. For taps (mode stays "pending"), we let touchend
+  // bubble to the canvas so Ghostty attaches the Android IME normally.
+  // This conditional block is safe where the v3.2 attempt (unconditional
+  // stopImmediatePropagation on touchend) was not.
+  const blockTouchEndIfSwipe = (e: TouchEvent) => {
+    if (currentTouch?.mode === "swipe") {
+      e.stopPropagation()
+    }
+  }
+  const touchBlockerOptions: AddEventListenerOptions = { capture: true, passive: true }
+  input.container.addEventListener("touchend", blockTouchEndIfSwipe, touchBlockerOptions)
+  input.container.addEventListener("touchcancel", blockTouchEndIfSwipe, touchBlockerOptions)
+  input.cleanups.push(() => {
+    input.container.removeEventListener("touchend", blockTouchEndIfSwipe, touchBlockerOptions)
+    input.container.removeEventListener("touchcancel", blockTouchEndIfSwipe, touchBlockerOptions)
+  })
+
   input.container.addEventListener("click", input.handleLinkClick, {
     capture: true,
   })
@@ -895,7 +980,7 @@ export const Terminal = (props: TerminalProps) => {
       classList={{
         ...(local.classList ?? {}),
         "select-text": true,
-        "size-full px-6 py-3 font-mono relative overflow-hidden": true,
+        "size-full px-6 py-3 font-mono relative overflow-hidden touch-none overscroll-contain": true,
         [local.class ?? ""]: !!local.class,
       }}
       {...others}
