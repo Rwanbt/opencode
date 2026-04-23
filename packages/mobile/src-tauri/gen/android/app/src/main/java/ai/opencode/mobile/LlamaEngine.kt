@@ -26,11 +26,16 @@ object LlamaEngine {
             System.loadLibrary("ggml-base")
             System.loadLibrary("ggml-cpu")
 
-            // Smart GPU backend selection based on device capabilities
-            // Vulkan 1.3+ (Adreno 730+/SD 8 Gen 1+) → Vulkan (fastest, most mature)
-            // Vulkan 1.1 (Adreno 6xx) → OpenCL only (Vulkan too slow on old drivers)
-            // No GPU → CPU fallback
-            val useVulkan = detectVulkanCapable()
+            // Smart GPU backend preload (for in-process JNI path; llama-server child
+            // process does its own linking via NEEDED deps).
+            // Inline detection: detectBestBackend() depends on nativeLibDir which is
+            // set by MainActivity AFTER this static init block runs.
+            // Vulkan 1.3+ (Adreno 730+/SD 8 Gen 1+) → ggml-vulkan.so preferred
+            // Vulkan 1.1 (Adreno 6xx) → ggml-opencl.so preferred
+            val soc = if (android.os.Build.VERSION.SDK_INT >= 31) android.os.Build.SOC_MODEL.lowercase() else ""
+            val useVulkan = soc.matches(Regex("sm(8[4-9]|9)\\d{2}.*")) ||
+                            soc.startsWith("mt698") || soc.startsWith("mt699") ||
+                            soc.startsWith("s5e9") || soc.startsWith("s5e84")
             if (useVulkan) {
                 try { System.loadLibrary("ggml-vulkan"); Log.i(TAG, "Vulkan backend loaded (preferred for this device)") } catch (_: UnsatisfiedLinkError) {
                     Log.w(TAG, "Vulkan load failed, trying OpenCL")
@@ -99,46 +104,110 @@ object LlamaEngine {
         }
     }
 
-    /** Detect if Vulkan is the preferred GPU backend for this device.
-     *  Vulkan 1.3+ devices (Adreno 730+) work well with Vulkan.
-     *  Older devices (Adreno 6xx, Vulkan 1.1) should use OpenCL. */
-    private fun detectVulkanCapable(): Boolean {
-        // Check Vulkan version from ActivityManager GPU info
-        try {
-            val vulkanVersion = android.app.ActivityManager.RunningAppProcessInfo().let {
-                // Use system property as a simpler approach
-                val prop = Runtime.getRuntime().exec("getprop ro.hardware.vulkan").inputStream.bufferedReader().readLine()?.trim() ?: ""
-                Log.i(TAG, "Vulkan hardware: $prop")
-                prop
-            }
-            // Adreno 730+ (SD 8 Gen 1+) → Vulkan capable
-            // Check via Android API level + hardware
-            val sdkVersion = android.os.Build.VERSION.SDK_INT
-            val board = android.os.Build.BOARD.lowercase()
-            val hardware = android.os.Build.HARDWARE.lowercase()
-            val soc = if (android.os.Build.VERSION.SDK_INT >= 31) android.os.Build.SOC_MODEL.lowercase() else ""
-            Log.i(TAG, "Device: board=$board, hardware=$hardware, soc=$soc, sdk=$sdkVersion")
+    /** Detect the best inference backend for this device.
+     *  Three tiers, in order of preference:
+     *  - VULKAN: Adreno 730+ (SD 8 Gen 1+), Dimensity 9000+, Exynos 2200+
+     *  - OPENCL: Adreno 6xx (SD 8xx pre-Gen1, SD 7xxG) — Vulkan 1.1 too weak
+     *  - CPU: unknown / validation failures
+     *
+     *  User override: env var OPENCODE_LLAMA_BACKEND=auto|vulkan|opencl|cpu */
+    private fun detectBestBackend(): Backend {
+        val override = System.getenv("OPENCODE_LLAMA_BACKEND")?.lowercase()
+        when (override) {
+            "cpu"    -> { Log.i(TAG, "Backend override: CPU"); return Backend.CPU }
+            "vulkan" -> { Log.i(TAG, "Backend override: VULKAN"); return Backend.VULKAN }
+            "opencl" -> { Log.i(TAG, "Backend override: OPENCL"); return Backend.OPENCL }
+            "auto", null -> {}
+            else -> Log.w(TAG, "Unknown OPENCODE_LLAMA_BACKEND='$override', ignoring")
+        }
 
-            // Snapdragon 8 Gen 1+ (SM8450+) have Adreno 730+ with good Vulkan
-            // SM8450=SD8Gen1, SM8475=SD8+Gen1, SM8550=SD8Gen2, SM8650=SD8Gen3
-            val modernSnapdragon = soc.contains("sm8") && !soc.contains("sm8150") && !soc.contains("sm8250") && !soc.contains("sm8350")
-            if (modernSnapdragon) {
-                Log.i(TAG, "Modern Snapdragon detected ($soc) — using Vulkan")
-                return true
-            }
+        val sdkVersion = android.os.Build.VERSION.SDK_INT
+        val soc = if (sdkVersion >= 31) android.os.Build.SOC_MODEL.lowercase() else ""
+        val board = android.os.Build.BOARD.lowercase()
+        val hardware = android.os.Build.HARDWARE.lowercase()
+        Log.i(TAG, "Device: board=$board, hardware=$hardware, soc=$soc, sdk=$sdkVersion")
 
-            // Dimensity 9000+ (MT6983+), Exynos 2200+ also have good Vulkan
-            if (soc.contains("mt698") || soc.contains("mt699") || soc.contains("s5e9") || soc.contains("s5e8")) {
-                Log.i(TAG, "Modern SoC detected ($soc) — using Vulkan")
-                return true
-            }
+        // Vulkan tier: modern Snapdragon (SM8450+, SM8650+), Dimensity 9000+, Exynos 2200+
+        val modernSnapdragon = soc.matches(Regex("sm(8[4-9]|9)\\d{2}.*"))
+        val modernDimensity  = soc.startsWith("mt698") || soc.startsWith("mt699")
+        val modernExynos     = soc.startsWith("s5e9") || soc.startsWith("s5e84")
+        if (modernSnapdragon || modernDimensity || modernExynos) {
+            Log.i(TAG, "Modern SoC ($soc) → VULKAN backend")
+            return Backend.VULKAN
+        }
 
-            Log.i(TAG, "Older SoC ($soc) — using OpenCL")
-            return false
-        } catch (e: Exception) {
-            Log.w(TAG, "GPU detection failed: ${e.message}, defaulting to OpenCL")
+        // OpenCL tier: SD 8xx pre-Gen1 (SM8150/SM8250/SM8350), SD 7xxG (SM7250/SM7325)
+        val openclCapableSnapdragon = soc.matches(Regex("sm(8[1-3]|7[2-3])\\d{2}.*"))
+        if (openclCapableSnapdragon) {
+            if (verifyOpenclLib()) {
+                Log.i(TAG, "Adreno 6xx SoC ($soc) with valid OpenCL binary → OPENCL backend")
+                return Backend.OPENCL
+            }
+            Log.w(TAG, "Adreno 6xx SoC ($soc) but OpenCL binary invalid/missing → CPU fallback")
+        }
+
+        Log.i(TAG, "No validated GPU backend for SoC ($soc) → CPU backend")
+        return Backend.CPU
+    }
+
+    /** Validate that libllama_server_opencl.so exists and has an ELF header.
+     *  Deep validation (symbol check, dlopen) happens at startServer time. */
+    private fun verifyOpenclLib(): Boolean {
+        val libDir = nativeLibDir ?: return false
+        val lib = java.io.File(libDir, "libllama_server_opencl.so")
+        if (!lib.exists() || lib.length() < 1_000_000) {
+            Log.w(TAG, "libllama_server_opencl.so missing or too small (${if (lib.exists()) lib.length() else -1} bytes)")
             return false
         }
+        return try {
+            java.io.RandomAccessFile(lib, "r").use { raf ->
+                val magic = ByteArray(4); raf.readFully(magic)
+                val ok = magic[0] == 0x7F.toByte() && magic[1] == 'E'.code.toByte() &&
+                        magic[2] == 'L'.code.toByte() && magic[3] == 'F'.code.toByte()
+                if (!ok) Log.w(TAG, "libllama_server_opencl.so is not an ELF file")
+                ok
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read libllama_server_opencl.so header: ${e.message}")
+            false
+        }
+    }
+
+    /** Compute a safe --n-gpu-layers value.
+     *  - CPU backend: 0 (no offload)
+     *  - VULKAN: 99 (full offload; Vulkan 1.3 handles VRAM allocation itself)
+     *  - OPENCL: Adreno shares RAM with CPU — budget 35% of total RAM.
+     *    Measured on Mi 10 Pro (SM8250, 8GB RAM): ngl=20 hits sweet spot
+     *    (prefill 10.6 tok/s). Bumping budget to 50% (ngl=29) causes mmap
+     *    thrashing (MemFree<100MB, zRAM swap) and degrades to 4.5/3.8 tok/s. */
+    private fun adaptiveNgl(modelSizeMB: Long, backend: Backend): Int {
+        if (backend == Backend.CPU) return 0
+        if (backend == Backend.VULKAN) return 99
+
+        val totalRamMB = totalSystemRamMB()
+        val budgetMB = (totalRamMB * 35 / 100)
+        // Rough bytes-per-layer estimate: gemma-4-E4B (4.7 GB, 36 layers) ≈ 130 MB/layer Q4_K_M.
+        // Use 36 as a safe default layer count — overestimates for bigger models (→ smaller ngl, safer).
+        val bytesPerLayerMB = (modelSizeMB / 36L).coerceAtLeast(100L)
+        val maxLayers = (budgetMB / bytesPerLayerMB).toInt().coerceIn(8, 99)
+        Log.i(TAG, "Adaptive ngl: totalRam=${totalRamMB}MB, budget=${budgetMB}MB, bytesPerLayer=${bytesPerLayerMB}MB → ngl=$maxLayers")
+        return maxLayers
+    }
+
+    /** Read total system RAM from /proc/meminfo (MemTotal). */
+    private fun totalSystemRamMB(): Long {
+        try {
+            val meminfo = java.io.File("/proc/meminfo").readText()
+            for (line in meminfo.lines()) {
+                if (line.startsWith("MemTotal:")) {
+                    val kb = line.replace(Regex("[^0-9]"), "").toLongOrNull() ?: 0
+                    return kb / 1024
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read MemTotal: ${e.message}")
+        }
+        return 4096L  // Conservative fallback
     }
 
     /** Store the native library directory so backends can be loaded from it */
@@ -146,23 +215,29 @@ object LlamaEngine {
     var nativeLibDir: String? = null
 
     /** Initialize the llama backend (call once at startup).
-     *  Disables the unwanted GPU backend via env var before loading. */
+     *  Picks the best backend (Vulkan/OpenCL/CPU) and gates ggml env vars accordingly. */
     fun init() {
         if (!initialized) {
-            val preferVulkan = detectVulkanCapable()
-            if (preferVulkan) {
-                // Modern SoC (Adreno 730+): use Vulkan GPU, disable OpenCL
-                setenv("GGML_DISABLE_OPENCL", "1")
-                Log.i(TAG, "Disabling OpenCL backend (Vulkan preferred)")
-            } else {
-                // Older SoC (Adreno 6xx): GPU too slow for LLM, disable BOTH backends → pure CPU
-                setenv("GGML_DISABLE_VULKAN", "1")
-                setenv("GGML_DISABLE_OPENCL", "1")
-                Log.i(TAG, "Disabling all GPU backends (CPU-only mode, faster on old SoCs)")
+            val backend = detectBestBackend()
+            selectedBackend = backend
+            when (backend) {
+                Backend.VULKAN -> {
+                    setenv("GGML_DISABLE_OPENCL", "1")
+                    Log.i(TAG, "Backend init: VULKAN (OpenCL disabled)")
+                }
+                Backend.OPENCL -> {
+                    setenv("GGML_DISABLE_VULKAN", "1")
+                    setenv("GGML_OPENCL_PLATFORM", "QUALCOMM")
+                    Log.i(TAG, "Backend init: OPENCL (Qualcomm platform pinned)")
+                }
+                Backend.CPU -> {
+                    setenv("GGML_DISABLE_VULKAN", "1")
+                    setenv("GGML_DISABLE_OPENCL", "1")
+                    Log.i(TAG, "Backend init: CPU (all GPU backends disabled)")
+                }
             }
             initBackend()
             initialized = true
-            Log.i(TAG, "Backend initialized (${if (preferVulkan) "Vulkan" else "CPU-only"})")
         }
     }
 
@@ -228,9 +303,15 @@ object LlamaEngine {
     private var serverProcess: Process? = null
 
     /** GPU backend selection result.
-     *  OpenCL intentionally omitted: the _opencl.so variant is an unvalidated
-     *  orphan artifact (no build script, no test). Older SoCs fall back to CPU. */
-    private enum class Backend { CPU, VULKAN }
+     *  Each backend has its own llama-server binary with explicit GPU NEEDED deps:
+     *  - CPU    → libllama_server.so         (no GPU NEEDED)
+     *  - VULKAN → libllama_server_vulkan.so  (NEEDED libggml-vulkan.so)
+     *  - OPENCL → libllama_server_opencl.so  (NEEDED libggml-opencl.so, Adreno kernels) */
+    enum class Backend { CPU, VULKAN, OPENCL }
+
+    /** Persisted backend choice from init(), consumed by load()/startServer(). */
+    @JvmField
+    var selectedBackend: Backend = Backend.CPU
 
     /** Load a GGUF model via external llama-server process.
      *  Backend selection (empirically validated on mobile):
@@ -240,20 +321,16 @@ object LlamaEngine {
      *    Vulkan via libllama_server.so (built with -DGGML_VULKAN=ON).
      *  - Large models on older SoCs: CPU NEON/dotprod (slower but functional). */
     fun load(modelPath: String, contextSize: Int = 4096, threads: Int = 4): Boolean {
-        init()
+        init()  // sets selectedBackend
         stopServer()
 
         val modelFile = java.io.File(modelPath)
         val modelSizeMB = modelFile.length() / (1024 * 1024)
-        val isLargeModel = modelSizeMB > 1500  // >1.5GB ~ >2B params quantized
-        val vulkanCapable = detectVulkanCapable()
+        val isSmallModel = modelSizeMB < 1500  // <1.5GB ~ <2B params quantized
 
-        val backend = when {
-            !isLargeModel -> Backend.CPU
-            vulkanCapable -> Backend.VULKAN
-            else -> Backend.CPU  // older SoC: CPU fallback (no OpenCL)
-        }
-        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), vulkanCapable=$vulkanCapable, backend=$backend")
+        // Small models: CPU NEON/dotprod beats GPU offload overhead empirically.
+        val backend = if (isSmallModel) Backend.CPU else selectedBackend
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend")
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
@@ -320,7 +397,27 @@ object LlamaEngine {
         Log.i(TAG, "Model unloaded")
     }
 
+    /** Outer entry point: picks effective backend (via circuit breaker) and
+     *  falls back to CPU if the GPU backend fails to boot. */
     private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig()): Boolean {
+        val effective = if (BackendCircuitBreaker.isDisabled(backend)) {
+            Log.w(TAG, "Backend $backend temporarily disabled (recent failures) → CPU")
+            Backend.CPU
+        } else backend
+
+        if (tryStartServer(modelPath, ctxSize, effective, config)) return true
+
+        // First attempt failed — record and fall back to CPU if we weren't already.
+        BackendCircuitBreaker.recordFailure(effective)
+        if (effective == Backend.CPU) {
+            Log.e(TAG, "CPU backend failed to start — no fallback left")
+            return false
+        }
+        Log.w(TAG, "Backend $effective failed → retrying with CPU fallback")
+        return tryStartServer(modelPath, ctxSize, Backend.CPU, config)
+    }
+
+    private fun tryStartServer(modelPath: String, ctxSize: Int, backend: Backend, config: LlmConfig): Boolean {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -344,12 +441,18 @@ object LlamaEngine {
             }
             val nativeLibDir = libDir
 
-            // Only libllama_server.so is produced by the build scripts
-            // (packages/mobile/scripts/build-llama-server.sh with -DGGML_VULKAN=ON).
-            // The _vulkan / _opencl / _modern variants are unvalidated orphan artifacts.
-            val serverBin = java.io.File(nativeLibDir, "libllama_server.so")
-            if (!serverBin.exists()) {
-                Log.w(TAG, "No llama-server binary found at ${serverBin.absolutePath}")
+            // Backend-specific binary. Each variant has explicit NEEDED GPU lib:
+            //   libllama_server.so         → libggml-cpu  (CPU backend)
+            //   libllama_server_vulkan.so  → libggml-vulkan
+            //   libllama_server_opencl.so  → libggml-opencl (Adreno 6xx kernels)
+            val binName = when (backend) {
+                Backend.OPENCL -> "libllama_server_opencl.so"
+                Backend.VULKAN -> "libllama_server_vulkan.so"
+                Backend.CPU    -> "libllama_server.so"
+            }
+            val serverBin = java.io.File(nativeLibDir, binName)
+            if (!serverBin.exists() || !serverBin.canExecute()) {
+                Log.w(TAG, "Binary $binName missing or not executable at ${serverBin.absolutePath}")
                 return false
             }
             Log.i(TAG, "Selected server binary: ${serverBin.name} (backend=$backend)")
@@ -357,10 +460,13 @@ object LlamaEngine {
             val homeDir = java.io.File(modelPath).parentFile?.parentFile?.let { java.io.File(it, "home") }
             homeDir?.mkdirs()
 
-            // GPU layer offload — only when using a GPU backend.
-            // CPU backend must use ngl=0 (no GPU transfer overhead).
+            // GPU layer offload — adaptive per backend.
+            //  - CPU:    0 layers (no GPU transfer overhead)
+            //  - VULKAN: 99 (Vulkan 1.3+ handles VRAM internally)
+            //  - OPENCL: budget 35% of RAM (Adreno shares memory with CPU → OOM risk)
             val useGpu = backend != Backend.CPU
-            val ngl = if (useGpu) "99" else "0"
+            val modelSizeMB = java.io.File(modelPath).length() / (1024 * 1024)
+            val ngl = adaptiveNgl(modelSizeMB, backend).toString()
 
             // Offload mode → -fitt value (MiB free headroom, GPU only)
             val fittHeadroom = when (config.offloadMode) {
