@@ -597,11 +597,19 @@ object LlamaEngine {
                 return false
             }
             service.updateNotification("OpenCode", "Loading ${java.io.File(modelPath).name}…")
-            val envOverrides = mapOf(
+            val envOverrides = mutableMapOf(
                 "HOME" to (homeDir?.absolutePath ?: "/tmp"),
                 "TMPDIR" to (homeDir?.absolutePath ?: "/tmp"),
                 "LD_LIBRARY_PATH" to "$nativeLibDir:/vendor/lib64:/system/vendor/lib64"
             )
+            // OpenCL backend init hints (llama.cpp ggml-opencl reads these before
+            // clCreateContext). Propagating via envOverrides guarantees the child
+            // inherits them, independent of JVM setenv timing.
+            if (backend == Backend.OPENCL) {
+                envOverrides["GGML_OPENCL_PLATFORM"] = "QUALCOMM"
+                envOverrides["GGML_OPENCL_DEVICE"] = "0"
+                envOverrides["GGML_OPENCL_ADRENO_USE_LARGE_BUFFER"] = "1"
+            }
             val spawned = service.spawnServer(args, envOverrides)
             if (spawned == null) {
                 Log.e(TAG, "LlamaService.spawnServer returned null")
