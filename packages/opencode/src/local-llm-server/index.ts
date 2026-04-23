@@ -32,10 +32,23 @@ function resolveTmpDir(): string {
   if (process.env.HOME) return path.join(process.env.HOME, ".cache", "tmp")
   return os.tmpdir()
 }
-const BASE_DIR = path.join(resolveTmpDir(), `opencode-llm-${PORT}`)
-const REF_DIR = path.join(BASE_DIR, "refs")
-const OWNER_FILE = path.join(BASE_DIR, "owner.pid")
-const LOCK_FILE = path.join(BASE_DIR, "start.lock")
+
+// Paths are lazily initialized. On mobile, mobile-entry.ts loads .env_vars
+// AFTER this module's top-level code has run; capturing resolveTmpDir()
+// eagerly would bake in "/tmp" and crash at the first mkdirSync.
+let BASE_DIR = ""
+let REF_DIR = ""
+let OWNER_FILE = ""
+let LOCK_FILE = ""
+let _pathsReady = false
+function initPaths(): void {
+  if (_pathsReady) return
+  BASE_DIR = path.join(resolveTmpDir(), `opencode-llm-${PORT}`)
+  REF_DIR = path.join(BASE_DIR, "refs")
+  OWNER_FILE = path.join(BASE_DIR, "owner.pid")
+  LOCK_FILE = path.join(BASE_DIR, "start.lock")
+  _pathsReady = true
+}
 
 const STARTUP_TIMEOUT_MS = 120_000
 const LOCK_ACQUIRE_TIMEOUT_MS = 150_000
@@ -246,10 +259,12 @@ export namespace LocalLLMServer {
   // ── Ref files & cleanup ───────────────────────────────────────────────────
 
   function ensureBaseDirs() {
+    initPaths()
     fs.mkdirSync(REF_DIR, { recursive: true })
   }
 
   function refPath(pid = process.pid) {
+    initPaths()
     return path.join(REF_DIR, `${pid}.ref`)
   }
 
@@ -303,6 +318,7 @@ export namespace LocalLLMServer {
   }
 
   function readOwner(): { ownerPid: number; childPid: number } | null {
+    initPaths()
     try {
       const raw = fs.readFileSync(OWNER_FILE, "utf8").trim()
       const [ownerStr, childStr] = raw.split(":")
@@ -346,6 +362,7 @@ export namespace LocalLLMServer {
    *   - Owner vivant → ne rien faire (il gère son cycle de vie, ex: Tauri idle-unload)
    */
   function syncCleanup() {
+    if (!_pathsReady) return
     try {
       fs.unlinkSync(refPath())
     } catch {}
@@ -434,6 +451,7 @@ export namespace LocalLLMServer {
   // ── Spawn helpers ─────────────────────────────────────────────────────────
 
   function buildArgs(modelPath: string): string[] {
+    initPaths()
     // deriveConfig picks GPU layers / threads / batch / KV quant based on
     // the running device (see auto-config.ts). Env overrides remain available
     // for advanced users who want to pin a specific value.
@@ -749,6 +767,42 @@ export namespace LocalLLMServer {
     modelID: string,
     signal?: AbortSignal,
   ): Promise<void> {
+    // On Android, LlamaService (Kotlin/JNI) owns the llama-server lifecycle:
+    // it spawns libllama_server.so, loads the model, and serves HTTP on 14097.
+    // The bun sidecar must not try to spawn its own llama-server — the desktop
+    // runtime dir (~/.local/share/ai.opencode.desktop/llama-runtime/) doesn't
+    // exist on-device, so findRuntimeDir()/findModelFile() would fail with
+    // "Runtime or model not found", even though the JNI server is healthy.
+    // But we still need to block here until the model has finished loading,
+    // otherwise the caller hits /v1/chat/completions too early and gets 503
+    // `{"status":"loading"}` which the AI SDK gives up on after 3 retries.
+    if (process.env.OPENCODE_CLIENT === "mobile-embedded") {
+      log.info("mobile-embedded: waiting for JNI llama-server to report ready")
+      const t0 = Date.now()
+      while (Date.now() - t0 < STARTUP_TIMEOUT_MS) {
+        if (signal?.aborted) throw new Error("[LocalLLMServer] Cancelled waiting for mobile JNI")
+        try {
+          const res = await fetch(`http://127.0.0.1:${PORT}/health`, {
+            signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+          })
+          if (res.ok) {
+            // LlamaHttpServer returns {"status":"ok"} when ready, {"status":"loading"} while the model streams in
+            const data = (await res.json().catch(() => ({}))) as { status?: string }
+            if (data.status === "ok") {
+              log.info("mobile JNI ready", { elapsed: Date.now() - t0 })
+              return
+            }
+          }
+        } catch {
+          // connection refused / timeout → retry
+        }
+        await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS))
+      }
+      throw new Error(
+        `[LocalLLMServer] Mobile JNI llama-server did not become ready within ${STARTUP_TIMEOUT_MS}ms`,
+      )
+    }
+    initPaths()
     pruneStaleRefs()
 
     // Single-flight : si un démarrage est en cours dans ce process, attendre
