@@ -216,11 +216,6 @@ const useTerminalUiBindings = (input: {
     if (currentTouch.mode === "pending") {
       if (Math.hypot(e.clientX - currentTouch.x, dy) < MOBILE_SWIPE_THRESHOLD_PX) return
       currentTouch.mode = "swipe"
-      // Blur the textarea so the softkeyboard closes during scroll — the
-      // user wants to see the scrollback, not type. Re-opening it is one
-      // tap away (tap the terminal or the toolbar's ⌨ button).
-      const ta = input.term.textarea
-      if (ta && document.activeElement === ta) ta.blur()
     }
 
     // Swipe mode: consume the event so the surrounding app scroller does
@@ -256,6 +251,25 @@ const useTerminalUiBindings = (input: {
     input.container.removeEventListener("pointermove", onTouchMoveCapture, touchMoveOptions)
     input.container.removeEventListener("pointerup", onTouchEndOrCancel, touchCaptureOptions)
     input.container.removeEventListener("pointercancel", onTouchEndOrCancel, touchCaptureOptions)
+  })
+
+  // Prevent Ghostty's `canvas.addEventListener("touchend", g.focus())` ONLY
+  // when the gesture was a swipe — so scrolling never toggles the
+  // softkeyboard state. For taps (mode stays "pending"), we let touchend
+  // bubble to the canvas so Ghostty attaches the Android IME normally.
+  // This conditional block is safe where the v3.2 attempt (unconditional
+  // stopImmediatePropagation on touchend) was not.
+  const blockTouchEndIfSwipe = (e: TouchEvent) => {
+    if (currentTouch?.mode === "swipe") {
+      e.stopPropagation()
+    }
+  }
+  const touchBlockerOptions: AddEventListenerOptions = { capture: true, passive: true }
+  input.container.addEventListener("touchend", blockTouchEndIfSwipe, touchBlockerOptions)
+  input.container.addEventListener("touchcancel", blockTouchEndIfSwipe, touchBlockerOptions)
+  input.cleanups.push(() => {
+    input.container.removeEventListener("touchend", blockTouchEndIfSwipe, touchBlockerOptions)
+    input.container.removeEventListener("touchcancel", blockTouchEndIfSwipe, touchBlockerOptions)
   })
 
   input.container.addEventListener("click", input.handleLinkClick, {
