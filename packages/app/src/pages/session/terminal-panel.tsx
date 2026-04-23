@@ -139,6 +139,19 @@ function TerminalMobileToolbar(props: {
       >
         Alt
       </button>
+      <button
+        type="button"
+        class={`${btnBase} ${btnNormal}`}
+        aria-label="Ouvrir le clavier"
+        onPointerDown={(e) => {
+          e.preventDefault()
+          const id = props.activeId()
+          if (!id) return
+          focusTerminalTextarea(id)
+        }}
+      >
+        ⌨
+      </button>
       <For each={keys}>
         {(k) => (
           <button
