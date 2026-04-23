@@ -188,6 +188,37 @@ function App() {
   })
 
   onMount(() => {
+    // Keyboard-aware viewport: expose `--vvh` (visual viewport height) as
+    // a CSS custom property so `#root` never exceeds the actually-visible
+    // area when the Android softkeyboard is open. Chromium WebView's `dvh`
+    // unit is unreliable on MIUI (doesn't always update on IME toggle, or
+    // updates with lag when the user refocuses an input), which leaves
+    // flex children at the bottom of the root — like the TerminalPanel —
+    // partially or fully hidden under the keyboard. `visualViewport` is
+    // the authoritative source and fires `resize` reliably on all touch
+    // flows we care about.
+    if (typeof window === "undefined") return
+    const vp = window.visualViewport
+    const sync = () => {
+      const h = vp?.height ?? window.innerHeight
+      document.documentElement.style.setProperty("--vvh", `${h}px`)
+    }
+    sync()
+    if (vp) {
+      vp.addEventListener("resize", sync)
+      vp.addEventListener("scroll", sync)
+    }
+    window.addEventListener("resize", sync)
+    onCleanup(() => {
+      if (vp) {
+        vp.removeEventListener("resize", sync)
+        vp.removeEventListener("scroll", sync)
+      }
+      window.removeEventListener("resize", sync)
+    })
+  })
+
+  onMount(() => {
     // Cold-start: the app may have been launched *by* a deep link intent.
     void getCurrentDeepLink()
       .then((urls) => {

@@ -297,10 +297,16 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 /* When the Android soft keyboard is up the visual viewport shrinks.
    We rely on `height: 100dvh` in index.html plus these tweaks.           */
 
-/* The root flex column must not exceed visual viewport */
+/* The root flex column must not exceed visual viewport. We pin the height
+   to `--vvh` (set from `visualViewport.height` in entry.tsx) instead of
+   `100dvh`, because Chromium WebView's `dvh` unit is unreliable on MIUI:
+   it doesn't always update when the softkeyboard opens via a programmatic
+   focus, leaving the TerminalPanel (bottom of the flex-col) pushed under
+   the keyboard. `--vvh` is refreshed on every `visualViewport.resize`,
+   which fires reliably on IME toggle, orientation change, and scroll. */
 #root {
-  height: 100dvh !important;
-  max-height: 100dvh !important;
+  height: var(--vvh, 100dvh) !important;
+  max-height: var(--vvh, 100dvh) !important;
   overflow: hidden !important;
 }
 
