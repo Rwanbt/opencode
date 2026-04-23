@@ -54,6 +54,28 @@ export function isRecommendedFor(model: CatalogModel, profile: DeviceProfile): b
 
 export const MODEL_CATALOG: CatalogModel[] = [
   {
+    id: "gemma-4-e4b",
+    name: "Gemma 4 E4B",
+    description: "Google's latest expert — 131K context, 140+ languages, best quality locally",
+    size: "5.0 GB",
+    sizeBytes: 4_977_169_088,
+    url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
+    filename: "gemma-4-E4B-it-Q4_K_M.gguf",
+    minRamGB: 8,
+    deviceClass: "flagship",
+  },
+  {
+    id: "gemma-4-e2b",
+    name: "Gemma 4 E2B",
+    description: "Gemma 4 at half capacity — fits standard devices (6 GB+ RAM)",
+    size: "3.1 GB",
+    sizeBytes: 3_106_735_776,
+    url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
+    filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+    minRamGB: 6,
+    deviceClass: "standard",
+  },
+  {
     id: "gemma-3-4b",
     name: "Gemma 3 4B",
     description: "Google's previous-gen small model — multilingual, great quality",
@@ -107,17 +129,6 @@ export const MODEL_CATALOG: CatalogModel[] = [
     filename: "gemma-3-1b-it-Q4_K_M.gguf",
     minRamGB: 2,
     deviceClass: "eco",
-  },
-  {
-    id: "gemma-3-4b",
-    name: "Gemma 3 4B",
-    description: "Google's coding-capable instruct model — recommended for flagship phones",
-    size: "2.5 GB",
-    sizeBytes: 2_500_000_000,
-    url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
-    filename: "gemma-3-4b-it-Q4_K_M.gguf",
-    minRamGB: 6,
-    deviceClass: "flagship",
   },
   {
     id: "qwen3-4b",
