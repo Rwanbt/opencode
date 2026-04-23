@@ -39,13 +39,15 @@ function formatBytes(bytes: number): string {
   return (bytes / 1_000_000_000).toFixed(2) + " GB"
 }
 
-// Restrict rfilename to a safe character set ending in a supported extension.
-// This rejects path-traversal tokens, shell metacharacters, and anything that
-// isn't a model weights file — cheap defense-in-depth for the download URL.
+// Defense-in-depth pattern for the filename we actually use in the download
+// URL — applied AFTER the GGUF filter, so non-weights siblings returned by
+// HF (README.md, .gitattributes, config.json, …) are skipped silently
+// instead of invalidating the whole response (z.array fails on a single
+// bad element, which would wipe every search result).
 const HF_RFILENAME = /^[A-Za-z0-9._/-]+\.(gguf|onnx)$/
 
 const HFSiblingSchema = z.object({
-  rfilename: z.string().min(1).max(256).regex(HF_RFILENAME),
+  rfilename: z.string().min(1).max(256),
   size: z.number().nonnegative().optional(),
 })
 
@@ -87,7 +89,13 @@ async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<H
     .map((m) => {
       const author = m.id.split("/")[0] ?? ""
       const ggufFiles = (m.siblings ?? [])
-        .filter((s) => s.rfilename.endsWith(".gguf") && !s.rfilename.includes("mmproj") && !s.rfilename.includes("imatrix"))
+        .filter(
+          (s) =>
+            HF_RFILENAME.test(s.rfilename) &&
+            s.rfilename.endsWith(".gguf") &&
+            !s.rfilename.includes("mmproj") &&
+            !s.rfilename.includes("imatrix"),
+        )
         .map((s) => ({
           filename: s.rfilename.includes("/") ? (s.rfilename.split("/").pop() ?? s.rfilename) : s.rfilename,
           size: s.size ?? 0,
