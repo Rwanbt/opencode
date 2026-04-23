@@ -166,6 +166,18 @@ class LlamaService : Service() {
             pb.redirectErrorStream(true)
             val proc = pb.start()
             child = proc
+            // Drain stdout into logcat so the OS pipe (64 KB on bionic) never fills.
+            // Without this, llama-server blocks progressively on verbose ggml logs
+            // and decode throughput collapses on the 2nd+ inference (observed -56 %).
+            // Mirrors spawnPtyServer pattern below.
+            Thread {
+                try {
+                    proc.inputStream.bufferedReader().forEachLine { line ->
+                        Log.d("llama-server", line)
+                    }
+                } catch (_: Exception) {}
+                Log.i(TAG, "llama-server stdout stream ended")
+            }.apply { isDaemon = true }.start()
             Log.i(TAG, "Spawned child process, argv[0]=${args.firstOrNull()}")
             proc
         } catch (e: Exception) {
