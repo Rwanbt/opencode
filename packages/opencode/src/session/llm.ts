@@ -240,6 +240,15 @@ export namespace LLM {
         modelID: input.model.id,
         apiModelID: input.model.api.id,
       })
+      // Mobile is bandwidth/perf-constrained — large system prompts cause
+      // linear-growth prefill each turn. Flag when exceeds 500 tok so
+      // future sessions can investigate systematic bloat.
+      if (process.env.OPENCODE_CLIENT === "mobile-embedded" && systemTokens > 500) {
+        log.warn("[mobile-embedded] large system prompt may cause multi-turn slowdown", {
+          systemTokens,
+          threshold: 500,
+        })
+      }
     }
 
     // rejoin to maintain 2-part structure for caching if header unchanged
