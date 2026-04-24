@@ -127,23 +127,28 @@ object LlamaEngine {
         val hardware = android.os.Build.HARDWARE.lowercase()
         Log.i(TAG, "Device: board=$board, hardware=$hardware, soc=$soc, sdk=$sdkVersion")
 
-        // Vulkan tier: modern Snapdragon (SM8450+, SM8650+), Dimensity 9000+, Exynos 2200+
-        val modernSnapdragon = soc.matches(Regex("sm(8[4-9]|9)\\d{2}.*"))
-        val modernDimensity  = soc.startsWith("mt698") || soc.startsWith("mt699")
-        val modernExynos     = soc.startsWith("s5e9") || soc.startsWith("s5e84")
-        if (modernSnapdragon || modernDimensity || modernExynos) {
-            Log.i(TAG, "Modern SoC ($soc) → VULKAN backend")
-            return Backend.VULKAN
-        }
-
-        // OpenCL tier: SD 8xx pre-Gen1 (SM8150/SM8250/SM8350), SD 7xxG (SM7250/SM7325)
-        val openclCapableSnapdragon = soc.matches(Regex("sm(8[1-3]|7[2-3])\\d{2}.*"))
-        if (openclCapableSnapdragon) {
+        // Qualcomm Adreno: route through OpenCL regardless of Adreno generation.
+        // Vulkan is broken in llama.cpp on Adreno (all versions):
+        //  - 15x slower than CPU on SD8Gen3 (discussion #9464)
+        //  - vk::DeviceLostError on batch>32 (issue #8743, unresolved)
+        //  - Adreno shader compile failures (issue #6395)
+        //  - 1 GB single-alloc cap
+        // Use Qualcomm's own OpenCL Adreno backend (PR #10693). Covers Adreno 6xx/7xx/8xx.
+        val qualcommAdreno = soc.matches(Regex("sm(7[2-9]|8|9)\\d{2}.*"))
+        if (qualcommAdreno) {
             if (verifyOpenclLib()) {
-                Log.i(TAG, "Adreno 6xx SoC ($soc) with valid OpenCL binary → OPENCL backend")
+                Log.i(TAG, "Qualcomm Adreno SoC ($soc) → OPENCL backend (Vulkan broken on Adreno)")
                 return Backend.OPENCL
             }
-            Log.w(TAG, "Adreno 6xx SoC ($soc) but OpenCL binary invalid/missing → CPU fallback")
+            Log.w(TAG, "Qualcomm Adreno SoC ($soc) but OpenCL binary invalid/missing → CPU fallback")
+        }
+
+        // Non-Qualcomm: Dimensity 9000+ (MT698x/699x), Exynos 2200+ (S5E9/S5E84) can try Vulkan.
+        val modernDimensity = soc.startsWith("mt698") || soc.startsWith("mt699")
+        val modernExynos    = soc.startsWith("s5e9") || soc.startsWith("s5e84")
+        if (modernDimensity || modernExynos) {
+            Log.i(TAG, "Non-Qualcomm modern SoC ($soc) → VULKAN backend")
+            return Backend.VULKAN
         }
 
         Log.i(TAG, "No validated GPU backend for SoC ($soc) → CPU backend")
@@ -176,21 +181,22 @@ object LlamaEngine {
     /** Compute a safe --n-gpu-layers value.
      *  - CPU backend: 0 (no offload)
      *  - VULKAN: 99 (full offload; Vulkan 1.3 handles VRAM allocation itself)
-     *  - OPENCL: Adreno shares RAM with CPU — budget 35% of total RAM.
-     *    Measured on Mi 10 Pro (SM8250, 8GB RAM): ngl=20 hits sweet spot
-     *    (prefill 10.6 tok/s). Bumping budget to 50% (ngl=29) causes mmap
-     *    thrashing (MemFree<100MB, zRAM swap) and degrades to 4.5/3.8 tok/s. */
+     *  - OPENCL Adreno: shared RAM with CPU. Budget scales with total RAM:
+     *    - ≤8 GB device (Mi 10 Pro): 35% (~20 layers Gemma-4-E4B) — thrashing at 50%
+     *    - >10 GB device (Xiaomi 14 Ultra 12GB+): 45% (~29 layers)
+     *    Also caps per-buffer ≤ 1 GB (Adreno llama.cpp issue #8743). */
     private fun adaptiveNgl(modelSizeMB: Long, backend: Backend): Int {
         if (backend == Backend.CPU) return 0
         if (backend == Backend.VULKAN) return 99
 
         val totalRamMB = totalSystemRamMB()
-        val budgetMB = (totalRamMB * 35 / 100)
+        val budgetPct = if (totalRamMB > 10000) 45 else 35
+        val budgetMB = totalRamMB * budgetPct / 100
         // Rough bytes-per-layer estimate: gemma-4-E4B (4.7 GB, 36 layers) ≈ 130 MB/layer Q4_K_M.
         // Use 36 as a safe default layer count — overestimates for bigger models (→ smaller ngl, safer).
         val bytesPerLayerMB = (modelSizeMB / 36L).coerceAtLeast(100L)
         val maxLayers = (budgetMB / bytesPerLayerMB).toInt().coerceIn(8, 99)
-        Log.i(TAG, "Adaptive ngl: totalRam=${totalRamMB}MB, budget=${budgetMB}MB, bytesPerLayer=${bytesPerLayerMB}MB → ngl=$maxLayers")
+        Log.i(TAG, "Adaptive ngl: totalRam=${totalRamMB}MB, budgetPct=$budgetPct%, budget=${budgetMB}MB, bytesPerLayer=${bytesPerLayerMB}MB → ngl=$maxLayers")
         return maxLayers
     }
 
@@ -328,9 +334,20 @@ object LlamaEngine {
         val modelSizeMB = modelFile.length() / (1024 * 1024)
         val isSmallModel = modelSizeMB < 1500  // <1.5GB ~ <2B params quantized
 
-        // Small models: CPU NEON/dotprod beats GPU offload overhead empirically.
-        val backend = if (isSmallModel) Backend.CPU else selectedBackend
-        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend")
+        // OpenCL Adreno kernels support Q4_0 and Q8_0 but NOT K-quants (Q4_K_M,
+        // Q5_K_M, etc.). With K-quants, llama.cpp master (b1-5d2b52d) crashes at
+        // model load with "pre-allocated tensor (cache_k_l…) in a buffer (OpenCL)
+        // that cannot run the operation (SET_ROWS)" (exit 134). Route CPU
+        // proactively to skip the ~13s crash+fallback roundtrip.
+        val modelNameUpper = modelFile.name.uppercase()
+        val modelIsOpenclFriendly = modelNameUpper.contains("Q4_0") ||
+                                    modelNameUpper.contains("Q8_0")
+        val backend = when {
+            isSmallModel -> Backend.CPU
+            selectedBackend == Backend.OPENCL && !modelIsOpenclFriendly -> Backend.CPU
+            else -> selectedBackend
+        }
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly")
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
@@ -496,24 +513,39 @@ object LlamaEngine {
                 "--batch-size", "512",
                 "--jinja",
                 // Single slot to minimize memory usage
-                "-np", "1"
+                "-np", "1",
+                // Prefix KV cache reuse across prompts. Without this, every new
+                // chat turn re-prefills the full conversation history from scratch
+                // (system prompt + all prior turns), growing linearly with turn
+                // count → user-perceived 20x slowdown on mobile. 256 is a
+                // conservative window (matches desktop default). The desktop
+                // TS sidecar (local-llm-server/index.ts) already passes this on
+                // its own spawn path; mobile was missing it.
+                "--cache-reuse", "256"
             )
 
+            // Detect model quantization from filename (used for OpenCL routing).
+            // OpenCL Adreno supports Q4_0 / Q8_0 but NOT K-quants (Q4_K_M, Q5_K_M,
+            // etc.). K-quants silently fall back to CPU mixed mode.
+            val modelFileName = java.io.File(modelPath).name.uppercase()
+            val modelIsOpenclFriendly = modelFileName.contains("Q4_0") ||
+                                        modelFileName.contains("Q8_0")
+
             // Context size strategy:
-            // - GPU backend: --fit on -fitc 16384 auto-scales to VRAM (floor 16K)
-            // - CPU backend: fixed 4096. Prompt eval on mobile CPU NEON for a 7B
-            //   model is ~50-100 tok/s, so 4K ctx = ~40-80s worst case prefill.
-            //   Larger ctx would blow prompt eval latency past acceptable.
-            //   Manual test proved 2048 ctx generates at ~1.5 tok/s on SM8250
-            //   (see session logs); 4096 is the compromise sweet spot.
-            if (useGpu) {
-                args.addAll(listOf(
-                    "--fit", "on",
-                    "-fitt", fittHeadroom,
-                    "-fitc", "16384"
-                ))
-            } else {
-                args.addAll(listOf("--ctx-size", "4096"))
+            // - OPENCL + Q4_0/Q8_0: --fit is IGNORED when FA is off (below).
+            //   Without FA, llama.cpp falls to model's trained ctx (Gemma-4 =
+            //   131072 → 1.5 GB KV on 8 GB device → LMK kill). Use explicit
+            //   --ctx-size 8192 cap (2× CPU, balances multi-turn vs mem).
+            // - OPENCL + K-quants: FA stays on, --fit works normally.
+            // - VULKAN: FA on supported → --fit on -fitc 16384 works as intended.
+            // - CPU backend: fixed 4096 (4K ctx = ~40-80s worst-case prefill NEON).
+            when {
+                backend == Backend.OPENCL && modelIsOpenclFriendly ->
+                    args.addAll(listOf("--ctx-size", "8192"))
+                useGpu ->
+                    args.addAll(listOf("--fit", "on", "-fitt", fittHeadroom, "-fitc", "16384"))
+                else ->
+                    args.addAll(listOf("--ctx-size", "4096"))
             }
 
             // KV cache quantization — q4_0 saves ~72% KV memory but llama.cpp
@@ -521,8 +553,24 @@ object LlamaEngine {
             // FA with quantized V, llama_init_from_model returns NULL and the next
             // llama_n_ctx() call segfaults with a null pointer deref.
             // → Rule: quantized KV ⇒ flash-attn on (regardless of CPU/GPU).
-            val kvType = config.kvCacheType
+            //
+            // OpenCL Adreno exception: Flash Attention is NOT implemented in the
+            // Qualcomm Adreno OpenCL backend (docs/backend/OPENCL.md + PR #10693).
+            //  - Q4_0 / Q8_0 → real GPU path: force KV f16 + FA off.
+            //  - Q4_K_M / K-quants → fall back to CPU mixed mode anyway, so
+            //    keeping the old config (quantized KV + FA on) is faster than
+            //    f16 KV + FA off (which degrades the hybrid path to ~1/2 speed
+            //    measured 1.96 vs 4.85 tok/s on Mi 10 Pro — regression).
+            val openclForceF16 = (backend == Backend.OPENCL) && modelIsOpenclFriendly
+            val kvType = if (openclForceF16) "f16" else config.kvCacheType
             val kvQuantized = kvType != "f16"
+            if (backend == Backend.OPENCL) {
+                if (openclForceF16 && config.kvCacheType != "f16") {
+                    Log.w(TAG, "OpenCL Adreno + Q4_0/Q8_0 model: forcing KV f16 + FA off for real GPU path")
+                } else if (!modelIsOpenclFriendly) {
+                    Log.i(TAG, "OpenCL Adreno + K-quant model ($modelFileName): keeping FA on + quantized KV (CPU mixed path baseline)")
+                }
+            }
             if (kvQuantized) {
                 args.addAll(listOf("--cache-type-k", kvType, "--cache-type-v", kvType))
                 Log.i(TAG, "KV cache quantization: $kvType (forces --flash-attn on)")
@@ -530,14 +578,20 @@ object LlamaEngine {
 
             // Flash Attention:
             // - Forced ON if KV is quantized (llama.cpp hard requirement)
+            // - Forced OFF only for OpenCL + Q4_0/Q8_0 (real GPU path uses no-FA)
             // - Otherwise: on in GPU, off in CPU (batch=1 decode overhead)
-            val flashAttnOn = kvQuantized || (useGpu && config.flashAttn)
+            val flashAttnOn = when {
+                backend == Backend.OPENCL && modelIsOpenclFriendly -> false
+                kvQuantized -> true
+                useGpu && config.flashAttn -> true
+                else -> false
+            }
             if (flashAttnOn) {
                 args.addAll(listOf("--flash-attn", "on"))
                 Log.i(TAG, "Flash Attention enabled (kvQuantized=$kvQuantized, useGpu=$useGpu)")
             } else {
                 args.addAll(listOf("--flash-attn", "off"))
-                Log.i(TAG, "Flash Attention disabled")
+                Log.i(TAG, "Flash Attention disabled (backend=$backend, kvQuantized=$kvQuantized)")
             }
 
             // Memory mapping: the device (8 GB RAM on SM8250 with ~3 GB system
