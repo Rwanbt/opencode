@@ -335,19 +335,30 @@ object LlamaEngine {
         val isSmallModel = modelSizeMB < 1500  // <1.5GB ~ <2B params quantized
 
         // OpenCL Adreno kernels support Q4_0 and Q8_0 but NOT K-quants (Q4_K_M,
-        // Q5_K_M, etc.). With K-quants, llama.cpp master (b1-5d2b52d) crashes at
-        // model load with "pre-allocated tensor (cache_k_l…) in a buffer (OpenCL)
-        // that cannot run the operation (SET_ROWS)" (exit 134). Route CPU
-        // proactively to skip the ~13s crash+fallback roundtrip.
+        // Q5_K_M, etc.). With K-quants, llama.cpp master crashes at model load
+        // with SET_ROWS unsupported (exit 134). Route CPU proactively.
+        //
+        // ALSO route CPU for Q4_0 on Adreno 6xx (OpenCL 2.0) — measured -68%
+        // decode on Mi 10 Pro (5.12 vs 16.2 CPU Q4_K_M). Adreno 6xx has weak
+        // OpenCL 2.0 kernel launch overhead for batch=1 decode. CPU REPACK
+        // NEON is faster there. Only Adreno 750+ (OpenCL 3.0+, SM8650+) has
+        // comparable OpenCL perf, and even then gain is marginal (~0%).
         val modelNameUpper = modelFile.name.uppercase()
         val modelIsOpenclFriendly = modelNameUpper.contains("Q4_0") ||
                                     modelNameUpper.contains("Q8_0")
+        val soc = if (android.os.Build.VERSION.SDK_INT >= 31)
+            android.os.Build.SOC_MODEL.lowercase() else ""
+        // Adreno OpenCL 3.0+ tier = SM8450+ (SD8Gen1+), SM9xxx, SM7350+. Adreno
+        // 6xx (SM8150/SM8250/SM8350/SM7250) = OCL 2.0, decode too weak.
+        val adrenoOcl3Plus = soc.matches(Regex("sm(8[4-9]|9|73[5-9])\\d*.*")) ||
+                             soc.matches(Regex("sm(7[4-9])\\d*.*"))
+        val useOpenclForThisModel = modelIsOpenclFriendly && adrenoOcl3Plus
         val backend = when {
             isSmallModel -> Backend.CPU
-            selectedBackend == Backend.OPENCL && !modelIsOpenclFriendly -> Backend.CPU
+            selectedBackend == Backend.OPENCL && !useOpenclForThisModel -> Backend.CPU
             else -> selectedBackend
         }
-        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly")
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly, adrenoOcl3Plus=$adrenoOcl3Plus")
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
@@ -523,6 +534,26 @@ object LlamaEngine {
                 // its own spawn path; mobile was missing it.
                 "--cache-reuse", "256"
             )
+
+            // Prompt Lookup Decoding / speculative self (PR #18471, Jan 2026).
+            // Drafts tokens from n-grams in the current prompt context, verified
+            // in batch on the main model → 1.5-3x decode on code/agent workloads
+            // (tool calls, JSON, repetitive). Compatible with Gemma-4 SWA
+            // (unlike prefix cache reuse which llama-server ignores for SWA).
+            // Escape hatch: OPENCODE_LLAMA_NO_SPEC=1 disables it.
+            // Using ngram-simple (most mature — avoid ngram-mod per issue #19232).
+            if (System.getenv("OPENCODE_LLAMA_NO_SPEC") != "1") {
+                args.addAll(listOf(
+                    "--spec-type", "ngram-simple",
+                    "--spec-ngram-size-n", "8",
+                    "--spec-ngram-size-m", "4"
+                ))
+            }
+
+            // Phase C experiment — REVERTED: --mlock + --ubatch-size 128 did not
+            // help (mlock failed OOM on 2.4 GB buffer even on 15 GB Xiaomi,
+            // ubatch=128 gave -6% vs default 512). Left here as dormant comment
+            // for docs; keep default behavior.
 
             // Detect model quantization from filename (used for OpenCL routing).
             // OpenCL Adreno supports Q4_0 / Q8_0 but NOT K-quants (Q4_K_M, Q5_K_M,
