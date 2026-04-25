@@ -114,9 +114,10 @@ object LlamaEngine {
     private fun detectBestBackend(): Backend {
         val override = System.getenv("OPENCODE_LLAMA_BACKEND")?.lowercase()
         when (override) {
-            "cpu"    -> { Log.i(TAG, "Backend override: CPU"); return Backend.CPU }
-            "vulkan" -> { Log.i(TAG, "Backend override: VULKAN"); return Backend.VULKAN }
-            "opencl" -> { Log.i(TAG, "Backend override: OPENCL"); return Backend.OPENCL }
+            "cpu"     -> { Log.i(TAG, "Backend override: CPU"); return Backend.CPU }
+            "vulkan"  -> { Log.i(TAG, "Backend override: VULKAN"); return Backend.VULKAN }
+            "opencl"  -> { Log.i(TAG, "Backend override: OPENCL"); return Backend.OPENCL }
+            "hexagon" -> { Log.i(TAG, "Backend override: HEXAGON"); return Backend.HEXAGON }
             "auto", null -> {}
             else -> Log.w(TAG, "Unknown OPENCODE_LLAMA_BACKEND='$override', ignoring")
         }
@@ -127,20 +128,29 @@ object LlamaEngine {
         val hardware = android.os.Build.HARDWARE.lowercase()
         Log.i(TAG, "Device: board=$board, hardware=$hardware, soc=$soc, sdk=$sdkVersion")
 
-        // Qualcomm Adreno: route through OpenCL regardless of Adreno generation.
-        // Vulkan is broken in llama.cpp on Adreno (all versions):
+        // Qualcomm Adreno: prefer Hexagon NPU (SM8450+ = SD 8 Gen 1+) when available,
+        // else OpenCL fallback. Vulkan is broken in llama.cpp on Adreno (all versions):
         //  - 15x slower than CPU on SD8Gen3 (discussion #9464)
         //  - vk::DeviceLostError on batch>32 (issue #8743, unresolved)
         //  - Adreno shader compile failures (issue #6395)
         //  - 1 GB single-alloc cap
-        // Use Qualcomm's own OpenCL Adreno backend (PR #10693). Covers Adreno 6xx/7xx/8xx.
+        // Hexagon NPU (HTP v75/v79/v81) is 5-10x faster than OpenCL for decode
+        // (docs/backend/snapdragon: Llama-3.2-1B Q4_0 → 51 tok/s decode v79 vs
+        // 7.81 tok/s OpenCL on Xiaomi 14 Ultra).
         val qualcommAdreno = soc.matches(Regex("sm(7[2-9]|8|9)\\d{2}.*"))
         if (qualcommAdreno) {
+            // Hexagon capable = SM8450+ (SD 8 Gen 1 uses HTP v75).
+            // Hexagon v68 (SM7150 SD730) supported but marginal gain on small models.
+            val hexagonCapable = soc.matches(Regex("sm(8[4-9]|9)\\d{2}.*"))
+            if (hexagonCapable && verifyHexagonLib()) {
+                Log.i(TAG, "Qualcomm Adreno SoC ($soc) → HEXAGON backend (NPU, SM8450+ capable)")
+                return Backend.HEXAGON
+            }
             if (verifyOpenclLib()) {
-                Log.i(TAG, "Qualcomm Adreno SoC ($soc) → OPENCL backend (Vulkan broken on Adreno)")
+                Log.i(TAG, "Qualcomm Adreno SoC ($soc) → OPENCL backend (Hexagon not available or pre-SM8450)")
                 return Backend.OPENCL
             }
-            Log.w(TAG, "Qualcomm Adreno SoC ($soc) but OpenCL binary invalid/missing → CPU fallback")
+            Log.w(TAG, "Qualcomm Adreno SoC ($soc) but no GPU binary → CPU fallback")
         }
 
         // Non-Qualcomm: Dimensity 9000+ (MT698x/699x), Exynos 2200+ (S5E9/S5E84) can try Vulkan.
@@ -153,6 +163,40 @@ object LlamaEngine {
 
         Log.i(TAG, "No validated GPU backend for SoC ($soc) → CPU backend")
         return Backend.CPU
+    }
+
+    /** Validate that libllama_server_hexagon.so exists, has an ELF header, AND
+     *  that at least one libggml-htp-vNN.so skel matching the device's Hexagon
+     *  version is present (required for FastRPC-loaded DSP kernels). */
+    private fun verifyHexagonLib(): Boolean {
+        val libDir = nativeLibDir ?: return false
+        val lib = java.io.File(libDir, "libllama_server_hexagon.so")
+        if (!lib.exists() || lib.length() < 1_000_000) {
+            Log.w(TAG, "libllama_server_hexagon.so missing or too small (${if (lib.exists()) lib.length() else -1} bytes)")
+            return false
+        }
+        // ELF magic check
+        val elfOk = try {
+            java.io.RandomAccessFile(lib, "r").use { raf ->
+                val magic = ByteArray(4); raf.readFully(magic)
+                magic[0] == 0x7F.toByte() && magic[1] == 'E'.code.toByte() &&
+                magic[2] == 'L'.code.toByte() && magic[3] == 'F'.code.toByte()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read libllama_server_hexagon.so header: ${e.message}")
+            false
+        }
+        if (!elfOk) return false
+        // At least one HTP skel must exist
+        val skels = listOf("v68", "v69", "v73", "v75", "v79", "v81")
+            .map { java.io.File(libDir, "libggml-htp-$it.so") }
+            .filter { it.exists() && it.length() > 10_000 }
+        if (skels.isEmpty()) {
+            Log.w(TAG, "No libggml-htp-vNN.so skels found in $libDir")
+            return false
+        }
+        Log.i(TAG, "Hexagon skels present: ${skels.joinToString { it.name }}")
+        return true
     }
 
     /** Validate that libllama_server_opencl.so exists and has an ELF header.
@@ -188,6 +232,7 @@ object LlamaEngine {
     private fun adaptiveNgl(modelSizeMB: Long, backend: Backend): Int {
         if (backend == Backend.CPU) return 0
         if (backend == Backend.VULKAN) return 99
+        if (backend == Backend.HEXAGON) return 99  // NPU manages its own 2GB pool (HTP0 REPACK)
 
         val totalRamMB = totalSystemRamMB()
         val budgetPct = if (totalRamMB > 10000) 45 else 35
@@ -235,6 +280,14 @@ object LlamaEngine {
                     setenv("GGML_DISABLE_VULKAN", "1")
                     setenv("GGML_OPENCL_PLATFORM", "QUALCOMM")
                     Log.i(TAG, "Backend init: OPENCL (Qualcomm platform pinned)")
+                }
+                Backend.HEXAGON -> {
+                    setenv("GGML_DISABLE_VULKAN", "1")
+                    setenv("GGML_DISABLE_OPENCL", "1")
+                    // ADSP_LIBRARY_PATH: FastRPC host-side lookup for libggml-htp-vNN.so
+                    // skels. Must point to app native lib dir so DSP channel can forward them.
+                    nativeLibDir?.let { setenv("ADSP_LIBRARY_PATH", it) }
+                    Log.i(TAG, "Backend init: HEXAGON (NPU; ADSP_LIBRARY_PATH=$nativeLibDir)")
                 }
                 Backend.CPU -> {
                     setenv("GGML_DISABLE_VULKAN", "1")
@@ -310,10 +363,11 @@ object LlamaEngine {
 
     /** GPU backend selection result.
      *  Each backend has its own llama-server binary with explicit GPU NEEDED deps:
-     *  - CPU    → libllama_server.so         (no GPU NEEDED)
-     *  - VULKAN → libllama_server_vulkan.so  (NEEDED libggml-vulkan.so)
-     *  - OPENCL → libllama_server_opencl.so  (NEEDED libggml-opencl.so, Adreno kernels) */
-    enum class Backend { CPU, VULKAN, OPENCL }
+     *  - CPU     → libllama_server.so              (no GPU NEEDED)
+     *  - VULKAN  → libllama_server_vulkan.so       (NEEDED libggml-vulkan.so)
+     *  - OPENCL  → libllama_server_opencl.so       (NEEDED libggml-opencl.so, Adreno kernels)
+     *  - HEXAGON → libllama_server_hexagon.so      (static, dlopens libggml-htp-vNN.so via FastRPC) */
+    enum class Backend { CPU, VULKAN, OPENCL, HEXAGON }
 
     /** Persisted backend choice from init(), consumed by load()/startServer(). */
     @JvmField
@@ -353,12 +407,34 @@ object LlamaEngine {
         val adrenoOcl3Plus = soc.matches(Regex("sm(8[4-9]|9|73[5-9])\\d*.*")) ||
                              soc.matches(Regex("sm(7[4-9])\\d*.*"))
         val useOpenclForThisModel = modelIsOpenclFriendly && adrenoOcl3Plus
+        // Hexagon NPU (HTP) kernels support Q4_0 / Q8_0 / MXFP4 natively (HTP-REPACK
+        // pre-quantizes weights on-device). K-quants are NOT in the HTP kernel set.
+        //
+        // Arch filter — measured on Xiaomi 14 Ultra (SM8650, HTP v75) 2026-04-24:
+        //  - Llama-3.2-1B Q4_0 : decode 17.1 tok/s (+119% vs OpenCL) ✅
+        //  - Gemma-4-E4B Q4_0 : decode  4.56 tok/s (-40%  vs OpenCL) ❌
+        // Gemma-4 SWA attention + gemma4 arch causes 105+ graph splits and 360 MiB
+        // CPU_REPACK fallback → CPU↔HTP memory copy kills decode. Route such arches
+        // to OPENCL/CPU path until upstream ggml-hexagon kernels cover them.
+        val modelIsHexagonUnfriendlyArch = modelNameUpper.contains("GEMMA-4") ||
+                                           modelNameUpper.contains("GEMMA4") ||
+                                           modelNameUpper.contains("MOE") ||
+                                           modelNameUpper.contains("QWEN3-") ||
+                                           modelNameUpper.contains("PHI-4")
+        val useHexagonForThisModel = modelIsOpenclFriendly && !modelIsHexagonUnfriendlyArch
         val backend = when {
+            selectedBackend == Backend.HEXAGON && !useHexagonForThisModel -> {
+                // Fall back to OPENCL if available on this SoC (SM8450+ = Adreno OCL 3.0+),
+                // else CPU. Don't just drop to CPU — OPENCL is strictly better than CPU
+                // on large Q4_0 models with Adreno 750+ (~33% faster than CPU REPACK).
+                if (adrenoOcl3Plus && modelIsOpenclFriendly) Backend.OPENCL else Backend.CPU
+            }
+            selectedBackend == Backend.HEXAGON -> Backend.HEXAGON  // skip small-model CPU gate
             isSmallModel -> Backend.CPU
             selectedBackend == Backend.OPENCL && !useOpenclForThisModel -> Backend.CPU
             else -> selectedBackend
         }
-        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly, adrenoOcl3Plus=$adrenoOcl3Plus")
+        Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly, hexagonUnfriendly=$modelIsHexagonUnfriendlyArch, adrenoOcl3Plus=$adrenoOcl3Plus")
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
@@ -474,9 +550,10 @@ object LlamaEngine {
             //   libllama_server_vulkan.so  → libggml-vulkan
             //   libllama_server_opencl.so  → libggml-opencl (Adreno 6xx kernels)
             val binName = when (backend) {
-                Backend.OPENCL -> "libllama_server_opencl.so"
-                Backend.VULKAN -> "libllama_server_vulkan.so"
-                Backend.CPU    -> "libllama_server.so"
+                Backend.HEXAGON -> "libllama_server_hexagon.so"
+                Backend.OPENCL  -> "libllama_server_opencl.so"
+                Backend.VULKAN  -> "libllama_server_vulkan.so"
+                Backend.CPU     -> "libllama_server.so"
             }
             val serverBin = java.io.File(nativeLibDir, binName)
             if (!serverBin.exists() || !serverBin.canExecute()) {
@@ -510,8 +587,35 @@ object LlamaEngine {
             // sandbox (cgroup v2, SELinux) can silently reject sched_setaffinity calls,
             // and PocketPal — which works — does no pinning at all.
             val nCores = Runtime.getRuntime().availableProcessors()
-            val nThreads = if (nCores <= 4) nCores else (nCores * 8 / 10).coerceAtLeast(2)
-            Log.i(TAG, "CPU topology: nCores=$nCores, nThreads=$nThreads (PocketPal heuristic)")
+            // Auto-detect big-core bitmask via cpufreq (detectBigCoreMask).
+            // SD865 = 0xF0 (cores 4-7), SD 8 Gen 3 = 0xFC (cores 2-7), SD 8 Gen 2 = 0xFE.
+            val bigMask = detectBigCoreMask()
+            val bigCount = Integer.bitCount(bigMask).coerceIn(1, nCores)
+            // Hexagon: 4 threads max (Qualcomm bench default; higher oversubscribes
+            // DSP callback dispatcher → measured decode regression 17.1→1.3 tok/s on SM8650).
+            // CPU backend: threads == big-core count (avoids LITTLE A55 slowdown).
+            //   SD865 6 threads includes 2 LITTLE → measured 18 pp / 3.4 decode on Gemma-4.
+            //   SD865 4 threads big-only should avoid the weak-link bottleneck.
+            // VULKAN/OPENCL: keep PocketPal AI heuristic (ne touche pas path GPU validé).
+            // OPENCL: 4 threads optimal pour decode mesuré sur Adreno 750 Gemma-4 Q4_0
+            // (2026-04-25 bench matrix : t=4 → 8.76 tok/s decode, t=8 → 7.15 tok/s, t=2 → 7.38 tok/s).
+            // Au-delà de 4 threads, contention CPU↔OpenCL driver thread dégrade decode.
+            val nThreads = when {
+                backend == Backend.HEXAGON -> 4
+                backend == Backend.OPENCL -> 4
+                backend == Backend.CPU -> bigCount.coerceAtLeast(2).coerceAtMost(4)
+                nCores <= 4 -> nCores
+                else -> (nCores * 8 / 10).coerceAtLeast(2)
+            }
+            Log.i(TAG, "CPU topology: nCores=$nCores, bigMask=0x${Integer.toHexString(bigMask)}, bigCount=$bigCount, nThreads=$nThreads (backend=$backend)")
+
+            // ubatch-size: pour OPENCL Adreno, 128 mesuré meilleur que 512 défaut sur decode
+            // (bench 2026-04-25 X14U Gemma-4 Q4_0 : ub=128 → 7.57 vs default → 7.15 tok/s).
+            // CPU/HEXAGON path : 512 reste cohérent.
+            val ubatchSize = when (backend) {
+                Backend.OPENCL -> "128"
+                else -> "512"
+            }
 
             val args = mutableListOf(
                 serverBin.absolutePath,
@@ -522,6 +626,7 @@ object LlamaEngine {
                 "--threads", nThreads.toString(),
                 "--threads-batch", nThreads.toString(),
                 "--batch-size", "512",
+                "--ubatch-size", ubatchSize,
                 "--jinja",
                 // Single slot to minimize memory usage
                 "-np", "1",
@@ -535,19 +640,109 @@ object LlamaEngine {
                 "--cache-reuse", "256"
             )
 
+            // OPENCL: --poll 0 (no busy-wait) mesuré meilleur que poll 50 default
+            // sur Adreno 750 (bench 2026-04-25 : poll=0 → 7.69 vs poll=100 → 7.60 tok/s).
+            if (backend == Backend.OPENCL) {
+                args.addAll(listOf("--poll", "0"))
+            }
+
             // Prompt Lookup Decoding / speculative self (PR #18471, Jan 2026).
-            // Drafts tokens from n-grams in the current prompt context, verified
-            // in batch on the main model → 1.5-3x decode on code/agent workloads
-            // (tool calls, JSON, repetitive). Compatible with Gemma-4 SWA
-            // (unlike prefix cache reuse which llama-server ignores for SWA).
-            // Escape hatch: OPENCODE_LLAMA_NO_SPEC=1 disables it.
-            // Using ngram-simple (most mature — avoid ngram-mod per issue #19232).
-            if (System.getenv("OPENCODE_LLAMA_NO_SPEC") != "1") {
+            // Drafts tokens from n-grams, verified in batch on the main model →
+            // 1.5-3x decode on code/agent workloads (tool calls, JSON, repetitive).
+            //
+            // Exceptions where ngram-simple is net negative (drafts rejected = overhead):
+            //  - CPU backend: batch-1 decode saturates big cluster, draft batch validation
+            //    adds overhead. Mesuré 2026-04-24 Mi 10 Pro Gemma-4-E4B Q4_0 : drafts=0/0
+            //    sur 1358 tokens, -5/10% decode.
+            //  - OPENCL + arch hexagon-unfriendly (Gemma-4 SWA, MoE) : statistique
+            //    similaire #gen drafts = 0 / #acc drafts = 0. SWA + ngram-simple ne
+            //    matchent pas → overhead init context spec à chaque token = decode
+            //    7.06 in-app vs 8.76 bench isolé sans spec.
+            //
+            // Spec-type override (P1 audit 2026-04-25): set OPENCODE_LLAMA_SPEC_TYPE
+            // to one of [ngram-cache | ngram-simple | ngram-map-k | ngram-map-k4v | ngram-mod]
+            // to evaluate alternatives on Gemma-4 SWA. ngram-cache maintains its own
+            // n-gram statistics independent of the target's KV cache, so it may match
+            // on Gemma-4 SWA where ngram-simple fails. When the override is set, the
+            // SWA-skip is RELAXED so the chosen spec-type can run on Gemma-4/MoE/Phi-4.
+            // Default behavior (no override) is unchanged — ngram-simple, skip on SWA.
+            //
+            // Escape hatch: OPENCODE_LLAMA_NO_SPEC=1 disables it globally.
+            // Avoid ngram-mod per issue #19232 (crash on Qwen3-Next).
+            //
+            // Recompute model flags here (this scope) — duplicate from load() to avoid
+            // forward-reference hazard.
+            val modelFileName = java.io.File(modelPath).name.uppercase()
+            val modelIsOpenclFriendly = modelFileName.contains("Q4_0") ||
+                                        modelFileName.contains("Q8_0")
+            val modelIsHexagonUnfriendlyArch = modelFileName.contains("GEMMA-4") ||
+                                               modelFileName.contains("GEMMA4") ||
+                                               modelFileName.contains("MOE") ||
+                                               modelFileName.contains("QWEN3-") ||
+                                               modelFileName.contains("PHI-4")
+            // Override resolution order:
+            //   1. env var OPENCODE_LLAMA_SPEC_TYPE (for shell-launched debug builds)
+            //   2. system property debug.opencode.spec_type (settable via `adb shell setprop`
+            //      without APK rebuild — preferred for in-app perf experiments)
+            val specTypeOverride: String? = System.getenv("OPENCODE_LLAMA_SPEC_TYPE")
+                ?: try {
+                    val cls = Class.forName("android.os.SystemProperties")
+                    val get = cls.getMethod("get", String::class.java, String::class.java)
+                    val v = get.invoke(null, "debug.opencode.spec_type", "") as? String
+                    if (v.isNullOrEmpty()) null else v
+                } catch (_: Throwable) { null }
+            val specType = specTypeOverride ?: "ngram-simple"
+            // Skip on CPU always; skip on SWA only when running default ngram-simple
+            // (other types — notably ngram-cache — get a chance via override).
+            val specSkipCondition = backend == Backend.CPU ||
+                (backend == Backend.OPENCL && modelIsHexagonUnfriendlyArch && specTypeOverride == null)
+            val specEnabled = System.getenv("OPENCODE_LLAMA_NO_SPEC") != "1" &&
+                              !specSkipCondition
+            if (specEnabled) {
                 args.addAll(listOf(
-                    "--spec-type", "ngram-simple",
+                    "--spec-type", specType,
                     "--spec-ngram-size-n", "8",
                     "--spec-ngram-size-m", "4"
                 ))
+                Log.i(TAG, "Speculative decoding: --spec-type $specType (override=${specTypeOverride != null})")
+            } else if (specSkipCondition) {
+                Log.i(TAG, "Speculative decoding skipped (backend=$backend, hexagonUnfriendly=$modelIsHexagonUnfriendlyArch, type=$specType — net overhead, set OPENCODE_LLAMA_SPEC_TYPE=ngram-cache to override on SWA)")
+            }
+
+            // CPU affinity — pin threads to big cluster to avoid A55 LITTLE bottleneck.
+            // Measured on SD865 (Mi 10 Pro, Gemma-4 Q4_0): -t 6 includes 2 A55 → 18 pp /
+            // 3.4 decode (A55 is ~2.5x slower than A77, drags the batch). Pinning to big
+            // cores only should reclaim ~20-40% throughput.
+            // History (reference_mi10pro_cpu_mask): old static build blocked HTTP with
+            // --cpu-mask. Re-test with current build; disable via OPENCODE_NO_CPU_MASK=1
+            // if the same issue resurfaces.
+            val cpuMaskEnabled = backend == Backend.CPU &&
+                                 bigMask != 0 &&
+                                 bigMask != ((1 shl nCores) - 1) &&  // skip if all cores are "big"
+                                 System.getenv("OPENCODE_NO_CPU_MASK") != "1"
+            if (cpuMaskEnabled) {
+                val maskHex = "0x" + Integer.toHexString(bigMask).uppercase()
+                args.addAll(listOf("--cpu-mask", maskHex, "--cpu-strict", "1"))
+                Log.i(TAG, "CPU affinity: --cpu-mask $maskHex --cpu-strict 1 (big cluster pinning)")
+            }
+
+            // HEXAGON backend — pin to HTP0 + CPU affinity (big cores 2-7) + polling.
+            // Measured on Xiaomi 14 Ultra (SM8650, HTP v75, Llama-3.2-1B Q4_0, 2026-04-24):
+            //  - WITHOUT these args (just --device HTP0): 49 tok/s pp, 1.3-8.2 tok/s decode
+            //  - WITH full Qualcomm args:                 81 tok/s pp, 17.1 tok/s decode (+122%/+119% vs OpenCL)
+            // --poll 100 (max valid range 0-100) = polling agressif des DSP callbacks
+            // (critique pour FastRPC IPC latency, sans poll decode chute à 1.3 tok/s).
+            // Note : "--poll 1000" pré-2026-04-25 était silencieusement clampé à 100,
+            // valeur explicitée pour clarté.
+            // --cpu-mask 0xfc = cores 2-7 (big+prime cluster on SD 8 Gen 1/2/3).
+            // --cpu-strict 1 prevents thread migration to LITTLE cores.
+            if (backend == Backend.HEXAGON) {
+                args.addAll(listOf(
+                    "--device", "HTP0", "--no-mmap",
+                    "--poll", "100",
+                    "--cpu-mask", "0xfc", "--cpu-strict", "1"
+                ))
+                Log.i(TAG, "HEXAGON: HTP0 + --poll 100 + --cpu-mask 0xfc --cpu-strict 1")
             }
 
             // Phase C experiment — REVERTED: --mlock + --ubatch-size 128 did not
@@ -558,25 +753,42 @@ object LlamaEngine {
             // Detect model quantization from filename (used for OpenCL routing).
             // OpenCL Adreno supports Q4_0 / Q8_0 but NOT K-quants (Q4_K_M, Q5_K_M,
             // etc.). K-quants silently fall back to CPU mixed mode.
-            val modelFileName = java.io.File(modelPath).name.uppercase()
-            val modelIsOpenclFriendly = modelFileName.contains("Q4_0") ||
-                                        modelFileName.contains("Q8_0")
-
-            // Context size strategy:
-            // - OPENCL + Q4_0/Q8_0: --fit is IGNORED when FA is off (below).
-            //   Without FA, llama.cpp falls to model's trained ctx (Gemma-4 =
-            //   131072 → 1.5 GB KV on 8 GB device → LMK kill). Use explicit
-            //   --ctx-size 8192 cap (2× CPU, balances multi-turn vs mem).
-            // - OPENCL + K-quants: FA stays on, --fit works normally.
-            // - VULKAN: FA on supported → --fit on -fitc 16384 works as intended.
-            // - CPU backend: fixed 4096 (4K ctx = ~40-80s worst-case prefill NEON).
+            //
+            // Context size strategy — ADAPTIVE on total RAM (audit 2026-04-25 soir).
+            // Previous hardcoded caps (8K OpenCL / 4K CPU) ignored that flagships
+            // have 12-16 GB shared RAM, plenty for 32K-64K KV cache. The agent
+            // OpenCode system prompt + tools defs eats 1.5-2K tokens, leaving only
+            // 2K usable on a 4K cap = chronic conversation truncation.
+            //
+            // KV cache (Gemma-4 E4B, f16, 32 layers × 8 KV heads × 256 dim):
+            //   ~32 KB / token → 4096=128MB, 16384=512MB, 32768=1GB, 65536=2GB.
+            // Budget: model (~5GB) + system overhead (~2-3GB) + KV must fit RAM.
+            //   - 16GB device → up to 65K KV (2GB) safe
+            //   - 8GB device → 16K KV (512MB) safe with mmap, 32K possible
+            //   - 6GB device → 8K KV (256MB) safe
+            //   - <6GB → keep 4K conservative
+            //
+            // OpenCL+Q4_0 path: FA is off (Adreno OpenCL doesn't impl FA), so --fit
+            // is ignored; we MUST pass an explicit --ctx-size. Adaptive cap below.
+            // OpenCL+K-quants: FA stays on, --fit works (kept as legacy path).
+            // CPU/Vulkan: explicit ctx for predictability + faster prefill cap.
+            val totalRamMB = totalSystemRamMB()
+            val totalRamGB = totalRamMB / 1024
+            val adaptiveCtx = when {
+                totalRamGB >= 14 -> 65536  // X14U 16GB → 64K
+                totalRamGB >= 10 -> 32768  // 12GB tier → 32K
+                totalRamGB >= 7  -> 16384  // Mi 10 Pro 8GB → 16K
+                totalRamGB >= 5  -> 8192   // 6GB → 8K
+                else             -> 4096   // <6GB → 4K conservative
+            }
+            Log.i(TAG, "Adaptive ctx-size: ${adaptiveCtx} tokens (totalRamGB=$totalRamGB, KV ~${(adaptiveCtx * 32) / 1024}MB)")
             when {
                 backend == Backend.OPENCL && modelIsOpenclFriendly ->
-                    args.addAll(listOf("--ctx-size", "8192"))
+                    args.addAll(listOf("--ctx-size", adaptiveCtx.toString()))
                 useGpu ->
-                    args.addAll(listOf("--fit", "on", "-fitt", fittHeadroom, "-fitc", "16384"))
+                    args.addAll(listOf("--fit", "on", "-fitt", fittHeadroom, "-fitc", adaptiveCtx.toString()))
                 else ->
-                    args.addAll(listOf("--ctx-size", "4096"))
+                    args.addAll(listOf("--ctx-size", adaptiveCtx.toString()))
             }
 
             // KV cache quantization — q4_0 saves ~72% KV memory but llama.cpp
@@ -694,6 +906,21 @@ object LlamaEngine {
                 envOverrides["GGML_OPENCL_PLATFORM"] = "QUALCOMM"
                 envOverrides["GGML_OPENCL_DEVICE"] = "0"
                 envOverrides["GGML_OPENCL_ADRENO_USE_LARGE_BUFFER"] = "1"
+            }
+            if (backend == Backend.HEXAGON) {
+                // FastRPC DSP library path — où le côté host de FastRPC cherche
+                // les libggml-htp-vNN.so pour les transmettre au cDSP context.
+                envOverrides["ADSP_LIBRARY_PATH"] = nativeLibDir
+                envOverrides["GGML_HEXAGON_NDEV"] = "1"
+                // Phase D Hexagon NPU tuning (2026-04-25, à valider in-app sur Llama-3.2 X14U) :
+                //  - HOSTBUF=1 : host-buffer mode requis pour REPACK (PR llama.cpp #12326),
+                //    expected +50% prefill upstream
+                //  - USE_HMX=1 : Hexagon Matrix Multiplier explicit on (matmul HW dédié)
+                //  - NHVX="all" : utilise tous les HVX threads disponibles
+                envOverrides["GGML_HEXAGON_HOSTBUF"] = "1"
+                envOverrides["GGML_HEXAGON_USE_HMX"] = "1"
+                envOverrides["GGML_HEXAGON_NHVX"] = "all"
+                Log.i(TAG, "HEXAGON envOverrides: ADSP_LIBRARY_PATH=$nativeLibDir, NDEV=1, HOSTBUF=1, USE_HMX=1, NHVX=all")
             }
             val spawned = service.spawnServer(args, envOverrides)
             if (spawned == null) {
