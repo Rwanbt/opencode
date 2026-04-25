@@ -601,6 +601,19 @@ alias cls='clear'\n\
     let sys_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path);
 
+    // Phase C: detect whether adbd is running. When the user has USB debugging
+    // active and pairs the device with a PC running cargo-proxy.mjs over
+    // `adb reverse tcp:9999 tcp:9999`, the bash tool routes toolchain commands
+    // (cargo, rustc, npm, ...) to the host PC. Otherwise the bash tool runs
+    // commands locally as before.
+    let cargo_proxy_active = Command::new("/system/bin/getprop")
+        .arg("init.svc.adbd")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "running")
+        .unwrap_or(false);
+    log::debug!("[OpenCode] adbd running = {} → OPENCODE_CARGO_PROXY = {}",
+        cargo_proxy_active, if cargo_proxy_active { "1" } else { "0" });
+
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
     // linker shipped alongside (also in nativeLibraryDir for exec permission).
     // Write env vars to a file — musl linker doesn't pass Command::env() to bun.
@@ -629,6 +642,7 @@ alias cls='clear'\n\
     );
     // Also add NO_PROXY for local connections
     let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
+    let env_content = format!("{}OPENCODE_CARGO_PROXY={}\n", env_content, if cargo_proxy_active { "1" } else { "0" });
     let _ = fs::write(&env_file, &env_content);
 
     // Build command: use --preload to load resolv_override.so via CLI arg
@@ -696,6 +710,7 @@ alias cls='clear'\n\
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
         .env("OPENCODE_CLIENT", "mobile-embedded")
+        .env("OPENCODE_CARGO_PROXY", if cargo_proxy_active { "1" } else { "0" })
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
         .env("SHELL", bin_link_dir.join("bash").to_str().unwrap_or("/bin/sh"))
