@@ -525,6 +525,7 @@ export const BashTool = Tool.define("bash", async () => {
         .optional(),
       description: z
         .string()
+        .optional()
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
@@ -539,6 +540,8 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+      // Auto-fallback when small/local models omit the description field (Gemma-4 E4B and similar).
+      const description = params.description ?? params.command.slice(0, 80).trim()
       const ps = PS.has(name)
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
@@ -583,8 +586,8 @@ export const BashTool = Tool.define("bash", async () => {
 
         const output = lines.join("\n")
         return {
-          title: `[dry-run] ${params.description}`,
-          metadata: { output, exit: null, description: `[dry-run] ${params.description}` },
+          title: `[dry-run] ${description}`,
+          metadata: { output, exit: null, description: `[dry-run] ${description}` },
           output,
         }
       }
@@ -601,7 +604,7 @@ export const BashTool = Tool.define("bash", async () => {
             cwd,
             env: await shellEnv(ctx, cwd),
             timeout,
-            description: params.description,
+            description,
             sandbox,
           },
           ctx,
@@ -616,7 +619,7 @@ export const BashTool = Tool.define("bash", async () => {
           cwd,
           env: await shellEnv(ctx, cwd),
           timeout,
-          description: params.description,
+          description,
         },
         ctx,
       )

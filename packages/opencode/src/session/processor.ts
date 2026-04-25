@@ -197,25 +197,30 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
-              const parts = MessageV2.parts(ctx.assistantMessage.id)
-              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+              // Cross-message tool history. Local 4B models retry failed tool
+              // calls in NEW assistant messages (each turn = new message), so a
+              // single-message inspection misses identical-input loops. Pull
+              // recent tool parts from the whole session instead.
+              const recentTools = MessageV2.recentToolParts(
+                ctx.assistantMessage.sessionID,
+                Math.max(DOOM_LOOP_THRESHOLD, 6),
+              )
+              const recentParts = recentTools.slice(-DOOM_LOOP_THRESHOLD)
 
               // Check 1: identical consecutive calls (original doom loop)
               const identicalLoop =
                 recentParts.length === DOOM_LOOP_THRESHOLD &&
                 recentParts.every(
                   (part) =>
-                    part.type === "tool" &&
                     part.tool === value.toolName &&
                     part.state.status !== "pending" &&
                     JSON.stringify(part.state.input) === JSON.stringify(value.input),
                 )
 
               // Check 2: repeated failed edits on the same file (catches alternating read→edit(fail) loops)
-              const recentWindow = parts.slice(-6)
+              const recentWindow = recentTools.slice(-6)
               const failedEdits = recentWindow.filter(
-                (part): part is MessageV2.ToolPart =>
-                  part.type === "tool" &&
+                (part) =>
                   part.tool === "edit" &&
                   part.state.status === "error",
               )

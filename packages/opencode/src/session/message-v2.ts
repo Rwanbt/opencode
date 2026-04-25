@@ -885,6 +885,38 @@ export namespace MessageV2 {
     )
   }
 
+  /**
+   * Returns the most recent N tool parts of a session, in chronological order
+   * (oldest first). Spans multiple messages, unlike `parts(messageID)`.
+   * Used for cross-message doom-loop detection: small models that retry the
+   * same failing tool call create a new assistant message per attempt, so
+   * single-message inspection cannot detect the loop.
+   */
+  export function recentToolParts(sessionID: SessionID, count: number) {
+    // Overfetch by 4× since we filter by part type after the SQL query.
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(PartTable)
+        .where(eq(PartTable.session_id, sessionID))
+        .orderBy(desc(PartTable.id))
+        .limit(count * 4)
+        .all(),
+    )
+    const tools: MessageV2.ToolPart[] = []
+    for (const row of rows) {
+      if ((row.data as { type?: string })?.type !== "tool") continue
+      tools.push({
+        ...row.data,
+        id: row.id,
+        sessionID: row.session_id,
+        messageID: row.message_id,
+      } as MessageV2.ToolPart)
+      if (tools.length >= count) break
+    }
+    return tools.reverse()
+  }
+
   export function get(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
     const row = Database.use((db) =>
       db
