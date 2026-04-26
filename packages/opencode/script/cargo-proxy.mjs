@@ -41,7 +41,9 @@ function adbArgs() {
 
 function deviceCacheDir(deviceCwd) {
   const hash = createHash("sha256").update(deviceCwd).digest("hex").slice(0, 16)
-  return join(tmpdir(), "opencode-cargo-proxy", hash)
+  // Forward-slashes only: tar on Windows treats `C:\path` as a remote spec
+  // and as a positional archive arg with the `-C` flag.
+  return join(tmpdir(), "opencode-cargo-proxy", hash).replace(/\\/g, "/")
 }
 
 function adbPull(deviceCwd, localDir) {
