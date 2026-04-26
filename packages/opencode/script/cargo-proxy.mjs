@@ -168,8 +168,14 @@ const server = createServer((req, res) => {
     }
     const out = execLocally(command, localDir, env)
     process.stderr.write(`[exec] exit=${out.exitCode} duration=${Date.now() - t0}ms\n`)
-    // Push sources back (skip target/, .git/, node_modules/)
-    const push = adbPush(localDir, deviceCwd, pull.pkg)
+    // Push sources back only when the command can mutate them. Read-only
+    // commands (cargo build/check/test/version, rustc, tsc, ...) leave
+    // sources untouched and target/ is excluded from push anyway, so
+    // pushing every time produces "Read-only file system" noise on the
+    // device and serves no purpose.
+    const MUTATING = /^\s*(cargo\s+(init|new|add|remove|generate|update)|npm\s+(init|install|i|add)|pnpm\s+(init|add|install|i)|yarn\s+(init|add|install)|bun\s+(init|add|install|i))\b/
+    const skipPush = !MUTATING.test(command)
+    const push = skipPush ? { ok: true } : adbPush(localDir, deviceCwd, pull.pkg)
     const pushNote = push.ok ? "" : `\n[cargo-proxy: push-back failed: ${push.error}]`
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(
