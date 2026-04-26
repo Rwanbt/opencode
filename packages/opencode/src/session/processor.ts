@@ -217,7 +217,11 @@ export namespace SessionProcessor {
                     JSON.stringify(part.state.input) === JSON.stringify(value.input),
                 )
 
-              // Check 2: repeated failed edits on the same file (catches alternating read→edit(fail) loops)
+              // Check 2: repeated failed edits on the same file (catches alternating
+              // read→edit(fail) loops). Only blocks subsequent EDIT calls — earlier
+              // versions also blocked bash/write/etc. on the same file, which broke
+              // recovery flows where the model legitimately switches tool after a
+              // string of failed edits (e.g. fall back to write, or run cargo check).
               const recentWindow = recentTools.slice(-6)
               const failedEdits = recentWindow.filter(
                 (part) =>
@@ -225,6 +229,7 @@ export namespace SessionProcessor {
                   part.state.status === "error",
               )
               const editFileLoop =
+                value.toolName === "edit" &&
                 failedEdits.length >= DOOM_LOOP_THRESHOLD &&
                 failedEdits.every(
                   (part) =>
