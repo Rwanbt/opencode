@@ -90,7 +90,8 @@ sudo chroot "$ROOTFS" /sbin/apk add --no-cache \
   jq tree htop fzf fd bat \
   ca-certificates \
   file diffutils findutils gawk sed grep \
-  gcc musl-dev
+  build-base \
+  rust cargo
 
 echo "    Packages installed."
 

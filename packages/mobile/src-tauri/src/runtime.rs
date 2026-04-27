@@ -488,7 +488,13 @@ pub async fn start_embedded_server(
         "tmux", "screen",
         "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
         "rsync", "wget",
-        "python3", "python", "node", "npm",
+        "python3", "python", "node", "npm", "pip", "pip3",
+        // Toolchain on-device (Alpine build-base + rust cargo). Adding the
+        // wrappers here lets the user build native Rust / C / C++ projects
+        // entirely on the phone, without a PC cargo proxy. The actual
+        // binaries are installed in the rootfs by build-alpine-rootfs.sh.
+        "gcc", "g++", "cc", "ar", "ld", "as", "ranlib", "objdump", "strip",
+        "rustc", "cargo", "rustup",
         "jq", "tree", "htop", "fzf", "fd", "bat", "exa",
     ];
     let mut tool_fns = String::new();
