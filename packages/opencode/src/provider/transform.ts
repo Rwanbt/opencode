@@ -388,6 +388,12 @@ export namespace ProviderTransform {
       }
       return 0.6
     }
+    // Gemma-4 default sampler chain ships temp=1.0 + top_k=64 which is too
+    // hot for code generation on small (≤4B) variants — produces verbose,
+    // hallucinated APIs (observed on E4B Q4_0/Q4_K_M Prism-EQ bench:
+    // duplicate imports, fake constants like MAIN_INPUT_CHANNELS).
+    // 0.5 brings it close to the recommended Gemma-4 IT setting for code.
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 0.5
     return undefined
   }
 
@@ -397,6 +403,7 @@ export namespace ProviderTransform {
     if (["minimax-m2", "gemini", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
       return 0.95
     }
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 0.92
     return undefined
   }
 
@@ -407,6 +414,7 @@ export namespace ProviderTransform {
       return 20
     }
     if (id.includes("gemini")) return 64
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 40
     return undefined
   }
 

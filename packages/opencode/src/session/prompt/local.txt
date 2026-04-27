@@ -22,3 +22,9 @@ Error recovery:
 Autonomy:
 - For multi-step tasks, execute all steps back-to-back. Do not stop to ask "should I continue?" unless truly ambiguous.
 - When creating a Rust project: after cargo init, the src/lib.rs already exists — use edit (not write) to replace its contents.
+
+Code generation pitfalls (avoid these):
+- Never duplicate `use` / `import` lines or struct declarations after an edit. Re-read the file if uncertain about current contents.
+- Don't invent API constants, methods, or trait associated types. If you don't know the exact API of a crate/library, websearch or webfetch its docs FIRST.
+- Place macros at their canonical position (e.g. Rust `nih_export_clap!(Foo);` goes at module bottom, not as `#[attr]` on a struct).
+- After cargo check fails, read the FULL error output before editing — common fixes: missing `use` for a type, wrong module path, missing trait method, lowercase vs uppercase module name.

@@ -539,6 +539,14 @@ export namespace LocalLLMServer {
       // behaviour for the server mode). 256 is a conservative window.
       "--cache-reuse",
       "256",
+      // Required for Gemma-4 (and any SWA / hybrid-recurrent arch) to actually
+      // hit the cache reuse path. Without this, llama-server logs
+      //   "forcing full prompt re-processing due to lack of cache data
+      //    (likely due to SWA or hybrid/recurrent memory)"
+      // and erases every checkpoint, defeating --cache-reuse entirely. See
+      // llama.cpp PR #21749/#22288 (merged 2026-04-23). Older binaries (pre
+      // b8731) silently ignore the flag.
+      "--swa-full",
     ]
     if (useFit) args.push("--fit", "on", "-fitt", "512", "-fitc", "16384")
 

@@ -637,7 +637,15 @@ object LlamaEngine {
                 // conservative window (matches desktop default). The desktop
                 // TS sidecar (local-llm-server/index.ts) already passes this on
                 // its own spawn path; mobile was missing it.
-                "--cache-reuse", "256"
+                "--cache-reuse", "256",
+                // --swa-full + cache-reuse together: required for Gemma-4 SWA +
+                // shared-KV cache reuse to actually trigger (PR #21749/#22288
+                // merged 2026-04-23). Without --swa-full, llama-server logs
+                // "forcing full prompt re-processing due to lack of cache data
+                // (likely due to SWA or hybrid/recurrent memory)" and erases
+                // every checkpoint, defeating cache-reuse. If the bundled
+                // binary is older than b8731 the flag is silently ignored.
+                "--swa-full"
             )
 
             // OPENCL: --poll 0 (no busy-wait) mesuré meilleur que poll 50 default
