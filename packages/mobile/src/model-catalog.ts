@@ -18,6 +18,21 @@ export interface CatalogModel {
    *   - "standard":  6-8 GB RAM, mid-range SoC
    *   - "flagship":  ≥8 GB RAM + 2023+ SoC (SD 8 Gen 3, Tensor G4, A17 Pro) */
   deviceClass: "eco" | "standard" | "flagship"
+  /** Optional multimodal projector for vision/audio. When present, the
+   * runtime downloads it alongside the main weights and passes --mmproj
+   * to llama-server so the model can accept image/audio attachments.
+   *
+   * Gemma 4 E4B has vision native in its base architecture (no separate
+   * "vision" variant in the model name) but llama.cpp still ships the
+   * vision encoder as a sibling .gguf — see PRs #21851 (mtmd Gemma) and
+   * #21874 (mmproj VRAM fix). Audio is NOT supported by llama.cpp upstream
+   * for Gemma 4 (#21868 marked "not planned"); use Parakeet/Murmur STT
+   * pre-pass instead.
+   *
+   * Both fields are optional — populate them once a tested mmproj GGUF
+   * is published on HF (bartowski / unsloth tend to be first). */
+  mmprojUrl?: string
+  mmprojFilename?: string
 }
 
 export interface DeviceProfile {
