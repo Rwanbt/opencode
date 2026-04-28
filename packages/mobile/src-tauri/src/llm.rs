@@ -174,6 +174,9 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 }
 
 /// Write LLM configuration to IPC file for Kotlin LlamaEngine to read.
+/// Format: one `key=value` per line. Keys not set as env vars are written
+/// as their string-default value so the Kotlin parser stays simple
+/// (`when (parts[0])` switch with explicit fallbacks per field).
 fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let ipc_dir = runtime_dir(app).join("llm_ipc");
     let _ = fs::create_dir_all(&ipc_dir);
@@ -184,21 +187,43 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let flash_attn = std::env::var("OPENCODE_FLASH_ATTN").unwrap_or_else(|_| "true".to_string());
     let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
     let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
+    // New 2026-04-28 params (set by frontend Configuration tab via set_llm_config).
+    // Empty string = "use llama.cpp default", so the Kotlin side knows when to
+    // skip the corresponding flag entirely.
+    let threads = std::env::var("OPENCODE_LLAMA_THREADS").unwrap_or_default();
+    let n_batch = std::env::var("OPENCODE_LLAMA_N_BATCH").unwrap_or_default();
+    let cache_reuse = std::env::var("OPENCODE_LLAMA_CACHE_REUSE").unwrap_or_default();
+    let top_k = std::env::var("OPENCODE_LLM_TOP_K").unwrap_or_default();
+    let top_p = std::env::var("OPENCODE_LLM_TOP_P").unwrap_or_default();
+    let temperature = std::env::var("OPENCODE_LLM_TEMPERATURE").unwrap_or_default();
+    let system_prompt = std::env::var("OPENCODE_LLM_SYSTEM_PROMPT").unwrap_or_default();
 
     // Build draft model path if provided
     let draft_path = draft_model.map(|d| {
         runtime_dir(app).join("models").join(&d).to_string_lossy().to_string()
     }).unwrap_or_default();
 
+    // System prompt may contain newlines/backslashes — escape so the
+    // line-based config parser stays simple. Decoded on the Kotlin side.
+    let system_prompt_escaped = system_prompt
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+
     // n_gpu_layers: overridden by Kotlin LlamaEngine based on empirical backend choice
     // (CPU for small models, Vulkan/OpenCL for large models on capable SoCs).
     let config = format!(
-        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n",
-        kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path
+        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n\
+         threads={}\nn_batch={}\ncache_reuse={}\ntop_k={}\ntop_p={}\ntemperature={}\nsystem_prompt_escaped={}\n",
+        kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path,
+        threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt_escaped
     );
 
     match fs::write(&config_file, &config) {
-        Ok(_) => log::debug!("[LLM] Config written: kv={}, flash={}, offload={}, mmap={}", kv_cache_type, flash_attn, offload_mode, mmap_mode),
+        Ok(_) => log::debug!(
+            "[LLM] Config written: kv={}, flash={}, offload={}, mmap={}, threads={}, n_batch={}, cache_reuse={}, top_k={}, top_p={}, temp={}, sys_prompt_set={}",
+            kv_cache_type, flash_attn, offload_mode, mmap_mode, threads, n_batch, cache_reuse, top_k, top_p, temperature, !system_prompt.is_empty()
+        ),
         Err(e) => log::warn!("[LLM] Failed to write config: {}", e),
     }
 }
@@ -448,20 +473,23 @@ pub async fn run_inference_benchmark(
         "stream": false,
         "cache_prompt": false,
     });
+    // Build request body manually (mobile reqwest is built without the
+    // "json" feature to keep the APK lean) — same wire format.
+    let body_string = serde_json::to_string(&body).map_err(|e| format!("serialize body: {e}"))?;
 
     let url = format!("http://127.0.0.1:{}/completion", BENCH_LLM_PORT);
     let resp = client
         .post(&url)
-        .json(&body)
+        .header("Content-Type", "application/json")
+        .body(body_string)
         .send()
         .await
         .map_err(|e| format!("llama-server unreachable: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("llama-server HTTP {}", resp.status()));
     }
-    let parsed: LlamaCompletionResponse = resp
-        .json()
-        .await
+    let body_text = resp.text().await.map_err(|e| format!("response body: {e}"))?;
+    let parsed: LlamaCompletionResponse = serde_json::from_str(&body_text)
         .map_err(|e| format!("response parse: {e}"))?;
     let t = parsed
         .timings

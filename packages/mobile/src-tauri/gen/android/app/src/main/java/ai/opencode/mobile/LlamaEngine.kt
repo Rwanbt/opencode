@@ -441,7 +441,12 @@ object LlamaEngine {
         return startServer(modelPath, contextSize, backend, config)
     }
 
-    /** Configuration for llama-server, read from IPC config file */
+    /** Configuration for llama-server, read from IPC config file.
+     *  Empty-string fields (threads, nBatch, topK, topP, temperature) mean
+     *  "use the llama.cpp default" — Kotlin then skips the corresponding
+     *  arg entirely instead of emitting a 0/empty value. Boolean cacheReuse
+     *  is `null` when unset (frontend never pushed a preference).
+     */
     data class LlmConfig(
         val kvCacheType: String = "q4_0",
         val flashAttn: Boolean = true,
@@ -449,6 +454,13 @@ object LlamaEngine {
         val mmapMode: String = "auto",
         val draftModelPath: String? = null,
         val nGpuLayers: Int = 0,
+        val threads: Int? = null,
+        val nBatch: Int? = null,
+        val cacheReuse: Boolean? = null,
+        val topK: Int? = null,
+        val topP: Float? = null,
+        val temperature: Float? = null,
+        val systemPrompt: String? = null,
     )
 
     /** Read LLM config from IPC file written by Rust backend */
@@ -465,20 +477,39 @@ object LlamaEngine {
                 var mmap = "auto"
                 var draftModel: String? = null
                 var ngl = 0
+                var threads: Int? = null
+                var nBatch: Int? = null
+                var cacheReuse: Boolean? = null
+                var topK: Int? = null
+                var topP: Float? = null
+                var temperature: Float? = null
+                var systemPrompt: String? = null
                 for (line in lines) {
                     val parts = line.split("=", limit = 2)
                     if (parts.size != 2) continue
+                    val raw = parts[1].trim()
                     when (parts[0].trim()) {
-                        "kv_cache_type" -> kvCache = parts[1].trim()
-                        "flash_attn" -> flashAttn = parts[1].trim() == "true"
-                        "offload_mode" -> offload = parts[1].trim()
-                        "mmap_mode" -> mmap = parts[1].trim()
-                        "draft_model" -> draftModel = parts[1].trim().ifEmpty { null }
-                        "n_gpu_layers" -> ngl = parts[1].trim().toIntOrNull() ?: 0
+                        "kv_cache_type" -> kvCache = raw
+                        "flash_attn" -> flashAttn = raw == "true"
+                        "offload_mode" -> offload = raw
+                        "mmap_mode" -> mmap = raw
+                        "draft_model" -> draftModel = raw.ifEmpty { null }
+                        "n_gpu_layers" -> ngl = raw.toIntOrNull() ?: 0
+                        // 2026-04-28: new Configuration tab params.
+                        // Empty raw value = unset on the frontend, leave the field null
+                        // so the args-builder skips its CLI flag entirely.
+                        "threads" -> threads = if (raw.isEmpty()) null else raw.toIntOrNull()?.takeIf { it > 0 }
+                        "n_batch" -> nBatch = if (raw.isEmpty()) null else raw.toIntOrNull()?.takeIf { it > 0 }
+                        "cache_reuse" -> cacheReuse = when (raw) { "true" -> true; "false" -> false; else -> null }
+                        "top_k" -> topK = if (raw.isEmpty()) null else raw.toIntOrNull()
+                        "top_p" -> topP = if (raw.isEmpty()) null else raw.toFloatOrNull()
+                        "temperature" -> temperature = if (raw.isEmpty()) null else raw.toFloatOrNull()
+                        "system_prompt_escaped" -> systemPrompt = if (raw.isEmpty()) null else
+                            raw.replace("\\n", "\n").replace("\\r", "\r").replace("\\\\", "\\")
                     }
                 }
-                Log.i(TAG, "Config: kv=$kvCache, flash=$flashAttn, offload=$offload, mmap=$mmap, draft=$draftModel, ngl=$ngl")
-                return LlmConfig(kvCache, flashAttn, offload, mmap, draftModel, ngl)
+                Log.i(TAG, "Config: kv=$kvCache, flash=$flashAttn, offload=$offload, mmap=$mmap, draft=$draftModel, ngl=$ngl, threads=$threads, nBatch=$nBatch, cacheReuse=$cacheReuse, topK=$topK, topP=$topP, temp=$temperature, sysPromptSet=${systemPrompt != null}")
+                return LlmConfig(kvCache, flashAttn, offload, mmap, draftModel, ngl, threads, nBatch, cacheReuse, topK, topP, temperature, systemPrompt)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to read LLM config: ${e.message}")
@@ -889,6 +920,45 @@ object LlamaEngine {
                 }
             } else if (config.draftModelPath != null) {
                 Log.i(TAG, "Speculative decoding skipped (CPU backend — GPU only feature)")
+            }
+
+            // 2026-04-28: per-user overrides from the Configuration tab.
+            // Pushed via set_llm_config Tauri command → write_llm_config Rust →
+            // readLlmConfig Kotlin. Empty/null fields = "use llama.cpp default"
+            // and we skip the corresponding flag entirely (last flag wins on
+            // llama-server CLI parsing, so these append-at-end overrides take
+            // precedence over the default --threads / cpu-mask logic above).
+            config.threads?.let {
+                args.addAll(listOf("--threads", it.toString()))
+                Log.i(TAG, "User override: --threads $it")
+            }
+            config.nBatch?.let {
+                args.addAll(listOf("--batch-size", it.toString(), "--ubatch-size", it.toString()))
+                Log.i(TAG, "User override: --batch-size $it (ubatch matched)")
+            }
+            config.cacheReuse?.let { reuse ->
+                if (!reuse) {
+                    args.addAll(listOf("--cache-reuse", "0"))
+                    Log.i(TAG, "User override: --cache-reuse 0 (disabled by user)")
+                }
+            }
+            config.topK?.let {
+                args.addAll(listOf("--top-k", it.toString()))
+                Log.i(TAG, "User override: --top-k $it")
+            }
+            config.topP?.let {
+                args.addAll(listOf("--top-p", it.toString()))
+                Log.i(TAG, "User override: --top-p $it")
+            }
+            config.temperature?.let {
+                args.addAll(listOf("--temp", it.toString()))
+                Log.i(TAG, "User override: --temp $it")
+            }
+            config.systemPrompt?.let {
+                if (it.isNotEmpty()) {
+                    args.addAll(listOf("--system-prompt", it))
+                    Log.i(TAG, "User override: --system-prompt set (${it.length} chars)")
+                }
             }
 
             Log.i(TAG, "Starting server: ${serverBin.name} backend=$backend ngl=$ngl kv=${config.kvCacheType} flash=${config.flashAttn}")
