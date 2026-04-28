@@ -185,6 +185,8 @@ export const SettingsConfiguration: Component = () => {
                 size="normal"
                 options={["custom", "fast", "quality", "eco", "long-context"]}
                 current={config.preset}
+                triggerStyle={{ "max-width": "220px" }}
+                valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
                     custom: "Custom",
@@ -357,6 +359,8 @@ export const SettingsConfiguration: Component = () => {
                 size="normal"
                 options={["auto", "gpu-max", "balanced"]}
                 current={config.offloadMode}
+                triggerStyle={{ "max-width": "220px" }}
+                valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
                     auto: "Auto (--fit, recommended)",
@@ -386,6 +390,8 @@ export const SettingsConfiguration: Component = () => {
                 size="normal"
                 options={["auto", "on", "off"]}
                 current={config.mmapMode}
+                triggerStyle={{ "max-width": "220px" }}
+                valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
                     auto: "Auto (recommended)",
