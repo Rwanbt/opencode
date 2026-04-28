@@ -617,9 +617,18 @@ export const BashTool = Tool.define("bash", async () => {
       dry_run: z
         .boolean()
         .optional()
-        .describe("Preview what the command would do without executing it. Shows parsed commands, affected files, and working directory."),
+        .describe(
+          "Set to true ONLY when the user explicitly asks to preview a command without executing it. By default leave this unset to actually run the command. Do NOT use as a substitute for the description field.",
+        ),
     }),
     async execute(params, ctx) {
+      // Heuristic: small/local models (Gemma-4 E4B and similar) sometimes
+      // hallucinate `dry_run: true` when they meant to provide a `description`.
+      // If dry_run is set but no description was provided, treat as accidental
+      // misuse and execute the command normally instead of just previewing it.
+      if (params.dry_run && (!params.description || params.description.trim().length === 0)) {
+        params.dry_run = false
+      }
       const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)

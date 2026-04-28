@@ -43,7 +43,12 @@ export const EditTool = Tool.define("edit", {
     oldString: z.string().describe("The text to replace"),
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
-    dry_run: z.boolean().optional().describe("Preview the diff without modifying the file"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .describe(
+        "Set to true ONLY when the user explicitly asks to preview the diff without applying it. By default leave this unset to actually apply the edit.",
+      ),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
