@@ -307,6 +307,27 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
     })
   }
 
+  // On the mobile-embedded build, drive bash with --init-file so the
+  // shell-function wrappers defined in .bashrc (cargo / rustc / python /
+  // gcc / …) are loaded for every tool invocation. Those wrappers exec
+  // the rootfs binaries through libmusl_linker.so, the only path SELinux
+  // allows for `untrusted_app` to run code that lives in app_data_file.
+  // BASH_ENV — bash's documented non-interactive rcfile env var — is
+  // ignored by the musl-static bash 5.2.15 build we ship; --init-file
+  // is the reliable workaround.
+  if (
+    env["OPENCODE_CLIENT"] === "mobile-embedded" &&
+    env["BASH_ENV"] &&
+    (shell.endsWith("/bash") || shell.endsWith("\\bash"))
+  ) {
+    return ChildProcess.make(shell, ["--init-file", env["BASH_ENV"]!, "-c", command], {
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: true,
+    })
+  }
+
   return ChildProcess.make(command, [], {
     shell,
     cwd,
@@ -324,7 +345,14 @@ const REMOTE_TOOLCHAIN = /^\s*(cargo|rustc|rustup|npm|pnpm|yarn|tsc|bun(\s+(inst
 async function runProxied(
   input: { command: string; cwd: string; description: string },
   ctx: Tool.Context,
-) {
+): Promise<{ title: string; metadata: any; output: string } | null> {
+  // Returns `null` if the cargo-proxy daemon is not reachable, signalling
+  // the caller to fall back to local on-device execution. This makes the
+  // proxy strictly opt-in: when a host PC is plugged with `adb reverse`
+  // and the daemon up, toolchain commands are routed there for speed;
+  // otherwise the on-device toolchain (rust/python/gcc shipped in the
+  // Alpine rootfs) handles them and the user keeps a fully autonomous
+  // mobile flow.
   const proxyUrl = process.env["OPENCODE_CARGO_PROXY_URL"] ?? "http://127.0.0.1:9999/exec"
   ctx.metadata({
     metadata: {
@@ -332,9 +360,6 @@ async function runProxied(
       description: input.description,
     },
   })
-  let stdout = ""
-  let stderr = ""
-  let exitCode: number | null = null
   const ac = new AbortController()
   const onAbort = () => ac.abort()
   ctx.abort.addEventListener("abort", onAbort, { once: true })
@@ -346,33 +371,33 @@ async function runProxied(
       signal: ac.signal,
     })
     if (!res.ok) {
+      // HTTP error (500, etc.): keep proxy result so the agent sees it.
       const text = await res.text()
-      stderr = `cargo-proxy HTTP ${res.status}: ${text}`
-      exitCode = -1
-    } else {
-      const data = (await res.json()) as { stdout?: string; stderr?: string; exitCode?: number }
-      stdout = data.stdout ?? ""
-      stderr = data.stderr ?? ""
-      exitCode = data.exitCode ?? -1
+      const output = `cargo-proxy HTTP ${res.status}: ${text}`
+      return {
+        title: input.description,
+        metadata: { output: preview(output), exit: -1, description: input.description },
+        output,
+      }
+    }
+    const data = (await res.json()) as { stdout?: string; stderr?: string; exitCode?: number }
+    const stdout = data.stdout ?? ""
+    const stderr = data.stderr ?? ""
+    const output = stdout + (stderr ? (stdout ? "\n--- stderr ---\n" : "") + stderr : "")
+    return {
+      title: input.description,
+      metadata: { output: preview(output), exit: data.exitCode ?? -1, description: input.description },
+      output,
     }
   } catch (e) {
-    stderr =
-      `cargo-proxy unreachable: ${(e as Error).message}\n` +
-      `Hint: ensure 'adb reverse tcp:9999 tcp:9999' is set up and ` +
-      `'bun script/cargo-proxy.mjs' is running on the host PC.`
-    exitCode = -1
+    // Network error (ECONNREFUSED, fetch failed). Proxy not running →
+    // return null so the caller falls back to local execution.
+    log.info("cargo-proxy unreachable, falling back to local execution", {
+      err: (e as Error).message,
+    })
+    return null
   } finally {
     ctx.abort.removeEventListener("abort", onAbort)
-  }
-  const output = stdout + (stderr ? (stdout ? "\n--- stderr ---\n" : "") + stderr : "")
-  return {
-    title: input.description,
-    metadata: {
-      output: preview(output),
-      exit: exitCode,
-      description: input.description,
-    },
-    output,
   }
 }
 
@@ -655,14 +680,17 @@ export const BashTool = Tool.define("bash", async () => {
       await ask(ctx, scan)
 
       // Phase C: route toolchain commands (cargo, rustc, npm, ...) over
-      // adb-reverse to a PC daemon when running on mobile. Skips Docker
-      // sandbox path since the mobile build never sets that config.
+      // adb-reverse to a PC daemon when running on mobile. Falls back to
+      // local on-device execution if the proxy daemon is not reachable
+      // (autonomous mobile use case: rust/python/gcc shipped in rootfs).
       if (
         process.env["OPENCODE_CARGO_PROXY"] === "1" &&
         process.env["OPENCODE_CLIENT"] === "mobile-embedded" &&
         REMOTE_TOOLCHAIN.test(params.command)
       ) {
-        return runProxied({ command: params.command, cwd, description }, ctx)
+        const proxied = await runProxied({ command: params.command, cwd, description }, ctx)
+        if (proxied) return proxied
+        // proxy unreachable → fall through to local run() below
       }
 
       // Check if Docker sandbox is configured

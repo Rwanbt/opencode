@@ -53,10 +53,9 @@ android {
             }
         }
         getByName("release") {
-            // Release hardening: no debuggable WebView, no JNI debug, minify + shrink.
-            // The portrait first-prompt diagnostic flag (isDebuggable=true) that was
-            // temporarily set here has been reverted — the bug is resolved.
-            isDebuggable = false
+            // Phase 1 toolchain validation: temporarily debuggable=true so run-as
+            // can inspect the wrappers/ dir + rootfs/ from adb. Revert after Phase 2/3.
+            isDebuggable = true
             isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
