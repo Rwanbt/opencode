@@ -461,6 +461,10 @@ object LlamaEngine {
         val topP: Float? = null,
         val temperature: Float? = null,
         val systemPrompt: String? = null,
+        // Multimodal projector path. When set, llama-server is started with
+        // --mmproj <path> + --mmproj-offload so /v1/chat/completions accepts
+        // image_url content blocks. Validated 2026-04-28 with Gemma 4 E4B.
+        val mmprojPath: String? = null,
     )
 
     /** Read LLM config from IPC file written by Rust backend */
@@ -484,6 +488,7 @@ object LlamaEngine {
                 var topP: Float? = null
                 var temperature: Float? = null
                 var systemPrompt: String? = null
+                var mmprojPath: String? = null
                 for (line in lines) {
                     val parts = line.split("=", limit = 2)
                     if (parts.size != 2) continue
@@ -506,10 +511,11 @@ object LlamaEngine {
                         "temperature" -> temperature = if (raw.isEmpty()) null else raw.toFloatOrNull()
                         "system_prompt_escaped" -> systemPrompt = if (raw.isEmpty()) null else
                             raw.replace("\\n", "\n").replace("\\r", "\r").replace("\\\\", "\\")
+                        "mmproj_path" -> mmprojPath = raw.ifEmpty { null }
                     }
                 }
-                Log.i(TAG, "Config: kv=$kvCache, flash=$flashAttn, offload=$offload, mmap=$mmap, draft=$draftModel, ngl=$ngl, threads=$threads, nBatch=$nBatch, cacheReuse=$cacheReuse, topK=$topK, topP=$topP, temp=$temperature, sysPromptSet=${systemPrompt != null}")
-                return LlmConfig(kvCache, flashAttn, offload, mmap, draftModel, ngl, threads, nBatch, cacheReuse, topK, topP, temperature, systemPrompt)
+                Log.i(TAG, "Config: kv=$kvCache, flash=$flashAttn, offload=$offload, mmap=$mmap, draft=$draftModel, ngl=$ngl, threads=$threads, nBatch=$nBatch, cacheReuse=$cacheReuse, topK=$topK, topP=$topP, temp=$temperature, sysPromptSet=${systemPrompt != null}, mmprojSet=${mmprojPath != null}")
+                return LlmConfig(kvCache, flashAttn, offload, mmap, draftModel, ngl, threads, nBatch, cacheReuse, topK, topP, temperature, systemPrompt, mmprojPath)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to read LLM config: ${e.message}")
@@ -958,6 +964,19 @@ object LlamaEngine {
                 if (it.isNotEmpty()) {
                     args.addAll(listOf("--system-prompt", it))
                     Log.i(TAG, "User override: --system-prompt set (${it.length} chars)")
+                }
+            }
+            // Multimodal projector — when present, llama-server accepts
+            // image_url content blocks via /v1/chat/completions. Vision
+            // encoder is pushed to GPU via --mmproj-offload (CLIP forward
+            // costs ~1-3s on CPU, near-zero on Adreno OpenCL).
+            // Validated 2026-04-28 Phase A spike on b8731 + Gemma 4 E4B.
+            config.mmprojPath?.let { mmp ->
+                if (mmp.isNotEmpty() && java.io.File(mmp).exists()) {
+                    args.addAll(listOf("--mmproj", mmp, "--mmproj-offload"))
+                    Log.i(TAG, "Multimodal projector: --mmproj $mmp + --mmproj-offload")
+                } else if (mmp.isNotEmpty()) {
+                    Log.w(TAG, "mmproj_path configured but file missing: $mmp")
                 }
             }
 

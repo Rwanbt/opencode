@@ -78,6 +78,8 @@ export const MODEL_CATALOG: CatalogModel[] = [
     filename: "gemma-4-E4B-it-Q4_0.gguf",
     minRamGB: 8,
     deviceClass: "flagship",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E4B-F16.gguf",
   },
   {
     id: "gemma-4-e4b",
@@ -87,6 +89,8 @@ export const MODEL_CATALOG: CatalogModel[] = [
     sizeBytes: 4_977_169_088,
     url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
     filename: "gemma-4-E4B-it-Q4_K_M.gguf",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E4B-F16.gguf",
     minRamGB: 8,
     deviceClass: "flagship",
   },
@@ -100,6 +104,8 @@ export const MODEL_CATALOG: CatalogModel[] = [
     filename: "gemma-4-E2B-it-Q4_0.gguf",
     minRamGB: 6,
     deviceClass: "standard",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E2B-F16.gguf",
   },
   {
     id: "gemma-4-e2b",
@@ -111,6 +117,8 @@ export const MODEL_CATALOG: CatalogModel[] = [
     filename: "gemma-4-E2B-it-Q4_K_M.gguf",
     minRamGB: 6,
     deviceClass: "standard",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E2B-F16.gguf",
   },
   {
     id: "gemma-3-4b",

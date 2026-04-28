@@ -197,6 +197,28 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let top_p = std::env::var("OPENCODE_LLM_TOP_P").unwrap_or_default();
     let temperature = std::env::var("OPENCODE_LLM_TEMPERATURE").unwrap_or_default();
     let system_prompt = std::env::var("OPENCODE_LLM_SYSTEM_PROMPT").unwrap_or_default();
+    // Multimodal projector — explicit env override or auto-detect a sibling
+    // mmproj-*.gguf next to the model. Same heuristic as desktop/llm.rs.
+    let mmproj_path = std::env::var("OPENCODE_LLAMA_MMPROJ").ok().filter(|s| !s.is_empty()).or_else(|| {
+        let model_dir = runtime_dir(app).join("models");
+        std::fs::read_dir(&model_dir)
+            .ok()?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("mmproj") && n.ends_with(".gguf"))
+                    .unwrap_or(false)
+            })
+            .min_by_key(|p| {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                if name.contains("f16") && !name.contains("bf16") { 0 }
+                else if name.contains("bf16") { 1 }
+                else if name.contains("f32") { 2 }
+                else { 3 }
+            })
+            .map(|p| p.to_string_lossy().to_string())
+    }).unwrap_or_default();
 
     // Build draft model path if provided
     let draft_path = draft_model.map(|d| {
@@ -214,15 +236,15 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     // (CPU for small models, Vulkan/OpenCL for large models on capable SoCs).
     let config = format!(
         "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n\
-         threads={}\nn_batch={}\ncache_reuse={}\ntop_k={}\ntop_p={}\ntemperature={}\nsystem_prompt_escaped={}\n",
+         threads={}\nn_batch={}\ncache_reuse={}\ntop_k={}\ntop_p={}\ntemperature={}\nsystem_prompt_escaped={}\nmmproj_path={}\n",
         kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path,
-        threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt_escaped
+        threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt_escaped, mmproj_path
     );
 
     match fs::write(&config_file, &config) {
         Ok(_) => log::debug!(
-            "[LLM] Config written: kv={}, flash={}, offload={}, mmap={}, threads={}, n_batch={}, cache_reuse={}, top_k={}, top_p={}, temp={}, sys_prompt_set={}",
-            kv_cache_type, flash_attn, offload_mode, mmap_mode, threads, n_batch, cache_reuse, top_k, top_p, temperature, !system_prompt.is_empty()
+            "[LLM] Config written: kv={}, flash={}, offload={}, mmap={}, threads={}, n_batch={}, cache_reuse={}, top_k={}, top_p={}, temp={}, sys_prompt_set={}, mmproj_set={}",
+            kv_cache_type, flash_attn, offload_mode, mmap_mode, threads, n_batch, cache_reuse, top_k, top_p, temperature, !system_prompt.is_empty(), !mmproj_path.is_empty()
         ),
         Err(e) => log::warn!("[LLM] Failed to write config: {}", e),
     }
