@@ -384,6 +384,8 @@ pub fn run() {
             llm::llm_idle_tick,
             llm::set_llm_config,
             llm::get_memory_info,
+            llm::detect_active_backend,
+            llm::run_inference_benchmark,
             speech::stt_download_model,
             speech::stt_load_model,
             speech::stt_transcribe,

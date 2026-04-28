@@ -380,6 +380,122 @@ pub async fn set_llm_config(
     Ok(())
 }
 
+// ─── Benchmark ─────────────────────────────────────────────────────────
+//
+// Settings → Benchmark tab calls these to measure llama-server throughput
+// on the user's actual device. Returns enough structured data for the UI
+// to plot a per-model history and surface a winner.
+
+const BENCH_LLM_PORT: u16 = 14097;
+
+#[tauri::command]
+pub async fn detect_active_backend() -> Result<String, String> {
+    Ok(std::env::var("OPENCODE_LLAMA_BACKEND").unwrap_or_else(|_| "auto".to_string()))
+}
+
+#[derive(Debug, Serialize)]
+pub struct BenchmarkResult {
+    pub prompt_tokens: u32,
+    pub generated_tokens: u32,
+    pub prefill_ms: f64,
+    pub decode_ms: f64,
+    pub prefill_tps: f64,
+    pub decode_tps: f64,
+    pub peak_ram_mib: Option<u64>,
+    pub device_label: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct LlamaCompletionTimings {
+    prompt_n: Option<u32>,
+    prompt_ms: Option<f64>,
+    prompt_per_second: Option<f64>,
+    predicted_n: Option<u32>,
+    predicted_ms: Option<f64>,
+    predicted_per_second: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct LlamaCompletionResponse {
+    #[serde(default)]
+    tokens_predicted: Option<u32>,
+    #[serde(default)]
+    tokens_evaluated: Option<u32>,
+    #[serde(default)]
+    timings: Option<LlamaCompletionTimings>,
+}
+
+/// Run a single fixed-shape prompt against the loaded llama-server and
+/// parse the timings block from its response. The mobile llama-server
+/// listens on port 14097 (Hexagon / OpenCL / CPU build, depending on
+/// LlamaEngine.detectBestBackend()).
+#[tauri::command]
+pub async fn run_inference_benchmark(
+    prompt: String,
+    n_predict: i32,
+) -> Result<BenchmarkResult, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+
+    let body = serde_json::json!({
+        "prompt": prompt,
+        "n_predict": n_predict,
+        "temperature": 0.0,
+        "top_k": 1,
+        "top_p": 1.0,
+        "stream": false,
+        "cache_prompt": false,
+    });
+
+    let url = format!("http://127.0.0.1:{}/completion", BENCH_LLM_PORT);
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("llama-server unreachable: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("llama-server HTTP {}", resp.status()));
+    }
+    let parsed: LlamaCompletionResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("response parse: {e}"))?;
+    let t = parsed
+        .timings
+        .ok_or_else(|| "llama-server response missing timings block".to_string())?;
+
+    let prompt_tokens = t.prompt_n.or(parsed.tokens_evaluated).unwrap_or(0);
+    let generated_tokens = t.predicted_n.or(parsed.tokens_predicted).unwrap_or(0);
+    let prefill_ms = t.prompt_ms.unwrap_or(0.0);
+    let decode_ms = t.predicted_ms.unwrap_or(0.0);
+    let prefill_tps = t.prompt_per_second.unwrap_or_else(|| {
+        if prefill_ms > 0.0 { prompt_tokens as f64 * 1000.0 / prefill_ms } else { 0.0 }
+    });
+    let decode_tps = t.predicted_per_second.unwrap_or_else(|| {
+        if decode_ms > 0.0 { generated_tokens as f64 * 1000.0 / decode_ms } else { 0.0 }
+    });
+
+    // Peak RAM: read /proc/meminfo once (best-effort).
+    let peak_ram_mib = match get_memory_info().await {
+        Ok(m) => Some(m.used_mb),
+        Err(_) => None,
+    };
+
+    Ok(BenchmarkResult {
+        prompt_tokens,
+        generated_tokens,
+        prefill_ms,
+        decode_ms,
+        prefill_tps,
+        decode_tps,
+        peak_ram_mib,
+        device_label: Some("Device RAM".to_string()),
+    })
+}
+
 // ─── Memory monitoring ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

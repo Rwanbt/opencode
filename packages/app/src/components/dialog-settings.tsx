@@ -10,6 +10,7 @@ import { SettingsConfiguration } from "./settings-configuration"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsBenchmark } from "./settings-benchmark"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -55,6 +56,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="console" />
                       Configuration
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="benchmark">
+                      <Icon name="settings-gear" />
+                      Benchmark
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -82,6 +87,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="configuration" class="no-scrollbar">
           <SettingsConfiguration />
+        </Tabs.Content>
+        <Tabs.Content value="benchmark" class="no-scrollbar">
+          <SettingsBenchmark />
         </Tabs.Content>
       </Tabs>
     </Dialog>
