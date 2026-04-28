@@ -14,6 +14,15 @@ const DEFAULT_CONFIG = {
   flashAttn: true,
   offloadMode: "auto",
   mmapMode: "auto",
+  accelerator: "auto",
+  threads: 0,
+  nBatch: 512,
+  cacheReuse: true,
+  topK: 64,
+  topP: 0.95,
+  temperature: 0.7,
+  systemPrompt: "",
+  draftModel: "",
 }
 
 /**
@@ -40,10 +49,21 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
       flashAttn: config.flashAttn,
       offloadMode: config.offloadMode,
       mmapMode: config.mmapMode,
+      accelerator: config.accelerator,
+      threads: config.threads,
+      nBatch: config.nBatch,
+      cacheReuse: config.cacheReuse,
+      topK: config.topK,
+      topP: config.topP,
+      temperature: config.temperature,
+      systemPrompt: config.systemPrompt,
     })
 
     console.log("[AutoLLM] Loading model:", filename)
-    await invoke("load_llm_model", { filename, draftModel: null })
+    await invoke("load_llm_model", {
+      filename,
+      draftModel: config.draftModel ? config.draftModel : null,
+    })
     currentlyLoaded = filename
     console.log("[AutoLLM] Model loaded successfully")
   } catch (e) {
@@ -63,6 +83,15 @@ function loadLlmConfig() {
         flashAttn: parsed.flashAttn ?? DEFAULT_CONFIG.flashAttn,
         offloadMode: parsed.offloadMode ?? DEFAULT_CONFIG.offloadMode,
         mmapMode: parsed.mmapMode ?? DEFAULT_CONFIG.mmapMode,
+        accelerator: parsed.accelerator ?? DEFAULT_CONFIG.accelerator,
+        threads: parsed.threads ?? DEFAULT_CONFIG.threads,
+        nBatch: parsed.nBatch ?? DEFAULT_CONFIG.nBatch,
+        cacheReuse: parsed.cacheReuse ?? DEFAULT_CONFIG.cacheReuse,
+        topK: parsed.topK ?? DEFAULT_CONFIG.topK,
+        topP: parsed.topP ?? DEFAULT_CONFIG.topP,
+        temperature: parsed.temperature ?? DEFAULT_CONFIG.temperature,
+        systemPrompt: parsed.systemPrompt ?? DEFAULT_CONFIG.systemPrompt,
+        draftModel: parsed.draftModel ?? DEFAULT_CONFIG.draftModel,
       }
     }
   } catch { /* ignore parse errors */ }

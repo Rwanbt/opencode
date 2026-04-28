@@ -313,13 +313,24 @@ pub async fn llm_idle_tick() -> Result<(), String> {
     Ok(())
 }
 
-/// Set LLM configuration env vars (called by frontend before load)
+/// Set LLM configuration env vars (called by frontend before load).
+/// Backwards-compatible: every field is optional. New fields (accelerator,
+/// threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt)
+/// are read by LlamaEngine.kt on the next load_llm_model() call.
 #[tauri::command]
 pub async fn set_llm_config(
     kv_cache_type: Option<String>,
     flash_attn: Option<bool>,
     offload_mode: Option<String>,
     mmap_mode: Option<String>,
+    accelerator: Option<String>,
+    threads: Option<i32>,
+    n_batch: Option<i32>,
+    cache_reuse: Option<bool>,
+    top_k: Option<i32>,
+    top_p: Option<f64>,
+    temperature: Option<f64>,
+    system_prompt: Option<String>,
 ) -> Result<(), String> {
     if let Some(kv) = kv_cache_type {
         std::env::set_var("OPENCODE_KV_CACHE_TYPE", &kv);
@@ -332,6 +343,38 @@ pub async fn set_llm_config(
     }
     if let Some(mm) = mmap_mode {
         std::env::set_var("OPENCODE_MMAP_MODE", &mm);
+    }
+    if let Some(acc) = accelerator {
+        // "auto" | "cpu" | "gpu" | "npu" — LlamaEngine.detectBestBackend()
+        // honours this override; "auto" clears any prior pin.
+        std::env::set_var("OPENCODE_LLAMA_BACKEND", &acc);
+    }
+    if let Some(t) = threads {
+        // 0 means auto-detect big-cores; LlamaEngine.detectBigCoreMask() handles fallback.
+        std::env::set_var("OPENCODE_LLAMA_THREADS", t.to_string());
+    }
+    if let Some(nb) = n_batch {
+        std::env::set_var("OPENCODE_LLAMA_N_BATCH", nb.to_string());
+    }
+    if let Some(cr) = cache_reuse {
+        std::env::set_var("OPENCODE_LLAMA_CACHE_REUSE", if cr { "true" } else { "false" });
+    }
+    if let Some(tk) = top_k {
+        std::env::set_var("OPENCODE_LLM_TOP_K", tk.to_string());
+    }
+    if let Some(tp) = top_p {
+        std::env::set_var("OPENCODE_LLM_TOP_P", format!("{}", tp));
+    }
+    if let Some(temp) = temperature {
+        std::env::set_var("OPENCODE_LLM_TEMPERATURE", format!("{}", temp));
+    }
+    if let Some(sp) = system_prompt {
+        // Empty string = clear/unset.
+        if sp.is_empty() {
+            std::env::remove_var("OPENCODE_LLM_SYSTEM_PROMPT");
+        } else {
+            std::env::set_var("OPENCODE_LLM_SYSTEM_PROMPT", &sp);
+        }
     }
     log::debug!("[LLM] Config updated via set_llm_config");
     Ok(())

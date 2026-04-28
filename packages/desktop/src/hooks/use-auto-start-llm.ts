@@ -12,20 +12,36 @@ function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> 
 let currentlyLoaded: string | null = null
 let loading = false
 
-/** Read LLM config from localStorage and push to Rust env vars */
-function pushConfigToEnv() {
+/** Read LLM config from localStorage and push to Rust env vars via set_llm_config */
+async function pushConfigToEnv() {
   try {
     const raw = localStorage.getItem("opencode-model-config")
     if (!raw) return
     const c = JSON.parse(raw)
-    // Desktop llm.rs reads these env vars when starting the server
-    if (c.kvCacheType) (globalThis as any).__OPENCODE_KV_CACHE = c.kvCacheType
-    if (c.offloadMode) (globalThis as any).__OPENCODE_OFFLOAD = c.offloadMode
-    if (c.mmapMode) (globalThis as any).__OPENCODE_MMAP = c.mmapMode
-    // Pass via Tauri env — Rust reads OPENCODE_KV_CACHE_TYPE etc.
-    // These are picked up by llm.rs load_llm_model()
-    console.log("[AutoLLM] Config:", c.kvCacheType, c.offloadMode, c.mmapMode)
-  } catch { /* ignore */ }
+    // Push the full config to the Rust side; load_llm_model() then reads
+    // the resulting OPENCODE_* env vars to build llama-server args.
+    await invokeTauri("set_llm_config", {
+      kvCacheType: c.kvCacheType,
+      flashAttn: c.flashAttn,
+      offloadMode: c.offloadMode,
+      mmapMode: c.mmapMode,
+      accelerator: c.accelerator,
+      threads: c.threads,
+      nBatch: c.nBatch,
+      cacheReuse: c.cacheReuse,
+      topK: c.topK,
+      topP: c.topP,
+      temperature: c.temperature,
+      systemPrompt: c.systemPrompt,
+    })
+    console.log("[AutoLLM] Config pushed:", {
+      kvCacheType: c.kvCacheType, offloadMode: c.offloadMode, mmapMode: c.mmapMode,
+      threads: c.threads, nBatch: c.nBatch, flashAttn: c.flashAttn, cacheReuse: c.cacheReuse,
+      accelerator: c.accelerator,
+    })
+  } catch (e) {
+    console.error("[AutoLLM] Failed to push config:", e)
+  }
 }
 
 /** Read the draft model filename from localStorage config */
@@ -47,7 +63,7 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
 
   loading = true
   try {
-    pushConfigToEnv()
+    await pushConfigToEnv()
     const draftModel = getDraftModel()
     console.log("[AutoLLM] Loading model:", filename, draftModel ? `(draft: ${draftModel})` : "")
     await invokeTauri("load_llm_model", { filename, draftModel })
@@ -81,6 +97,7 @@ export async function autoStartLocalLLM() {
     const draftModel = getDraftModel()
     console.log("[AutoLLM] Auto-starting model on launch:", filename, draftModel ? `(draft: ${draftModel})` : "")
     loading = true
+    await pushConfigToEnv()
     await invokeTauri("load_llm_model", { filename, draftModel })
     currentlyLoaded = filename
     console.log("[AutoLLM] Model auto-started successfully")

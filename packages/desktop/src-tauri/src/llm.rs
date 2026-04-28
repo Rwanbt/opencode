@@ -385,6 +385,95 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
     Ok(())
 }
 
+/// Set LLM configuration env vars (called by frontend before load).
+/// Mirror of mobile's set_llm_config: every field is optional, env vars
+/// are read by load_llm_model() on the next start, and (for top_k/top_p/
+/// temperature/system_prompt) by the agent-side request builder.
+/// Maps to existing desktop env names where they exist (OPENCODE_N_THREADS,
+/// OPENCODE_BATCH_SIZE) so the Rust spawn path keeps using its current vars.
+///
+/// Args are bundled in a struct because specta_fn caps at fewer positional
+/// parameters; this also gives a stable JS contract for `invoke("set_llm_config", { ... })`.
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetLlmConfigArgs {
+    pub kv_cache_type: Option<String>,
+    pub flash_attn: Option<bool>,
+    pub offload_mode: Option<String>,
+    pub mmap_mode: Option<String>,
+    pub accelerator: Option<String>,
+    pub threads: Option<i32>,
+    pub n_batch: Option<i32>,
+    pub cache_reuse: Option<bool>,
+    pub top_k: Option<i32>,
+    pub top_p: Option<f64>,
+    pub temperature: Option<f64>,
+    pub system_prompt: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_llm_config(args: SetLlmConfigArgs) -> Result<(), String> {
+    // edition 2024 marks env::set_var/remove_var as unsafe (process-wide
+    // mutation can race with other threads reading the env). The Tauri
+    // command handler runs single-threaded enough for this use case
+    // (frontend pushes config before each load), so the wrap is acceptable.
+    unsafe {
+        if let Some(kv) = args.kv_cache_type {
+            std::env::set_var("OPENCODE_KV_CACHE_TYPE", &kv);
+        }
+        if let Some(fa) = args.flash_attn {
+            std::env::set_var("OPENCODE_FLASH_ATTN", if fa { "true" } else { "false" });
+        }
+        if let Some(off) = args.offload_mode {
+            std::env::set_var("OPENCODE_OFFLOAD_MODE", &off);
+        }
+        if let Some(mm) = args.mmap_mode {
+            std::env::set_var("OPENCODE_MMAP_MODE", &mm);
+        }
+        if let Some(acc) = args.accelerator {
+            // Stored for the mobile-style backend pin (LlamaEngine.kt uses this);
+            // on desktop the offload_mode + n_gpu_layers already drive backend choice.
+            std::env::set_var("OPENCODE_LLAMA_BACKEND", &acc);
+        }
+        if let Some(t) = args.threads {
+            // 0 = auto: leave the env unset so load_llm_model falls back to its
+            // physical-cores heuristic; otherwise pin the value.
+            if t > 0 {
+                std::env::set_var("OPENCODE_N_THREADS", t.to_string());
+            } else {
+                std::env::remove_var("OPENCODE_N_THREADS");
+            }
+        }
+        if let Some(nb) = args.n_batch {
+            std::env::set_var("OPENCODE_BATCH_SIZE", nb.to_string());
+            // Use the same value as ubatch by default (single slot, simple tuning).
+            std::env::set_var("OPENCODE_UBATCH_SIZE", nb.to_string());
+        }
+        if let Some(cr) = args.cache_reuse {
+            std::env::set_var("OPENCODE_LLAMA_CACHE_REUSE", if cr { "true" } else { "false" });
+        }
+        if let Some(tk) = args.top_k {
+            std::env::set_var("OPENCODE_LLM_TOP_K", tk.to_string());
+        }
+        if let Some(tp) = args.top_p {
+            std::env::set_var("OPENCODE_LLM_TOP_P", format!("{}", tp));
+        }
+        if let Some(temp) = args.temperature {
+            std::env::set_var("OPENCODE_LLM_TEMPERATURE", format!("{}", temp));
+        }
+        if let Some(sp) = args.system_prompt {
+            if sp.is_empty() {
+                std::env::remove_var("OPENCODE_LLM_SYSTEM_PROMPT");
+            } else {
+                std::env::set_var("OPENCODE_LLM_SYSTEM_PROMPT", &sp);
+            }
+        }
+    }
+    tracing::debug!("[LLM] Config updated via set_llm_config");
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Option<String>) -> Result<(), String> {
@@ -487,6 +576,15 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .unwrap_or_else(|| "q4_0".to_string());
     let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
     let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
+    // Flash attention toggle (default on — best perf/memory).
+    let flash_attn = std::env::var("OPENCODE_FLASH_ATTN")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1" || v.eq_ignore_ascii_case("on"))
+        .unwrap_or(true);
+    // KV cache reuse between turns (default true; auto-disabled by llama.cpp on
+    // SWA models like Gemma 4 with a "cache reuse not supported" warning).
+    let cache_reuse = std::env::var("OPENCODE_LLAMA_CACHE_REUSE")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1" || v.eq_ignore_ascii_case("on"))
+        .unwrap_or(true);
 
     // n_gpu_layers: env > shared file > 99 (the historic "offload everything"
     // sentinel; llama.cpp silently caps it to the real layer count).
@@ -541,9 +639,9 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .arg("512") // leave 512 MiB free for OS/display
         .arg("-fitc")
         .arg("16384") // never go below 16K context
-        // Flash Attention for memory efficiency
+        // Flash Attention for memory efficiency (env-overridable)
         .arg("--flash-attn")
-        .arg("on")
+        .arg(if flash_attn { "on" } else { "off" })
         // KV cache quantization — read from user settings or default to q4_0
         .arg("--cache-type-k")
         .arg(&kv_cache_type)
@@ -555,6 +653,11 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // CPU threads
         .arg("--threads")
         .arg(n_threads.to_string());
+
+    // KV cache reuse between turns — opt-in via env (auto-disabled on SWA models).
+    if !cache_reuse {
+        cmd.arg("--cache-reuse").arg("0");
+    }
 
     if let Some(bs) = batch_size {
         cmd.arg("--batch-size").arg(bs.to_string());

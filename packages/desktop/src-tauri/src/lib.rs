@@ -493,6 +493,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             llm::load_llm_model,
             llm::unload_llm_model,
             llm::get_vram_info,
+            llm::set_llm_config,
             speech::tts_start,
             speech::tts_speak,
             speech::tts_stop,
