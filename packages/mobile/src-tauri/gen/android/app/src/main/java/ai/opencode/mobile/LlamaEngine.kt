@@ -971,12 +971,14 @@ object LlamaEngine {
             // encoder is pushed to GPU via --mmproj-offload (CLIP forward
             // costs ~1-3s on CPU, near-zero on Adreno OpenCL).
             // Validated 2026-04-28 Phase A spike on b8731 + Gemma 4 E4B.
-            config.mmprojPath?.let { mmp ->
-                if (mmp.isNotEmpty() && java.io.File(mmp).exists()) {
-                    args.addAll(listOf("--mmproj", mmp, "--mmproj-offload"))
-                    Log.i(TAG, "Multimodal projector: --mmproj $mmp + --mmproj-offload")
-                } else if (mmp.isNotEmpty()) {
-                    Log.w(TAG, "mmproj_path configured but file missing: $mmp")
+            config.mmprojPath?.also { mmp ->
+                when {
+                    mmp.isNotEmpty() && java.io.File(mmp).exists() -> {
+                        args.addAll(listOf("--mmproj", mmp, "--mmproj-offload"))
+                        Log.i(TAG, "Multimodal projector: --mmproj $mmp + --mmproj-offload")
+                    }
+                    mmp.isNotEmpty() -> Log.w(TAG, "mmproj_path configured but file missing: $mmp")
+                    else -> {}
                 }
             }
 
