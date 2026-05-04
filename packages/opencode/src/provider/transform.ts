@@ -27,12 +27,22 @@ export namespace ProviderTransform {
    * Rules (in priority order):
    *   reasoning === true  → never suppress (explicit opt-in)
    *   reasoning === false → always suppress (explicit opt-out)
-   *   no declaration      → suppress only for Qwen/QwQ family (by model ID)
+   *   no declaration      → allow thinking for Qwen/QwQ unless context < 8K
+   *                         (model.limit.context is updated to the real server n_ctx
+   *                          before this is called — see getLocalLLMAdaptiveLimits in llm.ts)
    */
   export function shouldSuppressThinking(model: Provider.Model): boolean {
     if (model.capabilities.reasoning === true) return false
     if (model.capabilities.reasoning === false) return true
-    return /qwen|qwq/i.test(model.api.id)
+    // Undefined reasoning capability: infer from model family.
+    // Qwen/QwQ family supports thinking via <think> blocks — allow it by default.
+    // Suppress only when the real context is tiny (<8K) to avoid starving the response.
+    // reasoning_budget (injected in llm.ts) caps the token cost proportionally.
+    if (/qwen|qwq/i.test(model.api.id)) {
+      const MIN_CONTEXT_FOR_THINKING = 8_000
+      return model.limit.context > 0 && model.limit.context < MIN_CONTEXT_FOR_THINKING
+    }
+    return false
   }
 
   // Maps npm package to the key the AI SDK expects for providerOptions

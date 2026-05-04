@@ -243,7 +243,10 @@ export namespace SessionProcessor {
 
               const loopType = identicalLoop ? "identical args" : "repeated failed edits on same file"
 
-              // Local models: auto-break instead of asking permission (4B models can't recover from loops)
+              // Local models: hard stop with recovery text.
+              // 4B models cannot reliably handle "explain and ask for help" — they
+              // tend to repeat the same call instead. We stop the agentic loop (blocked=true)
+              // and emit a short text part so the user understands why the agent stopped.
               if (ctx.model.providerID === "local-llm") {
                 log.warn("doom loop detected for local model", { tool: value.toolName, loopType })
                 ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
@@ -252,10 +255,22 @@ export namespace SessionProcessor {
                   state: {
                     status: "error",
                     input: value.input,
-                    error: `STOP: ${loopType}. Do not retry. Explain what you were trying to do and ask the user for help.`,
+                    error: `Stopped: ${loopType}`,
                     time: { start: Date.now(), end: Date.now() },
                   },
                 } satisfies MessageV2.ToolPart)
+                // Recovery message visible in the conversation thread.
+                yield* session.updatePart({
+                  id: PartID.ascending(),
+                  messageID: ctx.assistantMessage.id,
+                  sessionID: ctx.assistantMessage.sessionID,
+                  type: "text",
+                  text: `Loop detected (${loopType} on \`${value.toolName}\`). Please tell me how to proceed or suggest an alternative approach.`,
+                  time: { start: Date.now(), end: Date.now() },
+                } satisfies MessageV2.TextPart)
+                // Block the agentic loop — result will be "stop" so the user must re-prompt.
+                // Without this, the 4B model continues generating and usually repeats the same call.
+                ctx.blocked = true
                 return
               }
 

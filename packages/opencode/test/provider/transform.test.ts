@@ -5,7 +5,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 const OUTPUT_TOKEN_MAX = 32000
 
 describe("ProviderTransform.shouldSuppressThinking", () => {
-  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+  const createLocalModel = (apiId: string, reasoning?: boolean, context = 32768) =>
     ({
       id: `local-llm/${apiId}`,
       providerID: "local-llm",
@@ -21,7 +21,7 @@ describe("ProviderTransform.shouldSuppressThinking", () => {
         interleaved: false,
       },
       cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-      limit: { context: 32768, output: 8192 },
+      limit: { context, output: 8192 },
       status: "active",
       options: {},
       headers: {},
@@ -37,19 +37,31 @@ describe("ProviderTransform.shouldSuppressThinking", () => {
     expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
   })
 
-  test("Qwen3.5 (no reasoning declaration) → DOES suppress thinking", () => {
-    const model = createLocalModel("Qwen3.5-32B-Q4_K_M")
+  // New budget-aware policy: Qwen/QwQ thinking is ALLOWED by default when context is large
+  // enough. The reasoning_budget parameter (set per-request in llm.ts) caps token cost.
+  test("Qwen3.5 with large context (32768) → does NOT suppress thinking", () => {
+    const model = createLocalModel("Qwen3.5-32B-Q4_K_M", undefined, 32768)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("QwQ with large context → does NOT suppress thinking", () => {
+    const model = createLocalModel("QwQ-32B-Q4_K_M", undefined, 32768)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("qwen lowercase variant with large context → does NOT suppress", () => {
+    const model = createLocalModel("qwen2.5-coder-32b-instruct", undefined, 32768)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
+  })
+
+  test("Qwen with tiny context (<8K) → DOES suppress thinking to protect response budget", () => {
+    const model = createLocalModel("Qwen3.5-4B-Q4_K_M", undefined, 4096)
     expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
   })
 
-  test("QwQ (no reasoning declaration) → DOES suppress thinking", () => {
-    const model = createLocalModel("QwQ-32B-Q4_K_M")
-    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
-  })
-
-  test("qwen lowercase variant → DOES suppress", () => {
-    const model = createLocalModel("qwen2.5-coder-32b-instruct")
-    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  test("Qwen with unknown context (0) → does NOT suppress (budget unknown, allow thinking)", () => {
+    const model = createLocalModel("Qwen3.5-4B-Q4_K_M", undefined, 0)
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
   })
 
   test("reasoning: true (explicit) → never suppress regardless of model", () => {
@@ -67,12 +79,11 @@ describe("ProviderTransform.shouldSuppressThinking", () => {
     expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
   })
 
-  test("DeepSeek model (no reasoning declaration) → does NOT suppress", () => {
-    const model = createLocalModel("DeepSeek-R1-Distill-Qwen-14B")
-    // This contains "Qwen" in name — but it's a DeepSeek distill.
-    // The regex matches "qwen" so it IS suppressed. This is acceptable:
-    // DeepSeek-Qwen distills share the Qwen tokenizer and DO understand /no_think.
-    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(true)
+  test("DeepSeek-Qwen distill with large context → does NOT suppress", () => {
+    const model = createLocalModel("DeepSeek-R1-Distill-Qwen-14B", undefined, 32768)
+    // DeepSeek-Qwen distills share the Qwen tokenizer and understand /no_think,
+    // but with sufficient context they benefit from thinking — allow it by default.
+    expect(ProviderTransform.shouldSuppressThinking(model)).toBe(false)
   })
 
   test("Phi model (no reasoning declaration) → does NOT suppress", () => {
@@ -82,7 +93,7 @@ describe("ProviderTransform.shouldSuppressThinking", () => {
 })
 
 describe("ProviderTransform.message - local-llm /no_think injection", () => {
-  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+  const createLocalModel = (apiId: string, reasoning?: boolean, context = 32768) =>
     ({
       id: `local-llm/${apiId}`,
       providerID: "local-llm",
@@ -98,17 +109,25 @@ describe("ProviderTransform.message - local-llm /no_think injection", () => {
         interleaved: false,
       },
       cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-      limit: { context: 32768, output: 8192 },
+      limit: { context, output: 8192 },
       status: "active",
       options: {},
       headers: {},
     }) as any
 
-  test("Qwen model gets /no_think appended to last user message", () => {
+  test("Qwen model with large context does NOT get /no_think (thinking allowed)", () => {
     const msgs = [
       { role: "user", content: "Hello" },
     ] as any[]
-    const result = ProviderTransform.message(msgs, createLocalModel("Qwen3.5-32B"), {})
+    const result = ProviderTransform.message(msgs, createLocalModel("Qwen3.5-32B", undefined, 32768), {})
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("Qwen model with tiny context (<8K) DOES get /no_think (protect response budget)", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("Qwen3.5-32B", undefined, 4096), {})
     expect(result[0].content).toBe("Hello /no_think")
   })
 
@@ -128,7 +147,7 @@ describe("ProviderTransform.message - local-llm /no_think injection", () => {
     expect(result[0].content).toBe("Hello")
   })
 
-  test("Qwen model strips reasoning parts from assistant messages", () => {
+  test("Qwen model with large context preserves reasoning parts in assistant messages", () => {
     const msgs = [
       {
         role: "assistant",
@@ -139,7 +158,28 @@ describe("ProviderTransform.message - local-llm /no_think injection", () => {
       },
       { role: "user", content: "Follow up" },
     ] as any[]
-    const result = ProviderTransform.message(msgs, createLocalModel("QwQ-32B"), {})
+    const result = ProviderTransform.message(msgs, createLocalModel("QwQ-32B", undefined, 32768), {})
+    // Reasoning NOT stripped (thinking active)
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "thinking..." },
+      { type: "text", text: "Answer" },
+    ])
+    // No /no_think
+    expect(result[1].content).toBe("Follow up")
+  })
+
+  test("Qwen model with tiny context strips reasoning and appends /no_think", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking..." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+      { role: "user", content: "Follow up" },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, createLocalModel("QwQ-32B", undefined, 4096), {})
     // Reasoning stripped from assistant
     expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
     // /no_think appended to user
@@ -176,7 +216,7 @@ describe("ProviderTransform.message - local-llm /no_think injection", () => {
 
 describe("ProviderTransform.options - local-llm enable_thinking suppression", () => {
   const sessionID = "test-session"
-  const createLocalModel = (apiId: string, reasoning?: boolean) =>
+  const createLocalModel = (apiId: string, reasoning?: boolean, context = 32768) =>
     ({
       id: `local-llm/${apiId}`,
       providerID: "local-llm",
@@ -192,14 +232,19 @@ describe("ProviderTransform.options - local-llm enable_thinking suppression", ()
         interleaved: false,
       },
       cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-      limit: { context: 32768, output: 8192 },
+      limit: { context, output: 8192 },
       status: "active",
       options: {},
       headers: {},
     }) as any
 
-  test("Qwen model gets chat_template_kwargs with enable_thinking: false", () => {
-    const result = ProviderTransform.options({ model: createLocalModel("Qwen3.5-32B"), sessionID })
+  test("Qwen with large context → does NOT get chat_template_kwargs (thinking allowed)", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("Qwen3.5-32B", undefined, 32768), sessionID })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("Qwen with tiny context (<8K) → gets chat_template_kwargs with enable_thinking: false", () => {
+    const result = ProviderTransform.options({ model: createLocalModel("Qwen3.5-32B", undefined, 4096), sessionID })
     expect(result.chat_template_kwargs).toEqual({ enable_thinking: false })
   })
 

@@ -208,6 +208,7 @@ export namespace ToolRegistry {
           "glob",
           "grep",
           "question",
+          "todowrite",
           "websearch",
           "webfetch",
         ])
@@ -219,6 +220,7 @@ export namespace ToolRegistry {
           glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
           grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
           question: "Ask user a question. Args: {question: string}. Use when you need clarification.",
+          todowrite: "Track your plan as a list of tasks. Args: {todos: [{content: string, status: 'pending'|'in_progress'|'completed', priority: 'high'|'medium'|'low'}]}. Call this to persist your plan so you don't lose it across context windows.",
           websearch: "Search the web. Args: {query: string}. Search BEFORE coding when unsure about any library API, crate name, or version.",
           webfetch: "Fetch a URL as text. Args: {url: string}. Use to read docs, READMEs, or pages found via websearch.",
         }
