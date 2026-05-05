@@ -494,6 +494,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           // Guard 1 — read before edit
+          // Also allow edit if the model wrote the file in this session (it has the content).
           const hasRead = messages.some((m) =>
             m.parts.some(
               (p) =>
@@ -503,7 +504,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 (p.state as any).input?.filePath === args.filePath,
             ),
           )
-          if (!hasRead) {
+          const hasWrite = messages.some((m) =>
+            m.parts.some(
+              (p) =>
+                p.type === "tool" &&
+                p.tool === "write" &&
+                p.state.status === "completed" &&
+                (p.state as any).input?.filePath === args.filePath,
+            ),
+          )
+          if (!hasRead && !hasWrite) {
             return "You must read this file before editing it: " + args.filePath
           }
         }
