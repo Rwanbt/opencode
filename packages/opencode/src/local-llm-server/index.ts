@@ -18,7 +18,7 @@ import { detectProfile, deriveConfig } from "./auto-config"
 
 const log = Log.create({ service: "local-llm-server" })
 
-const PORT = 14097
+const PORT = Number(process.env.OPENCODE_LLAMA_PORT ?? 14097)
 
 // Resolve the tmp base dir in a way that works on Android, where `/` is
 // read-only for sandboxed apps and `os.tmpdir()` returns the bionic default
@@ -67,6 +67,9 @@ const ALLOWED_KV_CACHE_TYPES = new Set([
   "iq4_nl",
   "q5_0",
   "q5_1",
+  "turbo2", // TurboQuant 3.25 bpw — Hadamard + PolarQuant + QJL (Google ICLR 2026)
+  "turbo3", // TurboQuant 3.75 bpw — meilleur compromis compression/qualité
+  "turbo4", // TurboQuant 4.25 bpw — proche q4_0 en taille, supérieur en qualité
 ])
 
 // ─── Module state ─────────────────────────────────────────────────────────────
