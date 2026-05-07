@@ -8,7 +8,16 @@ jobs:
   notify:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Send nicely-formatted embed to Discord
-        uses: SethCohen/github-releases-to-discord@v1
-        with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Send release notification to Discord
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          NAME: ${{ github.event.release.name }}
+          URL: ${{ github.event.release.html_url }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title  "$TAG" \
+            --arg desc   "$NAME" \
+            --arg url    "$URL" \
+            '{embeds:[{title:$title,description:$desc,url:$url,color:5814783}]}')
+          curl -sf -H 'Content-Type: application/json' -d "$PAYLOAD" "$WEBHOOK"

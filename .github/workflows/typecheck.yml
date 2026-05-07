@@ -19,3 +19,26 @@ jobs:
 
       - name: Run typecheck
         run: bun typecheck
+
+      - name: Audit innerHTML usage
+        run: |
+          UNKNOWN=$(grep -rn "innerHTML" packages/web/src packages/app/src packages/ui/src \
+            --include="*.tsx" --include="*.ts" \
+            | grep -v "\.test\.ts:" \
+            | grep -v "content-bash.tsx" \
+            | grep -v "content-code.tsx" \
+            | grep -v "content-markdown.tsx" \
+            | grep -v "file-tree.tsx" \
+            | grep -v "prompt-input.tsx" \
+            | grep -v "settings-general.tsx" \
+            | grep -v "ui/src/components/markdown.tsx" \
+            | grep -v "ui/src/components/file-ssr.tsx" \
+            | grep -v "ui/src/components/icon.tsx" \
+            | grep -v "ui/src/components/file.tsx" \
+            | grep -v "ui/src/pierre/file-find.ts" \
+            || true)
+          if [ -n "$UNKNOWN" ]; then
+            echo "::error::Unvetted innerHTML usage detected. Audit and add to .eslintrc.restrict.cjs before merging."
+            echo "$UNKNOWN"
+            exit 1
+          fi
