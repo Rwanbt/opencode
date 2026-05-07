@@ -2,7 +2,7 @@
  * Text chunking strategies for RAG indexing.
  * Splits code and text into meaningful chunks for embedding.
  */
-import { createHash } from "crypto"
+import { createHash } from "node:crypto"
 
 const MAX_CHUNK_SIZE = 1500 // ~375 tokens at 4 chars/token
 const OVERLAP = 200 // Character overlap between chunks

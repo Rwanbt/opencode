@@ -1,8 +1,7 @@
 import { Log } from "../util/log"
-import { Ollama } from "./ollama"
 import { Filesystem } from "../util/filesystem"
-import path from "path"
-import fs from "fs/promises"
+import path from "node:path"
+import fs from "node:fs/promises"
 
 const log = Log.create({ service: "local-models" })
 

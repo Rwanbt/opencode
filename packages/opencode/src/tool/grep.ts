@@ -7,7 +7,7 @@ import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
-import path from "path"
+import path from "node:path"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000

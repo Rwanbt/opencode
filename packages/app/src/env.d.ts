@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_OPENCODE_SERVER_PORT: string
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: TypeScript module augmentation for import.meta.env
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }

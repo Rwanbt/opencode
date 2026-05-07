@@ -211,7 +211,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         reset(action: string) {
           setStore("keybinds", (current) => {
-            if (!Object.prototype.hasOwnProperty.call(current, action)) return current
+            if (!Object.hasOwn(current, action)) return current
             const next = { ...current }
             delete next[action]
             return next

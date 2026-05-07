@@ -85,9 +85,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
 
   const createLanguageModel = (modelId: OpenaiCompatibleModelId) => createChatModel(modelId)
 
-  const provider = function (modelId: OpenaiCompatibleModelId) {
-    return createChatModel(modelId)
-  }
+  const provider = (modelId: OpenaiCompatibleModelId) => createChatModel(modelId)
 
   provider.languageModel = createLanguageModel
   provider.chat = createChatModel

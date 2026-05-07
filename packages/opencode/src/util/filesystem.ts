@@ -1,10 +1,10 @@
-import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
-import { createWriteStream, existsSync, statSync } from "fs"
+import { chmod, mkdir, readFile, stat as statFile, writeFile } from "node:fs/promises"
+import { createWriteStream, existsSync, statSync } from "node:fs"
 import { lookup } from "mime-types"
-import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
-import { Readable } from "stream"
-import { pipeline } from "stream/promises"
+import { realpathSync } from "node:fs"
+import { dirname, join, relative, resolve as pathResolve, win32 } from "node:path"
+import { Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import { Glob } from "./glob"
 
 export namespace Filesystem {

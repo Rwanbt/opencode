@@ -1,5 +1,5 @@
 import {
-  APICallError,
+  type APICallError,
   InvalidResponseDataError,
   type LanguageModelV3,
   type LanguageModelV3CallOptions,
@@ -695,7 +695,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 inputTokens: {
                   total: usage.promptTokens,
                   noCache:
-                    usage.promptTokens != undefined && usage.promptTokensDetails.cachedTokens != undefined
+                    usage.promptTokens !== undefined && usage.promptTokensDetails.cachedTokens !== undefined
                       ? usage.promptTokens - usage.promptTokensDetails.cachedTokens
                       : undefined,
                   cacheRead: usage.promptTokensDetails.cachedTokens,

@@ -128,31 +128,6 @@ export interface ISerializeRange {
   end: number
 }
 
-export interface IHTMLSerializeOptions {
-  /**
-   * The number of rows in the scrollback buffer to serialize, starting from
-   * the bottom of the scrollback buffer.
-   */
-  scrollback?: number
-  /**
-   * Whether to only serialize the selection.
-   * Default: false
-   */
-  onlySelection?: boolean
-  /**
-   * Whether to include the global background of the terminal.
-   * Default: false
-   */
-  includeGlobalBackground?: boolean
-  /**
-   * The range to serialize. This is prioritized over onlySelection.
-   */
-  range?: {
-    startLine: number
-    endLine: number
-    startCol: number
-  }
-}
 
 // ============================================================================
 // Helper Functions

@@ -286,7 +286,7 @@ export function DialogLocalLLM() {
     } catch {}
   }
 
-  async function handleStart(filename: string) {
+  async function _handleStart(filename: string) {
     setError("")
     setLoading(filename)
     try {
@@ -322,7 +322,7 @@ export function DialogLocalLLM() {
     setLoading(null)
   }
 
-  async function handleStop() {
+  async function _handleStop() {
     setLoading("__stop__")
     try {
       await invokeTauri("unload_llm_model")

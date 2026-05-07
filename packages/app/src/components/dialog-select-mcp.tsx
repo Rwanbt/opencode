@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/solid-query"
-import { Component, createEffect, createMemo, on, Show } from "solid-js"
+import { type Component, createEffect, createMemo, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"

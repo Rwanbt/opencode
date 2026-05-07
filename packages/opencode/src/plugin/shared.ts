@@ -1,5 +1,5 @@
-import path from "path"
-import { fileURLToPath, pathToFileURL } from "url"
+import path from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import semver from "semver"
 import { Npm } from "@/npm"
 import { Filesystem } from "@/util/filesystem"

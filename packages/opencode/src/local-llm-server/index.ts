@@ -9,10 +9,10 @@
  *   owner.pid      — PID owner:PID child du process qui a spawné le serveur
  *   start.lock     — lock exclusif atomique (O_EXCL) pendant le spawn
  */
-import path from "path"
-import os from "os"
-import fs from "fs"
-import net from "net"
+import path from "node:path"
+import os from "node:os"
+import fs from "node:fs"
+import net from "node:net"
 import { Log } from "@/util/log"
 import { detectProfile, deriveConfig } from "./auto-config"
 

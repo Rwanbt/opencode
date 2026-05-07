@@ -1,8 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { LocalLLMServer } from "@/local-llm-server"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
-import * as Queue from "effect/Queue"
+import { Effect, Layer, Record, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
@@ -437,7 +436,7 @@ export namespace LLM {
         }
 
         let repairedArgs = false
-        let parsedArgs: unknown = undefined
+        let parsedArgs: unknown 
         try {
           parsedArgs = JSON.parse(failed.toolCall.input)
           const map = FIELD_ALIASES[resolvedName]

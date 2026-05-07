@@ -1,5 +1,5 @@
 import { Log } from "../util/log"
-import path from "path"
+import path from "node:path"
 import { Global } from "../global"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"

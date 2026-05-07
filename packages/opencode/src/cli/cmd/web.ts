@@ -4,7 +4,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import open from "open"
-import { networkInterfaces } from "os"
+import { networkInterfaces } from "node:os"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()

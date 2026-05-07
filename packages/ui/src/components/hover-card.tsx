@@ -1,5 +1,5 @@
 import { HoverCard as Kobalte } from "@kobalte/core/hover-card"
-import { ComponentProps, JSXElement, ParentProps, splitProps } from "solid-js"
+import { type ComponentProps, type JSXElement, type ParentProps, splitProps } from "solid-js"
 
 export interface HoverCardProps extends ParentProps, Omit<ComponentProps<typeof Kobalte>, "children"> {
   trigger: JSXElement

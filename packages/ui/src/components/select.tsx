@@ -1,7 +1,7 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
-import { Button, ButtonProps } from "./button"
+import { Button, type ButtonProps } from "./button"
 import { Icon } from "./icon"
 
 export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
@@ -13,13 +13,14 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   groupBy?: (x: T) => string
   valueClass?: ComponentProps<"div">["class"]
   onSelect?: (value: T | undefined) => void
-  onHighlight?: (value: T | undefined) => (() => void) | void
+  onHighlight?: (value: T | undefined) => (() => void) | undefined
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   children?: (item: T | undefined) => JSX.Element
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
   triggerProps?: Record<string, string | number | boolean | undefined>
+  "data-action"?: string
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -44,7 +45,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
 
   const state = {
     key: undefined as string | undefined,
-    cleanup: undefined as (() => void) | void,
+    cleanup: undefined as (() => void) | undefined,
   }
 
   const stop = () => {
@@ -83,7 +84,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
   })
 
   return (
-    // @ts-ignore
+    // @ts-expect-error
     <Kobalte<T, { category: string; options: T[] }>
       {...others}
       data-component="select"

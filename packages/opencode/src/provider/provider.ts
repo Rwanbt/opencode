@@ -1,5 +1,5 @@
 import z from "zod"
-import os from "os"
+import os from "node:os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -9,7 +9,7 @@ import { Npm } from "../npm"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import { type LanguageModelV3 } from "@ai-sdk/provider"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -17,7 +17,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
-import path from "path"
+import path from "node:path"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -1390,7 +1390,6 @@ export namespace Provider {
 
             const res = await fetchFn(input, {
               ...opts,
-              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
               timeout: false,
             })
 

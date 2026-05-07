@@ -1,4 +1,4 @@
-import { type SelectedLineRange } from "@pierre/diffs"
+import type { SelectedLineRange } from "@pierre/diffs"
 
 type SelectionKey = "ui.sessionReview.selection.line" | "ui.sessionReview.selection.lines"
 type SelectionVars = Record<string, string | number>

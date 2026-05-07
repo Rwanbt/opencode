@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import path from "node:path"
 import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./glob.txt"

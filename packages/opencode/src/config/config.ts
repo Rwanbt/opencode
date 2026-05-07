@@ -1,13 +1,13 @@
 import { Log } from "../util/log"
-import path from "path"
-import { pathToFileURL } from "url"
-import os from "os"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
+import os from "node:os"
 import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
-import fsNode from "fs/promises"
+import fsNode from "node:fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
@@ -23,7 +23,7 @@ import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
+import { constants, existsSync } from "node:fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -310,7 +310,6 @@ export namespace Config {
           ...parsed.data,
           mode: "primary" as const,
         }
-        continue
       }
     }
     return result
@@ -561,7 +560,7 @@ export namespace Config {
         .describe("MCP server access control for this agent"),
     })
     .catchall(z.any())
-    .transform((agent, ctx) => {
+    .transform((agent, _ctx) => {
       const knownKeys = new Set([
         "name",
         "model",
@@ -1646,7 +1645,7 @@ export namespace Config {
           // Migrate deprecated `mode` field to `agent`
           if (result.mode) {
             result.agent = mergeDeep(result.agent ?? {}, result.mode)
-            for (const [key, value] of Object.entries(result.mode)) {
+            for (const [key, _value] of Object.entries(result.mode)) {
               if (result.agent![key] && !(result.agent![key] as any).mode) {
                 ;(result.agent![key] as any).mode = "primary"
               }

@@ -1,18 +1,18 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, type Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
-  ContentPart,
+  type ContentPart,
   DEFAULT_PROMPT,
   isPromptEqual,
-  Prompt,
+  type Prompt,
   usePrompt,
-  ImageAttachmentPart,
-  AgentPart,
-  FileAttachmentPart,
+  type ImageAttachmentPart,
+  type AgentPart,
+  type FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -1095,14 +1095,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (mode === "auto-edit") return "Auto Edit"
     return "Ask"
   })
-  const acceptLabel = createMemo(() =>
+  const _acceptLabel = createMemo(() =>
     language.t(accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable"),
   )
   const setAcceptMode = (value: string) => {
     const mode = value === "Full Auto" ? true : value === "Auto Edit" ? ("auto-edit" as const) : false
     permission.setAcceptMode(mode, params.id, sdk.directory)
   }
-  const toggleAccept = () => {
+  const _toggleAccept = () => {
     if (!params.id) {
       permission.toggleAutoAcceptDirectory(sdk.directory)
       return

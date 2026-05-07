@@ -14,7 +14,7 @@ const log = Log.create({ service: "rag.conflict" })
 const TOPIC_SIMILARITY_THRESHOLD = 0.85
 
 /** Threshold below which same-topic embeddings are considered "contradictory". */
-const CONTRADICTION_THRESHOLD = 0.5
+const _CONTRADICTION_THRESHOLD = 0.5
 
 export interface ConflictCandidate {
   id: string

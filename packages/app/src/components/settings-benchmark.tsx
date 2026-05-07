@@ -12,7 +12,7 @@
  * Future: when run_device_backend_benchmark lands in the Rust side, this
  * UI will iterate over CPU / OpenCL / Vulkan / Hexagon and show a table.
  */
-import { Component, createSignal, createResource, createMemo, For, Show, onCleanup } from "solid-js"
+import { type Component, createSignal, createResource, createMemo, For, Show, } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 

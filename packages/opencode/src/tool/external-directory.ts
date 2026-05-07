@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { Effect } from "effect"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"

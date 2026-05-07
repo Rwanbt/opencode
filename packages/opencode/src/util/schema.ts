@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import type { Schema } from "effect"
 
 /**
  * Attach static methods to a schema object. Designed to be used with `.pipe()`:
@@ -33,7 +33,7 @@ type NewtypeBrand<Tag extends string> = { readonly [NewtypeBrand]: Tag }
  *   Schema.decodeEffect(QuestionID)(input)
  */
 export function Newtype<Self>() {
-  return <const Tag extends string, S extends Schema.Top>(tag: Tag, schema: S) => {
+  return <const Tag extends string, S extends Schema.Top>(_tag: Tag, schema: S) => {
     type Branded = NewtypeBrand<Tag>
 
     abstract class Base {

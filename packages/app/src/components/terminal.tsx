@@ -362,7 +362,7 @@ export const Terminal = (props: TerminalProps) => {
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let ghostty: Ghostty
+  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -568,7 +568,7 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      if (g) ghostty = g
+      if (g) _ghostty = g
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
@@ -632,7 +632,7 @@ export const Terminal = (props: TerminalProps) => {
       })
       cleanups.push(() => disposeIfDisposable(onData))
       const onKey = t.onKey((key) => {
-        if (key.key == "Enter") {
+        if (key.key === "Enter") {
           props.onSubmit?.()
         }
       })

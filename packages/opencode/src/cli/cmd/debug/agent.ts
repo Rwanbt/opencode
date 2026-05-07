@@ -1,5 +1,5 @@
-import { EOL } from "os"
-import { basename } from "path"
+import { EOL } from "node:os"
+import { basename } from "node:path"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "../../../provider/provider"
 import { Session } from "../../../session"

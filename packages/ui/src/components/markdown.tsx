@@ -3,7 +3,7 @@ import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
-import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { stream } from "./markdown-stream"
 
@@ -51,7 +51,7 @@ function sanitize(html: string) {
   return DOMPurify.sanitize(html, config)
 }
 
-function escape(text: string) {
+function escapeHtml(text: string) {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -61,7 +61,7 @@ function escape(text: string) {
 }
 
 function fallback(markdown: string) {
-  return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
+  return escapeHtml(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
 }
 
 type CopyLabels = {

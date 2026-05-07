@@ -1,4 +1,4 @@
-import { Component, For, Show } from "solid-js"
+import { type Component, For, Show } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"

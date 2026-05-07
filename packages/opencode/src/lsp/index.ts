@@ -2,8 +2,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
-import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
+import path from "node:path"
+import { pathToFileURL, fileURLToPath } from "node:url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
@@ -39,6 +39,7 @@ export namespace LSP {
     })
   export type Range = z.infer<typeof Range>
 
+  // biome-ignore lint/suspicious/noShadowRestrictedNames: LSP protocol uses Symbol as the canonical name
   export const Symbol = z
     .object({
       name: z.string(),

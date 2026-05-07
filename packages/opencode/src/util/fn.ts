@@ -2,7 +2,7 @@ import { z } from "zod"
 
 export function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => Result) {
   const result = (input: z.infer<T>) => {
-    let parsed
+    let parsed: z.infer<T>
     try {
       parsed = schema.parse(input)
     } catch (e) {

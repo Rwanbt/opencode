@@ -1,4 +1,4 @@
-import { dict as en } from "./en"
+import type { dict as en } from "./en"
 
 type Keys = keyof typeof en
 

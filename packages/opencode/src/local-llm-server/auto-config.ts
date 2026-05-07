@@ -13,8 +13,8 @@
 //! Keep this file simple and avoid external deps — it runs in the opencode
 //! sidecar hot path.
 
-import os from "os"
-import { spawnSync } from "child_process"
+import os from "node:os"
+import { spawnSync } from "node:child_process"
 
 export type GpuBackend = "cuda" | "rocm" | "vulkan" | "opencl" | "metal" | "none"
 export type ThermalState = "nominal" | "fair" | "serious" | "critical"

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Button } from "@opencode-ai/ui/button"
@@ -346,7 +346,6 @@ export const SortableProject = (props: {
   )
 
   return (
-    // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
       <Show when={preview() && !selected()} fallback={tile()}>
         <HoverCard

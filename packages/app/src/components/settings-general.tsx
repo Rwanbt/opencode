@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
+import { type Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import QRCode from "qrcode"
 import { Button } from "@opencode-ai/ui/button"
@@ -401,45 +401,54 @@ export const SettingsGeneral: Component = () => {
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <Select
-            data-action="settings-sounds-agent"
-            {...soundSelectProps(
-              () => settings.sounds.agentEnabled(),
-              () => settings.sounds.agent(),
-              (value) => settings.sounds.setAgentEnabled(value),
-              (id) => settings.sounds.setAgent(id),
-            )}
-          />
+          {
+            // @ts-expect-error -- data-action is valid HTML but not reflected in Kobalte's SelectRootProps tsgo types
+            <Select
+              data-action="settings-sounds-agent"
+              {...soundSelectProps(
+                () => settings.sounds.agentEnabled(),
+                () => settings.sounds.agent(),
+                (value) => settings.sounds.setAgentEnabled(value),
+                (id) => settings.sounds.setAgent(id),
+              )}
+            />
+          }
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <Select
-            data-action="settings-sounds-permissions"
-            {...soundSelectProps(
-              () => settings.sounds.permissionsEnabled(),
-              () => settings.sounds.permissions(),
-              (value) => settings.sounds.setPermissionsEnabled(value),
-              (id) => settings.sounds.setPermissions(id),
-            )}
-          />
+          {
+            // @ts-expect-error -- data-action is valid HTML but not reflected in Kobalte's SelectRootProps tsgo types
+            <Select
+              data-action="settings-sounds-permissions"
+              {...soundSelectProps(
+                () => settings.sounds.permissionsEnabled(),
+                () => settings.sounds.permissions(),
+                (value) => settings.sounds.setPermissionsEnabled(value),
+                (id) => settings.sounds.setPermissions(id),
+              )}
+            />
+          }
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <Select
-            data-action="settings-sounds-errors"
-            {...soundSelectProps(
-              () => settings.sounds.errorsEnabled(),
-              () => settings.sounds.errors(),
-              (value) => settings.sounds.setErrorsEnabled(value),
-              (id) => settings.sounds.setErrors(id),
-            )}
-          />
+          {
+            // @ts-expect-error -- data-action is valid HTML but not reflected in Kobalte's SelectRootProps tsgo types
+            <Select
+              data-action="settings-sounds-errors"
+              {...soundSelectProps(
+                () => settings.sounds.errorsEnabled(),
+                () => settings.sounds.errors(),
+                (value) => settings.sounds.setErrorsEnabled(value),
+                (id) => settings.sounds.setErrors(id),
+              )}
+            />
+          }
         </SettingsRow>
       </SettingsList>
     </div>

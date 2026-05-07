@@ -75,38 +75,24 @@ export function estimateSessionContextBreakdown(args: {
 }) {
   if (!args.input) return []
 
-  const counts = args.messages.reduce(
-    (acc, msg) => {
-      const parts = args.parts[msg.id] ?? []
-      if (msg.role === "user") {
-        const user = parts.reduce((sum, part) => sum + charsFromUserPart(part), 0)
-        return { ...acc, user: acc.user + user }
+  const counts = {
+    system: args.systemPrompt?.length ?? 0,
+    user: 0,
+    assistant: 0,
+    tool: 0,
+  }
+  for (const msg of args.messages) {
+    const parts = args.parts[msg.id] ?? []
+    if (msg.role === "user") {
+      counts.user += parts.reduce((sum, part) => sum + charsFromUserPart(part), 0)
+    } else if (msg.role === "assistant") {
+      for (const part of parts) {
+        const next = charsFromAssistantPart(part)
+        counts.assistant += next.assistant
+        counts.tool += next.tool
       }
-
-      if (msg.role !== "assistant") return acc
-      const assistant = parts.reduce(
-        (sum, part) => {
-          const next = charsFromAssistantPart(part)
-          return {
-            assistant: sum.assistant + next.assistant,
-            tool: sum.tool + next.tool,
-          }
-        },
-        { assistant: 0, tool: 0 },
-      )
-      return {
-        ...acc,
-        assistant: acc.assistant + assistant.assistant,
-        tool: acc.tool + assistant.tool,
-      }
-    },
-    {
-      system: args.systemPrompt?.length ?? 0,
-      user: 0,
-      assistant: 0,
-      tool: 0,
-    },
-  )
+    }
+  }
 
   const tokens = {
     system: estimateTokens(counts.system),

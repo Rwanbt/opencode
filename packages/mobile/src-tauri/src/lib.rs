@@ -94,7 +94,7 @@ enum PrivateFetchMsg {
 ///
 /// dead_code allow: registered in invoke_handler under `#[cfg(target_os="android")]`,
 /// so host cargo check sees no caller.
-#[allow(dead_code)]
+#[cfg(target_os = "android")]
 #[tauri::command]
 async fn fetch_private_server(
     url: String,

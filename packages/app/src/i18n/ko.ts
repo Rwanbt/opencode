@@ -1,5 +1,6 @@
-import { dict as en } from "./en"
+import type { dict as en } from "./en"
 
+// biome-ignore lint/correctness/noUnusedVariables: type-guard ensures this file stays in sync with en.ts
 type Keys = keyof typeof en
 
 export const dict = {

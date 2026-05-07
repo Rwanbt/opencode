@@ -5,7 +5,7 @@ import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
 import { Session } from "."
-import { MessageV2 } from "./message-v2"
+import type { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
 
 export namespace SessionSummary {

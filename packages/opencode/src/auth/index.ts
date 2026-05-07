@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
@@ -272,7 +272,7 @@ let migrationDone = false
 async function maybeMigrateToKeychain(storage: KeychainStorage): Promise<void> {
   if (migrationDone) return
   migrationDone = true // set early so concurrent calls don't race
-  const fs = await import("fs/promises")
+  const fs = await import("node:fs/promises")
   let legacy: Record<string, unknown>
   try {
     const raw = await fs.readFile(file, "utf8")
@@ -309,7 +309,7 @@ async function maybeMigrateToKeychain(storage: KeychainStorage): Promise<void> {
 }
 
 async function maybeRollbackFromKeychain(): Promise<void> {
-  const fs = await import("fs/promises")
+  const fs = await import("node:fs/promises")
   const exists = async (p: string) => {
     try {
       await fs.access(p)
@@ -325,7 +325,7 @@ async function maybeRollbackFromKeychain(): Promise<void> {
 }
 
 async function maybePurgeMigratedBackup(): Promise<void> {
-  const fs = await import("fs/promises")
+  const fs = await import("node:fs/promises")
   try {
     const stat = await fs.stat(migratedMarker)
     const ageMs = Date.now() - stat.mtimeMs

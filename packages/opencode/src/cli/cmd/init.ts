@@ -1,10 +1,10 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import * as prompts from "@clack/prompts"
-import fs from "fs/promises"
-import path from "path"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { LANGUAGE_EXTENSIONS } from "../../lsp/language"
 import { Filesystem } from "../../util/filesystem"
 

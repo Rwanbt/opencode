@@ -1,17 +1,17 @@
 import "@opentui/solid/runtime-plugin-support"
-import {
-  type TuiDispose,
-  type TuiPlugin,
-  type TuiPluginApi,
-  type TuiPluginInstallResult,
-  type TuiPluginModule,
-  type TuiPluginMeta,
-  type TuiPluginStatus,
-  type TuiSlotPlugin,
-  type TuiTheme,
+import type {
+  TuiDispose,
+  TuiPlugin,
+  TuiPluginApi,
+  TuiPluginInstallResult,
+  TuiPluginModule,
+  TuiPluginMeta,
+  TuiPluginStatus,
+  TuiSlotPlugin,
+  TuiTheme,
 } from "@opencode-ai/plugin/tui"
-import path from "path"
-import { fileURLToPath } from "url"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { Config } from "@/config/config"
 import { TuiConfig } from "@/config/tui"

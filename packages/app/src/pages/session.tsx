@@ -445,8 +445,8 @@ export default function Page() {
     review: reviewTab,
     hasReview: canReview,
   })
-  const contextOpen = tabState.contextOpen
-  const openedTabs = tabState.openedTabs
+  const _contextOpen = tabState.contextOpen
+  const _openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)

@@ -1,12 +1,9 @@
 import { cmd } from "./cmd"
 import { UI } from "../ui"
-import { EOL } from "os"
-import os from "os"
-import fs from "fs/promises"
-import path from "path"
-import { Process } from "../../util/process"
+import os from "node:os"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { Filesystem } from "../../util/filesystem"
-import { LANGUAGE_EXTENSIONS } from "../../lsp/language"
 
 const CHECK = UI.Style.TEXT_SUCCESS + "  [PASS]" + UI.Style.TEXT_NORMAL
 const FAIL = UI.Style.TEXT_DANGER + "  [FAIL]" + UI.Style.TEXT_NORMAL
@@ -77,7 +74,7 @@ async function checkConfig(dir: string): Promise<void> {
         JSON.parse(cleaned)
         UI.println(CHECK + `  Config: ${path.relative(dir, p)}`)
         return
-      } catch (err) {
+      } catch (_err) {
         UI.println(FAIL + `  Config parse error: ${path.relative(dir, p)}`)
         return
       }
@@ -112,7 +109,7 @@ async function detectProjectLanguages(dir: string): Promise<Set<string>> {
 async function checkLSPs(dir: string): Promise<void> {
   const projectExts = await detectProjectLanguages(dir)
 
-  for (const [id, info] of Object.entries(KNOWN_LSPS)) {
+  for (const [_id, info] of Object.entries(KNOWN_LSPS)) {
     const needed = info.extensions.some((ext) => projectExts.has(ext))
     if (!needed) continue
 

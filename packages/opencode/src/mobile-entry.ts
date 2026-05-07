@@ -3,9 +3,9 @@
  * Only includes the `serve` command — no TUI, no terminal UI dependencies.
  * Bundled with `bun build --target=bun` for the Android APK.
  */
-import { existsSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from "fs"
-import dns from "dns"
-import { join as pathJoin, dirname } from "path"
+import { existsSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
+import dns from "node:dns"
+import { join as pathJoin, dirname } from "node:path"
 
 // ─── Android environment bootstrap ────────────────────────────────────
 // The musl dynamic linker doesn't forward env vars from Rust's Command::env().
@@ -128,8 +128,8 @@ import { JsonMigration } from "./storage/json-migration"
 import { Global } from "./global"
 import { Filesystem } from "./util/filesystem"
 import { errorMessage } from "./util/error"
-import path from "path"
-import { EOL } from "os"
+import path from "node:path"
+import { EOL } from "node:os"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", { e: errorMessage(e) })

@@ -6,7 +6,7 @@
  */
 import { Log } from "../util/log"
 
-const log = Log.create({ service: "rag.confidence" })
+const _log = Log.create({ service: "rag.confidence" })
 
 /** Half-life in days for different source types. */
 const HALF_LIFE: Record<string, number> = {

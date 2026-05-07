@@ -21,9 +21,9 @@
  *   - We preserve the existing `Log.Default.error(...)` call sites in
  *     `src/index.ts` — this reporter is additive.
  */
-import fs from "fs"
-import path from "path"
-import os from "os"
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { Installation } from "../installation"

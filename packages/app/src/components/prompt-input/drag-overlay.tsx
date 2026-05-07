@@ -1,4 +1,4 @@
-import { Component, Show } from "solid-js"
+import { type Component, Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
 
 type PromptDragOverlayProps = {

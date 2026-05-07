@@ -8,8 +8,8 @@ import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
 import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
-import { EOL } from "os"
-import path from "path"
+import { EOL } from "node:os"
+import path from "node:path"
 import { which } from "../../util/which"
 
 function pagerCmd(): string[] {

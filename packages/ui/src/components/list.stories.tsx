@@ -141,7 +141,7 @@ export const ItemWrapper = {
     <mod.List
       items={["One", "Two", "Three"]}
       key={(item) => item}
-      itemWrapper={(item, node) => (
+      itemWrapper={(_item, node) => (
         <div style={{ border: "1px solid var(--border-weak)", "border-radius": "6px", margin: "4px 0" }}>{node}</div>
       )}
     >

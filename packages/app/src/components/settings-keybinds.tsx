@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { type Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"

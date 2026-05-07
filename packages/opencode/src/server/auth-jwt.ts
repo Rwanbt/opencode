@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "crypto"
+import { createHmac, randomBytes } from "node:crypto"
 import type { Context, Next } from "hono"
 import { HTTPException } from "hono/http-exception"
 import { User, type UserID, type UserRole } from "../user"

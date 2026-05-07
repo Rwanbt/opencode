@@ -1,4 +1,4 @@
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"

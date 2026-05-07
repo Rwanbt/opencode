@@ -1,5 +1,5 @@
-import { existsSync } from "fs"
-import z from "zod"
+import { existsSync } from "node:fs"
+import type z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Config } from "./config"
 import { ConfigPaths } from "./paths"

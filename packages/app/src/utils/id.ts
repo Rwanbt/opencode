@@ -1,4 +1,3 @@
-import z from "zod"
 
 const prefixes = {
   session: "ses",
@@ -15,16 +14,8 @@ let counter = 0
 
 type Prefix = keyof typeof prefixes
 export namespace Identifier {
-  export function schema(prefix: Prefix) {
-    return z.string().startsWith(prefixes[prefix])
-  }
-
   export function ascending(prefix: Prefix, given?: string) {
     return generateID(prefix, false, given)
-  }
-
-  export function descending(prefix: Prefix, given?: string) {
-    return generateID(prefix, true, given)
   }
 }
 

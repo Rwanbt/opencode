@@ -6,7 +6,7 @@
 #      BENCH_WORKDIR (default: D:/tmp/bench-prism-eq)
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 MODEL="${BENCH_MODEL:-local-llm/gemma-4-E4B-it}"
 TIMEOUT="${BENCH_TIMEOUT:-240}"
@@ -95,6 +95,7 @@ for i in {0..6}; do
   START_SEC=$SECONDS
 
   # Run with hard timeout
+  # shellcheck disable=SC2086
   timeout "${TIMEOUT}s" $OC run --log-level ERROR -m "$MODEL" --format json \
     $WEB_FLAG --dir "$WORKDIR" $CONT_FLAG "${PROMPTS[$i]}" > "$OUTFILE" 2>&1
   RC=$?
@@ -194,6 +195,7 @@ SEOF
 
 for i in {0..6}; do
   N=$((i + 1))
+  # shellcheck source=/dev/null
   source "$RESDIR/p${N}.txt" 2>/dev/null || true
   echo "| $N | ${SCORES[$i]}/5 | $([ "${compile:-no}" = yes ] && echo OK || echo FAIL) | ${patterns:-?} | ${steps:-?} | ${time:-?} | ${websearch:-0} |" >> "$RESDIR/summary.md"
 done

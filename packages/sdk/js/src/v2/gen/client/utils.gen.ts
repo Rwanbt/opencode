@@ -135,7 +135,6 @@ export const setAuthParams = async ({
       case "cookie":
         options.headers.append("Cookie", `${name}=${token}`)
         break
-      case "header":
       default:
         options.headers.set(name, token)
         break

@@ -32,6 +32,7 @@ export namespace Keybind {
     }
   }
 
+  // biome-ignore lint/suspicious/noShadowRestrictedNames: toString is the correct semantic name for this API
   export function toString(info: Info | undefined): string {
     if (!info) return ""
     const parts: string[] = []

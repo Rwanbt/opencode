@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
-import { type IPty } from "bun-pty"
+import type { IPty } from "bun-pty"
 import z from "zod"
 import { Log } from "../util/log"
 import { lazy } from "@opencode-ai/util/lazy"
@@ -235,7 +235,7 @@ export namespace Pty {
         if (Shell.login(command)) {
           args.push("-l")
         }
-        const shellName = Shell.name(command)
+        const _shellName = Shell.name(command)
 
         let cwd = input.cwd || s.dir
         // On Android, the project dir may be "/" which is unreadable from

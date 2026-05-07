@@ -6,7 +6,7 @@ import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { usePlatform } from "./platform"
-import { Project } from "@opencode-ai/sdk/v2"
+import type { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
@@ -922,7 +922,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               return
             }
 
-            const index = current.all.findIndex((f) => f === tab)
+            const index = current.all.indexOf(tab)
             const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
             batch(() => {
               setStore("sessionTabs", session, "all", all)
@@ -933,7 +933,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
-            const index = current.all.findIndex((f) => f === tab)
+            const index = current.all.indexOf(tab)
             if (index === -1) return
             setStore(
               "sessionTabs",

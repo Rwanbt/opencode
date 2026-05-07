@@ -1,4 +1,4 @@
-import z from "zod"
+import type z from "zod"
 import sessionProjectors from "../session/projectors"
 import { SyncEvent } from "@/sync"
 import { Session } from "@/session"

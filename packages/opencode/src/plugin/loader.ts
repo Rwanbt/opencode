@@ -6,6 +6,7 @@ import {
   isDeprecatedPlugin,
   pluginSource,
   resolvePluginTarget,
+  type PluginEntry,
   type PluginKind,
   type PluginPackage,
   type PluginSource,
@@ -67,7 +68,7 @@ export namespace PluginLoader {
     }
     if (!target) return { ok: false, stage: "install", error: new Error(`Plugin ${plan.spec} target is empty`) }
 
-    let base
+    let base: PluginEntry
     try {
       base = await createPluginEntry(plan.spec, target, kind)
     } catch (error) {
@@ -97,7 +98,7 @@ export namespace PluginLoader {
   }
 
   export async function load(row: Resolved): Promise<{ ok: true; value: Loaded } | { ok: false; error: unknown }> {
-    let mod
+    let mod: Record<string, unknown>
     try {
       mod = await import(row.entry)
     } catch (error) {

@@ -218,6 +218,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      // biome-ignore lint/suspicious/noDocumentCookie: intentional cookie for i18n locale persistence
       document.cookie = cookie(locale())
     })
 

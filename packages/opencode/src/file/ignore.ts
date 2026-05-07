@@ -1,4 +1,4 @@
-import { sep } from "node:path"
+
 import { extname, basename } from "node:path"
 import { Glob } from "../util/glob"
 

@@ -1,4 +1,4 @@
-import { Component, createSignal, createResource, JSX, Show, onCleanup, For } from "solid-js"
+import { type Component, createSignal, createResource, type JSX, Show, onCleanup, For } from "solid-js"
 import { Slider } from "@kobalte/core/slider"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
@@ -552,7 +552,7 @@ function SegmentedButton<T extends string>(props: {
 
 function DraftModelSelect(props: { current: string; onSelect: (v: string) => void }) {
   const [tick, setTick] = createSignal(0)
-  const [models, { refetch }] = createResource(tick, async () => {
+  const [models] = createResource(tick, async () => {
     try {
       const all: { filename: string; size: number }[] = await invokeTauri("list_models")
       // Only show small models suitable as drafts (< 4 GB)

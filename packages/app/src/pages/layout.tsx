@@ -7,14 +7,14 @@ import {
   on,
   onCleanup,
   onMount,
-  ParentProps,
+  type ParentProps,
   Show,
   untrack,
   type Accessor,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate, useParams } from "@solidjs/router"
-import { useLayout, LocalProject } from "@/context/layout"
+import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -26,7 +26,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
-import { Session, type Message } from "@opencode-ai/sdk/v2/client"
+import type { Session, Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -1933,8 +1933,8 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     const ids = workspaceIds(project)
-    const fromIndex = ids.findIndex((dir) => dir === draggable.id.toString())
-    const toIndex = ids.findIndex((dir) => dir === droppable.id.toString())
+    const fromIndex = ids.indexOf(draggable.id.toString())
+    const toIndex = ids.indexOf(droppable.id.toString())
     if (fromIndex === -1 || toIndex === -1) return
     if (fromIndex === toIndex) return
 
@@ -2141,7 +2141,7 @@ export default function Layout(props: ParentProps) {
             </Show>
           }
         >
-          <>
+          
             <div class="shrink-0 pl-1 py-1">
               <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
                 <div class="flex flex-col min-w-0">
@@ -2275,7 +2275,7 @@ export default function Layout(props: ParentProps) {
                   </>
                 }
               >
-                <>
+                
                   <div class="shrink-0 py-4">
                     <Button
                       size="large"
@@ -2329,10 +2329,10 @@ export default function Layout(props: ParentProps) {
                       </DragOverlay>
                     </DragDropProvider>
                   </div>
-                </>
+                
               </Show>
             </div>
-          </>
+          
         </Show>
 
         <div

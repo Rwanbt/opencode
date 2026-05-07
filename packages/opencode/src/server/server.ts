@@ -3,12 +3,10 @@ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler 
 import { Hono } from "hono"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
-import { basicAuth } from "hono/basic-auth"
 import { JwtAuth } from "./auth-jwt"
 import { AuthRoutes } from "./routes/auth"
 import z from "zod"
 import { Auth } from "../auth"
-import { Flag } from "../flag/flag"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "./router"
 import { websocket } from "hono/bun"
@@ -20,7 +18,6 @@ import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
 
-// @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 initProjectors()

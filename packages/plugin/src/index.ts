@@ -14,7 +14,7 @@ import type {
 import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
 
 import type { BunShell } from "./shell.js"
-import { type ToolDefinition } from "./tool.js"
+import type { ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
 

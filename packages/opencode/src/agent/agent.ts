@@ -21,7 +21,7 @@ import PROMPT_LEARNER from "./prompt/learner.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
-import path from "path"
+import path from "node:path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
@@ -89,7 +89,7 @@ export namespace Agent {
       const provider = yield* Provider.Service
 
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Agent.state")(function* (ctx) {
+        Effect.fn("Agent.state")(function* (_ctx) {
           const cfg = yield* config.get()
           const skillDirs = yield* skill.dirs()
           const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -401,6 +401,7 @@ export namespace Agent {
             )
           }
 
+          // biome-ignore lint/correctness/useYield: Effect.fnUntraced return-only generator is intentional
           const get = Effect.fnUntraced(function* (agent: string) {
             return agents[agent]
           })
@@ -481,7 +482,7 @@ export namespace Agent {
               ),
               {
                 role: "user",
-                content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
+                content: `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
               },
             ],
             model: language,

@@ -12,8 +12,8 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Session } from "@opencode-ai/sdk/v2/client"
-import { type LocalProject } from "@/context/layout"
+import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
@@ -375,7 +375,6 @@ export const SortableWorkspace = (props: {
 
   return (
     <div
-      // @ts-ignore
       use:sortable
       classList={{
         "opacity-30": sortable.isActiveDraggable,

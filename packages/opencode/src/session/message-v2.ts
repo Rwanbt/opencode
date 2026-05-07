@@ -950,6 +950,7 @@ export namespace MessageV2 {
     return result
   }
 
+  // biome-ignore lint/correctness/useYield: Effect.fnUntraced return-only generator is intentional
   export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
     return filterCompacted(stream(sessionID))
   })
@@ -1004,7 +1005,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case APICallError.isInstance(e):
+      case APICallError.isInstance(e): {
         const parsed = ProviderError.parseAPICallError({
           providerID: ctx.providerID,
           error: e,
@@ -1030,6 +1031,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      }
       case e instanceof Error:
         return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
       default:

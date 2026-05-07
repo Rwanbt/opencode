@@ -146,3 +146,12 @@ SolidJS 1.9.10 + Tailwind 4. Entry: `entry.tsx`. Key dirs: `pages/`, `components
 ### CSP / IPC (Windows desktop WebView)
 
 `connect-src` must whitelist `http://ipc.localhost` (Tauri IPC) and `http://asset.localhost` (static assets). Missing entries cause silent IPC failures.
+
+## Health Stack
+
+- typecheck: bun turbo typecheck
+- lint: bunx biome check .
+- test: cd packages/opencode && bun test --timeout 30000
+- deadcode: bunx knip --no-progress
+- shell: shellcheck scripts/*.sh
+- rust: cargo check --manifest-path packages/desktop/src-tauri/Cargo.toml

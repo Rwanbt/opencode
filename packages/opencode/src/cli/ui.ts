@@ -1,5 +1,5 @@
 import z from "zod"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { NamedError } from "@opencode-ai/util/error"
 import { logo as glyphs } from "./logo"
 
@@ -106,7 +106,7 @@ export namespace UI {
   }
 
   export async function input(prompt: string): Promise<string> {
-    const readline = require("readline")
+    const readline = require("node:readline")
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,

@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { User } from "../../user"
-import { UserID, UserRole } from "../../user/schema"
+import { type UserID, UserRole } from "../../user/schema"
 import { JwtAuth } from "../auth-jwt"
 import { errors } from "../error"
 

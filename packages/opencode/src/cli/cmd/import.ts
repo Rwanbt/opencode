@@ -8,7 +8,7 @@ import { Database } from "../../storage/db"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { Filesystem } from "../../util/filesystem"
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */

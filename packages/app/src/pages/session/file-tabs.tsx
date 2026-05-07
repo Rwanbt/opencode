@@ -378,7 +378,7 @@ export function FileTabContent(props: { tab: string }) {
     requestAnimationFrame(() => comments.clearFocus())
   })
 
-  const cancelCommenting = () => {
+  const _cancelCommenting = () => {
     const p = path()
     if (p) file.setSelectedLines(p, null)
     setNote("commenting", null)

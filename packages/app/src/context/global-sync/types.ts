@@ -9,7 +9,6 @@ import type {
   Part,
   Path,
   PermissionRequest,
-  Project,
   ProviderListResponse,
   QuestionRequest,
   Session,
@@ -124,11 +123,6 @@ export type RootLoadArgs = {
   list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
 }
 
-export type RootLoadResult = {
-  data?: Session[]
-  limit: number
-  limited: boolean
-}
 
 // Power-users bounce between many worktrees in a single app lifetime.
 // MAX_DIR_STORES + DIR_IDLE_TTL_MS bound the Solid reactive graph so we

@@ -1,4 +1,4 @@
-import { type SelectedLineRange } from "@pierre/diffs"
+import type { SelectedLineRange } from "@pierre/diffs"
 
 export type DiffSelectionSide = "additions" | "deletions"
 

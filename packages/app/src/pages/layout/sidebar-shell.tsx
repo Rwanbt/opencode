@@ -10,7 +10,7 @@ import {
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { type LocalProject } from "@/context/layout"
+import type { LocalProject } from "@/context/layout"
 
 export const SidebarContent = (props: {
   mobile?: boolean
