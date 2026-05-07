@@ -140,7 +140,9 @@
     "@xmldom/xmldom": "0.9.10",
     "hono": "4.12.18",
     "@modelcontextprotocol/sdk": "1.27.1",
-    "@hono/node-server": "2.0.1"
+    "@hono/node-server": "2.0.1",
+    "h3": "2.0.1-rc.22",
+    "esbuild": "0.28.0"
   },
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
