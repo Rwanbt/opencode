@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify"
 import { marked } from "marked"
 import { codeToHtml } from "shiki"
 import markedShiki from "marked-shiki"
@@ -37,7 +38,16 @@ export function ContentMarkdown(props: Props) {
   const [html] = createResource(
     () => strip(props.text),
     async (markdown) => {
-      return markedWithShiki.parse(markdown)
+      const raw = await markedWithShiki.parse(markdown)
+      if (typeof window !== "undefined" && DOMPurify.isSupported) {
+        return DOMPurify.sanitize(raw, {
+          USE_PROFILES: { html: true },
+          SANITIZE_NAMED_PROPS: true,
+          FORBID_TAGS: ["style"],
+          FORBID_CONTENTS: ["style", "script"],
+        })
+      }
+      return raw
     },
   )
   const [expanded, setExpanded] = createSignal(false)
