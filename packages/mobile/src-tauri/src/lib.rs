@@ -10,7 +10,8 @@ mod llm;
 // when no caller is cfg-enabled.
 #[allow(dead_code)]
 mod validate;
-#[cfg(target_os = "android")]
+// proxy uses only tokio (cross-platform) — include for tests on host machines
+#[cfg(any(target_os = "android", test))]
 mod proxy;
 mod kokoro;
 mod parakeet;

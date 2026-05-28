@@ -1602,7 +1602,7 @@ pub fn write_schema_version(dir: &Path) {
     }
 }
 
-async fn check_health(port: u32, password: Option<&str>) -> bool {
+pub(crate) async fn check_health(port: u32, password: Option<&str>) -> bool {
     let url = format!("http://127.0.0.1:{}/global/health", port);
     let client = match reqwest::Client::builder()
         .timeout(HEALTH_CHECK_TIMEOUT)
@@ -1621,6 +1621,143 @@ async fn check_health(port: u32, password: Option<&str>) -> bool {
     match req.send().await {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
+    }
+}
+
+// runtime.rs uses Unix-specific APIs (set_mode, forkpty, etc.) so tests only
+// compile and run on Android/Linux targets — not on Windows dev machines.
+#[cfg(all(test, target_os = "android"))]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn temp_test_dir(name: &str) -> std::path::PathBuf {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("opencode_test_{}_{}", name, n));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // ─── is_ready_without_schema_check ───────────────────────────────
+
+    #[test]
+    fn is_ready_without_schema_check_missing_all_files() {
+        let dir = temp_test_dir("no_files");
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!result, "empty dir should return false");
+    }
+
+    #[test]
+    fn is_ready_without_schema_check_missing_native_lib_dir() {
+        let dir = temp_test_dir("missing_nld");
+        // Create opencode-cli.js but NOT .native_lib_dir
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!result, "missing .native_lib_dir should return false");
+    }
+
+    #[test]
+    fn is_ready_without_schema_check_ok() {
+        let dir = temp_test_dir("ok");
+        // Create a fake nativeLibraryDir with libbun_exec.so
+        let nlib_dir = temp_test_dir("nlib_ok");
+        std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
+
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
+
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+        assert!(result, "all required files present should return true");
+    }
+
+    // ─── write_schema_version ────────────────────────────────────────
+
+    #[test]
+    fn write_schema_version_creates_file() {
+        let dir = temp_test_dir("schema_write");
+        write_schema_version(&dir);
+        let content = std::fs::read_to_string(dir.join(".schema_version"))
+            .expect(".schema_version should exist after write_schema_version");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            content.trim(),
+            RUNTIME_SCHEMA_VERSION.to_string(),
+            ".schema_version should contain the current RUNTIME_SCHEMA_VERSION"
+        );
+    }
+
+    // ─── is_runtime_ready ────────────────────────────────────────────
+
+    /// Helper: populate `dir` with the minimal structure for is_runtime_ready,
+    /// using `nlib_dir` as the nativeLibraryDir (must contain libbun_exec.so).
+    fn setup_runtime_files(dir: &Path, nlib_dir: &Path) {
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
+        std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
+    }
+
+    #[test]
+    fn is_runtime_ready_no_schema_version() {
+        let dir = temp_test_dir("rr_no_schema");
+        let nlib_dir = temp_test_dir("rr_no_schema_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+
+        // Create rootfs so we can verify it gets removed
+        let rootfs = dir.join("rootfs");
+        std::fs::create_dir_all(&rootfs).unwrap();
+
+        // .schema_version is absent — should return false
+        let result = is_runtime_ready(&dir);
+
+        let rootfs_still_exists = rootfs.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(!result, "missing .schema_version should return false");
+        assert!(
+            !rootfs_still_exists,
+            "is_runtime_ready should wipe rootfs when schema version is missing"
+        );
+    }
+
+    #[test]
+    fn is_runtime_ready_wrong_schema_version() {
+        let dir = temp_test_dir("rr_wrong_schema");
+        let nlib_dir = temp_test_dir("rr_wrong_schema_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+        // Write an old/wrong schema version
+        std::fs::write(dir.join(".schema_version"), b"0").unwrap();
+
+        let result = is_runtime_ready(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(!result, "outdated .schema_version should return false");
+    }
+
+    #[test]
+    fn is_runtime_ready_correct_schema_version() {
+        let dir = temp_test_dir("rr_ok");
+        let nlib_dir = temp_test_dir("rr_ok_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+        // Write the current schema version
+        std::fs::write(
+            dir.join(".schema_version"),
+            RUNTIME_SCHEMA_VERSION.to_string(),
+        )
+        .unwrap();
+
+        let result = is_runtime_ready(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(result, "correct .schema_version and all files should return true");
     }
 }
 
