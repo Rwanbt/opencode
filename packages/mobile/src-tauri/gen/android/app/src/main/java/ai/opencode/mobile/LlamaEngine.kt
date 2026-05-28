@@ -10,9 +10,15 @@ object LlamaEngine {
     private const val TAG = "LlamaEngine"
     private var initialized = false
 
+    private val ELF_MAGIC = byteArrayOf(0x7F, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
+
     /** Store the app ClassLoader so Rust JNI threads can find our classes */
     @JvmField
     var appClassLoader: ClassLoader? = null
+
+    /** Application context for system service fallbacks (RAM, thermal). Set by MainActivity. */
+    @JvmField
+    var applicationContext: android.content.Context? = null
 
     /** Callback interface for streaming tokens during generation */
     interface TokenCallback {
@@ -179,8 +185,7 @@ object LlamaEngine {
         val elfOk = try {
             java.io.RandomAccessFile(lib, "r").use { raf ->
                 val magic = ByteArray(4); raf.readFully(magic)
-                magic[0] == 0x7F.toByte() && magic[1] == 'E'.code.toByte() &&
-                magic[2] == 'L'.code.toByte() && magic[3] == 'F'.code.toByte()
+                magic.contentEquals(ELF_MAGIC)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to read libllama_server_hexagon.so header: ${e.message}")
@@ -211,8 +216,7 @@ object LlamaEngine {
         return try {
             java.io.RandomAccessFile(lib, "r").use { raf ->
                 val magic = ByteArray(4); raf.readFully(magic)
-                val ok = magic[0] == 0x7F.toByte() && magic[1] == 'E'.code.toByte() &&
-                        magic[2] == 'L'.code.toByte() && magic[3] == 'F'.code.toByte()
+                val ok = magic.contentEquals(ELF_MAGIC)
                 if (!ok) Log.w(TAG, "libllama_server_opencl.so is not an ELF file")
                 ok
             }
@@ -245,7 +249,7 @@ object LlamaEngine {
         return maxLayers
     }
 
-    /** Read total system RAM from /proc/meminfo (MemTotal). */
+    /** Read total system RAM from /proc/meminfo, with ActivityManager as fallback. */
     private fun totalSystemRamMB(): Long {
         try {
             val meminfo = java.io.File("/proc/meminfo").readText()
@@ -258,7 +262,19 @@ object LlamaEngine {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to read MemTotal: ${e.message}")
         }
-        return 4096L  // Conservative fallback
+        // ActivityManager.MemoryInfo.totalMem is available since API 16
+        applicationContext?.let { ctx ->
+            try {
+                val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                    as android.app.ActivityManager
+                val mi = android.app.ActivityManager.MemoryInfo()
+                am.getMemoryInfo(mi)
+                return mi.totalMem / (1024 * 1024)
+            } catch (e: Exception) {
+                Log.w(TAG, "ActivityManager totalMem fallback failed: ${e.message}")
+            }
+        }
+        return 4096L  // Conservative last-resort fallback
     }
 
     /** Store the native library directory so backends can be loaded from it */
@@ -1101,7 +1117,7 @@ object LlamaEngine {
         }
     }
 
-    /** Get available RAM in MB using /proc/meminfo (more reliable than ActivityManager) */
+    /** Get available RAM in MB using /proc/meminfo, with ActivityManager as fallback. */
     private fun getAvailableRamMB(): Long {
         try {
             val meminfo = java.io.File("/proc/meminfo").readText()
@@ -1114,7 +1130,18 @@ object LlamaEngine {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to read /proc/meminfo: ${e.message}")
         }
-        return 2000  // Optimistic fallback
+        applicationContext?.let { ctx ->
+            try {
+                val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                    as android.app.ActivityManager
+                val mi = android.app.ActivityManager.MemoryInfo()
+                am.getMemoryInfo(mi)
+                return mi.availMem / (1024 * 1024)
+            } catch (e: Exception) {
+                Log.w(TAG, "ActivityManager availMem fallback failed: ${e.message}")
+            }
+        }
+        return 2000  // Optimistic last-resort fallback
     }
 
     private fun stopServer() {

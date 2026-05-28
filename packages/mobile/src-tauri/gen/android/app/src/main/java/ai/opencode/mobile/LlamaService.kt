@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 
 /**
@@ -73,6 +74,11 @@ class LlamaService : Service() {
     @Volatile
     private var watchdogThread: Thread? = null
 
+    // Held for the lifetime of an active llama-server child process.
+    // PARTIAL_WAKE_LOCK prevents CPU deep sleep between token generation steps
+    // when the screen is off — without it the SoC can stall for ~200ms per step.
+    private var inferenceWakeLock: PowerManager.WakeLock? = null
+
     /** Called on the watchdog thread when llama-server exits unexpectedly. */
     @Volatile
     var onServerCrash: ((exitCode: Int) -> Unit)? = null
@@ -94,7 +100,8 @@ class LlamaService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "LlamaService onDestroy — killing child llama-server if any")
-        stopChildProcess()
+        stopChildProcess()  // also calls releaseInferenceWakeLock()
+        releaseInferenceWakeLock()  // safety net if child was already null
         instance = null
         super.onDestroy()
     }
@@ -216,6 +223,7 @@ class LlamaService : Service() {
             pb.redirectErrorStream(true)
             val proc = pb.start()
             child = proc
+            acquireInferenceWakeLock()
             // Drain stdout into logcat so the OS pipe (64 KB on bionic) never fills.
             // Without this, llama-server blocks progressively on verbose ggml logs
             // and decode throughput collapses on the 2nd+ inference (observed -56 %).
@@ -303,6 +311,31 @@ class LlamaService : Service() {
             Log.i(TAG, "Child process stopped")
         } catch (e: Exception) {
             Log.w(TAG, "Error stopping child process: ${e.message}")
+        }
+        releaseInferenceWakeLock()
+    }
+
+    private fun acquireInferenceWakeLock() {
+        try {
+            if (inferenceWakeLock?.isHeld == true) return
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            inferenceWakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "opencode:inference"
+            ).also { it.acquire(30 * 60 * 1000L /* 30 min max */) }
+            Log.i(TAG, "Inference wake lock acquired")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
+        }
+    }
+
+    private fun releaseInferenceWakeLock() {
+        try {
+            inferenceWakeLock?.let { if (it.isHeld) it.release() }
+            inferenceWakeLock = null
+            Log.i(TAG, "Inference wake lock released")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to release wake lock: ${e.message}")
         }
     }
 

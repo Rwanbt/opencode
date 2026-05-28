@@ -98,6 +98,7 @@ class MainActivity : TauriActivity() {
     // Load llama.cpp libraries and start command loop
     try {
       LlamaEngine.nativeLibDir = nativeLibDir
+      LlamaEngine.applicationContext = applicationContext
       LlamaEngine.init()
       android.util.Log.i("OpenCode", "LlamaEngine initialized")
       val llmDir = File(baseDir, "runtime/llm_ipc")
