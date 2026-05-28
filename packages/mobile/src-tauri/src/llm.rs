@@ -37,18 +37,55 @@ fn llm_command(app: &AppHandle, cmd: &str, timeout_secs: u64) -> Result<String, 
     fs::write(&request_file, cmd).map_err(|e| format!("Write request: {}", e))?;
     log::debug!("[LLM] Sent command: {}", &cmd[..cmd.len().min(100)]);
 
+    let is_load = cmd.starts_with("load|");
+    // Extract filename for progress events (everything after "load|")
+    let load_filename = if is_load {
+        cmd.get(5..).and_then(|p| std::path::Path::new(p).file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
     // Poll for result
     let start = Instant::now();
     let timeout = Duration::from_secs(timeout_secs);
+    let mut last_progress = Instant::now();
+    // Emit initial progress event immediately for load commands
+    if is_load {
+        let _ = app.emit("llm-model-loading", serde_json::json!({
+            "elapsed_secs": 0,
+            "max_secs": timeout_secs,
+            "filename": &load_filename,
+        }));
+    }
     loop {
         if start.elapsed() > timeout {
+            if is_load {
+                let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": "timed out" }));
+            }
             return Err("Command timed out".to_string());
+        }
+        // Emit progress every 5s during model load so the frontend can show elapsed time
+        if is_load && last_progress.elapsed().as_secs() >= 5 {
+            let _ = app.emit("llm-model-loading", serde_json::json!({
+                "elapsed_secs": start.elapsed().as_secs(),
+                "max_secs": timeout_secs,
+                "filename": &load_filename,
+            }));
+            last_progress = Instant::now();
         }
         if result_file.exists() {
             let result = fs::read_to_string(&result_file).unwrap_or_default();
             let _ = fs::remove_file(&result_file);
             if let Some(msg) = result.strip_prefix("error:") {
+                if is_load {
+                    let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": msg }));
+                }
                 return Err(msg.to_string());
+            }
+            if is_load {
+                let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": null }));
             }
             return Ok(result);
         }
@@ -66,9 +103,9 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map(|e| e == "gguf").unwrap_or(false) {
-                if let Ok(meta) = fs::metadata(&path) {
+                if let (Some(name), Ok(meta)) = (path.file_name(), fs::metadata(&path)) {
                     models.push(ModelInfo {
-                        filename: path.file_name().unwrap().to_string_lossy().to_string(),
+                        filename: name.to_string_lossy().to_string(),
                         size: meta.len(),
                     });
                 }

@@ -181,7 +181,8 @@ impl ParakeetEngine {
         let encoded_lengths: ArrayD<i64> = enc_out["encoded_lengths"].try_extract_array::<i64>().map_err(|e| e.to_string())?.to_owned();
         // Permute [batch, dim, time] → [batch, time, dim]
         let encoder_output = encoder_output.permuted_axes(IxDyn(&[0, 2, 1])).to_owned();
-        let enc_len = encoded_lengths.as_slice().unwrap()[0] as usize;
+        let enc_len = encoded_lengths.as_slice()
+            .ok_or("encoded_lengths array is not contiguous")?[0] as usize;
         tracing::info!("[Parakeet] Encode: {:?}, {} steps", t1.elapsed(), enc_len);
 
         // 3. Greedy decode (RNN-T style, matching Murmure's decode_sequence)
@@ -228,12 +229,13 @@ impl ParakeetEngine {
             let new_s1: ArrayD<f32> = dec_out["output_states_1"].try_extract_array::<f32>().map_err(|e| e.to_string())?.to_owned();
             let new_s2: ArrayD<f32> = dec_out["output_states_2"].try_extract_array::<f32>().map_err(|e| e.to_string())?.to_owned();
 
-            let logits_flat = logits.as_slice().unwrap();
+            let logits_flat = logits.as_slice()
+                .ok_or("logits array is not contiguous")?;
             let vl = vocab_size.min(logits_flat.len());
             let vocab_logits = &logits_flat[..vl];
 
             let token = vocab_logits.iter().enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .max_by(|(_, a), (_, b)| a.total_cmp(b))
                 .map(|(i, _)| i as i32)
                 .unwrap_or(blank_idx);
 
