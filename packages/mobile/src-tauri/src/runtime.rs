@@ -9,6 +9,9 @@ use tauri::{AppHandle, Emitter, Manager};
 const DEFAULT_PORT: u32 = 14096;
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 const RUNTIME_SUBDIR: &str = "runtime";
+// Bump this when the rootfs layout, wrapper scripts, or binary ABI changes
+// in a way that requires a clean re-extraction. Models directory is preserved.
+const RUNTIME_SCHEMA_VERSION: u32 = 1;
 
 /// Static storage for the server child process.
 static SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
@@ -117,7 +120,9 @@ pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
     let start = std::time::Instant::now();
 
     loop {
-        if is_runtime_ready(&dir) {
+        if is_ready_without_schema_check(&dir) {
+            // Write the schema version sentinel so future launches skip re-extraction
+            write_schema_version(&dir);
             let _ = app.emit(
                 "extraction-progress",
                 ExtractionProgress {
@@ -1546,13 +1551,55 @@ pub(crate) fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
     fs::read_to_string(&path_file).ok().map(|s| PathBuf::from(s.trim()))
 }
 
-fn is_runtime_ready(dir: &Path) -> bool {
-    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
+/// Check if the runtime binaries are present, ignoring schema version.
+/// Used during the extraction polling loop before write_schema_version is called.
+fn is_ready_without_schema_check(dir: &Path) -> bool {
     dir.join("opencode-cli.js").exists()
         && dir.join(".native_lib_dir").exists()
-        && native_lib_dir(dir)
-            .map(|d| d.join("libbun_exec.so").exists())
-            .unwrap_or(false)
+        && native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
+}
+
+fn is_runtime_ready(dir: &Path) -> bool {
+    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
+    if !dir.join("opencode-cli.js").exists()
+        || !dir.join(".native_lib_dir").exists()
+        || !native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
+    {
+        return false;
+    }
+    // Schema version guard: if version file is missing or stale, wipe rootfs
+    // (not models) and force re-extraction. This prevents silent corruption
+    // after an APK update that ships a new Alpine rootfs layout.
+    let version_file = dir.join(".schema_version");
+    let current = fs::read_to_string(&version_file)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .unwrap_or(0);
+    if current != RUNTIME_SCHEMA_VERSION {
+        log::warn!(
+            "[runtime] schema version mismatch (have={} want={}), wiping rootfs",
+            current,
+            RUNTIME_SCHEMA_VERSION
+        );
+        let rootfs = dir.join("rootfs");
+        if rootfs.exists() {
+            if let Err(e) = fs::remove_dir_all(&rootfs) {
+                log::warn!("[runtime] failed to wipe rootfs: {}", e);
+            }
+        }
+        // Remove version file so next ready-check re-triggers extraction
+        let _ = fs::remove_file(&version_file);
+        return false;
+    }
+    true
+}
+
+/// Write the current schema version sentinel after a successful extraction.
+pub fn write_schema_version(dir: &Path) {
+    let path = dir.join(".schema_version");
+    if let Err(e) = fs::write(&path, RUNTIME_SCHEMA_VERSION.to_string()) {
+        log::warn!("[runtime] failed to write schema version: {}", e);
+    }
 }
 
 async fn check_health(port: u32, password: Option<&str>) -> bool {
