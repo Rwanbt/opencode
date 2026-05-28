@@ -25,9 +25,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -82,7 +82,7 @@ jobs:
 
   rust-unit:
     name: rust unit tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,9 +118,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
