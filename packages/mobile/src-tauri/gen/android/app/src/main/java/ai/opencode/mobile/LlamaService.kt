@@ -70,6 +70,13 @@ class LlamaService : Service() {
     @Volatile
     private var isForeground: Boolean = false
 
+    @Volatile
+    private var watchdogThread: Thread? = null
+
+    /** Called on the watchdog thread when llama-server exits unexpectedly. */
+    @Volatile
+    var onServerCrash: ((exitCode: Int) -> Unit)? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -222,10 +229,60 @@ class LlamaService : Service() {
                 Log.i(TAG, "llama-server stdout stream ended")
             }.apply { isDaemon = true }.start()
             Log.i(TAG, "Spawned child process, argv[0]=${args.firstOrNull()}")
+            startWatchdog(proc)
             proc
         } catch (e: Exception) {
             Log.e(TAG, "Failed to spawn child process: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * Monitor the child process and fire onServerCrash if it exits unexpectedly.
+     * Interrupted when stopChildProcess() is called (intentional stop).
+     */
+    private fun startWatchdog(proc: Process) {
+        watchdogThread?.interrupt()
+        val watchdog = Thread {
+            try {
+                val exitCode = proc.waitFor()
+                // Only fire crash callback if this is still the active child
+                // (i.e., we didn't call stopChildProcess() ourselves).
+                if (child === proc) {
+                    child = null
+                    Log.w(TAG, "llama-server exited unexpectedly (code=$exitCode)")
+                    updateNotification("OpenCode", "Model stopped (exit $exitCode) — tap to restart")
+                    onServerCrash?.invoke(exitCode)
+                }
+            } catch (_: InterruptedException) {
+                // Intentional stop via stopChildProcess() — no action needed
+            }
+        }
+        watchdog.isDaemon = true
+        watchdog.name = "llama-watchdog"
+        watchdog.start()
+        watchdogThread = watchdog
+    }
+
+    /**
+     * Query the device thermal status from Android's PowerManager.
+     * Returns "nominal", "fair", "serious", or "critical".
+     * Available on API 29+; returns "nominal" on older devices.
+     */
+    fun getThermalState(): String {
+        return try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "nominal"
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            when (pm.currentThermalStatus) {
+                android.os.PowerManager.THERMAL_STATUS_NONE,
+                android.os.PowerManager.THERMAL_STATUS_LIGHT -> "nominal"
+                android.os.PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+                android.os.PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                else -> "critical"
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getThermalState failed: ${e.message}")
+            "nominal"
         }
     }
 
@@ -234,7 +291,12 @@ class LlamaService : Service() {
 
     /** Kill and clear the current child process. */
     fun stopChildProcess() {
+        // Interrupt watchdog first so it doesn't fire onServerCrash
+        // after we intentionally destroy the process.
+        watchdogThread?.interrupt()
+        watchdogThread = null
         val proc = child ?: return
+        child = null  // clear before destroyForcibly so watchdog sees child===null
         try {
             proc.destroyForcibly()
             proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -242,7 +304,6 @@ class LlamaService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Error stopping child process: ${e.message}")
         }
-        child = null
     }
 
     // ── PTY Server ─────────────────────────────────────────────────

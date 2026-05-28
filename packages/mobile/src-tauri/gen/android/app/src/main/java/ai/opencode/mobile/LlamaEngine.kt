@@ -384,6 +384,29 @@ object LlamaEngine {
         init()  // sets selectedBackend
         stopServer()
 
+        // Guard: refuse to load when device is critically hot. Thermal state
+        // CRITICAL/EMERGENCY/SHUTDOWN means the SoC is actively throttling or
+        // about to shut down — loading a model at this point causes decode
+        // slowdowns of 5–10× and risks kernel OOM or forced process kill.
+        val thermalState = LlamaService.get()?.getThermalState() ?: "nominal"
+        if (thermalState == "critical") {
+            Log.w(TAG, "Device thermal state is CRITICAL — refusing to load model. Cool the device and retry.")
+            return false
+        }
+        // Throttle GPU layers by 50% when device is hot but not yet critical.
+        val thermalThrottle = thermalState == "serious"
+        if (thermalThrottle) {
+            Log.w(TAG, "Device thermal state is SERIOUS — reducing GPU layers by 50% to prevent throttling")
+        }
+
+        // Register crash recovery callback: when llama-server exits unexpectedly,
+        // call stopServer() so loaded() returns false and the next chat request
+        // surfaces a "model not loaded" error instead of timing out for 120s.
+        LlamaService.get()?.onServerCrash = { exitCode ->
+            Log.w(TAG, "Crash recovery: calling stopServer() (server exit $exitCode)")
+            stopServer()
+        }
+
         val modelFile = java.io.File(modelPath)
         val modelSizeMB = modelFile.length() / (1024 * 1024)
         val isSmallModel = modelSizeMB < 1500  // <1.5GB ~ <2B params quantized
@@ -438,7 +461,7 @@ object LlamaEngine {
 
         // Read config from IPC file (written by Rust backend)
         val config = readLlmConfig(modelPath)
-        return startServer(modelPath, contextSize, backend, config)
+        return startServer(modelPath, contextSize, backend, config, thermalThrottle)
     }
 
     /** Configuration for llama-server, read from IPC config file.
@@ -540,13 +563,13 @@ object LlamaEngine {
 
     /** Outer entry point: picks effective backend (via circuit breaker) and
      *  falls back to CPU if the GPU backend fails to boot. */
-    private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig()): Boolean {
+    private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig(), thermalThrottle: Boolean = false): Boolean {
         val effective = if (BackendCircuitBreaker.isDisabled(backend)) {
             Log.w(TAG, "Backend $backend temporarily disabled (recent failures) → CPU")
             Backend.CPU
         } else backend
 
-        if (tryStartServer(modelPath, ctxSize, effective, config)) return true
+        if (tryStartServer(modelPath, ctxSize, effective, config, thermalThrottle)) return true
 
         // First attempt failed — record and fall back to CPU if we weren't already.
         BackendCircuitBreaker.recordFailure(effective)
@@ -555,10 +578,10 @@ object LlamaEngine {
             return false
         }
         Log.w(TAG, "Backend $effective failed → retrying with CPU fallback")
-        return tryStartServer(modelPath, ctxSize, Backend.CPU, config)
+        return tryStartServer(modelPath, ctxSize, Backend.CPU, config, thermalThrottle)
     }
 
-    private fun tryStartServer(modelPath: String, ctxSize: Int, backend: Backend, config: LlmConfig): Boolean {
+    private fun tryStartServer(modelPath: String, ctxSize: Int, backend: Backend, config: LlmConfig, thermalThrottle: Boolean = false): Boolean {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -608,7 +631,14 @@ object LlamaEngine {
             //  - OPENCL: budget 35% of RAM (Adreno shares memory with CPU → OOM risk)
             val useGpu = backend != Backend.CPU
             val modelSizeMB = java.io.File(modelPath).length() / (1024 * 1024)
-            val ngl = adaptiveNgl(modelSizeMB, backend).toString()
+            // When device is thermally stressed (SEVERE), halve GPU layers to
+            // reduce heat output and prevent kernel-triggered OOM kill.
+            val rawNgl = adaptiveNgl(modelSizeMB, backend)
+            val ngl = if (thermalThrottle && rawNgl > 0) (rawNgl / 2).coerceAtLeast(4) else rawNgl
+            if (thermalThrottle && rawNgl != ngl) {
+                Log.w(TAG, "Thermal throttle: ngl $rawNgl → $ngl (device is hot)")
+            }
+            val nglStr = ngl.toString()
 
             // Offload mode → -fitt value (MiB free headroom, GPU only)
             val fittHeadroom = when (config.offloadMode) {
@@ -659,7 +689,7 @@ object LlamaEngine {
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "14097",
-                "--n-gpu-layers", ngl,
+                "--n-gpu-layers", nglStr,
                 "--threads", nThreads.toString(),
                 "--threads-batch", nThreads.toString(),
                 "--batch-size", "512",
@@ -982,7 +1012,7 @@ object LlamaEngine {
                 }
             }
 
-            Log.i(TAG, "Starting server: ${serverBin.name} backend=$backend ngl=$ngl kv=${config.kvCacheType} flash=${config.flashAttn}")
+            Log.i(TAG, "Starting server: ${serverBin.name} backend=$backend ngl=$nglStr kv=${config.kvCacheType} flash=${config.flashAttn}")
 
             // Delegate spawn to LlamaService (Foreground Service).
             // The child process inherits foreground priority and is exempt from
