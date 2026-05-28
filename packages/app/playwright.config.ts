@@ -16,13 +16,13 @@ if (process.env.PLAYWRIGHT_JUNIT_OUTPUT) {
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
-  timeout: 60_000,
+  timeout: Number(process.env.PLAYWRIGHT_TIMEOUT ?? 60_000),
   expect: {
     timeout: 10_000,
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: Number(process.env.PLAYWRIGHT_RETRIES ?? (process.env.CI ? 2 : 0)),
   workers,
   reporter,
   webServer: {

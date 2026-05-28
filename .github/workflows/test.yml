@@ -33,10 +33,15 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Enable git long paths on Windows
+      - name: Configure git on Windows
         if: runner.os == 'Windows'
-        run: git config --global core.longpaths true
         shell: bash
+        run: |
+          git config --global core.longpaths true
+          # Some repo files are stored with git mode 120000 (symlink) but contain
+          # TypeScript source. Windows refuses to stat these as symlinks ("Result too large").
+          # core.symlinks=false makes git check them out as plain text files instead.
+          git config --global core.symlinks false
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,6 +123,14 @@ jobs:
             packages/desktop/src-tauri
             packages/mobile/src-tauri
 
+      - name: Create sidecar stub for Rust unit tests
+        # Tauri build.rs validates externalBin paths exist at compile time.
+        # The sidecar is built separately (bun run build --single --baseline).
+        # An empty stub satisfies the existence check without needing a full build.
+        run: |
+          mkdir -p packages/desktop/sidecars
+          touch packages/desktop/sidecars/opencode-cli-x86_64-unknown-linux-gnu
+
       - name: Desktop Rust tests
         # ort uses download-binaries on Linux — downloads libonnxruntime.so at build time.
         # No Windows DLL loading issues on Linux; tests in tls.rs / server.rs / validate.rs
@@ -147,10 +160,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Enable git long paths on Windows
+      - name: Configure git on Windows
         if: runner.os == 'Windows'
-        run: git config --global core.longpaths true
         shell: bash
+        run: |
+          git config --global core.longpaths true
+          git config --global core.symlinks false
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -191,6 +206,9 @@ jobs:
           # 4vCPU runners: 3 workers leaves 1 CPU free for backend processes.
           # 5 workers was causing resource contention and test timeouts.
           PLAYWRIGHT_WORKERS: "3"
+          # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
+          # tests more time to start and respond (was 60s, now 90s).
+          PLAYWRIGHT_TIMEOUT: "90000"
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
