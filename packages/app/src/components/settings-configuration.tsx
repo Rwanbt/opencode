@@ -126,8 +126,9 @@ export const SettingsConfiguration: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
-        {/* GPU Info */}
+        {/* Hardware Status */}
         <VramWidget />
+        <ThermalWidget />
 
         {/* Accelerator (NEW) */}
         <div class="flex flex-col gap-1">
@@ -641,6 +642,50 @@ function VramWidget() {
           </div>
         )
       }}
+    </Show>
+  )
+}
+
+const THERMAL_MSG: Record<string, string> = {
+  fair: "Device is warm — inference may be slightly slower.",
+  serious: "Device is hot — GPU layers reduced to protect hardware.",
+  critical: "Device is critically hot — local inference disabled until it cools.",
+}
+
+function ThermalWidget() {
+  const [thermal, setThermal] = createSignal<"nominal" | "fair" | "serious" | "critical">("nominal")
+
+  const poll = async () => {
+    try {
+      const state = await invokeTauri("get_thermal_state")
+      setThermal(state as "nominal" | "fair" | "serious" | "critical")
+    } catch { /* unavailable on Windows */ }
+  }
+
+  poll()
+  const id = setInterval(poll, 10_000)
+  onCleanup(() => clearInterval(id))
+
+  return (
+    <Show when={thermal() !== "nominal"}>
+      <div
+        class="flex items-center gap-3 rounded-lg px-4 py-3 text-13-regular border"
+        classList={{
+          "bg-yellow-500/10 text-yellow-400 border-yellow-500/20": thermal() === "fair",
+          "bg-orange-500/10 text-orange-400 border-orange-500/20": thermal() === "serious",
+          "bg-red-500/10 text-red-400 border-red-500/20": thermal() === "critical",
+        }}
+      >
+        <div
+          class="size-2 rounded-full shrink-0 animate-pulse"
+          classList={{
+            "bg-yellow-400": thermal() === "fair",
+            "bg-orange-400": thermal() === "serious",
+            "bg-red-400": thermal() === "critical",
+          }}
+        />
+        <span>{THERMAL_MSG[thermal()] ?? ""}</span>
+      </div>
     </Show>
   )
 }
