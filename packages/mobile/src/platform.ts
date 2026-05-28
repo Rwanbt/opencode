@@ -317,7 +317,7 @@ export async function createPlatform(): Promise<Platform> {
       return makeStorage(name ? createStore(name) : settingsStore)
     },
 
-    fetch: (input, init) => {
+    fetch: ((input, init) => {
       const url =
         typeof input === "string"
           ? input
@@ -339,7 +339,7 @@ export async function createPlatform(): Promise<Platform> {
       // Chemin normal : utilise la référence _baseFetch capturée à la création
       // du platform (identique au code original avant les modifications C1).
       return _baseFetch(input as any, init)
-    },
+    }) as typeof fetch,
 
     async getDefaultServer() {
       return ((await settings.getItem("defaultServerUrl")) ?? null) as any
