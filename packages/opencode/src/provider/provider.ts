@@ -56,69 +56,10 @@ import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
+import { shouldUseCopilotResponsesApi, wrapSSE, e2eURL } from "./helpers"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
-
-  function shouldUseCopilotResponsesApi(modelID: string): boolean {
-    const match = /^gpt-(\d+)/.exec(modelID)
-    if (!match) return false
-    return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-  }
-
-  function wrapSSE(res: Response, ms: number, ctl: AbortController) {
-    if (typeof ms !== "number" || ms <= 0) return res
-    if (!res.body) return res
-    if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
-
-    const reader = res.body.getReader()
-    const body = new ReadableStream<Uint8Array>({
-      async pull(ctrl) {
-        const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-          const id = setTimeout(() => {
-            const err = new Error("SSE read timed out")
-            ctl.abort(err)
-            void reader.cancel(err)
-            reject(err)
-          }, ms)
-
-          reader.read().then(
-            (part) => {
-              clearTimeout(id)
-              resolve(part)
-            },
-            (err) => {
-              clearTimeout(id)
-              reject(err)
-            },
-          )
-        })
-
-        if (part.done) {
-          ctrl.close()
-          return
-        }
-
-        ctrl.enqueue(part.value)
-      },
-      async cancel(reason) {
-        ctl.abort(reason)
-        await reader.cancel(reason)
-      },
-    })
-
-    return new Response(body, {
-      headers: new Headers(res.headers),
-      status: res.status,
-      statusText: res.statusText,
-    })
-  }
-
-  function e2eURL() {
-    const url = Env.get("OPENCODE_E2E_LLM_URL")
-    if (typeof url !== "string" || url === "") return
-    return url
-  }
 
   type BundledSDK = {
     languageModel(modelId: string): LanguageModelV3
