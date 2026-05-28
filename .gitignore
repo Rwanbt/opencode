@@ -88,3 +88,9 @@ packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime/rootfs_version
 
 # gstack local reports and analytics
 .gstack/
+
+# graphify dependency graph cache (machine-generated, not for version control)
+graphify-out/
+
+# Claude Code local memory (project-specific, not for version control)
+.claude/
