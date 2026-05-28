@@ -34,6 +34,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Enterprise Readiness — Function Size
+
+Cible pour tout nouveau code TypeScript :
+
+| Métrique | Cible | Alerte | Bloquant |
+|----------|-------|--------|----------|
+| LOC par fonction | ≤ 50 | > 100 | > 200 |
+| LOC par fichier (packages/app/) | ≤ 500 | > 800 | > 1500 |
+
+**Technique** : si une fonction dépasse 50 LOC, extraire via le pattern Factory with Deps (ADR-0001).
+
+**Exceptions documentées** : coordinateurs (session.tsx ~1010 LOC, layout.tsx ~1127 LOC) — voir ADR-0002.
+
+## Design Review — Step 0
+
+Avant toute extraction de module ou refactoring majeur :
+
+1. Rédiger un mini-ADR (2 phrases : contexte + décision) dans `docs/adr/`
+2. Vérifier que l'extraction respecte Single Responsibility
+3. Identifier les dépendances circulaires potentielles avant de coder
+
 ## Commands
 
 **Package manager: Bun 1.3.11** (exact lock enforced). Do not use npm/yarn/pnpm.
