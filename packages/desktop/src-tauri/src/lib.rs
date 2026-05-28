@@ -287,6 +287,52 @@ fn check_linux_app(app_name: &str) -> bool {
     return true;
 }
 
+/// Read the current CPU thermal state from the OS.
+/// Returns "nominal", "fair", "serious", or "critical".
+///
+/// Linux: reads /sys/class/thermal/thermal_zone*/temp, averages across zones
+///        (°C × 1000). Zones > 100°C are clamped to critical.
+/// Windows/macOS: not implemented yet — returns "nominal".
+#[tauri::command]
+#[specta::specta]
+fn get_thermal_state() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        let mut temps: Vec<f32> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir("/sys/class/thermal") {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let n = name.to_string_lossy();
+                if !n.starts_with("thermal_zone") {
+                    continue;
+                }
+                // Skip cooling devices; only zones have a `temp` file
+                let temp_path = entry.path().join("temp");
+                if let Ok(raw) = std::fs::read_to_string(&temp_path) {
+                    if let Ok(millideg) = raw.trim().parse::<f32>() {
+                        temps.push(millideg / 1000.0);
+                    }
+                }
+            }
+        }
+        if !temps.is_empty() {
+            let max_c = temps.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            let label = if max_c >= 95.0 {
+                "critical"
+            } else if max_c >= 85.0 {
+                "serious"
+            } else if max_c >= 70.0 {
+                "fair"
+            } else {
+                "nominal"
+            };
+            tracing::debug!("[thermal] max={:.1}°C zones={} → {}", max_c, temps.len(), label);
+            return label.to_string();
+        }
+    }
+    "nominal".to_string()
+}
+
 #[tauri::command]
 #[specta::specta]
 fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
@@ -481,6 +527,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::rotate_tls_cert,
             get_display_backend,
             set_display_backend,
+            get_thermal_state,
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path,
