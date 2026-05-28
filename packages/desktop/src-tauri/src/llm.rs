@@ -931,13 +931,18 @@ fn read_shared_llm_config() -> Option<SharedLlmConfig> {
     }
 }
 
-/// Check if enough free VRAM is available (for speculative decoding guard)
+/// Check if enough free VRAM is available (for speculative decoding guard).
+/// Probes NVIDIA → AMD (rocm-smi) → AMD (sysfs drm) → Intel Arc (xpu-smi) in order.
+/// Returns true if free VRAM ≥ min_mib, or if no GPU tool is available (rare OOM risk
+/// is acceptable because llama.cpp's --fit flag caps layers to available memory).
 fn check_vram_free(min_mib: u64) -> bool {
-    if let Ok(output) = std::process::Command::new("nvidia-smi")
+    // NVIDIA
+    if let Ok(out) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
         .output()
-        && output.status.success() {
-            let free: u64 = String::from_utf8_lossy(&output.stdout)
+    {
+        if out.status.success() {
+            let free: u64 = String::from_utf8_lossy(&out.stdout)
                 .trim()
                 .lines()
                 .next()
@@ -946,7 +951,72 @@ fn check_vram_free(min_mib: u64) -> bool {
                 .unwrap_or(0);
             return free >= min_mib;
         }
-    // Fallback: if can't detect, enable anyway (OOM rare with --fit on)
+    }
+
+    // AMD — ROCm toolchain
+    if let Ok(out) = std::process::Command::new("rocm-smi")
+        .args(["--showmeminfo", "vram", "--csv"])
+        .output()
+    {
+        if out.status.success() {
+            // Output: GPU_ID,VRAM_Total_Memory(B),VRAM_Used_Memory(B)
+            // Take the first data line; parse Used and Total from bytes → MiB.
+            for line in String::from_utf8_lossy(&out.stdout).lines().skip(1) {
+                let cols: Vec<&str> = line.split(',').collect();
+                if cols.len() >= 3 {
+                    let total: u64 = cols[1].trim().parse().unwrap_or(0) / (1024 * 1024);
+                    let used: u64  = cols[2].trim().parse().unwrap_or(0) / (1024 * 1024);
+                    if total > 0 {
+                        return total.saturating_sub(used) >= min_mib;
+                    }
+                }
+            }
+        }
+    }
+
+    // AMD — sysfs drm (Linux only, works without ROCm)
+    #[cfg(target_os = "linux")]
+    {
+        use std::fs;
+        if let Ok(entries) = fs::read_dir("/sys/class/drm") {
+            for entry in entries.flatten() {
+                let dev = entry.path().join("device");
+                let total_path = dev.join("mem_info_vram_total");
+                let used_path  = dev.join("mem_info_vram_used");
+                if let (Ok(t), Ok(u)) = (fs::read_to_string(&total_path), fs::read_to_string(&used_path)) {
+                    let total: u64 = t.trim().parse().unwrap_or(0) / (1024 * 1024);
+                    let used: u64  = u.trim().parse().unwrap_or(0) / (1024 * 1024);
+                    if total > 0 {
+                        return total.saturating_sub(used) >= min_mib;
+                    }
+                }
+            }
+        }
+    }
+
+    // Intel Arc — oneAPI Level Zero / xpu-smi
+    if let Ok(out) = std::process::Command::new("xpu-smi")
+        .args(["discovery", "--dump", "1"])
+        .output()
+    {
+        if out.status.success() {
+            // xpu-smi dump 1 = "Tile ID, GPU Utilization (%), GPU Power (W), GPU Frequency (MHz),
+            //                   GPU Core Temperature (Celsius Degree), GPU Memory Temperature (…),
+            //                   GPU Memory Utilization (%), GPU Memory Used (MiB), GPU Memory Size (MiB)"
+            for line in String::from_utf8_lossy(&out.stdout).lines().skip(1) {
+                let cols: Vec<&str> = line.split(',').collect();
+                if cols.len() >= 9 {
+                    let used: u64  = cols[7].trim().parse().unwrap_or(0);
+                    let total: u64 = cols[8].trim().parse().unwrap_or(0);
+                    if total > 0 {
+                        return total.saturating_sub(used) >= min_mib;
+                    }
+                }
+            }
+        }
+    }
+
+    // No GPU tool found — enable anyway; llama.cpp --fit keeps us safe
     true
 }
 
