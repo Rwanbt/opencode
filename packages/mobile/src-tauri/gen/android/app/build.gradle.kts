@@ -53,9 +53,7 @@ android {
             }
         }
         getByName("release") {
-            // Phase 1 toolchain validation: temporarily debuggable=true so run-as
-            // can inspect the wrappers/ dir + rootfs/ from adb. Revert after Phase 2/3.
-            isDebuggable = true
+            isDebuggable = false
             isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
