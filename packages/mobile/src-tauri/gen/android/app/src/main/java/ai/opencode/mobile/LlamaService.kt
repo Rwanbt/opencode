@@ -67,6 +67,9 @@ class LlamaService : Service() {
     @Volatile
     private var ptyServerProcess: Process? = null
 
+    @Volatile
+    private var isForeground: Boolean = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -138,6 +141,7 @@ class LlamaService : Service() {
         } else {
             startForeground(NOTIF_ID, notification)
         }
+        isForeground = true
     }
 
     /** Update the persistent notification text (e.g. "Loading Gemma-4..."). */
@@ -148,6 +152,45 @@ class LlamaService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "updateNotification failed: ${e.message}")
         }
+    }
+
+    /** True if the llama-server child process is alive (model loaded and running). */
+    fun isModelActive(): Boolean = child?.let { isProcessAlive(it) } ?: false
+
+    private fun isProcessAlive(proc: Process): Boolean = try {
+        proc.exitValue()
+        false  // exitValue() throws if still running; if it returns, process is dead
+    } catch (_: IllegalThreadStateException) { true }
+
+    /**
+     * Demote from foreground when the app backgrounds with no active inference.
+     * Removes the persistent notification without killing the service or pty_server.
+     * Safe to call multiple times; no-op if already not in foreground.
+     */
+    fun tryDemoteFromForeground() {
+        if (!isForeground) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            isForeground = false
+            Log.i(TAG, "Demoted from foreground (no active inference)")
+        } catch (e: Exception) {
+            Log.w(TAG, "tryDemoteFromForeground failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Promote back to foreground. Must be called before any llama-server spawn,
+     * or within 5s of startForegroundService() on a fresh start.
+     */
+    fun promoteToForeground(title: String = "OpenCode", text: String = "Local AI service ready") {
+        if (isForeground) return
+        startInForeground(title, text)
+        Log.i(TAG, "Promoted back to foreground")
     }
 
     /**
