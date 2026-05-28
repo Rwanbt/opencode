@@ -445,8 +445,7 @@ export namespace ProviderTransform {
       id.includes("glm") ||
       id.includes("mistral") ||
       id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("k2p5") // models.dev ships "k2p5" and "kimi-k2.5" as distinct IDs
     )
       return {}
 
