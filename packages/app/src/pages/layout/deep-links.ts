@@ -128,3 +128,81 @@ export const drainPendingDeepLinks = (target: OpenCodeWindow) => {
   if (target.__OPENCODE__) target.__OPENCODE__.deepLinks = []
   return pending
 }
+
+// ── createDeepLinkHandler ────────────────────────────────────────────────────
+
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { onMount } from "solid-js"
+import { base64Encode } from "@opencode-ai/util/encode"
+import type { useProviders } from "@/hooks/use-providers"
+import type { useServer } from "@/context/server"
+import type { setSessionHandoff } from "@/pages/session/handoff"
+
+interface DeepLinkHandlerDeps {
+  providers: ReturnType<typeof useProviders>
+  server: ReturnType<typeof useServer>
+  openProject: (directory: string, nav?: boolean) => void | Promise<void>
+  navigateWithSidebarReset: (href: string) => void
+  popularProviders: string[]
+  setSessionHandoff: typeof setSessionHandoff
+}
+
+export function createDeepLinkHandler(deps: DeepLinkHandlerDeps) {
+  const { providers, server, openProject, navigateWithSidebarReset, popularProviders, setSessionHandoff: _setSessionHandoff } = deps
+
+  const handleDeepLinks = (urls: string[]) => {
+    // OAuth callbacks are routed even in non-local mode (e.g. an admin using
+    // a remote server still needs to finish auth when redirected back to the
+    // desktop app by the provider). Handle them first, then the local-only
+    // project links.
+    for (const callback of collectOAuthCallbackDeepLinks(urls)) {
+      // S2.A2: validate providerID against the live provider registry.
+      // The shape guard in parseOAuthCallbackDeepLink prevents XSS via the
+      // ID alone, but a hostile QR could still dispatch a callback for an
+      // ID we don't know — which at best wastes a dialog wake-up, at worst
+      // confuses the dialog subscriber. `popularProviders` is our static
+      // fallback for first-launch (registry not yet loaded from the server).
+      const known = new Set<string>([
+        ...providers.all().map((p) => p.id),
+        ...popularProviders,
+      ])
+      if (!known.has(callback.providerID)) {
+        console.warn("[deep-link] oauth callback for unknown providerID, dropping", {
+          providerID: callback.providerID,
+        })
+        continue
+      }
+      window.dispatchEvent(new CustomEvent(oauthCallbackEvent, { detail: callback }))
+    }
+
+    if (!server.isLocal()) return
+
+    for (const directory of collectOpenProjectDeepLinks(urls)) {
+      openProject(directory)
+    }
+
+    for (const link of collectNewSessionDeepLinks(urls)) {
+      openProject(link.directory, false)
+      const slug = base64Encode(link.directory)
+      if (link.prompt) {
+        _setSessionHandoff(slug, { prompt: link.prompt })
+      }
+      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
+      navigateWithSidebarReset(href)
+    }
+  }
+
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const urls = detail?.urls ?? []
+      if (urls.length === 0) return
+      handleDeepLinks(urls)
+    }
+
+    handleDeepLinks(drainPendingDeepLinks(window))
+    makeEventListener(window, deepLinkEvent, handler as EventListener)
+  })
+
+  return {}
+}
