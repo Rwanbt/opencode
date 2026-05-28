@@ -896,7 +896,13 @@ object LlamaEngine {
             //    f16 KV + FA off (which degrades the hybrid path to ~1/2 speed
             //    measured 1.96 vs 4.85 tok/s on Mi 10 Pro — regression).
             val openclForceF16 = (backend == Backend.OPENCL) && modelIsOpenclFriendly
-            val kvType = if (openclForceF16) "f16" else config.kvCacheType
+            // "auto" means "let llama-server pick its default (f16)". Never pass it as a
+            // CLI argument — older binaries reject it with "Unsupported cache type: auto".
+            val kvType = when {
+                openclForceF16 -> "f16"
+                config.kvCacheType == "auto" -> "f16"
+                else -> config.kvCacheType
+            }
             val kvQuantized = kvType != "f16"
             if (backend == Backend.OPENCL) {
                 if (openclForceF16 && config.kvCacheType != "f16") {
@@ -908,6 +914,8 @@ object LlamaEngine {
             if (kvQuantized) {
                 args.addAll(listOf("--cache-type-k", kvType, "--cache-type-v", kvType))
                 Log.i(TAG, "KV cache quantization: $kvType (forces --flash-attn on)")
+            } else {
+                Log.i(TAG, "KV cache: f16 default (no --cache-type-k flag passed)")
             }
 
             // Flash Attention:
