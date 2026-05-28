@@ -1,0 +1,33 @@
+# Normalize all text files to LF in the repository (cross-platform consistency).
+# Windows devs with core.autocrlf=true will still get CRLF on checkout,
+# but git will no longer show phantom "modified" diffs on LF files.
+* text=auto eol=lf
+
+# Binaries — no line-ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.apk binary
+*.aar binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.exe binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
+*.br binary
+*.wasm binary
+*.keystore binary
+*.pfx binary
+*.p12 binary
+*.jks binary
