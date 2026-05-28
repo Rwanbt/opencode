@@ -372,18 +372,21 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     }
     let isFirstChunk = true
     const providerOptionsName = this.providerOptionsName
+    // Capture chunkSchema as a local const so typeof resolves correctly inside
+    // the TransformStream callback (where `this` is the stream controller, not
+    // the class instance).
+    const chunkSchema = this.chunkSchema
     let isActiveReasoning = false
     let isActiveText = false
     let reasoningOpaque: string | undefined
 
     return {
       stream: response.pipeThrough(
-        new TransformStream<ParseResult<z.infer<typeof this.chunkSchema>>, LanguageModelV3StreamPart>({
+        new TransformStream<ParseResult<z.infer<typeof chunkSchema>>, LanguageModelV3StreamPart>({
           start(controller) {
             controller.enqueue({ type: "stream-start", warnings })
           },
 
-          // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX
           transform(chunk, controller) {
             // Emit raw chunk if requested (before anything else)
             if (options.includeRawChunks) {
