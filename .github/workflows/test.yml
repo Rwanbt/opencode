@@ -10,7 +10,7 @@ on:
 concurrency:
   # Keep every run on dev so cancelled checks do not pollute the default branch
   # commit history. PRs and other branches still share a group and cancel stale runs.
-  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
+  group: ${{ (github.ref == 'refs/heads/dev') && format('{0}-{1}', github.workflow, github.run_id) || format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -164,6 +164,9 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
+          # 4vCPU runners: 3 workers leaves 1 CPU free for backend processes.
+          # 5 workers was causing resource contention and test timeouts.
+          PLAYWRIGHT_WORKERS: "3"
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
