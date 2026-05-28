@@ -12,6 +12,9 @@
      5. Native-mobile feel (spacing, scrolling, feedback)
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ─── 0. GLOBAL ANIMATIONS ──────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg) } }
+
 /* ─── 1. ROOT & SAFE AREA ────────────────────────────────────────────────── */
 
 /* Portrait: top/bottom safe areas already handled in index.html.

@@ -4,6 +4,7 @@
  * Passes KV cache, flash attention, and speculative decoding config.
  */
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
 let currentlyLoaded: string | null = null
 let loading = false
@@ -33,17 +34,32 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
   if (providerID !== "local-llm" || !modelID || loading) return
 
   const filename = await findGGUFFile(modelID)
-  if (!filename) return
+  if (!filename) {
+    // No matching model found — prompt the user to open the model manager
+    window.dispatchEvent(new CustomEvent("no-model-found", { detail: { modelID } }))
+    return
+  }
 
   if (currentlyLoaded === filename) return
 
   loading = true
+  window.dispatchEvent(new CustomEvent("llm-loading-progress", {
+    detail: { elapsed_secs: 0, max_secs: 240, filename, loading: true },
+  }))
+  // Subscribe to Rust progress events and forward them as DOM events
+  const unlisten = await listen<{ elapsed_secs: number; max_secs: number; filename: string }>(
+    "llm-model-loading",
+    (event) => {
+      window.dispatchEvent(new CustomEvent("llm-loading-progress", {
+        detail: { ...event.payload, loading: true },
+      }))
+    },
+  )
   try {
     // Read user config from localStorage or use defaults
     const config = loadLlmConfig()
 
     // Push config to Rust env vars before loading
-    console.log("[AutoLLM] Setting config:", config)
     await invoke("set_llm_config", {
       kvCacheType: config.kvCacheType,
       flashAttn: config.flashAttn,
@@ -59,15 +75,16 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
       systemPrompt: config.systemPrompt,
     })
 
-    console.log("[AutoLLM] Loading model:", filename)
     await invoke("load_llm_model", {
       filename,
       draftModel: config.draftModel ? config.draftModel : null,
     })
     currentlyLoaded = filename
-    console.log("[AutoLLM] Model loaded successfully")
   } catch (e) {
     console.error("[AutoLLM] Failed to load model:", e)
+  } finally {
+    unlisten()
+    window.dispatchEvent(new CustomEvent("llm-loading-progress", { detail: { loading: false } }))
   }
   loading = false
 }
