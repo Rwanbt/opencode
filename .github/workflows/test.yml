@@ -80,6 +80,37 @@ jobs:
           retention-days: 7
           path: packages/*/.artifacts/unit/junit.xml
 
+  rust-unit:
+    name: rust unit tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
+        with:
+          workspaces: |
+            packages/desktop/src-tauri
+            packages/mobile/src-tauri
+
+      - name: Desktop Rust tests
+        # ort uses download-binaries on Linux — downloads libonnxruntime.so at build time.
+        # No Windows DLL loading issues on Linux; tests in tls.rs / server.rs / validate.rs
+        # do not call ORT themselves, but the binary still links it.
+        working-directory: packages/desktop/src-tauri
+        run: cargo test --lib
+
+      - name: Mobile Rust tests (proxy.rs — cross-platform tokio)
+        working-directory: packages/mobile/src-tauri
+        # Only proxy::tests run on Linux (runtime::tests require target_os="android")
+        run: cargo test --lib -- proxy::tests
+
   e2e:
     name: e2e (${{ matrix.settings.name }})
     strategy:

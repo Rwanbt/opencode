@@ -285,3 +285,15 @@ jobs:
           name: opencode-mobile-apk
           path: packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk
           retention-days: 30
+
+      # ─── Verify Android Rust unit tests compile ────────────────────
+      # runtime::tests are cfg(all(test, target_os="android")) — they only
+      # compile for Android. We verify compilation here; execution requires
+      # a device/emulator (not available in this CI job).
+      - name: Verify Android Rust unit tests compile
+        working-directory: packages/mobile/src-tauri
+        run: |
+          ORT_LIB_LOCATION=/tmp/ort-android \
+          cargo check --tests --target aarch64-linux-android
+        env:
+          ANDROID_NDK_HOME: ${{ env.NDK_HOME }}
