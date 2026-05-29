@@ -222,9 +222,9 @@ jobs:
           # expect.timeout increased from 10s → 30s in playwright.config.ts, but
           # CI_PLAYWRIGHT_EXPECT_TIMEOUT can further tune it per-platform.
           PLAYWRIGHT_EXPECT_TIMEOUT: "30000"
-        # Windows runners are 2-3x slower than Linux for Playwright — give extra
-        # buffer. 30 min was not enough for the full 131-test suite on windows-latest.
-        timeout-minutes: 45
+        # Linux e2e: 131 tests + 3-retry flaky tests run up to ~44 min; use 60 min
+        # to give headroom without hitting the GitHub 6h hard limit.
+        timeout-minutes: 60
 
       - name: Upload Playwright artifacts
         if: always()
