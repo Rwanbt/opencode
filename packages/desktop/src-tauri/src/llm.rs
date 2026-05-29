@@ -136,7 +136,9 @@ impl LlmServerState {
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ModelInfo {
     pub filename: String,
-    pub size: u64,
+    // f64 instead of u64: JSON/JS has no native BigInt, and specta rejects u64
+    // with BigIntForbidden. File sizes fit comfortably in f64 (2^53 bytes).
+    pub size: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -347,7 +349,7 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
                 && let Ok(meta) = fs::metadata(&path) {
                     models.push(ModelInfo {
                         filename: path.file_name().unwrap().to_string_lossy().to_string(),
-                        size: meta.len(),
+                        size: meta.len() as f64,
                     });
                 }
         }
@@ -1023,9 +1025,11 @@ fn check_vram_free(min_mib: u64) -> bool {
 /// Get GPU VRAM info (total, used, free) in MiB
 #[derive(serde::Serialize, specta::Type)]
 pub struct VramInfo {
-    pub total_mib: u64,
-    pub used_mib: u64,
-    pub free_mib: u64,
+    // f64: specta rejects u64 (BigIntForbidden); VRAM ≤ 200 GB = 200 000 MiB,
+    // well within f64 precision.
+    pub total_mib: f64,
+    pub used_mib: f64,
+    pub free_mib: f64,
     pub gpu_name: String,
 }
 
@@ -1052,7 +1056,8 @@ pub struct BenchmarkResult {
     pub decode_ms: f64,
     pub prefill_tps: f64,
     pub decode_tps: f64,
-    pub peak_ram_mib: Option<u64>,
+    // f64: specta rejects u64 (BigIntForbidden); RAM in MiB fits in f64.
+    pub peak_ram_mib: Option<f64>,
     pub device_label: Option<String>,
 }
 
@@ -1167,9 +1172,9 @@ pub async fn get_vram_info() -> Result<VramInfo, String> {
                 let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
                 if parts.len() >= 4 {
                     return Ok(VramInfo {
-                        total_mib: parts[0].parse().unwrap_or(0),
-                        used_mib: parts[1].parse().unwrap_or(0),
-                        free_mib: parts[2].parse().unwrap_or(0),
+                        total_mib: parts[0].parse().unwrap_or(0.0),
+                        used_mib: parts[1].parse().unwrap_or(0.0),
+                        free_mib: parts[2].parse().unwrap_or(0.0),
                         gpu_name: parts[3].to_string(),
                     });
                 }
