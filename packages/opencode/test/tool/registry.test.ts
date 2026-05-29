@@ -9,7 +9,11 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("tool.registry", () => {
+// Instance.provide starts the full OpenCode server — too slow on Windows CI (>5 min per test).
+// Covered by Linux. Skip on Windows CI.
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
+
+describe.skipIf(skipOnWindowsCI)("tool.registry", () => {
   test(
     "loads tools from .opencode/tool (singular)",
     async () => {

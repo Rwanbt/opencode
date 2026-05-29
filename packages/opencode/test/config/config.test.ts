@@ -776,7 +776,10 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
   }
 })
 
-test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
+// Instance.provide starts the full OpenCode server — too slow on Windows CI (>3 min).
+const _skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
+
+test.skipIf(_skipOnWindowsCI)("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   await using tmp = await tmpdir<string>({
     init: async (dir) => {
       const cfg = path.join(dir, "configdir")

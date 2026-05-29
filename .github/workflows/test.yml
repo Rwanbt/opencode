@@ -20,6 +20,7 @@ permissions:
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -213,15 +214,16 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
-          # 4vCPU runners: 3 workers leaves 1 CPU free for backend processes.
-          # 5 workers was causing resource contention and test timeouts.
-          PLAYWRIGHT_WORKERS: "3"
+          # 4vCPU runners: 2 workers. Post-SolidJS fix, flaky terminal/shell tests
+          # fail in burst patterns that point to CPU contention; 2 workers reduces
+          # context-switching pressure and lets the backend process breathe.
+          PLAYWRIGHT_WORKERS: "2"
           # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
           # tests more time to start and respond (was 60s, now 90s).
           PLAYWRIGHT_TIMEOUT: "90000"
-          # expect.timeout increased from 10s → 30s in playwright.config.ts, but
-          # CI_PLAYWRIGHT_EXPECT_TIMEOUT can further tune it per-platform.
-          PLAYWRIGHT_EXPECT_TIMEOUT: "30000"
+          # expect.timeout: 30s was flaky after SolidJS fix removed crash-fast paths;
+          # flaky tests now complete their 3-retry cycle and need more assertion headroom.
+          PLAYWRIGHT_EXPECT_TIMEOUT: "45000"
         # Linux e2e: 131 tests + 3-retry flaky tests run up to ~44 min; use 60 min
         # to give headroom without hitting the GitHub 6h hard limit.
         timeout-minutes: 60

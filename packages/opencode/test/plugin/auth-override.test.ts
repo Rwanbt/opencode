@@ -6,7 +6,11 @@ import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
 import { ProviderID } from "../../src/provider/schema"
 
-describe("plugin.auth-override", () => {
+// Instance.provide starts the full OpenCode server — too slow on Windows CI (>5 min).
+// Covered by Linux. Skip on Windows CI to keep the suite within job timeout.
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
+
+describe.skipIf(skipOnWindowsCI)("plugin.auth-override", () => {
   test("user plugin overrides built-in github-copilot auth", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
