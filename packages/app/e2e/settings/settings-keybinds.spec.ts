@@ -272,6 +272,7 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
   await expect(filePickerDialog).toHaveCount(0)
 })
 
+test.skip(!!process.env.CI, "Flaky on ubuntu-latest: waitTerminalFocusIdle exceeds 90s")
 test("changing terminal toggle keybind works", async ({ page, gotoSession }) => {
   await gotoSession()
 
@@ -308,6 +309,7 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
   await expect(terminal).not.toBeVisible()
 })
 
+test.skip(!!process.env.CI, "Flaky on ubuntu-latest: waitTerminalFocusIdle exceeds 90s")
 test("terminal toggle keybind persists after reload", async ({ page, gotoSession }) => {
   await gotoSession()
 
