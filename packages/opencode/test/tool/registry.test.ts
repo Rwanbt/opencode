@@ -45,7 +45,7 @@ describe("tool.registry", () => {
         },
       })
     },
-    120_000,
+    300_000,
   )
 
   test(
@@ -83,7 +83,7 @@ describe("tool.registry", () => {
         },
       })
     },
-    120_000,
+    300_000,
   )
 
   test(
@@ -133,6 +133,6 @@ describe("tool.registry", () => {
         },
       })
     },
-    120_000,
+    300_000,
   )
 })

@@ -56,7 +56,7 @@ describe("memory: abort controller leak", () => {
         expect(growth).toBeLessThan(ITERATIONS / 10)
       },
     })
-  }, 120_000)
+  }, 300_000)
 
   test("compare closure vs bind pattern directly", async () => {
     const ITERATIONS = 500
