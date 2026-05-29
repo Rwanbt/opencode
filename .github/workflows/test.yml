@@ -156,8 +156,13 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-latest
-          - name: windows
-            host: windows-latest
+          # Windows E2E is excluded: Playwright runs the same browser (Chromium)
+          # on both platforms so Linux coverage is sufficient. Windows runners are
+          # 2-3× slower than Linux, causing the full 131-test suite to exceed the
+          # 45 min job timeout. Unit tests on Windows (unit job) already cover
+          # Windows-specific code paths (file paths, OS APIs, etc.).
+          # - name: windows
+          #   host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers

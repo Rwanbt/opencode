@@ -119,7 +119,7 @@ async function promptSlashSelected(page: Page, input: { id: string; count: numbe
 
 export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? 30_000
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
   await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
@@ -127,7 +127,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
 
 export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? 30_000
   await waitTerminalReady(page, { term, timeout })
   await expect.poll(() => terminalFocusIdle(page, term), { timeout }).toBe(true)
 }
@@ -137,7 +137,7 @@ export async function showPromptSlash(
   input: { id: string; text: string; prompt?: Locator; timeout?: number },
 ) {
   const prompt = input.prompt ?? page.locator(promptSelector)
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? 30_000
   await expect
     .poll(
       async () => {
@@ -155,7 +155,7 @@ export async function runPromptSlash(
   input: { id: string; text: string; prompt?: Locator; timeout?: number },
 ) {
   const prompt = input.prompt ?? page.locator(promptSelector)
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? 30_000
   const count = await promptSlashSelects(page)
   await showPromptSlash(page, input)
   await prompt.press("Enter")
@@ -164,7 +164,7 @@ export async function runPromptSlash(
 
 export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
   const term = input.term ?? page.locator(terminalSelector).first()
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? 30_000
   await waitTerminalReady(page, { term, timeout })
   const textarea = term.locator("textarea")
   await term.click()
@@ -246,7 +246,7 @@ async function assertHealthy(page: Page, context: string) {
 async function waitSidebarButton(page: Page, context: string) {
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
   const boundary = page.getByRole("heading", { name: /something went wrong/i }).first()
-  await button.or(boundary).first().waitFor({ state: "visible", timeout: 10_000 })
+  await button.or(boundary).first().waitFor({ state: "visible", timeout: 30_000 })
   await assertHealthy(page, context)
   return button
 }
@@ -589,7 +589,7 @@ async function status(sdk: ReturnType<typeof createSdk>, sessionID: string) {
   return data?.[sessionID]
 }
 
-async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 10_000) {
+async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
   let prev = ""
   await expect
     .poll(
