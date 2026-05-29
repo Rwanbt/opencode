@@ -18,7 +18,10 @@ export default defineConfig({
   outputDir: "./e2e/test-results",
   timeout: Number(process.env.PLAYWRIGHT_TIMEOUT ?? 60_000),
   expect: {
-    timeout: 10_000,
+    // Standard GitHub-hosted runners are slower than Blacksmith. 10s was
+    // causing intermittent toBeVisible/toHaveAttribute failures on elements
+    // that take longer to render when the runner is under load.
+    timeout: Number(process.env.PLAYWRIGHT_EXPECT_TIMEOUT ?? 30_000),
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
   forbidOnly: !!process.env.CI,

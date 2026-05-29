@@ -15,6 +15,10 @@ let container: DockerContainer | undefined
 
 /** Check if Docker CLI is available on the host. */
 export function isDockerAvailable(): boolean {
+  // CI_DOCKER_DISABLED lets CI workflows opt out when Docker is installed but
+  // unreliable (e.g. Windows runners where docker pull fails due to network
+  // restrictions or Docker Hub rate-limits).
+  if (process.env.CI_DOCKER_DISABLED === "true") return false
   try {
     execSync("docker version --format '{{.Server.Version}}'", {
       stdio: "pipe",

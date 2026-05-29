@@ -69,6 +69,11 @@ jobs:
         run: bun turbo test:ci
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          # Docker integration tests (ensureContainer / docker pull) are skipped on
+          # Windows CI because Docker Desktop on windows-latest cannot pull images
+          # reliably (network restrictions, Hub rate-limits). isDockerAvailable()
+          # honours this flag and returns false so test.skipIf works correctly.
+          CI_DOCKER_DISABLED: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Publish unit reports
         if: always()
@@ -209,7 +214,12 @@ jobs:
           # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
           # tests more time to start and respond (was 60s, now 90s).
           PLAYWRIGHT_TIMEOUT: "90000"
-        timeout-minutes: 30
+          # expect.timeout increased from 10s → 30s in playwright.config.ts, but
+          # CI_PLAYWRIGHT_EXPECT_TIMEOUT can further tune it per-platform.
+          PLAYWRIGHT_EXPECT_TIMEOUT: "30000"
+        # Windows runners are 2-3x slower than Linux for Playwright — give extra
+        # buffer. 30 min was not enough for the full 131-test suite on windows-latest.
+        timeout-minutes: 45
 
       - name: Upload Playwright artifacts
         if: always()
