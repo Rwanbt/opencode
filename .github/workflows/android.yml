@@ -293,7 +293,11 @@ jobs:
       - name: Verify Android Rust unit tests compile
         working-directory: packages/mobile/src-tauri
         run: |
+          NDK_BIN=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           ORT_LIB_LOCATION=/tmp/ort-android \
+          CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang" \
+          AR_aarch64_linux_android="$NDK_BIN/llvm-ar" \
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android24-clang" \
           cargo check --tests --target aarch64-linux-android
         env:
           ANDROID_NDK_HOME: ${{ env.NDK_HOME }}
