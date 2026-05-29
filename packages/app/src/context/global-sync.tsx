@@ -99,7 +99,9 @@ function createGlobalSync() {
       cacheProjects()
       return
     }
-    setGlobalStore("project", next)
+    // Always deep-clone arrays to strip any reactive SolidJS Proxies that callers
+    // may have passed (e.g. spreading globalStore.project into a new array)
+    setGlobalStore("project", JSON.parse(JSON.stringify(next)) as Project[])
     cacheProjects()
   }
 
