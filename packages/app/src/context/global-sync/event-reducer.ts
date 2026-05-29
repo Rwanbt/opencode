@@ -33,7 +33,9 @@ export function applyGlobalEvent(input: {
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
     input.setGlobalProject((draft) => {
-      draft[result.index] = { ...draft[result.index], ...properties }
+      // Mutate individual properties instead of replacing the object to avoid
+      // spreading reactive Proxies (SolidJS Proxy-in-Proxy causes an invariant error)
+      Object.assign(draft[result.index], properties)
     })
     return
   }

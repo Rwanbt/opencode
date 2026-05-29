@@ -18,7 +18,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
 import { useFile } from "@/context/file"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createSessionScroll } from "@/pages/session/session-scroll"
@@ -447,16 +447,28 @@ export default function Page() {
     if (idx >= 0) {
       globalSync.set(
         "project",
-        list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
+        produce((draft) => {
+          Object.assign(draft[idx], next)
+        }),
       )
       return
     }
     const at = list.findIndex((item) => item.id > next.id)
     if (at >= 0) {
-      globalSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
+      globalSync.set(
+        "project",
+        produce((draft) => {
+          draft.splice(at, 0, next)
+        }),
+      )
       return
     }
-    globalSync.set("project", [...list, next])
+    globalSync.set(
+      "project",
+      produce((draft) => {
+        draft.push(next)
+      }),
+    )
   }
 
   const gitMutation = useMutation(() => ({
