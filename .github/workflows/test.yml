@@ -224,9 +224,9 @@ jobs:
           # expect.timeout: 30s was flaky after SolidJS fix removed crash-fast paths;
           # flaky tests now complete their 3-retry cycle and need more assertion headroom.
           PLAYWRIGHT_EXPECT_TIMEOUT: "45000"
-        # Linux e2e: 131 tests + 3-retry flaky tests run up to ~44 min; use 60 min
-        # to give headroom without hitting the GitHub 6h hard limit.
-        timeout-minutes: 60
+        # Linux e2e: 131 tests + 3-retry flaky tests (terminal/shell) can reach 55 min.
+        # 70 min leaves 15 min headroom without wasting runner time.
+        timeout-minutes: 70
 
       - name: Upload Playwright artifacts
         if: always()

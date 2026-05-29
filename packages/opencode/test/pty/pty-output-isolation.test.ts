@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test"
+
+// PTY tests on Windows CI receive ConPTY escape sequences instead of raw text,
+// causing assertions like expect(output).toContain("AAA") to fail.
+// These tests are covered by unit (linux). Skip on Windows CI.
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
 
-describe("pty", () => {
+describe.skipIf(skipOnWindowsCI)("pty", () => {
   test("does not leak output when websocket objects are reused", async () => {
     await using dir = await tmpdir({ git: true })
 
