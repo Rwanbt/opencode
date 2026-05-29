@@ -86,7 +86,9 @@ function createGlobalSync() {
   const cacheProjects = () => {
     setProjectCache(
       "value",
-      untrack(() => globalStore.project.map(sanitizeProject)),
+      // JSON round-trip strips reactive Proxies so projectCache never holds SolidJS
+      // store references that would cause a double-proxy error on restore
+      untrack(() => JSON.parse(JSON.stringify(globalStore.project.map(sanitizeProject))) as Project[]),
     )
   }
 
@@ -123,7 +125,9 @@ function createGlobalSync() {
       if (projectWritten) return
       const cached = projectCache.value
       if (cached.length === 0) return
-      setGlobalStore("project", cached)
+      // cached may be a reactive Proxy if cacheProjects ran before projectInit resolved;
+      // JSON round-trip guarantees plain objects so setGlobalStore never sees a double-proxy
+      setGlobalStore("project", JSON.parse(JSON.stringify(cached)) as Project[])
     })
   }
 
