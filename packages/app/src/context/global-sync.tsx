@@ -92,10 +92,13 @@ function createGlobalSync() {
     )
   }
 
-  const setProjects = (next: Project[] | ((draft: Project[]) => void)) => {
+  const setProjects = (next: Project[] | ((state: Project[]) => Project[])) => {
     projectWritten = true
     if (typeof next === "function") {
-      setGlobalStore("project", produce(next))
+      // Pass the function directly — callers that need immer-style mutations must
+      // wrap in produce() themselves. Double-wrapping produce(produce(fn)) creates
+      // a Proxy-of-Proxy which SolidJS rejects with a Symbol(solid-proxy) error.
+      setGlobalStore("project", next)
       cacheProjects()
       return
     }
@@ -115,7 +118,7 @@ function createGlobalSync() {
 
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => void))
+      setProjects(input[1] as Project[] | ((state: Project[]) => Project[]))
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
