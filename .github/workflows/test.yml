@@ -124,12 +124,12 @@ jobs:
             packages/mobile/src-tauri
 
       - name: Create sidecar stub for Rust unit tests
-        # Tauri build.rs validates externalBin paths exist at compile time.
-        # The sidecar is built separately (bun run build --single --baseline).
-        # An empty stub satisfies the existence check without needing a full build.
+        # Tauri build.rs validates externalBin paths at compile time relative to
+        # the src-tauri directory. The sidecar is built separately via
+        # bun run build --single --baseline. An empty stub satisfies the check.
         run: |
-          mkdir -p packages/desktop/sidecars
-          touch packages/desktop/sidecars/opencode-cli-x86_64-unknown-linux-gnu
+          mkdir -p packages/desktop/src-tauri/sidecars
+          touch packages/desktop/src-tauri/sidecars/opencode-cli-x86_64-unknown-linux-gnu
 
       - name: Desktop Rust tests
         # ort uses download-binaries on Linux — downloads libonnxruntime.so at build time.
