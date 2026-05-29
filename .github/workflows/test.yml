@@ -214,10 +214,9 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
-          # 4vCPU runners: 2 workers. Post-SolidJS fix, flaky terminal/shell tests
-          # fail in burst patterns that point to CPU contention; 2 workers reduces
-          # context-switching pressure and lets the backend process breathe.
-          PLAYWRIGHT_WORKERS: "2"
+          # 4vCPU runners: 3 workers leaves 1 CPU free for the backend process.
+          # Measured 22 min total with 3 workers on a passing run (26639359779).
+          PLAYWRIGHT_WORKERS: "3"
           # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
           # tests more time to start and respond (was 60s, now 90s).
           PLAYWRIGHT_TIMEOUT: "90000"

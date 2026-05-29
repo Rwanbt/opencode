@@ -1,9 +1,10 @@
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { expect, type Locator, type Page } from "@playwright/test"
 
-// Respect PLAYWRIGHT_EXPECT_TIMEOUT so CI can tune without code changes.
-// Default: 30s locally, 45s on CI (set in .github/workflows/test.yml).
-const DEFAULT_TIMEOUT = Number(process.env.PLAYWRIGHT_EXPECT_TIMEOUT ?? 30_000)
+// Use the per-test timeout (PLAYWRIGHT_TIMEOUT=90s on CI) for all poll-based waits.
+// expect.poll() stops as soon as the predicate is true — the timeout is only a ceiling.
+// Using the higher value ensures PTY startup and terminal settle have enough headroom.
+const DEFAULT_TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT ?? process.env.PLAYWRIGHT_EXPECT_TIMEOUT ?? 60_000)
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
