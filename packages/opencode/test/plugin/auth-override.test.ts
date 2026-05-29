@@ -55,7 +55,7 @@ describe("plugin.auth-override", () => {
     expect(copilot.length).toBe(1)
     expect(copilot[0].label).toBe("Test Override Auth")
     expect(plainMethods[ProviderID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
-  }, 30000) // Increased timeout for plugin installation
+  }, 120_000) // Increased timeout for plugin installation
 })
 
 const file = path.join(import.meta.dir, "../../src/plugin/index.ts")
