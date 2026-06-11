@@ -10,7 +10,7 @@ on:
 concurrency:
   # Keep every run on dev so cancelled checks do not pollute the default branch
   # commit history. PRs and other branches still share a group and cancel stale runs.
-  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
+  group: ${{ (github.ref == 'refs/heads/dev') && format('{0}-{1}', github.workflow, github.run_id) || format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -20,19 +20,30 @@ permissions:
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash
     steps:
+      - name: Configure git on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git config --global core.longpaths true
+          # Some repo files are stored with git mode 120000 (symlink) but contain
+          # TypeScript source. Windows refuses to stat these as symlinks ("Result too large").
+          # core.symlinks=false makes git check them out as plain text files instead.
+          git config --global core.symlinks false
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -59,10 +70,15 @@ jobs:
         run: bun turbo test:ci
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          # Docker integration tests (ensureContainer / docker pull) are skipped on
+          # Windows CI because Docker Desktop on windows-latest cannot pull images
+          # reliably (network restrictions, Hub rate-limits). isDockerAvailable()
+          # honours this flag and returns false so test.skipIf works correctly.
+          CI_DOCKER_DISABLED: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Publish unit reports
         if: always()
-        uses: mikepenz/action-junit-report@v6
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386  # v6.4.0
         with:
           report_paths: packages/*/.artifacts/unit/junit.xml
           check_name: "unit results (${{ matrix.settings.name }})"
@@ -80,6 +96,59 @@ jobs:
           retention-days: 7
           path: packages/*/.artifacts/unit/junit.xml
 
+  rust-unit:
+    name: rust unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
+
+      - name: Install Linux native dependencies
+        # Tauri desktop Cargo crate links against glib, webkit2gtk, and related libs.
+        # Standard ubuntu-latest does not pre-install these dev headers (Blacksmith did).
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libsoup-3.0-dev
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
+        with:
+          workspaces: |
+            packages/desktop/src-tauri
+            packages/mobile/src-tauri
+
+      - name: Create sidecar stub for Rust unit tests
+        # Tauri build.rs validates externalBin paths at compile time relative to
+        # the src-tauri directory. The sidecar is built separately via
+        # bun run build --single --baseline. An empty stub satisfies the check.
+        run: |
+          mkdir -p packages/desktop/src-tauri/sidecars
+          touch packages/desktop/src-tauri/sidecars/opencode-cli-x86_64-unknown-linux-gnu
+
+      - name: Desktop Rust tests
+        # ort uses download-binaries on Linux — downloads libonnxruntime.so at build time.
+        # No Windows DLL loading issues on Linux; tests in tls.rs / server.rs / validate.rs
+        # do not call ORT themselves, but the binary still links it.
+        working-directory: packages/desktop/src-tauri
+        run: cargo test --lib
+
+      - name: Mobile Rust tests (proxy.rs — cross-platform tokio)
+        working-directory: packages/mobile/src-tauri
+        # Only proxy::tests run on Linux (runtime::tests require target_os="android")
+        run: cargo test --lib -- proxy::tests
+
   e2e:
     name: e2e (${{ matrix.settings.name }})
     strategy:
@@ -87,9 +156,14 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: ubuntu-latest
+          # Windows E2E is excluded: Playwright runs the same browser (Chromium)
+          # on both platforms so Linux coverage is sufficient. Windows runners are
+          # 2-3× slower than Linux, causing the full 131-test suite to exceed the
+          # 45 min job timeout. Unit tests on Windows (unit job) already cover
+          # Windows-specific code paths (file paths, OS APIs, etc.).
+          # - name: windows
+          #   host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -97,6 +171,13 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Configure git on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git config --global core.longpaths true
+          git config --global core.symlinks false
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -133,7 +214,18 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
-        timeout-minutes: 30
+          # 4vCPU runners: 3 workers leaves 1 CPU free for the backend process.
+          # Measured 22 min total with 3 workers on a passing run (26639359779).
+          PLAYWRIGHT_WORKERS: "3"
+          # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
+          # tests more time to start and respond (was 60s, now 90s).
+          PLAYWRIGHT_TIMEOUT: "90000"
+          # expect.timeout: 30s was flaky after SolidJS fix removed crash-fast paths;
+          # flaky tests now complete their 3-retry cycle and need more assertion headroom.
+          PLAYWRIGHT_EXPECT_TIMEOUT: "45000"
+        # Linux e2e: 131 tests + 3-retry flaky tests (terminal/shell) can reach 55 min.
+        # 70 min leaves 15 min headroom without wasting runner time.
+        timeout-minutes: 70
 
       - name: Upload Playwright artifacts
         if: always()

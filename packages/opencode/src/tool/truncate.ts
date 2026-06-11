@@ -1,6 +1,6 @@
 import { NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
-import path from "path"
+import path from "node:path"
 import type { Agent } from "../agent/agent"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"

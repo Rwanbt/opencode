@@ -15,9 +15,9 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
-import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { type SelectedLineRange } from "@pierre/diffs"
+import type { FileContent, FileDiff } from "@opencode-ai/sdk/v2"
+import type { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
@@ -156,7 +156,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const open = () => props.open ?? store.open
   const files = createMemo(() => props.diffs.map((diff) => diff.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
+  const _diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
   const grouped = createMemo(() => {
     const next = new Map<string, SessionReviewComment[]>()
     for (const comment of props.comments ?? []) {
@@ -361,7 +361,7 @@ export const SessionReview = (props: SessionReviewProps) => {
               <Accordion multiple value={open()} onChange={handleChange}>
                 <For each={props.diffs}>
                   {(diff) => {
-                    let wrapper: HTMLDivElement | undefined
+                    let _wrapper: HTMLDivElement | undefined
                     const file = diff.file
 
                     const expanded = createMemo(() => open().includes(file))
@@ -444,7 +444,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       },
                       editSubmitLabel: props.lineCommentActions?.saveLabel,
                       renderCommentActions: props.lineCommentActions
-                        ? (comment, controls) => (
+                        ? (_comment, controls) => (
                             <ReviewCommentMenu
                               labels={props.lineCommentActions!}
                               onEdit={controls.edit}
@@ -540,7 +540,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <div
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
-                              wrapper = el
+                              _wrapper = el
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()

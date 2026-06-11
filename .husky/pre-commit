@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+# Pre-commit checks — fast gate before CI
+# Runs only on staged TypeScript/shell files to keep latency low.
+
+# 1. Biome lint (staged files only via --changed)
+bunx biome check --changed --no-errors-on-unmatched .
+
+# 2. Shell scripts (only if shellcheck is available)
+if command -v shellcheck >/dev/null 2>&1; then
+  git diff --cached --name-only --diff-filter=ACM | grep '\.sh$' | xargs -r shellcheck
+fi

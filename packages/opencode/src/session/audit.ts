@@ -13,10 +13,10 @@
  *   - `metadata` must never contain plaintext secrets. Callers should hash /
  *     redact before passing.
  */
-import { randomBytes } from "crypto"
+import { randomBytes } from "node:crypto"
 import { Database } from "../storage/db"
 import { AuditLogTable } from "./audit.sql"
-import { and, desc, eq, gte, lt, lte, SQL } from "drizzle-orm"
+import { and, desc, eq, gte, lt, lte, type SQL } from "drizzle-orm"
 import { Log } from "../util/log"
 import { Config } from "../config/config"
 

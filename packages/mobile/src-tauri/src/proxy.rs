@@ -123,7 +123,7 @@ async fn handle_connect(request: &str, client: &mut TcpStream) {
     }
 }
 
-async fn handle_http(request: &str, raw: &[u8], client: &mut TcpStream) {
+pub(crate) async fn handle_http(request: &str, raw: &[u8], client: &mut TcpStream) {
     // For plain HTTP, extract the full URL and forward
     let first_line = request.lines().next().unwrap_or("");
     let url = first_line.split_whitespace().nth(1).unwrap_or("");
@@ -166,5 +166,36 @@ async fn handle_http(request: &str, raw: &[u8], client: &mut TcpStream) {
     } else {
         let resp = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
         let _ = client.write_all(resp.as_bytes()).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that start_proxy() returns a valid (non-zero) port.
+    ///
+    /// Note: PROXY_PORT and PROXY_STARTING are global atomics that persist for
+    /// the lifetime of the test binary. We cannot safely reset them between test
+    /// runs without unsafe code. The tests are therefore designed to be correct
+    /// regardless of ordering: either the proxy is already running (fast-path)
+    /// or this call is the one that starts it. Both outcomes return Ok(port > 0).
+    #[tokio::test]
+    async fn start_proxy_returns_valid_port() {
+        let result = start_proxy().await;
+        assert!(result.is_ok(), "start_proxy should succeed: {:?}", result);
+        let port = result.unwrap();
+        assert!(port > 0, "returned port must be non-zero, got {}", port);
+    }
+
+    /// Calling start_proxy() twice must return the same port (idempotent).
+    #[tokio::test]
+    async fn start_proxy_is_idempotent() {
+        let port1 = start_proxy().await.expect("first start_proxy call failed");
+        let port2 = start_proxy().await.expect("second start_proxy call failed");
+        assert_eq!(
+            port1, port2,
+            "start_proxy must return the same port on repeated calls (idempotent)"
+        );
     }
 }

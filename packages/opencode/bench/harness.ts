@@ -39,8 +39,8 @@ interface RunResult {
   modelSizeMb: number
   ftlMs: number | null
   tps: number | null
-  peakRssMb: number
-  wallSeconds: number
+  rssPeakMb: number
+  wallSec: number
   nPredict: number
   prompt: string
   stderr?: string
@@ -159,8 +159,8 @@ async function runOne(model: Model, nPredict: number): Promise<RunResult> {
         modelSizeMb,
         ftlMs: null,
         tps: null,
-        peakRssMb: sampler.stop(),
-        wallSeconds: 0,
+        rssPeakMb: sampler.stop(),
+        wallSec: 0,
         nPredict,
         prompt: PROMPT,
         stderr: stderrTail,
@@ -181,8 +181,8 @@ async function runOne(model: Model, nPredict: number): Promise<RunResult> {
         modelSizeMb,
         ftlMs: null,
         tps: null,
-        peakRssMb: sampler.stop(),
-        wallSeconds: (performance.now() - t0) / 1000,
+        rssPeakMb: sampler.stop(),
+        wallSec: (performance.now() - t0) / 1000,
         nPredict,
         prompt: PROMPT,
         stderr: stderrTail,
@@ -213,9 +213,9 @@ async function runOne(model: Model, nPredict: number): Promise<RunResult> {
       }
     }
 
-    const wallSeconds = (performance.now() - t0) / 1000
+    const wallSec = (performance.now() - t0) / 1000
     const ftlMs = firstTokenAt === null ? null : Math.round(firstTokenAt)
-    const tps = tokenCount > 0 && wallSeconds > 0 ? +(tokenCount / wallSeconds).toFixed(2) : null
+    const tps = tokenCount > 0 && wallSec > 0 ? +(tokenCount / wallSec).toFixed(2) : null
 
     return {
       timestamp,
@@ -223,8 +223,8 @@ async function runOne(model: Model, nPredict: number): Promise<RunResult> {
       modelSizeMb,
       ftlMs,
       tps,
-      peakRssMb: sampler.stop(),
-      wallSeconds: +wallSeconds.toFixed(3),
+      rssPeakMb: sampler.stop(),
+      wallSec: +wallSec.toFixed(3),
       nPredict,
       prompt: PROMPT,
     }

@@ -3,8 +3,8 @@
  * Reads the most recent .opencode/learnings/*.md files and formats
  * them for system prompt injection.
  */
-import fs from "fs"
-import path from "path"
+import fs from "node:fs"
+import path from "node:path"
 
 /**
  * Read recent learnings from disk and format for system prompt injection.
@@ -36,7 +36,6 @@ export function readRecentLearnings(worktree: string, budgetTokens: number): str
       if (content.length + text.length > budgetChars) break
       content += text + "\n---\n"
     } catch {
-      continue
     }
   }
 

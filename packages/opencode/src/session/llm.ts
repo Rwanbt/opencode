@@ -1,8 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { LocalLLMServer } from "@/local-llm-server"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
-import * as Queue from "effect/Queue"
+import { Effect, Layer, Record, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
@@ -71,7 +70,7 @@ export namespace LLM {
   async function getLocalLLMAdaptiveLimits(
     baseURL: string,
     model: Provider.Model,
-  ): Promise<{ maxTokens: number; reasoningBudget: number } | null> {
+  ): Promise<{ nCtx: number; maxTokens: number; reasoningBudget: number } | null> {
     try {
       // Derive props URL from baseURL (strip trailing /v1 or /v1/)
       const propsUrl = baseURL.replace(/\/v1\/?$/, "") + "/props"
@@ -91,7 +90,7 @@ export namespace LLM {
       const reasoningBudget = Math.min(Math.max(128, Math.floor(maxTokens * 0.15)), cap)
 
       log.info("local-llm adaptive limits", { nCtx, maxTokens, reasoningBudget })
-      return { maxTokens, reasoningBudget }
+      return { nCtx, maxTokens, reasoningBudget }
     } catch (e) {
       log.error("getLocalLLMAdaptiveLimits failed", { error: String(e) })
       return null
@@ -240,6 +239,15 @@ export namespace LLM {
         modelID: input.model.id,
         apiModelID: input.model.api.id,
       })
+      // Mobile is bandwidth/perf-constrained — large system prompts cause
+      // linear-growth prefill each turn. Flag when exceeds 500 tok so
+      // future sessions can investigate systematic bloat.
+      if (process.env.OPENCODE_CLIENT === "mobile-embedded" && systemTokens > 500) {
+        log.warn("[mobile-embedded] large system prompt may cause multi-turn slowdown", {
+          systemTokens,
+          threshold: 500,
+        })
+      }
     }
 
     // rejoin to maintain 2-part structure for caching if header unchanged
@@ -333,6 +341,14 @@ export namespace LLM {
         ? await getLocalLLMAdaptiveLimits(provider.options?.baseURL ?? "http://127.0.0.1:14097/v1", input.model)
         : null
 
+    // Propagate the real n_ctx back into the model object so that overflow.ts and
+    // compaction.ts (called later in processor.ts via ctx.model) use the server-measured
+    // context rather than the registry's declarative value. Mutation is safe: the same
+    // object reference is shared between LLM.stream() and the processor's ctx.model.
+    if (localLLMLimits && input.model.providerID === "local-llm") {
+      input.model.limit = { ...input.model.limit, context: localLLMLimits.nCtx }
+    }
+
     const maxOutputTokens =
       isOpenaiOauth || provider.id.includes("github-copilot")
         ? undefined
@@ -404,17 +420,51 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
+        // Step 1: lowercase tool name normalization
         const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        const resolvedName = lower !== failed.toolCall.toolName && tools[lower] ? lower : failed.toolCall.toolName
+
+        // Step 2: argument alias repair — small models (Qwen 4B, Gemma) frequently use
+        // wrong field names. Map wrong → right for the most common mistakes.
+        const FIELD_ALIASES: Record<string, Record<string, string>> = {
+          bash: { cmd: "command", cmd_string: "command", shell_command: "command" },
+          edit: { path: "filePath", file: "filePath", file_path: "filePath" },
+          write: { path: "filePath", file: "filePath", file_path: "filePath", content_string: "content" },
+          read: { path: "filePath", file: "filePath", file_path: "filePath" },
+          glob: { directory: "path", dir: "path" },
+          grep: { directory: "path", dir: "path", regex: "pattern", search: "pattern" },
+        }
+
+        let repairedArgs = false
+        let parsedArgs: unknown 
+        try {
+          parsedArgs = JSON.parse(failed.toolCall.input)
+          const map = FIELD_ALIASES[resolvedName]
+          if (map && parsedArgs !== null && typeof parsedArgs === "object") {
+            const args = parsedArgs as Record<string, unknown>
+            for (const [wrong, right] of Object.entries(map)) {
+              if (wrong in args && !(right in args)) {
+                args[right] = args[wrong]
+                delete args[wrong]
+                repairedArgs = true
+              }
+            }
+          }
+        } catch {}
+
+        if (resolvedName !== failed.toolCall.toolName || repairedArgs) {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
-            repaired: lower,
+            repaired: resolvedName,
+            argsFixed: repairedArgs,
           })
           return {
             ...failed.toolCall,
-            toolName: lower,
+            toolName: resolvedName,
+            input: repairedArgs ? JSON.stringify(parsedArgs) : failed.toolCall.input,
           }
         }
+
         return {
           ...failed.toolCall,
           input: JSON.stringify({

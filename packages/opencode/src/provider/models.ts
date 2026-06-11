@@ -1,6 +1,6 @@
 import { Global } from "../global"
 import { Log } from "../util/log"
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
@@ -11,7 +11,6 @@ import { Hash } from "@/util/hash"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
-/* @ts-ignore */
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -111,7 +110,6 @@ export namespace ModelsDev {
   export const Data = lazy(async () => {
     const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
     if (result) return result
-    // @ts-ignore
     const snapshot = await import("./models-snapshot.js")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)

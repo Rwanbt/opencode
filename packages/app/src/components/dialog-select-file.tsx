@@ -271,7 +271,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const globalSync = useGlobalSync()
   const { params, tabs, view } = useSessionLayout()
   const filesOnly = () => props.mode === "files"
-  const state = { cleanup: undefined as (() => void) | void, committed: false }
+  const state = { cleanup: undefined as (() => void) | undefined, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const commandEntries = createCommandEntries({ filesOnly, command, language })
   const fileEntries = createFileEntries({ file, tabs, language })

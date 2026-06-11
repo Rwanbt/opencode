@@ -53,9 +53,6 @@ android {
             }
         }
         getByName("release") {
-            // Release hardening: no debuggable WebView, no JNI debug, minify + shrink.
-            // The portrait first-prompt diagnostic flag (isDebuggable=true) that was
-            // temporarily set here has been reverted — the bug is resolved.
             isDebuggable = false
             isJniDebuggable = false
             isMinifyEnabled = true

@@ -1,4 +1,4 @@
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { Config } from "../../../config/config"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"

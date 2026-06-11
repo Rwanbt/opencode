@@ -1,0 +1,145 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["sst.config.ts", "turbo.json", "scripts/**/*.{ts,js,sh}"],
+      "project": ["*.ts", "*.js"]
+    },
+    "packages/opencode": {
+      "entry": [
+        "src/index.ts",
+        "src/cli/**/*.ts",
+        "src/server.ts",
+        "bench/**/*.ts",
+        "script/**/*.ts",
+        "test/**/*.ts"
+      ],
+      "project": ["src/**/*.ts", "test/**/*.ts", "bench/**/*.ts"]
+    },
+    "packages/app": {
+      "entry": [
+        "src/entry.tsx",
+        "src/entry.css",
+        "vite.config.ts",
+        "happydom.ts",
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+        "src/testing/**/*.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "*.ts"],
+      "ignore": [
+        "src/hooks/use-collaborative.ts",
+        "src/hooks/use-mobile-layout.ts",
+        "src/utils/ws-auth.ts",
+        "src/components/auth/login-form.tsx",
+        "src/components/diff/mobile-diff.tsx",
+        "src/components/mobile/message-input.tsx",
+        "src/components/mobile/nav-drawer.tsx",
+        "src/components/presence/presence-indicator.tsx",
+        "src/components/session/observer-badge.tsx"
+      ]
+    },
+    "packages/ui": {
+      "entry": [
+        "src/index.ts",
+        "src/index.css",
+        "vite.config.ts",
+        "src/**/*.test.ts",
+        "src/storybook/**/*.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/desktop": {
+      "entry": ["src/index.ts", "src/index.tsx", "vite.config.ts", "src/**/*.ts", "src/**/*.tsx"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/mobile": {
+      "entry": ["src/index.ts", "vite.config.ts", "src/**/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/util": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/plugin": {
+      "entry": ["src/index.ts", "src/example.ts", "src/shell.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/sdk/js": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/gen/**", "src/v2/gen/**"]
+    }
+  },
+  "ignore": [
+    "**/dist/**",
+    "**/ts-dist/**",
+    "**/target/**",
+    "**/.turbo/**",
+    "**/src-tauri/**",
+    "packages/console/**",
+    "packages/slack/**",
+    "packages/script/**",
+    "packages/web/**",
+    "packages/storybook/**",
+    "packages/desktop-electron/**",
+    "packages/enterprise/**",
+    "packages/function/**",
+    "infra/**",
+    "nix/**",
+    "install/**",
+    "patches/**",
+    "sdks/**",
+    "specs/**",
+    "docs/**"
+  ],
+  "ignoreDependencies": [
+    "prettier",
+    "husky",
+    "typescript",
+    "sst",
+    "turbo",
+    "glob",
+    "semver",
+    "@tauri-apps/.*",
+    "@actions/.*",
+    "@parcel/watcher-.*",
+    "@opencode-ai/.*",
+    "@aws-sdk/.*",
+    "@babel/.*",
+    "@solid-primitives/.*",
+    "@solidjs/.*",
+    "@shikijs/.*",
+    "@tsconfig/.*",
+    "@standard-schema/.*",
+    "@hono/.*",
+    "@pierre/.*",
+    "@openauthjs/.*",
+    "@types/.*",
+    "tailwindcss",
+    "@tailwindcss/.*",
+    "tree-sitter-.*",
+    "chokidar",
+    "motion-dom",
+    "motion-utils",
+    "shiki",
+    "marked",
+    "marked-shiki",
+    "virtua",
+    "solid-list",
+    "luxon",
+    "diff",
+    "partial-json",
+    "drizzle-orm",
+    "zod-to-json-schema",
+    "why-is-node-running",
+    "vite-plugin-icons-spritesheet",
+    "semver",
+    "dompurify",
+    "@playwright/test",
+    "storybook",
+    "storybook/.*",
+    "opencode-web-ui.gen.ts"
+  ],
+  "ignoreExportsUsedInFile": true
+}

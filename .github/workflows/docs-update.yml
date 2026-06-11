@@ -43,7 +43,7 @@ jobs:
 
       - name: Run opencode
         if: steps.commits.outputs.has_commits == 'true'
-        uses: sst/opencode/github@latest
+        uses: sst/opencode/github@fe594693a447fb4f456327888ae2fe5ffc4b6f3d  # pin 2026-05-07
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:

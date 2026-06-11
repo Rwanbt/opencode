@@ -1,4 +1,4 @@
-import { Component, createSignal, For, JSX, onMount, Show } from "solid-js"
+import { type Component, createSignal, For, type JSX, onMount, Show } from "solid-js"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
 import { Button } from "@opencode-ai/ui/button"
@@ -74,7 +74,7 @@ export const SettingsAudio: Component = () => {
   const [kokoroVoices, setKokoroVoices] = createSignal<string[]>([])
   const [kokoroAvailable, setKokoroAvailable] = createSignal(false)
   const [kokoroDownloading, setKokoroDownloading] = createSignal(false)
-  const [downloadProgress, setDownloadProgress] = createSignal(0)
+  const [downloadProgress, _setDownloadProgress] = createSignal(0)
 
   // On mobile, force provider to kokoro (Pocket is not available).
   onMount(() => {

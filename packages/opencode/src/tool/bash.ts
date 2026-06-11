@@ -1,7 +1,7 @@
 import z from "zod"
-import os from "os"
+import os from "node:os"
 import { Tool } from "./tool"
-import path from "path"
+import path from "node:path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -10,7 +10,7 @@ import { Language, type Node } from "web-tree-sitter"
 
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
-import { fileURLToPath } from "url"
+import { fileURLToPath } from "node:url"
 import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
 
@@ -18,7 +18,7 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
 import { Cause, Effect, Exit, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess, } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as DockerSandbox from "@/sandbox/docker"
 import { Config } from "@/config/config"
@@ -307,6 +307,27 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
     })
   }
 
+  // On the mobile-embedded build, drive bash with --init-file so the
+  // shell-function wrappers defined in .bashrc (cargo / rustc / python /
+  // gcc / …) are loaded for every tool invocation. Those wrappers exec
+  // the rootfs binaries through libmusl_linker.so, the only path SELinux
+  // allows for `untrusted_app` to run code that lives in app_data_file.
+  // BASH_ENV — bash's documented non-interactive rcfile env var — is
+  // ignored by the musl-static bash 5.2.15 build we ship; --init-file
+  // is the reliable workaround.
+  if (
+    env["OPENCODE_CLIENT"] === "mobile-embedded" &&
+    env["BASH_ENV"] &&
+    (shell.endsWith("/bash") || shell.endsWith("\\bash"))
+  ) {
+    return ChildProcess.make(shell, ["--init-file", env["BASH_ENV"]!, "-c", command], {
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: true,
+    })
+  }
+
   return ChildProcess.make(command, [], {
     shell,
     cwd,
@@ -314,6 +335,70 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
     stdin: "ignore",
     detached: process.platform !== "win32",
   })
+}
+
+// Phase C of Prism-EQ bench parity plan: route toolchain commands from a
+// mobile bash tool to a PC daemon over `adb reverse tcp:9999 tcp:9999`.
+// Activated only when both env vars are set by the mobile runtime.
+const REMOTE_TOOLCHAIN = /^\s*(cargo|rustc|rustup|npm|pnpm|yarn|tsc|bun(\s+(install|run|test|build|x))?)\b/
+
+async function runProxied(
+  input: { command: string; cwd: string; description: string },
+  ctx: Tool.Context,
+): Promise<{ title: string; metadata: any; output: string } | null> {
+  // Returns `null` if the cargo-proxy daemon is not reachable, signalling
+  // the caller to fall back to local on-device execution. This makes the
+  // proxy strictly opt-in: when a host PC is plugged with `adb reverse`
+  // and the daemon up, toolchain commands are routed there for speed;
+  // otherwise the on-device toolchain (rust/python/gcc shipped in the
+  // Alpine rootfs) handles them and the user keeps a fully autonomous
+  // mobile flow.
+  const proxyUrl = process.env["OPENCODE_CARGO_PROXY_URL"] ?? "http://127.0.0.1:9999/exec"
+  ctx.metadata({
+    metadata: {
+      output: `[cargo-proxy] forwarding to ${proxyUrl}\n`,
+      description: input.description,
+    },
+  })
+  const ac = new AbortController()
+  const onAbort = () => ac.abort()
+  ctx.abort.addEventListener("abort", onAbort, { once: true })
+  try {
+    const res = await fetch(proxyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceCwd: input.cwd, command: input.command }),
+      signal: ac.signal,
+    })
+    if (!res.ok) {
+      // HTTP error (500, etc.): keep proxy result so the agent sees it.
+      const text = await res.text()
+      const output = `cargo-proxy HTTP ${res.status}: ${text}`
+      return {
+        title: input.description,
+        metadata: { output: preview(output), exit: -1, description: input.description },
+        output,
+      }
+    }
+    const data = (await res.json()) as { stdout?: string; stderr?: string; exitCode?: number }
+    const stdout = data.stdout ?? ""
+    const stderr = data.stderr ?? ""
+    const output = stdout + (stderr ? (stdout ? "\n--- stderr ---\n" : "") + stderr : "")
+    return {
+      title: input.description,
+      metadata: { output: preview(output), exit: data.exitCode ?? -1, description: input.description },
+      output,
+    }
+  } catch (e) {
+    // Network error (ECONNREFUSED, fetch failed). Proxy not running →
+    // return null so the caller falls back to local execution.
+    log.info("cargo-proxy unreachable, falling back to local execution", {
+      err: (e as Error).message,
+    })
+    return null
+  } finally {
+    ctx.abort.removeEventListener("abort", onAbort)
+  }
 }
 
 async function run(
@@ -525,20 +610,32 @@ export const BashTool = Tool.define("bash", async () => {
         .optional(),
       description: z
         .string()
+        .optional()
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
       dry_run: z
         .boolean()
         .optional()
-        .describe("Preview what the command would do without executing it. Shows parsed commands, affected files, and working directory."),
+        .describe(
+          "Set to true ONLY when the user explicitly asks to preview a command without executing it. By default leave this unset to actually run the command. Do NOT use as a substitute for the description field.",
+        ),
     }),
     async execute(params, ctx) {
+      // Heuristic: small/local models (Gemma-4 E4B and similar) sometimes
+      // hallucinate `dry_run: true` when they meant to provide a `description`.
+      // If dry_run is set but no description was provided, treat as accidental
+      // misuse and execute the command normally instead of just previewing it.
+      if (params.dry_run && (!params.description || params.description.trim().length === 0)) {
+        params.dry_run = false
+      }
       const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+      // Auto-fallback when small/local models omit the description field (Gemma-4 E4B and similar).
+      const description = params.description ?? params.command.slice(0, 80).trim()
       const ps = PS.has(name)
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
@@ -583,13 +680,27 @@ export const BashTool = Tool.define("bash", async () => {
 
         const output = lines.join("\n")
         return {
-          title: `[dry-run] ${params.description}`,
-          metadata: { output, exit: null, description: `[dry-run] ${params.description}` },
+          title: `[dry-run] ${description}`,
+          metadata: { output, exit: null, description: `[dry-run] ${description}` },
           output,
         }
       }
 
       await ask(ctx, scan)
+
+      // Phase C: route toolchain commands (cargo, rustc, npm, ...) over
+      // adb-reverse to a PC daemon when running on mobile. Falls back to
+      // local on-device execution if the proxy daemon is not reachable
+      // (autonomous mobile use case: rust/python/gcc shipped in rootfs).
+      if (
+        process.env["OPENCODE_CARGO_PROXY"] === "1" &&
+        process.env["OPENCODE_CLIENT"] === "mobile-embedded" &&
+        REMOTE_TOOLCHAIN.test(params.command)
+      ) {
+        const proxied = await runProxied({ command: params.command, cwd, description }, ctx)
+        if (proxied) return proxied
+        // proxy unreachable → fall through to local run() below
+      }
 
       // Check if Docker sandbox is configured
       const config = await Config.get()
@@ -601,7 +712,7 @@ export const BashTool = Tool.define("bash", async () => {
             cwd,
             env: await shellEnv(ctx, cwd),
             timeout,
-            description: params.description,
+            description,
             sandbox,
           },
           ctx,
@@ -616,7 +727,7 @@ export const BashTool = Tool.define("bash", async () => {
           cwd,
           env: await shellEnv(ctx, cwd),
           timeout,
-          description: params.description,
+          description,
         },
         ctx,
       )

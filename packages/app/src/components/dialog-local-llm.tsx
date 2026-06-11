@@ -24,14 +24,35 @@ function listenTauri(event: string, handler: (e: any) => void): Promise<() => vo
 
 interface ModelInfo { filename: string; size: number }
 
+type CatalogEntry = {
+  id: string
+  name: string
+  description: string
+  size: string
+  sizeBytes: number
+  url: string
+  filename: string
+  recommended?: boolean
+  // vision: model supports image input when a mmproj-*.gguf projector is installed alongside it
+  vision?: boolean
+}
+
 // Curated GGUF catalog. URLs verified against HuggingFace — no fabricated repos.
 // Every entry must be a repo that exists and resolves to a real .gguf file.
-const MODEL_CATALOG = [
-  { id: "gemma-3-4b", name: "Gemma 3 4B", description: "Google's latest coding-capable small model — recommended", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf", filename: "gemma-3-4b-it-Q4_K_M.gguf", recommended: true },
+// vision:true = model has multimodal capability when paired with a mmproj projector.
+// Download the projector via HuggingFace search (search the repo name, expand, download mmproj).
+const MODEL_CATALOG: CatalogEntry[] = [
+  { id: "gemma-4-e4b", name: "Gemma 4 E4B", description: "Google's latest expert — 131K context, 140+ languages, best quality locally", size: "5.0 GB", sizeBytes: 4_977_169_088, url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf", filename: "gemma-4-E4B-it-Q4_K_M.gguf", recommended: true, vision: true },
+  { id: "gemma-4-e2b", name: "Gemma 4 E2B", description: "Gemma 4 at half capacity — fits mid-range hardware", size: "3.1 GB", sizeBytes: 3_106_735_776, url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf", filename: "gemma-4-E2B-it-Q4_K_M.gguf", vision: true },
+  { id: "gemma-3-4b", name: "Gemma 3 4B", description: "Google's previous-gen coding-capable small model", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf", filename: "gemma-3-4b-it-Q4_K_M.gguf", vision: true },
   { id: "qwen3-4b", name: "Qwen3 4B", description: "Great multilingual instruct model", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf", filename: "Qwen3-4B-Q4_K_M.gguf" },
   { id: "qwen3-1.7b", name: "Qwen3 1.7B", description: "Fast & lightweight", size: "1.1 GB", sizeBytes: 1_100_000_000, url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf", filename: "Qwen3-1.7B-Q4_K_M.gguf" },
   { id: "qwen3-0.6b", name: "Qwen3 0.6B", description: "Ultra-light — ideal as draft for speculative decoding", size: "0.5 GB", sizeBytes: 500_000_000, url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf", filename: "Qwen3-0.6B-Q4_K_M.gguf" },
 ]
+
+// Filename patterns for models known to support vision when a mmproj is present.
+// Used in registerLocalModels() to declare modalities.input.image = true.
+const VISION_FILENAME_PATTERNS = ["gemma-3", "gemma-4", "llava", "moondream", "minicpm-v", "internvl", "qwen2-vl", "qwen-vl"]
 
 function formatBytes(bytes: number): string {
   if (bytes < 1_000_000) return (bytes / 1_000).toFixed(0) + " KB"
@@ -39,13 +60,15 @@ function formatBytes(bytes: number): string {
   return (bytes / 1_000_000_000).toFixed(2) + " GB"
 }
 
-// Restrict rfilename to a safe character set ending in a supported extension.
-// This rejects path-traversal tokens, shell metacharacters, and anything that
-// isn't a model weights file — cheap defense-in-depth for the download URL.
+// Defense-in-depth pattern for the filename we actually use in the download
+// URL — applied AFTER the GGUF filter, so non-weights siblings returned by
+// HF (README.md, .gitattributes, config.json, …) are skipped silently
+// instead of invalidating the whole response (z.array fails on a single
+// bad element, which would wipe every search result).
 const HF_RFILENAME = /^[A-Za-z0-9._/-]+\.(gguf|onnx)$/
 
 const HFSiblingSchema = z.object({
-  rfilename: z.string().min(1).max(256).regex(HF_RFILENAME),
+  rfilename: z.string().min(1).max(256),
   size: z.number().nonnegative().optional(),
 })
 
@@ -64,6 +87,8 @@ interface HFSearchResult {
   name: string
   downloads: number
   ggufFiles: { filename: string; size: number; url: string }[]
+  // mmproj projectors found in the same repo (F16 first). Download alongside the model to enable vision.
+  mmprojFiles: { filename: string; size: number; url: string }[]
 }
 
 async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<HFSearchResult[]> {
@@ -86,19 +111,33 @@ async function searchHuggingFace(query: string, signal?: AbortSignal): Promise<H
   return data
     .map((m) => {
       const author = m.id.split("/")[0] ?? ""
+      const toFileEntry = (s: { rfilename: string; size?: number }) => ({
+        filename: s.rfilename.includes("/") ? (s.rfilename.split("/").pop() ?? s.rfilename) : s.rfilename,
+        size: s.size ?? 0,
+        url: `https://huggingface.co/${m.id}/resolve/main/${s.rfilename}`,
+      })
       const ggufFiles = (m.siblings ?? [])
-        .filter((s) => s.rfilename.endsWith(".gguf") && !s.rfilename.includes("mmproj") && !s.rfilename.includes("imatrix"))
-        .map((s) => ({
-          filename: s.rfilename.includes("/") ? (s.rfilename.split("/").pop() ?? s.rfilename) : s.rfilename,
-          size: s.size ?? 0,
-          url: `https://huggingface.co/${m.id}/resolve/main/${s.rfilename}`,
-        }))
+        .filter(
+          (s) =>
+            HF_RFILENAME.test(s.rfilename) &&
+            s.rfilename.endsWith(".gguf") &&
+            !s.rfilename.toLowerCase().includes("mmproj") &&
+            !s.rfilename.includes("imatrix"),
+        )
+        .map(toFileEntry)
+      // Collect mmproj projectors from the same repo, sorted F16 > BF16 > F32 > other.
+      const mmprojRank = (n: string) => (n.includes("f16") && !n.includes("bf16") ? 0 : n.includes("bf16") ? 1 : n.includes("f32") ? 2 : 3)
+      const mmprojFiles = (m.siblings ?? [])
+        .filter((s) => HF_RFILENAME.test(s.rfilename) && s.rfilename.endsWith(".gguf") && s.rfilename.toLowerCase().includes("mmproj"))
+        .sort((a, b) => mmprojRank(a.rfilename.toLowerCase()) - mmprojRank(b.rfilename.toLowerCase()))
+        .map(toFileEntry)
       return {
         id: m.id,
         author,
         name: m.id.split("/").pop() ?? m.id,
         downloads: m.downloads ?? 0,
         ggufFiles,
+        mmprojFiles,
       }
     })
     .filter((m) => m.ggufFiles.length > 0)
@@ -125,6 +164,13 @@ export function DialogLocalLLM() {
   const [hfExpanded, setHfExpanded] = createSignal<string | null>(null)
   const [hfError, setHfError] = createSignal("")
   const [vramMib, setVramMib] = createSignal(0)
+
+  // Derived: mmproj projector is present (enables vision capability on compatible models)
+  const mmprojInstalled = () => (models() ?? []).some((m) => m.filename.toLowerCase().startsWith("mmproj") && m.filename.endsWith(".gguf"))
+  // Main models only (excludes mmproj projectors from the loadable model list)
+  const mainModels = () => (models() ?? []).filter((m) => !m.filename.toLowerCase().startsWith("mmproj"))
+  // Installed mmproj projector files (accessories, shown separately)
+  const installedMmproj = () => (models() ?? []).filter((m) => m.filename.toLowerCase().startsWith("mmproj"))
 
   // Detect VRAM on mount
   onMount(async () => {
@@ -239,9 +285,25 @@ export function DialogLocalLLM() {
         ? modelConfig.contextManual || 32768
         : 131072 // auto: use model's native context
 
-      const modelEntries: Record<string, { name: string; limit?: { context: number; output: number } }> = {}
+      // Detect vision projector: if any mmproj-*.gguf is installed, vision-capable models
+      // get modalities.input.image=true so the provider layer passes image blocks through.
+      // The Rust backend (desktop/llm.rs, mobile/llm.rs) auto-discovers the mmproj sibling
+      // and passes --mmproj to llama-server — no additional config required.
+      const hasMmproj = allModels.some((m) => m.filename.toLowerCase().startsWith("mmproj") && m.filename.endsWith(".gguf"))
+
+      type Modality = "text" | "audio" | "image" | "video" | "pdf"
+      const visionModalities = hasMmproj
+        ? { modalities: { input: ["text", "image"] as Modality[], output: ["text"] as Modality[] } }
+        : {}
+
+      const modelEntries: Record<string, object> = {}
       for (const m of allModels) {
+        // Skip mmproj projectors — they are accessories, not runnable models
+        if (m.filename.toLowerCase().startsWith("mmproj")) continue
+
         const name = m.filename.replace(/\.gguf$/i, "").replace(/[-_]Q\d.*$/i, "")
+        const fileLower = m.filename.toLowerCase()
+        const isVisionCapable = hasMmproj && VISION_FILENAME_PATTERNS.some((p) => fileLower.includes(p))
 
         // Dynamic output tokens based on model size and context
         let outputTokens: number
@@ -261,6 +323,7 @@ export function DialogLocalLLM() {
         modelEntries[name] = {
           name,
           limit: { context: contextSize, output: outputTokens },
+          ...(isVisionCapable ? visionModalities : {}),
         }
       }
       await globalSync.updateConfig({
@@ -276,7 +339,7 @@ export function DialogLocalLLM() {
     } catch {}
   }
 
-  async function handleStart(filename: string) {
+  async function _handleStart(filename: string) {
     setError("")
     setLoading(filename)
     try {
@@ -312,7 +375,7 @@ export function DialogLocalLLM() {
     setLoading(null)
   }
 
-  async function handleStop() {
+  async function _handleStop() {
     setLoading("__stop__")
     try {
       await invokeTauri("unload_llm_model")
@@ -392,7 +455,7 @@ export function DialogLocalLLM() {
         <Show when={(models() ?? []).length > 0}>
           <div class="flex flex-col gap-1">
             <div class="text-13-medium text-text-weak">Installed</div>
-            <For each={models()}>
+            <For each={mainModels()}>
               {(model) => (
                 <div class="flex items-center justify-between gap-2 py-2 border-b border-border-weak-base last:border-none">
                   <div class="flex flex-col min-w-0">
@@ -410,6 +473,22 @@ export function DialogLocalLLM() {
                 </div>
               )}
             </For>
+            <For each={installedMmproj()}>
+              {(proj) => (
+                <div class="flex items-center justify-between gap-2 py-2 border-b border-border-weak-base last:border-none">
+                  <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="text-14-regular text-text-strong truncate">{proj.filename.replace(/\.gguf$/i, "")}</span>
+                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">Vision Projector</span>
+                    </div>
+                    <span class="text-12-regular text-text-weak">{formatBytes(proj.size)}</span>
+                  </div>
+                  <Button size="small" variant="ghost" class="text-text-critical-base" disabled={loading() !== null} onClick={() => handleDelete(proj.filename)}>
+                    Delete
+                  </Button>
+                </div>
+              )}
+            </For>
           </div>
         </Show>
 
@@ -423,11 +502,20 @@ export function DialogLocalLLM() {
                   <div class="flex items-center gap-2">
                     <span class="text-14-regular text-text-strong">{item.name}</span>
                     <Show when={item.recommended}><Tag>Recommended</Tag></Show>
+                    <Show when={item.vision && mmprojInstalled()}>
+                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">Vision ✓</span>
+                    </Show>
+                    <Show when={item.vision && !mmprojInstalled()}>
+                      <span class="text-11-regular text-text-weak bg-surface-inset rounded px-1.5 py-0.5">Vision</span>
+                    </Show>
                   </div>
                   <span class="text-12-regular text-text-weak">
                     {item.description} — {item.size}
                     <Show when={vramMib() > 0 && recommendQuant(item.sizeBytes / 1e9)}>
                       {" · "}<span class={vramBadgeClass(item.sizeBytes / 1e9)}>{recommendQuant(item.sizeBytes / 1e9)}</span>
+                    </Show>
+                    <Show when={item.vision && !mmprojInstalled()}>
+                      {" · "}<span class="text-text-weak">Add vision projector via HF search to enable images</span>
                     </Show>
                   </span>
                 </div>
@@ -518,6 +606,38 @@ export function DialogLocalLLM() {
                               )
                             }}
                           </For>
+                          {/* Vision projectors — download alongside model to enable image input */}
+                          <Show when={result.mmprojFiles.length > 0}>
+                            <For each={result.mmprojFiles}>
+                              {(file) => {
+                                const fname = file.filename.split("/").pop() ?? file.filename
+                                return (
+                                  <div class="flex items-center justify-between gap-2 py-1.5 px-1">
+                                    <div class="flex flex-col min-w-0 flex-1">
+                                      <div class="flex items-center gap-1.5">
+                                        <span class="text-12-regular text-text-strong truncate">{fname}</span>
+                                        <span class="text-10-regular text-icon-success-base bg-icon-success-base/10 rounded px-1 py-0.5 shrink-0">Vision Projector</span>
+                                      </div>
+                                      <Show when={file.size > 0}>
+                                        <span class="text-11-regular text-text-weak">{formatBytes(file.size)}</span>
+                                      </Show>
+                                    </div>
+                                    <Show when={isDownloaded(fname)} fallback={
+                                      <Show when={downloading()[fname] !== undefined} fallback={
+                                        <Button size="small" variant="secondary" onClick={() => handleDownload(file.url, fname)}>
+                                          Download
+                                        </Button>
+                                      }>
+                                        <span class="text-12-regular text-text-weak">{Math.round((downloading()[fname] ?? 0) * 100)}%</span>
+                                      </Show>
+                                    }>
+                                      <span class="text-12-regular text-icon-success-base">Downloaded</span>
+                                    </Show>
+                                  </div>
+                                )
+                              }}
+                            </For>
+                          </Show>
                         </div>
                       </Show>
                     </div>

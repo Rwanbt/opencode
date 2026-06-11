@@ -1,10 +1,10 @@
-import type { ChildProcessWithoutNullStreams } from "child_process"
-import path from "path"
-import os from "os"
+import type { ChildProcessWithoutNullStreams } from "node:child_process"
+import path from "node:path"
+import os from "node:os"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { text } from "node:stream/consumers"
-import fs from "fs/promises"
+import fs from "node:fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -826,7 +826,7 @@ export namespace LSPServer {
           if (cargoTomlContent.includes("[workspace]")) {
             return currentDir
           }
-        } catch (err) {
+        } catch (_err) {
           // File doesn't exist or can't be read, continue searching up
         }
 

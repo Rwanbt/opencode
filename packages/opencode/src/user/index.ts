@@ -2,7 +2,7 @@ import { Database, eq } from "../storage/db"
 import { CollabUserTable, CollabUserTokenTable } from "./user.sql"
 import { UserID, type UserRole } from "./schema"
 import { Log } from "../util/log"
-import { createHash, randomBytes } from "crypto"
+import { createHash, randomBytes } from "node:crypto"
 
 export { UserID, type UserRole } from "./schema"
 

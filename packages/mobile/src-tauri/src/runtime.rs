@@ -9,6 +9,9 @@ use tauri::{AppHandle, Emitter, Manager};
 const DEFAULT_PORT: u32 = 14096;
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 const RUNTIME_SUBDIR: &str = "runtime";
+// Bump this when the rootfs layout, wrapper scripts, or binary ABI changes
+// in a way that requires a clean re-extraction. Models directory is preserved.
+const RUNTIME_SCHEMA_VERSION: u32 = 1;
 
 /// Static storage for the server child process.
 static SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
@@ -117,7 +120,9 @@ pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
     let start = std::time::Instant::now();
 
     loop {
-        if is_runtime_ready(&dir) {
+        if is_ready_without_schema_check(&dir) {
+            // Write the schema version sentinel so future launches skip re-extraction
+            write_schema_version(&dir);
             let _ = app.emit(
                 "extraction-progress",
                 ExtractionProgress {
@@ -144,6 +149,487 @@ pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
 
         tokio::time::sleep(poll_interval).await;
     }
+}
+
+/// Recreate rootfs hardlink aliases as symlinks. Alpine ships several
+/// duplicate names (`gcc-ar` ↔ `aarch64-alpine-linux-musl-gcc-ar`,
+/// `g++` ↔ `aarch64-alpine-linux-musl-g++`, etc.) as hardlinks; SELinux
+/// `app_data_file` blocks `link()`, so tar can't recreate them on-device.
+/// We turn them into symlinks instead.
+fn repair_rootfs_hardlinks(rootfs_dir: &Path) {
+    let bin = rootfs_dir.join("usr/bin");
+    // Each tuple is a (canonical_short, target_prefixed) pair that Alpine
+    // ships as hardlinks. Whichever side tar managed to extract is the
+    // "real" file; the missing side becomes a symlink to it. The direction
+    // depends on tar archive ordering, which is non-deterministic — so we
+    // detect at runtime instead of assuming.
+    let pairs: &[(&str, &str)] = &[
+        ("gcc",        "aarch64-alpine-linux-musl-gcc"),
+        ("gcc-ar",     "aarch64-alpine-linux-musl-gcc-ar"),
+        ("gcc-nm",     "aarch64-alpine-linux-musl-gcc-nm"),
+        ("gcc-ranlib", "aarch64-alpine-linux-musl-gcc-ranlib"),
+        ("c++",        "aarch64-alpine-linux-musl-c++"),
+        ("cpp",        "aarch64-alpine-linux-musl-cpp"),
+        ("cc",         "aarch64-alpine-linux-musl-cc"),
+        ("g++",        "aarch64-alpine-linux-musl-g++"),
+        ("ar",         "aarch64-alpine-linux-musl-ar"),
+        ("ranlib",     "aarch64-alpine-linux-musl-ranlib"),
+        ("strip",      "aarch64-alpine-linux-musl-strip"),
+        ("objcopy",    "aarch64-alpine-linux-musl-objcopy"),
+        ("objdump",    "aarch64-alpine-linux-musl-objdump"),
+        ("nm",         "aarch64-alpine-linux-musl-nm"),
+        ("as",         "aarch64-alpine-linux-musl-as"),
+        ("readelf",    "aarch64-alpine-linux-musl-readelf"),
+        ("addr2line",  "aarch64-alpine-linux-musl-addr2line"),
+        ("size",       "aarch64-alpine-linux-musl-size"),
+        ("strings",    "aarch64-alpine-linux-musl-strings"),
+        ("c++filt",    "aarch64-alpine-linux-musl-c++filt"),
+    ];
+    for (a, b) in pairs {
+        let a_path = bin.join(a);
+        let b_path = bin.join(b);
+        let a_exists = a_path.exists() || fs::symlink_metadata(&a_path).is_ok();
+        let b_exists = b_path.exists() || fs::symlink_metadata(&b_path).is_ok();
+        match (a_exists, b_exists) {
+            (true, false) => { let _ = std::os::unix::fs::symlink(a, &b_path); }
+            (false, true) => { let _ = std::os::unix::fs::symlink(b, &a_path); }
+            _ => {}
+        }
+    }
+}
+
+/// Set up cargo / rustc / gcc / binutils so they run on-device despite the
+/// Android 13+ `untrusted_app` SELinux policy denying `execute_no_trans` on
+/// `app_data_file`.
+///
+/// Why this is needed:
+/// musl libc resolves intra-libc calls (`execve`, `posix_spawn`) with hidden
+/// visibility, so an LD_PRELOAD interposer cannot intercept the syscalls that
+/// `cargo` and `rustc` use to spawn `rustc` / `cc` / `collect2` / `ld` /
+/// `cc1` / `as`. Each of those targets sits in `/rootfs/...` (app_data_file)
+/// and the kernel returns EACCES (reported as ENOENT by the SELinux hook).
+///
+/// Two-step solution:
+/// 1. **In-rootfs wrap.** For every musl-ELF subprocess that is spawned by
+///    absolute path (cc1, collect2, lto1, the binutils, the rustc-specific
+///    LLVM tools), rename the binary to `<name>.elf64` and replace the
+///    original with a shebang script `#!<nlib>/libbash_exec.so` that
+///    re-execs through `<nlib>/libmusl_linker.so <name>.elf64`. The kernel's
+///    binfmt_script handler exec'd into `libbash_exec.so` (which lives in
+///    `nativeLibraryDir`, an apk_data_file label that *is* execute-allowed),
+///    bypassing the EACCES on the script's app_data_file label.
+/// 2. **Entry-point wrappers.** Generate `<cache>/wrappers/{cargo,rustc,…}`
+///    shebang scripts for the toolchain binaries Cargo / the user invoke
+///    directly. PATH-first prepends this dir; `RUSTC` env var hard-pins the
+///    rustc wrapper for cargo.
+///
+/// Idempotent: skips files already wrapped (those whose `.elf64` backup
+/// exists). Liblto_plugin.so is restored if it was wrapped (it must remain a
+/// loadable shared library, not a script).
+fn prepare_toolchain_wrappers(
+    rootfs_dir: &Path,
+    nlib_dir: &Path,
+    cache_dir: &Path,
+) -> std::io::Result<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bash_exec = nlib_dir.join("libbash_exec.so");
+    let musl_linker = nlib_dir.join("libmusl_linker.so");
+
+    if !bash_exec.exists() || !musl_linker.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "libbash_exec.so or libmusl_linker.so not found in nativeLibraryDir",
+        ));
+    }
+
+    // Wrap one ELF binary as a shebang-script that re-execs through linker.
+    // Idempotent: if `<file>.elf64` already exists we assume `file` is
+    // already a wrapper script and skip. Symlinks are skipped — wrapping a
+    // symlink would break the resolver chain.
+    let wrap_one = |file: &Path| -> std::io::Result<()> {
+        // Skip our own `.elf64` backup files — without this, a second pass
+        // through the libexec directory would treat `collect2.elf64` as a
+        // fresh ELF and wrap it AGAIN, producing `collect2.elf64.elf64` and
+        // a wrapper script at `collect2.elf64` that the linker then can't
+        // load ("Not a valid dynamic program").
+        if file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.ends_with(".elf64"))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        // Convention: append `.elf64` to the FULL filename so `liblto_plugin.so`
+        // becomes `liblto_plugin.so.elf64` (rather than `liblto_plugin.elf64`,
+        // which `with_extension` would produce).
+        let backup = PathBuf::from(format!("{}.elf64", file.display()));
+        let meta_res = fs::symlink_metadata(file);
+
+        // If both `<file>` (wrapper script) and `<file>.elf64` (real ELF) exist
+        // already, this is a previous wrap. Don't redo the rename — but DO
+        // refresh the wrapper script: nativeLibraryDir contains the per-install
+        // APK hash, so a wrapper from a prior install points to a now-dead
+        // `libbash_exec.so` path and `cc: cannot execute: required file not
+        // found`. Always re-write so the shebang tracks the current install.
+        if backup.exists() {
+            if let Ok(meta) = &meta_res {
+                if meta.file_type().is_symlink() {
+                    return Ok(());
+                }
+            }
+            let script = format!(
+                "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+                bash = bash_exec.display(),
+                linker = musl_linker.display(),
+                backup = backup.display(),
+            );
+            let _ = fs::write(file, script);
+            if let Ok(mut perm) = fs::metadata(file).map(|m| m.permissions()) {
+                perm.set_mode(0o755);
+                let _ = fs::set_permissions(file, perm);
+            }
+            return Ok(());
+        }
+
+        let meta = meta_res?;
+        if meta.file_type().is_symlink() {
+            return Ok(());
+        }
+        if !meta.is_file() || meta.len() < 1024 {
+            return Ok(());
+        }
+        let mut magic = [0u8; 4];
+        {
+            use std::io::Read;
+            let mut f = fs::File::open(file)?;
+            let _ = f.read(&mut magic);
+        }
+        if magic != [0x7f, b'E', b'L', b'F'] {
+            return Ok(());
+        }
+        fs::rename(file, &backup)?;
+        let script = format!(
+            "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+            bash = bash_exec.display(),
+            linker = musl_linker.display(),
+            backup = backup.display(),
+        );
+        fs::write(file, script)?;
+        let mut perm = fs::metadata(file)?.permissions();
+        perm.set_mode(0o755);
+        fs::set_permissions(file, perm)?;
+        Ok(())
+    };
+
+    // 1. Wrap GCC libexec internals (cc1, cc1plus, collect2, lto1, …) — these
+    //    are spawned by absolute path by cc/g++ and bypass any PATH wrappers.
+    let libexec_root = rootfs_dir.join("usr/libexec/gcc");
+    if let Ok(versions) = fs::read_dir(&libexec_root) {
+        for triplet in versions.flatten() {
+            if let Ok(versions2) = fs::read_dir(triplet.path()) {
+                for ver in versions2.flatten() {
+                    if let Ok(entries) = fs::read_dir(ver.path()) {
+                        for entry in entries.flatten() {
+                            let p = entry.path();
+                            // Skip .so plugins (must remain dlopen-able).
+                            if p.extension().and_then(|e| e.to_str()) == Some("so") {
+                                continue;
+                            }
+                            let _ = wrap_one(&p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Restore liblto_plugin.so if it was previously wrapped (must be a real .so).
+    if let Ok(entries) = fs::read_dir(&libexec_root) {
+        for triplet in entries.flatten() {
+            if let Ok(versions) = fs::read_dir(triplet.path()) {
+                for ver in versions.flatten() {
+                    let lto_dir = ver.path();
+                    let lto = lto_dir.join("liblto_plugin.so");
+                    let lto_backup = lto_dir.join("liblto_plugin.so.elf64");
+                    if lto.exists() && lto_backup.exists() {
+                        // The script wrapper is at lto, the real .so is at backup
+                        let is_script = fs::read(&lto)
+                            .ok()
+                            .map(|b| b.starts_with(b"#!"))
+                            .unwrap_or(false);
+                        if is_script {
+                            let _ = fs::remove_file(&lto);
+                            let _ = fs::rename(&lto_backup, &lto);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Wrap binutils + target-prefixed binutils + rustc-specific LLVM tools.
+    let binutils_targets = [
+        "as", "ld.bfd", "ld.gold", "ar", "ranlib", "strip",
+        "objcopy", "objdump", "nm", "readelf", "addr2line", "size", "strings", "c++filt",
+    ];
+    for name in &binutils_targets {
+        let p = rootfs_dir.join("usr/bin").join(name);
+        if p.exists() {
+            let _ = wrap_one(&p);
+        }
+    }
+    if let Ok(entries) = fs::read_dir(rootfs_dir.join("usr/bin")) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if let Some(s) = name.to_str() {
+                if s.starts_with("aarch64-alpine-linux-musl-")
+                    && !s.ends_with(".elf64")
+                {
+                    let _ = wrap_one(&entry.path());
+                }
+            }
+        }
+    }
+    let rustlib_bin = rootfs_dir.join("usr/lib/rustlib/aarch64-alpine-linux-musl/bin");
+    if let Ok(entries) = fs::read_dir(&rustlib_bin) {
+        for entry in entries.flatten() {
+            let _ = wrap_one(&entry.path());
+        }
+    }
+
+    // 3. Recreate `ld` symlink to ld.bfd if missing — Alpine binutils ship it
+    //    as a symlink and `collect2` looks for it by bare name. Some prior
+    //    wrap passes lost it.
+    let ld = rootfs_dir.join("usr/bin/ld");
+    let ld_bfd = rootfs_dir.join("usr/bin/ld.bfd");
+    if ld_bfd.exists() && !ld.exists() {
+        let _ = std::os::unix::fs::symlink("ld.bfd", &ld);
+    }
+
+    // 4. Generate /cache/wrappers/ entry-point scripts.
+    let wrappers = cache_dir.join("wrappers");
+    fs::create_dir_all(&wrappers)?;
+
+    // ELF entry points (cargo, rustc, python3, …) — invoke linker directly.
+    // Mix of musl ELFs and shell scripts; the is_script branch below handles both.
+    let elf_tools = [
+        // Existing core toolchain
+        "rustc", "cargo", "python", "python3", "node", "npm", "node-gyp",
+        "pip", "pip3", "rustup",
+        // Phase 1 extension: debug + profiling
+        "gdb", "lldb", "strace", "ltrace",
+        // PHP stack
+        "php", "php83", "composer",
+        // SQL clients
+        "sqlite3", "psql", "mysql",
+        // Modern build systems
+        "cmake", "ctest", "ninja", "samu", "meson", "pkgconf",
+        // Go
+        "go", "gofmt",
+        // Ruby
+        "ruby", "gem", "irb",
+        // Java / JVM tooling
+        "java", "javac", "jar", "gradle", "mvn",
+        // Linters / formatters
+        "shellcheck", "shfmt", "clang-tidy", "clang-format",
+    ];
+    // Resolve symlinks while keeping resolution sandboxed inside the rootfs.
+    // fs::canonicalize escapes the sandbox: an absolute symlink like
+    // `/usr/lib/go/bin/go` (typical for go/gradle/mvn/psql in Alpine) resolves
+    // against the device root (which has no /usr/lib/go) and yields ENOENT.
+    // We strip the leading slash and re-anchor at rootfs_dir instead.
+    fn resolve_in_rootfs(path: &Path, rootfs: &Path) -> Option<PathBuf> {
+        let mut current = path.to_path_buf();
+        for _ in 0..16 {
+            match fs::symlink_metadata(&current) {
+                Ok(md) if md.file_type().is_symlink() => {
+                    let target = fs::read_link(&current).ok()?;
+                    current = if target.is_absolute() {
+                        rootfs.join(target.strip_prefix("/").ok()?)
+                    } else {
+                        current.parent()?.join(target)
+                    };
+                }
+                Ok(_) => return Some(current),
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
+    // Extract the interpreter basename from a `#!...` shebang line.
+    // Returns None if the file has no shebang or the line is malformed.
+    fn parse_shebang_interp(path: &Path) -> Option<String> {
+        let buf = fs::read(path).ok()?;
+        if !buf.starts_with(b"#!") {
+            return None;
+        }
+        let line_end = buf[2..].iter().position(|&b| b == b'\n').unwrap_or(buf.len() - 2);
+        let line = std::str::from_utf8(&buf[2..2 + line_end]).ok()?.trim();
+        let interp_path = line.split_whitespace().next()?;
+        Path::new(interp_path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+    }
+
+    // LD_LIBRARY_PATH injected into every wrapper so dynamically-linked tools
+    // (php, gdb, sqlite3, java, ruby, clang-tidy, …) find their .so deps in
+    // the rootfs. Without this, exec succeeds but the loader bails on the
+    // first DT_NEEDED. Includes llvm19/lib (clang-extra-tools) and the JDK
+    // lib dir so `java` finds libjli.so + libz.so.1.
+    let ld_path = format!(
+        "{r}/usr/lib:{r}/lib:{r}/usr/lib/llvm19/lib:{r}/usr/lib/jvm/java-21-openjdk/lib",
+        r = rootfs_dir.display()
+    );
+
+    for t in &elf_tools {
+        let src = rootfs_dir.join("usr/bin").join(t);
+        let real = match resolve_in_rootfs(&src, rootfs_dir) {
+            Some(r) => r,
+            None => continue,
+        };
+        let head = fs::read(&real).ok();
+        let is_script = head
+            .as_ref()
+            .map(|b| b.starts_with(b"#!"))
+            .unwrap_or(false);
+        // Statically-linked ELFs (e.g. Go binaries) have no PT_INTERP, so the
+        // "ld-musl" string never appears in their headers. They cannot be run
+        // via libmusl_linker.so (which expects a dynamic ELF to mmap+relocate)
+        // and SELinux blocks direct execve from app_data_file. Skip them — a
+        // user-facing wrapper that just errors is worse than no wrapper.
+        // Static ELFs (Go binaries: go, gofmt, shfmt) have no PT_INTERP and
+        // can't run via libmusl_linker.so (which expects a dynamic ELF). Parse
+        // the ELF program headers and look for a PT_INTERP entry — this is
+        // more robust than scanning for the "ld-musl" string, which has false
+        // negatives (shfmt embeds the literal in a data section even though
+        // it's static) and required a full-file scan to avoid false positives
+        // on Rust binaries (cargo/rustc keep the interp past the first 2 KB).
+        fn is_static_elf64(buf: &[u8]) -> bool {
+            if buf.len() < 64 || &buf[..4] != b"\x7fELF" || buf[4] != 2 {
+                return false;
+            }
+            let to_u64 = |o: usize| u64::from_le_bytes(buf[o..o + 8].try_into().unwrap()) as usize;
+            let to_u16 = |o: usize| u16::from_le_bytes(buf[o..o + 2].try_into().unwrap()) as usize;
+            let phoff = to_u64(0x20);
+            let phentsize = to_u16(0x36);
+            let phnum = to_u16(0x38);
+            if phoff == 0 || phentsize == 0 || phnum == 0 {
+                return false;
+            }
+            let table_end = phoff.saturating_add(phnum.saturating_mul(phentsize));
+            if table_end > buf.len() {
+                return false;
+            }
+            for i in 0..phnum {
+                let off = phoff + i * phentsize;
+                let p_type = u32::from_le_bytes(buf[off..off + 4].try_into().unwrap());
+                if p_type == 3 {
+                    return false; // PT_INTERP found → dynamic
+                }
+            }
+            true
+        }
+        let is_static_elf = head.as_ref().map(|b| is_static_elf64(b)).unwrap_or(false);
+        if is_static_elf {
+            log::info!(
+                "[wrap] skip {} — static ELF (cannot run via libmusl_linker)",
+                t
+            );
+            continue;
+        }
+        let script = if is_script {
+            // Map the script's shebang interpreter to one of our generated
+            // wrappers (or libbash_exec.so for sh scripts). Three issues we
+            // dodge by re-routing instead of letting the kernel re-exec the
+            // shebang directly:
+            //   1. /bin/sh on Android = Bionic /system/bin/sh which honors
+            //      LD_LIBRARY_PATH and CANNOT_LINK against musl libc when our
+            //      LD_LIBRARY_PATH is exported. Sending sh scripts through
+            //      libbash_exec.so (bash-as-shared-lib in nativeLibraryDir)
+            //      bypasses Bionic entirely.
+            //   2. /usr/bin/env doesn't exist on Android, so `#!/usr/bin/env
+            //      python3` would fail at the kernel binfmt_script step.
+            //   3. /usr/bin/python3 etc. point at the device root, not the
+            //      rootfs. Routing through wrappers/python3 hits the rootfs
+            //      ELF with the proper LD_LIBRARY_PATH already set in that
+            //      wrapper.
+            // Also: do NOT export LD_LIBRARY_PATH at the script level. Any
+            // sub-binary the script spawns is itself wrapped (cargo, java,
+            // php, …); each wrapper sets its own. Exporting here propagates
+            // the path into Bionic /bin/sh sub-shells and breaks them.
+            let shebang_interp = parse_shebang_interp(&real);
+            let interp_path: Option<String> = shebang_interp.as_deref().and_then(|name| {
+                match name {
+                    "sh" | "bash" => Some(bash_exec.display().to_string()),
+                    "env" => None,
+                    other => {
+                        let w = wrappers.join(other);
+                        if rootfs_dir.join("usr/bin").join(other).exists() {
+                            Some(w.display().to_string())
+                        } else {
+                            None
+                        }
+                    }
+                }
+            });
+            match interp_path {
+                Some(interp) => format!(
+                    "#!{bash}\nexec \"{interp}\" \"{real}\" \"$@\"\n",
+                    bash = bash_exec.display(),
+                    interp = interp,
+                    real = real.display(),
+                ),
+                None => format!(
+                    "#!{bash}\nexec \"{real}\" \"$@\"\n",
+                    bash = bash_exec.display(),
+                    real = real.display(),
+                ),
+            }
+        } else {
+            format!(
+                "#!{bash}\nexport LD_LIBRARY_PATH=\"{ld}:${{LD_LIBRARY_PATH}}\"\nexec \"{linker}\" \"{real}\" \"$@\"\n",
+                bash = bash_exec.display(),
+                ld = ld_path,
+                linker = musl_linker.display(),
+                real = real.display(),
+            )
+        };
+        let dst = wrappers.join(t);
+        fs::write(&dst, script)?;
+        let mut perm = fs::metadata(&dst)?.permissions();
+        perm.set_mode(0o755);
+        fs::set_permissions(&dst, perm)?;
+    }
+
+    // Script entry points (cc, gcc, g++, binutils …) — already wrapped in
+    // rootfs by the wrap_one pass; just delegate via libbash_exec.so so the
+    // kernel binfmt_script handler does the dance.
+    let script_tools = [
+        "gcc", "g++", "cc", "ar", "as", "ld", "ld.bfd", "ranlib", "strip",
+        "objcopy", "objdump", "nm", "cpp", "c++",
+    ];
+    for t in &script_tools {
+        let src = rootfs_dir.join("usr/bin").join(t);
+        if !src.exists() {
+            continue;
+        }
+        let script = format!(
+            "#!{bash}\nexec \"{src}\" \"$@\"\n",
+            bash = bash_exec.display(),
+            src = src.display(),
+        );
+        let dst = wrappers.join(t);
+        fs::write(&dst, script)?;
+        let mut perm = fs::metadata(&dst)?.permissions();
+        perm.set_mode(0o755);
+        fs::set_permissions(&dst, perm)?;
+    }
+
+    Ok(wrappers)
 }
 
 /// Start the embedded OpenCode server.
@@ -184,6 +670,13 @@ pub async fn start_embedded_server(
     // Ensure home directory exists
     let _ = fs::create_dir_all(&home_dir);
     let _ = fs::create_dir_all(home_dir.join(".opencode"));
+
+    // App-private tmp dir for Node/Bun's os.tmpdir(). Android's rootfs `/` is
+    // read-only for sandboxed apps, so any module calling mkdirSync(os.tmpdir()
+    // + '/…') hits EROFS. Exporting TMPDIR (+ TMP/TEMP for cross-platform
+    // libs) redirects every tmpdir consumer into the app's writable cache.
+    let app_tmp_dir = home_dir.join(".cache").join("tmp");
+    let _ = fs::create_dir_all(&app_tmp_dir);
 
     // External-storage symlinks live under $HOME/storage/ and are set up by
     // MainActivity.setupStorageSymlinks() in Java via Os.symlink(). Doing it
@@ -481,7 +974,13 @@ pub async fn start_embedded_server(
         "tmux", "screen",
         "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
         "rsync", "wget",
-        "python3", "python", "node", "npm",
+        "python3", "python", "node", "npm", "pip", "pip3",
+        // Toolchain on-device (Alpine build-base + rust cargo). Adding the
+        // wrappers here lets the user build native Rust / C / C++ projects
+        // entirely on the phone, without a PC cargo proxy. The actual
+        // binaries are installed in the rootfs by build-alpine-rootfs.sh.
+        "gcc", "g++", "cc", "ar", "ld", "as", "ranlib", "objdump", "strip",
+        "rustc", "cargo", "rustup",
         "jq", "tree", "htop", "fzf", "fd", "bat", "exa",
     ];
     let mut tool_fns = String::new();
@@ -587,28 +1086,70 @@ alias cls='clear'\n\
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
 
+    // Set up Cargo / Rust / GCC / binutils on-device. Wraps in-rootfs
+    // sub-binaries (cc1, collect2, lto1, ld.bfd, …) as shebang scripts and
+    // generates entry-point wrappers under cache/wrappers/. See the docstring
+    // on prepare_toolchain_wrappers for the full SELinux story.
+    let cache_dir = home_dir.join(".cache");
+    let _ = fs::create_dir_all(&cache_dir);
+    let wrappers_dir = match prepare_toolchain_wrappers(&rootfs_dir, &nlib_dir, &cache_dir) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            log::warn!("[OpenCode] prepare_toolchain_wrappers failed: {} — Rust/Cargo on-device will not work", e);
+            None
+        }
+    };
+
     // Build PATH with bin links and nativeLibraryDir.
     // NOTE: /system/bin is intentionally excluded — Android SELinux blocks exec()
     // of system binaries from the untrusted_app domain, causing silent failures
     // and terminal freezes. All needed commands are provided via toybox symlinks.
     let sys_path = std::env::var("PATH").unwrap_or_default();
-    let path = format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path);
+    // Wrappers dir comes FIRST so cargo / rustc / cc are resolved through the
+    // bash + linker chain rather than execve'd as raw musl ELFs (denied by
+    // SELinux execute_no_trans).
+    let path = if let Some(ref w) = wrappers_dir {
+        format!("{}:{}:{}:{}", w.display(), bin_link_dir.display(), nlib_dir.display(), sys_path)
+    } else {
+        format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path)
+    };
+
+    // Phase C: detect whether adbd is running. When the user has USB debugging
+    // active and pairs the device with a PC running cargo-proxy.mjs over
+    // `adb reverse tcp:9999 tcp:9999`, the bash tool routes toolchain commands
+    // (cargo, rustc, npm, ...) to the host PC. Otherwise the bash tool runs
+    // commands locally as before.
+    let cargo_proxy_active = Command::new("/system/bin/getprop")
+        .arg("init.svc.adbd")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "running")
+        .unwrap_or(false);
+    log::debug!("[OpenCode] adbd running = {} → OPENCODE_CARGO_PROXY = {}",
+        cargo_proxy_active, if cargo_proxy_active { "1" } else { "0" });
 
     // On Android, bun is linked against musl. We invoke it via the musl dynamic
     // linker shipped alongside (also in nativeLibraryDir for exec permission).
     // Write env vars to a file — musl linker doesn't pass Command::env() to bun.
     // mobile-entry.ts reads this file and applies env vars at startup.
+    // Use the bundled bash (libbash_exec.so, in nativeLibraryDir which has
+    // exec_no_trans allowed by SELinux for `untrusted_app`). Driving the
+    // bash tool through this shell lets us set BASH_ENV so .bashrc is
+    // sourced even in non-interactive `bash -c "<cmd>"` invocations: the
+    // shell-function wrappers (cargo / rustc / python / gcc / …) defined
+    // below from the `tools` array become available, and the calls go
+    // through libmusl_linker.so without ever exec()ing a script in
+    // app_data_file (which `untrusted_app` cannot do).
     let env_file = dir.join(".env_vars");
+    let bash_path = bin_link_dir.join("bash");
+    let bash_env_path = home_dir.join(".bashrc");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
         home = home_dir.display(),
+        bash_env = bash_env_path.display(),
         cert = ca_bundle_path.display(),
         resolv = resolv_path.display(),
-        // Use /system/bin/sh (Android's mksh, bionic-compiled) instead of the
-        // statically-linked bash binary. Static bash uses its own libc fork()
-        // which triggers Android's seccomp filter (SIGSYS/exitCode=159).
-        // /system/bin/sh uses bionic's clone() which is whitelisted.
-        shell = "/system/bin/sh",
+        tmp = app_tmp_dir.display(),
+        shell = bash_path.display(),
         pty = nlib_dir.join("librust_pty.so").display(),
         pw = password,
         xdg_data = home_dir.join(".local/share").display(),
@@ -621,6 +1162,15 @@ alias cls='clear'\n\
     );
     // Also add NO_PROXY for local connections
     let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
+    let env_content = format!("{}OPENCODE_CARGO_PROXY={}\n", env_content, if cargo_proxy_active { "1" } else { "0" });
+    // Pin RUSTC + MUSL_LINKER so cargo finds rustc through the wrapper chain
+    // even when its `Command::new` ignores PATH ordering.
+    let env_content = if let Some(ref w) = wrappers_dir {
+        let r = format!("{}RUSTC={}\nMUSL_LINKER={}\n", env_content, w.join("rustc").display(), nlib_dir.join("libmusl_linker.so").display());
+        r
+    } else {
+        env_content
+    };
     let _ = fs::write(&env_file, &env_content);
 
     // Build command: use --preload to load resolv_override.so via CLI arg
@@ -680,11 +1230,15 @@ alias cls='clear'\n\
         .env("PATH", &path)
         .env("LD_LIBRARY_PATH", &lib_path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
+        .env("TMPDIR", app_tmp_dir.to_str().unwrap_or(""))
+        .env("TMP", app_tmp_dir.to_str().unwrap_or(""))
+        .env("TEMP", app_tmp_dir.to_str().unwrap_or(""))
         .env("EXTERNAL_STORAGE", "/sdcard")
         .env("OPENCODE_HOME", home_dir.to_str().unwrap_or("/tmp"))
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
         .env("OPENCODE_CLIENT", "mobile-embedded")
+        .env("OPENCODE_CARGO_PROXY", if cargo_proxy_active { "1" } else { "0" })
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
         .env("SHELL", bin_link_dir.join("bash").to_str().unwrap_or("/bin/sh"))
@@ -696,6 +1250,17 @@ alias cls='clear'\n\
         .env("XDG_STATE_HOME", home_dir.join(".local/state").to_str().unwrap_or(""))
         .env("XDG_CACHE_HOME", home_dir.join(".cache").to_str().unwrap_or(""))
         .env("XDG_CONFIG_HOME", home_dir.join(".config").to_str().unwrap_or(""))
+        .env(
+            "RUSTC",
+            wrappers_dir
+                .as_ref()
+                .map(|w| w.join("rustc").to_string_lossy().to_string())
+                .unwrap_or_default(),
+        )
+        .env(
+            "MUSL_LINKER",
+            nlib_dir.join("libmusl_linker.so").to_string_lossy().to_string(),
+        )
         .stdout(stdout_file)
         .stderr(Stdio::piped())
         .spawn()
@@ -895,10 +1460,20 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::info!("[install_ext] tar FAILED: {}", stderr);
-        return Err(format!("tar failed: {}", stderr));
+        // SELinux on Android denies link() under app_data_file, so rootfs.tgz
+        // hardlinks (gcc-ar→aarch64-…-gcc-ar etc.) abort tar. Treat as
+        // non-fatal: most files still extracted, missing hardlinks are
+        // recreated as symlinks below in repair_rootfs_hardlinks.
+        log::warn!(
+            "[install_ext] tar reported errors (treated as non-fatal): {}",
+            stderr.trim()
+        );
     }
     log::info!("[install_ext] rootfs extracted to {}", rootfs_dir.display());
+
+    // Repair: tar's failed hardlinks left aliases like `aarch64-…-gcc-ar`
+    // missing while the canonical `gcc-ar` is present. Re-create as symlinks.
+    repair_rootfs_hardlinks(&rootfs_dir);
 
     // Seed /etc/resolv.conf so git-http, wget, pip etc. can resolve DNS.
     let _ = fs::create_dir_all(rootfs_dir.join("etc"));
@@ -933,6 +1508,21 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
         );
     }
 
+    // Bake the toolchain wrappers immediately after extraction so cargo /
+    // rustc / gcc are usable without a server restart. start_embedded_server
+    // also calls this — both are idempotent. Rationale: the very first
+    // launch goes through ExtractionProgress (this command) → onComplete →
+    // start_embedded_server. If the user's UI flow ever inverts that order
+    // (warm restart against a fresh rootfs), the wrappers still get created.
+    if let Some(nlib) = native_lib_dir(&dir) {
+        let cache_dir = dir.join("home").join(".cache");
+        let _ = fs::create_dir_all(&cache_dir);
+        match prepare_toolchain_wrappers(&rootfs_dir, &nlib, &cache_dir) {
+            Ok(p) => log::info!("[install_ext] toolchain wrappers ready at {}", p.display()),
+            Err(e) => log::warn!("[install_ext] prepare_toolchain_wrappers failed: {}", e),
+        }
+    }
+
     Ok(())
 }
 
@@ -961,16 +1551,58 @@ pub(crate) fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
     fs::read_to_string(&path_file).ok().map(|s| PathBuf::from(s.trim()))
 }
 
-fn is_runtime_ready(dir: &Path) -> bool {
-    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
+/// Check if the runtime binaries are present, ignoring schema version.
+/// Used during the extraction polling loop before write_schema_version is called.
+fn is_ready_without_schema_check(dir: &Path) -> bool {
     dir.join("opencode-cli.js").exists()
         && dir.join(".native_lib_dir").exists()
-        && native_lib_dir(dir)
-            .map(|d| d.join("libbun_exec.so").exists())
-            .unwrap_or(false)
+        && native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
 }
 
-async fn check_health(port: u32, password: Option<&str>) -> bool {
+fn is_runtime_ready(dir: &Path) -> bool {
+    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
+    if !dir.join("opencode-cli.js").exists()
+        || !dir.join(".native_lib_dir").exists()
+        || !native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
+    {
+        return false;
+    }
+    // Schema version guard: if version file is missing or stale, wipe rootfs
+    // (not models) and force re-extraction. This prevents silent corruption
+    // after an APK update that ships a new Alpine rootfs layout.
+    let version_file = dir.join(".schema_version");
+    let current = fs::read_to_string(&version_file)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .unwrap_or(0);
+    if current != RUNTIME_SCHEMA_VERSION {
+        log::warn!(
+            "[runtime] schema version mismatch (have={} want={}), wiping rootfs",
+            current,
+            RUNTIME_SCHEMA_VERSION
+        );
+        let rootfs = dir.join("rootfs");
+        if rootfs.exists() {
+            if let Err(e) = fs::remove_dir_all(&rootfs) {
+                log::warn!("[runtime] failed to wipe rootfs: {}", e);
+            }
+        }
+        // Remove version file so next ready-check re-triggers extraction
+        let _ = fs::remove_file(&version_file);
+        return false;
+    }
+    true
+}
+
+/// Write the current schema version sentinel after a successful extraction.
+pub fn write_schema_version(dir: &Path) {
+    let path = dir.join(".schema_version");
+    if let Err(e) = fs::write(&path, RUNTIME_SCHEMA_VERSION.to_string()) {
+        log::warn!("[runtime] failed to write schema version: {}", e);
+    }
+}
+
+pub(crate) async fn check_health(port: u32, password: Option<&str>) -> bool {
     let url = format!("http://127.0.0.1:{}/global/health", port);
     let client = match reqwest::Client::builder()
         .timeout(HEALTH_CHECK_TIMEOUT)
@@ -989,6 +1621,143 @@ async fn check_health(port: u32, password: Option<&str>) -> bool {
     match req.send().await {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
+    }
+}
+
+// runtime.rs uses Unix-specific APIs (set_mode, forkpty, etc.) so tests only
+// compile and run on Android/Linux targets — not on Windows dev machines.
+#[cfg(all(test, target_os = "android"))]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn temp_test_dir(name: &str) -> std::path::PathBuf {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("opencode_test_{}_{}", name, n));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // ─── is_ready_without_schema_check ───────────────────────────────
+
+    #[test]
+    fn is_ready_without_schema_check_missing_all_files() {
+        let dir = temp_test_dir("no_files");
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!result, "empty dir should return false");
+    }
+
+    #[test]
+    fn is_ready_without_schema_check_missing_native_lib_dir() {
+        let dir = temp_test_dir("missing_nld");
+        // Create opencode-cli.js but NOT .native_lib_dir
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!result, "missing .native_lib_dir should return false");
+    }
+
+    #[test]
+    fn is_ready_without_schema_check_ok() {
+        let dir = temp_test_dir("ok");
+        // Create a fake nativeLibraryDir with libbun_exec.so
+        let nlib_dir = temp_test_dir("nlib_ok");
+        std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
+
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
+
+        let result = is_ready_without_schema_check(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+        assert!(result, "all required files present should return true");
+    }
+
+    // ─── write_schema_version ────────────────────────────────────────
+
+    #[test]
+    fn write_schema_version_creates_file() {
+        let dir = temp_test_dir("schema_write");
+        write_schema_version(&dir);
+        let content = std::fs::read_to_string(dir.join(".schema_version"))
+            .expect(".schema_version should exist after write_schema_version");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            content.trim(),
+            RUNTIME_SCHEMA_VERSION.to_string(),
+            ".schema_version should contain the current RUNTIME_SCHEMA_VERSION"
+        );
+    }
+
+    // ─── is_runtime_ready ────────────────────────────────────────────
+
+    /// Helper: populate `dir` with the minimal structure for is_runtime_ready,
+    /// using `nlib_dir` as the nativeLibraryDir (must contain libbun_exec.so).
+    fn setup_runtime_files(dir: &Path, nlib_dir: &Path) {
+        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
+        std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
+    }
+
+    #[test]
+    fn is_runtime_ready_no_schema_version() {
+        let dir = temp_test_dir("rr_no_schema");
+        let nlib_dir = temp_test_dir("rr_no_schema_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+
+        // Create rootfs so we can verify it gets removed
+        let rootfs = dir.join("rootfs");
+        std::fs::create_dir_all(&rootfs).unwrap();
+
+        // .schema_version is absent — should return false
+        let result = is_runtime_ready(&dir);
+
+        let rootfs_still_exists = rootfs.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(!result, "missing .schema_version should return false");
+        assert!(
+            !rootfs_still_exists,
+            "is_runtime_ready should wipe rootfs when schema version is missing"
+        );
+    }
+
+    #[test]
+    fn is_runtime_ready_wrong_schema_version() {
+        let dir = temp_test_dir("rr_wrong_schema");
+        let nlib_dir = temp_test_dir("rr_wrong_schema_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+        // Write an old/wrong schema version
+        std::fs::write(dir.join(".schema_version"), b"0").unwrap();
+
+        let result = is_runtime_ready(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(!result, "outdated .schema_version should return false");
+    }
+
+    #[test]
+    fn is_runtime_ready_correct_schema_version() {
+        let dir = temp_test_dir("rr_ok");
+        let nlib_dir = temp_test_dir("rr_ok_nlib");
+        setup_runtime_files(&dir, &nlib_dir);
+        // Write the current schema version
+        std::fs::write(
+            dir.join(".schema_version"),
+            RUNTIME_SCHEMA_VERSION.to_string(),
+        )
+        .unwrap();
+
+        let result = is_runtime_ready(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&nlib_dir);
+
+        assert!(result, "correct .schema_version and all files should return true");
     }
 }
 

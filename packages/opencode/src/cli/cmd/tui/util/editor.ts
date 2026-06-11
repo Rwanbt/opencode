@@ -2,7 +2,7 @@ import { defer } from "@/util/defer"
 import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CliRenderer } from "@opentui/core"
+import type { CliRenderer } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 

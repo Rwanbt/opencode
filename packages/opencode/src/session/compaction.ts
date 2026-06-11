@@ -2,7 +2,6 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
 import { SessionID, MessageID, PartID } from "./schema"
-import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
@@ -125,7 +124,7 @@ export namespace SessionCompaction {
           const msg = msgs[msgIndex]
           if (msg.info.role === "user") turns++
           if (turns < 2) continue
-          if (msg.info.role === "assistant" && msg.info.summary) break loop
+          if (msg.info.role === "assistant" && msg.info.summary) break
           for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
             const part = msg.parts[partIndex]
             if (part.type === "tool")

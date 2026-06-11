@@ -4,7 +4,7 @@
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
 import z from "zod"
-import * as path from "path"
+import * as path from "node:path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -16,7 +16,7 @@ import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { Snapshot } from "@/snapshot"
+import type { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 import * as SecurityScanner from "../security/scanner"
 import { FileLock } from "../file/lock"
@@ -43,7 +43,12 @@ export const EditTool = Tool.define("edit", {
     oldString: z.string().describe("The text to replace"),
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
-    dry_run: z.boolean().optional().describe("Preview the diff without modifying the file"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .describe(
+        "Set to true ONLY when the user explicitly asks to preview the diff without applying it. By default leave this unset to actually apply the edit.",
+      ),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
@@ -441,7 +446,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
             if (match) {
               yield match[0]
             }
-          } catch (e) {
+          } catch (_e) {
             // Invalid regex pattern, skip
           }
         }

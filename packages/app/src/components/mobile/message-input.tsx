@@ -1,4 +1,4 @@
-import { createSignal, onMount } from "solid-js"
+import { createSignal, } from "solid-js"
 import { usePlatform } from "../../context/platform"
 
 export interface MessageInputProps {

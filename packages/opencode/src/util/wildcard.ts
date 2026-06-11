@@ -21,11 +21,10 @@ export namespace Wildcard {
 
   export function all(input: string, patterns: Record<string, any>) {
     const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
-    let result = undefined
+    let result: unknown
     for (const [pattern, value] of sorted) {
       if (match(input, pattern)) {
         result = value
-        continue
       }
     }
     return result
@@ -33,13 +32,12 @@ export namespace Wildcard {
 
   export function allStructured(input: { head: string; tail: string[] }, patterns: Record<string, any>) {
     const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
-    let result = undefined
+    let result: unknown
     for (const [pattern, value] of sorted) {
       const parts = pattern.split(/\s+/)
       if (!match(input.head, parts[0])) continue
       if (parts.length === 1 || matchSequence(input.tail, parts.slice(1))) {
         result = value
-        continue
       }
     }
     return result

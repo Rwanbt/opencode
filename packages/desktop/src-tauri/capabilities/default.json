@@ -50,6 +50,7 @@
         { "url": "http://localhost:*/*" }
       ]
     },
-    "clipboard-manager:allow-read-image"
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-text"
   ]
 }

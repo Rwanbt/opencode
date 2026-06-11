@@ -1,4 +1,4 @@
-import type { ChildProcessWithoutNullStreams } from "child_process"
+import type { ChildProcessWithoutNullStreams } from "node:child_process"
 import { Process } from "../util/process"
 
 type Child = Process.Child & ChildProcessWithoutNullStreams

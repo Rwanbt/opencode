@@ -1,9 +1,9 @@
-import { Cause, Effect, Layer, Scope, ServiceMap } from "effect"
-// @ts-ignore
+import { Cause, Effect, Layer, ServiceMap } from "effect"
+// @ts-expect-error
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { readdir } from "fs/promises"
-import path from "path"
+import { readdir } from "node:fs/promises"
+import path from "node:path"
 import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"

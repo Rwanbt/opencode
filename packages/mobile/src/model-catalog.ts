@@ -18,6 +18,21 @@ export interface CatalogModel {
    *   - "standard":  6-8 GB RAM, mid-range SoC
    *   - "flagship":  ≥8 GB RAM + 2023+ SoC (SD 8 Gen 3, Tensor G4, A17 Pro) */
   deviceClass: "eco" | "standard" | "flagship"
+  /** Optional multimodal projector for vision/audio. When present, the
+   * runtime downloads it alongside the main weights and passes --mmproj
+   * to llama-server so the model can accept image/audio attachments.
+   *
+   * Gemma 4 E4B has vision native in its base architecture (no separate
+   * "vision" variant in the model name) but llama.cpp still ships the
+   * vision encoder as a sibling .gguf — see PRs #21851 (mtmd Gemma) and
+   * #21874 (mmproj VRAM fix). Audio is NOT supported by llama.cpp upstream
+   * for Gemma 4 (#21868 marked "not planned"); use Parakeet/Murmur STT
+   * pre-pass instead.
+   *
+   * Both fields are optional — populate them once a tested mmproj GGUF
+   * is published on HF (bartowski / unsloth tend to be first). */
+  mmprojUrl?: string
+  mmprojFilename?: string
 }
 
 export interface DeviceProfile {
@@ -53,6 +68,58 @@ export function isRecommendedFor(model: CatalogModel, profile: DeviceProfile): b
 }
 
 export const MODEL_CATALOG: CatalogModel[] = [
+  {
+    id: "gemma-4-e4b-q4_0",
+    name: "Gemma 4 E4B (Q4_0, GPU-accelerated)",
+    description: "Google's latest expert — Q4_0 pure for Adreno OpenCL full GPU acceleration. Q4_K_M on Adreno silently falls back to CPU mixed mode (per llama.cpp OPENCL.md).",
+    size: "4.84 GB",
+    sizeBytes: 5_195_984_896,
+    url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf",
+    filename: "gemma-4-E4B-it-Q4_0.gguf",
+    minRamGB: 8,
+    deviceClass: "flagship",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E4B-F16.gguf",
+  },
+  {
+    id: "gemma-4-e4b",
+    name: "Gemma 4 E4B (Q4_K_M, CPU/Vulkan)",
+    description: "Google's latest expert — 131K context, 140+ languages, best quality locally. Q4_K_M variant (unsupported on Adreno OpenCL; fine on CPU/Vulkan).",
+    size: "5.0 GB",
+    sizeBytes: 4_977_169_088,
+    url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
+    filename: "gemma-4-E4B-it-Q4_K_M.gguf",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E4B-F16.gguf",
+    minRamGB: 8,
+    deviceClass: "flagship",
+  },
+  {
+    id: "gemma-4-e2b-q4_0",
+    name: "Gemma 4 E2B (Q4_0, GPU-accelerated)",
+    description: "Gemma 4 E2B at Q4_0 pure for Adreno OpenCL full GPU acceleration.",
+    size: "3.04 GB",
+    sizeBytes: 3_266_000_000,
+    url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf",
+    filename: "gemma-4-E2B-it-Q4_0.gguf",
+    minRamGB: 6,
+    deviceClass: "standard",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E2B-F16.gguf",
+  },
+  {
+    id: "gemma-4-e2b",
+    name: "Gemma 4 E2B (Q4_K_M, CPU/Vulkan)",
+    description: "Gemma 4 at half capacity — fits standard devices (6 GB+ RAM). Q4_K_M variant (CPU/Vulkan only).",
+    size: "3.1 GB",
+    sizeBytes: 3_106_735_776,
+    url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
+    filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+    minRamGB: 6,
+    deviceClass: "standard",
+    mmprojUrl: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-F16.gguf",
+    mmprojFilename: "mmproj-gemma-4-E2B-F16.gguf",
+  },
   {
     id: "gemma-3-4b",
     name: "Gemma 3 4B",
@@ -107,17 +174,6 @@ export const MODEL_CATALOG: CatalogModel[] = [
     filename: "gemma-3-1b-it-Q4_K_M.gguf",
     minRamGB: 2,
     deviceClass: "eco",
-  },
-  {
-    id: "gemma-3-4b",
-    name: "Gemma 3 4B",
-    description: "Google's coding-capable instruct model — recommended for flagship phones",
-    size: "2.5 GB",
-    sizeBytes: 2_500_000_000,
-    url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
-    filename: "gemma-3-4b-it-Q4_K_M.gguf",
-    minRamGB: 6,
-    deviceClass: "flagship",
   },
   {
     id: "qwen3-4b",

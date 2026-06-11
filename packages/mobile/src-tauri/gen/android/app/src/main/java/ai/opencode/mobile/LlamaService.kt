@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 
 /**
@@ -67,6 +68,21 @@ class LlamaService : Service() {
     @Volatile
     private var ptyServerProcess: Process? = null
 
+    @Volatile
+    private var isForeground: Boolean = false
+
+    @Volatile
+    private var watchdogThread: Thread? = null
+
+    // Held for the lifetime of an active llama-server child process.
+    // PARTIAL_WAKE_LOCK prevents CPU deep sleep between token generation steps
+    // when the screen is off — without it the SoC can stall for ~200ms per step.
+    private var inferenceWakeLock: PowerManager.WakeLock? = null
+
+    /** Called on the watchdog thread when llama-server exits unexpectedly. */
+    @Volatile
+    var onServerCrash: ((exitCode: Int) -> Unit)? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -84,7 +100,8 @@ class LlamaService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "LlamaService onDestroy — killing child llama-server if any")
-        stopChildProcess()
+        stopChildProcess()  // also calls releaseInferenceWakeLock()
+        releaseInferenceWakeLock()  // safety net if child was already null
         instance = null
         super.onDestroy()
     }
@@ -138,6 +155,7 @@ class LlamaService : Service() {
         } else {
             startForeground(NOTIF_ID, notification)
         }
+        isForeground = true
     }
 
     /** Update the persistent notification text (e.g. "Loading Gemma-4..."). */
@@ -148,6 +166,45 @@ class LlamaService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "updateNotification failed: ${e.message}")
         }
+    }
+
+    /** True if the llama-server child process is alive (model loaded and running). */
+    fun isModelActive(): Boolean = child?.let { isProcessAlive(it) } ?: false
+
+    private fun isProcessAlive(proc: Process): Boolean = try {
+        proc.exitValue()
+        false  // exitValue() throws if still running; if it returns, process is dead
+    } catch (_: IllegalThreadStateException) { true }
+
+    /**
+     * Demote from foreground when the app backgrounds with no active inference.
+     * Removes the persistent notification without killing the service or pty_server.
+     * Safe to call multiple times; no-op if already not in foreground.
+     */
+    fun tryDemoteFromForeground() {
+        if (!isForeground) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            isForeground = false
+            Log.i(TAG, "Demoted from foreground (no active inference)")
+        } catch (e: Exception) {
+            Log.w(TAG, "tryDemoteFromForeground failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Promote back to foreground. Must be called before any llama-server spawn,
+     * or within 5s of startForegroundService() on a fresh start.
+     */
+    fun promoteToForeground(title: String = "OpenCode", text: String = "Local AI service ready") {
+        if (isForeground) return
+        startInForeground(title, text)
+        Log.i(TAG, "Promoted back to foreground")
     }
 
     /**
@@ -166,11 +223,74 @@ class LlamaService : Service() {
             pb.redirectErrorStream(true)
             val proc = pb.start()
             child = proc
+            acquireInferenceWakeLock()
+            // Drain stdout into logcat so the OS pipe (64 KB on bionic) never fills.
+            // Without this, llama-server blocks progressively on verbose ggml logs
+            // and decode throughput collapses on the 2nd+ inference (observed -56 %).
+            // Mirrors spawnPtyServer pattern below.
+            Thread {
+                try {
+                    proc.inputStream.bufferedReader().forEachLine { line ->
+                        Log.d("llama-server", line)
+                    }
+                } catch (_: Exception) {}
+                Log.i(TAG, "llama-server stdout stream ended")
+            }.apply { isDaemon = true }.start()
             Log.i(TAG, "Spawned child process, argv[0]=${args.firstOrNull()}")
+            startWatchdog(proc)
             proc
         } catch (e: Exception) {
             Log.e(TAG, "Failed to spawn child process: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * Monitor the child process and fire onServerCrash if it exits unexpectedly.
+     * Interrupted when stopChildProcess() is called (intentional stop).
+     */
+    private fun startWatchdog(proc: Process) {
+        watchdogThread?.interrupt()
+        val watchdog = Thread {
+            try {
+                val exitCode = proc.waitFor()
+                // Only fire crash callback if this is still the active child
+                // (i.e., we didn't call stopChildProcess() ourselves).
+                if (child === proc) {
+                    child = null
+                    Log.w(TAG, "llama-server exited unexpectedly (code=$exitCode)")
+                    updateNotification("OpenCode", "Model stopped (exit $exitCode) — tap to restart")
+                    onServerCrash?.invoke(exitCode)
+                }
+            } catch (_: InterruptedException) {
+                // Intentional stop via stopChildProcess() — no action needed
+            }
+        }
+        watchdog.isDaemon = true
+        watchdog.name = "llama-watchdog"
+        watchdog.start()
+        watchdogThread = watchdog
+    }
+
+    /**
+     * Query the device thermal status from Android's PowerManager.
+     * Returns "nominal", "fair", "serious", or "critical".
+     * Available on API 29+; returns "nominal" on older devices.
+     */
+    fun getThermalState(): String {
+        return try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "nominal"
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            when (pm.currentThermalStatus) {
+                android.os.PowerManager.THERMAL_STATUS_NONE,
+                android.os.PowerManager.THERMAL_STATUS_LIGHT -> "nominal"
+                android.os.PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+                android.os.PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                else -> "critical"
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getThermalState failed: ${e.message}")
+            "nominal"
         }
     }
 
@@ -179,7 +299,12 @@ class LlamaService : Service() {
 
     /** Kill and clear the current child process. */
     fun stopChildProcess() {
+        // Interrupt watchdog first so it doesn't fire onServerCrash
+        // after we intentionally destroy the process.
+        watchdogThread?.interrupt()
+        watchdogThread = null
         val proc = child ?: return
+        child = null  // clear before destroyForcibly so watchdog sees child===null
         try {
             proc.destroyForcibly()
             proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -187,7 +312,31 @@ class LlamaService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Error stopping child process: ${e.message}")
         }
-        child = null
+        releaseInferenceWakeLock()
+    }
+
+    private fun acquireInferenceWakeLock() {
+        try {
+            if (inferenceWakeLock?.isHeld == true) return
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            inferenceWakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "opencode:inference"
+            ).also { it.acquire(30 * 60 * 1000L /* 30 min max */) }
+            Log.i(TAG, "Inference wake lock acquired")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
+        }
+    }
+
+    private fun releaseInferenceWakeLock() {
+        try {
+            inferenceWakeLock?.let { if (it.isHeld) it.release() }
+            inferenceWakeLock = null
+            Log.i(TAG, "Inference wake lock released")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to release wake lock: ${e.message}")
+        }
     }
 
     // ── PTY Server ─────────────────────────────────────────────────

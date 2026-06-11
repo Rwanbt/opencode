@@ -301,7 +301,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   if (data.error) return { type: "failed" as const }
 
                   await sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
-                  continue
                 }
               },
             }

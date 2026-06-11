@@ -1,7 +1,7 @@
 import { AnythingLLMClient } from "./client"
 import { Log } from "../util/log"
 
-const log = Log.create({ service: "anythingllm-mcp" })
+const _log = Log.create({ service: "anythingllm-mcp" })
 
 /**
  * MCP server adapter that exposes AnythingLLM capabilities as MCP tools.

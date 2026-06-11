@@ -10,7 +10,8 @@ mod llm;
 // when no caller is cfg-enabled.
 #[allow(dead_code)]
 mod validate;
-#[cfg(target_os = "android")]
+// proxy uses only tokio (cross-platform) — include for tests on host machines
+#[cfg(any(target_os = "android", test))]
 mod proxy;
 mod kokoro;
 mod parakeet;
@@ -94,7 +95,7 @@ enum PrivateFetchMsg {
 ///
 /// dead_code allow: registered in invoke_handler under `#[cfg(target_os="android")]`,
 /// so host cargo check sees no caller.
-#[allow(dead_code)]
+#[cfg(target_os = "android")]
 #[tauri::command]
 async fn fetch_private_server(
     url: String,
@@ -384,6 +385,8 @@ pub fn run() {
             llm::llm_idle_tick,
             llm::set_llm_config,
             llm::get_memory_info,
+            llm::detect_active_backend,
+            llm::run_inference_benchmark,
             speech::stt_download_model,
             speech::stt_load_model,
             speech::stt_transcribe,

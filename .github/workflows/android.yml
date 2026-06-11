@@ -25,7 +25,7 @@ jobs:
           java-version: '21'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3
 
       - name: Install Android NDK + CMake
         run: |
@@ -36,18 +36,19 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable 2025-05
         with:
+          toolchain: stable
           targets: aarch64-linux-android
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
         with:
           workspaces: packages/mobile/src-tauri
           cache-targets: true
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2.2.0
 
       - name: Install dependencies
         run: bun install
@@ -284,3 +285,19 @@ jobs:
           name: opencode-mobile-apk
           path: packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk
           retention-days: 30
+
+      # ─── Verify Android Rust unit tests compile ────────────────────
+      # runtime::tests are cfg(all(test, target_os="android")) — they only
+      # compile for Android. We verify compilation here; execution requires
+      # a device/emulator (not available in this CI job).
+      - name: Verify Android Rust unit tests compile
+        working-directory: packages/mobile/src-tauri
+        run: |
+          NDK_BIN=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          ORT_LIB_LOCATION=/tmp/ort-android \
+          CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang" \
+          AR_aarch64_linux_android="$NDK_BIN/llvm-ar" \
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android24-clang" \
+          cargo check --tests --target aarch64-linux-android
+        env:
+          ANDROID_NDK_HOME: ${{ env.NDK_HOME }}

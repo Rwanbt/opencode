@@ -21,15 +21,15 @@ import {
 import { z } from "zod/v4"
 import type { OpenAIConfig } from "./openai-config"
 import { openaiFailedResponseHandler } from "./openai-error"
-import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
-import { fileSearchOutputSchema } from "./tool/file-search"
-import { imageGenerationOutputSchema } from "./tool/image-generation"
+import type { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
+import type { fileSearchOutputSchema } from "./tool/file-search"
+import type { imageGenerationOutputSchema } from "./tool/image-generation"
 import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input"
 import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason"
 import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types"
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
-import { localShellInputSchema } from "./tool/local-shell"
+import type { localShellInputSchema } from "./tool/local-shell"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -1724,12 +1724,11 @@ function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
   }
 }
 
-// TODO AI SDK 6: use optional here instead of nullish
 const openaiResponsesProviderOptionsSchema = z.object({
   include: z
     .array(z.enum(["reasoning.encrypted_content", "file_search_call.results", "message.output_text.logprobs"]))
-    .nullish(),
-  instructions: z.string().nullish(),
+    .optional(),
+  instructions: z.string().optional(),
 
   /**
    * Return the log probabilities of the tokens.
@@ -1750,20 +1749,20 @@ const openaiResponsesProviderOptionsSchema = z.object({
    * This maximum number applies across all built-in tool calls, not per individual tool.
    * Any further attempts to call a tool by the model will be ignored.
    */
-  maxToolCalls: z.number().nullish(),
+  maxToolCalls: z.number().optional(),
 
-  metadata: z.any().nullish(),
-  parallelToolCalls: z.boolean().nullish(),
-  previousResponseId: z.string().nullish(),
-  promptCacheKey: z.string().nullish(),
-  reasoningEffort: z.string().nullish(),
-  reasoningSummary: z.string().nullish(),
-  safetyIdentifier: z.string().nullish(),
-  serviceTier: z.enum(["auto", "flex", "priority"]).nullish(),
-  store: z.boolean().nullish(),
-  strictJsonSchema: z.boolean().nullish(),
-  textVerbosity: z.enum(["low", "medium", "high"]).nullish(),
-  user: z.string().nullish(),
+  metadata: z.any().optional(),
+  parallelToolCalls: z.boolean().optional(),
+  previousResponseId: z.string().optional(),
+  promptCacheKey: z.string().optional(),
+  reasoningEffort: z.string().optional(),
+  reasoningSummary: z.string().optional(),
+  safetyIdentifier: z.string().optional(),
+  serviceTier: z.enum(["auto", "flex", "priority"]).optional(),
+  store: z.boolean().optional(),
+  strictJsonSchema: z.boolean().optional(),
+  textVerbosity: z.enum(["low", "medium", "high"]).optional(),
+  user: z.string().optional(),
 })
 
 export type OpenAIResponsesProviderOptions = z.infer<typeof openaiResponsesProviderOptionsSchema>

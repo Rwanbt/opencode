@@ -4,7 +4,7 @@ import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
-import { existsSync } from "fs"
+import { existsSync } from "node:fs"
 
 export const AttachCommand = cmd({
   command: "attach <url>",

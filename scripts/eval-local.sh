@@ -3,7 +3,7 @@
 # Usage: bash scripts/eval-local.sh
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RESULTS_DIR="packages/opencode/test/tool/eval-results"
 mkdir -p "$RESULTS_DIR"
@@ -37,7 +37,9 @@ echo "$RAW" > "$RESULTS_DIR/raw-$TIMESTAMP.json"
 # Parse tool results
 echo "--- Tool Calls ---"
 echo "$RAW" | grep '"type":"tool_use"' | while IFS= read -r line; do
+  # shellcheck disable=SC2001
   TOOL=$(echo "$line" | sed 's/.*"tool":"\([^"]*\)".*/\1/')
+  # shellcheck disable=SC2001
   STATUS=$(echo "$line" | sed 's/.*"status":"\([^"]*\)".*/\1/')
   ERROR=$(echo "$line" | grep -o '"error":"[^"]*"' | sed 's/"error":"//;s/"$//' | head -1)
   if [ -n "$ERROR" ]; then
@@ -61,7 +63,6 @@ echo "--- Guard Status ---"
 G2=$(echo "$RAW" | grep -c 'File already exists' || true)
 G4=$(echo "$RAW" | grep -c 'oldString not found' || true)
 G1=$(echo "$RAW" | grep -c 'must read this file before editing' || true)
-G3=$(echo "$RAW" | grep -c 'oldString cannot be empty' || true)
 
 [ "$G2" -ge 1 ] && echo "  Guard 2 (write existing):   PASS" || echo "  Guard 2 (write existing):   NOT TESTED"
 [ "$G4" -ge 1 ] && echo "  Guard 4 (bad oldString):    PASS" || echo "  Guard 4 (bad oldString):    NOT TESTED"

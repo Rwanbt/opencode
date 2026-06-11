@@ -1,9 +1,9 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
-import { type rpc } from "./worker"
-import path from "path"
-import { fileURLToPath } from "url"
+import type { rpc } from "./worker"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
 import { errorMessage } from "@/util/error"
@@ -15,7 +15,7 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
-import { writeHeapSnapshot } from "v8"
+import { writeHeapSnapshot } from "node:v8"
 
 declare global {
   const OPENCODE_WORKER_PATH: string

@@ -85,3 +85,12 @@ ehthumbs.db
 packages/mobile/src-tauri/assets/runtime/rootfs.tgz
 packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime/rootfs.tgz
 packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime/rootfs_version.txt
+
+# gstack local reports and analytics
+.gstack/
+
+# graphify dependency graph cache (machine-generated, not for version control)
+graphify-out/
+
+# Claude Code local memory (project-specific, not for version control)
+.claude/

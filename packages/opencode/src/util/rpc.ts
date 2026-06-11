@@ -4,6 +4,7 @@ export namespace Rpc {
   }
 
   export function listen(rpc: Definition) {
+    // biome-ignore lint/suspicious/noGlobalAssign: Web Worker onmessage assignment is intentional
     onmessage = async (evt) => {
       const parsed = JSON.parse(evt.data)
       if (parsed.type === "rpc.request") {
@@ -28,7 +29,8 @@ export namespace Rpc {
   }
 
   export function client<T extends Definition>(target: {
-    postMessage: (data: string) => void | null
+    // biome-ignore lint/suspicious/noConfusingVoidType: void needed to accept Worker.postMessage which returns void
+    postMessage: (data: string) => undefined | null | void
     onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
   }) {
     const pending = new Map<string, Pending>()

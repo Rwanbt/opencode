@@ -1,18 +1,16 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, type Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
-  ContentPart,
+  type ContentPart,
   DEFAULT_PROMPT,
   isPromptEqual,
-  Prompt,
+  type Prompt,
   usePrompt,
-  ImageAttachmentPart,
-  AgentPart,
-  FileAttachmentPart,
+  type ImageAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -36,11 +34,19 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
-import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+import {
+  createTextFragment,
+  getCursorPosition,
+  setCursorPosition,
+  setRangeEdge,
+  createPill,
+  isNormalizedEditor,
+  renderEditor,
+  parseFromDOM,
+} from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
-  canNavigateHistoryAtCursor,
   navigatePromptHistory,
   prependHistoryEntry,
   type PromptHistoryComment,
@@ -49,6 +55,7 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { createKeyDownHandler } from "./prompt-input/keyboard-handler"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -524,7 +531,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const renderEditorWithCursor = (parts: Prompt) => {
     const cursor = currentCursor()
-    renderEditor(parts)
+    renderEditor(editorRef, parts)
     if (cursor !== null) setCursorPosition(editorRef, cursor)
   }
 
@@ -679,55 +686,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
-    const pill = document.createElement("span")
-    pill.textContent = part.content
-    pill.setAttribute("data-type", part.type)
-    if (part.type === "file") pill.setAttribute("data-path", part.path)
-    if (part.type === "agent") pill.setAttribute("data-name", part.name)
-    pill.setAttribute("contenteditable", "false")
-    pill.style.userSelect = "text"
-    pill.style.cursor = "default"
-    return pill
-  }
-
-  const isNormalizedEditor = () =>
-    Array.from(editorRef.childNodes).every((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent ?? ""
-        if (!text.includes("\u200B")) return true
-        if (text !== "\u200B") return false
-
-        const prev = node.previousSibling
-        const next = node.nextSibling
-        const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
-        return !!prevIsBr && !next
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return false
-      const el = node as HTMLElement
-      if (el.dataset.type === "file") return true
-      if (el.dataset.type === "agent") return true
-      return el.tagName === "BR"
-    })
-
-  const renderEditor = (parts: Prompt) => {
-    clearEditor()
-    for (const part of parts) {
-      if (part.type === "text") {
-        editorRef.appendChild(createTextFragment(part.content))
-        continue
-      }
-      if (part.type === "file" || part.type === "agent") {
-        editorRef.appendChild(createPill(part))
-      }
-    }
-
-    const last = editorRef.lastChild
-    if (last?.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR") {
-      editorRef.appendChild(document.createTextNode("\u200B"))
-    }
-  }
-
   // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
     const activeId = slashActive()
@@ -775,14 +733,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const reconcile = (input: Prompt) => {
     if (mirror.input) {
       mirror.input = false
-      if (isNormalizedEditor()) return
+      if (isNormalizedEditor(editorRef)) return
 
       renderEditorWithCursor(input)
       return
     }
 
-    const dom = parseFromDOM()
-    if (isNormalizedEditor() && isPromptEqual(input, dom)) return
+    const dom = parseFromDOM(editorRef)
+    if (isNormalizedEditor(editorRef) && isPromptEqual(input, dom)) return
 
     renderEditorWithCursor(input)
   }
@@ -797,90 +755,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  const parseFromDOM = (): Prompt => {
-    const parts: Prompt = []
-    let position = 0
-    let buffer = ""
-
-    const flushText = () => {
-      let content = buffer
-      if (content.includes("\r")) content = content.replace(/\r\n?/g, "\n")
-      if (content.includes("\u200B")) content = content.replace(/\u200B/g, "")
-      buffer = ""
-      if (!content) return
-      parts.push({ type: "text", content, start: position, end: position + content.length })
-      position += content.length
-    }
-
-    const pushFile = (file: HTMLElement) => {
-      const content = file.textContent ?? ""
-      parts.push({
-        type: "file",
-        path: file.dataset.path!,
-        content,
-        start: position,
-        end: position + content.length,
-      })
-      position += content.length
-    }
-
-    const pushAgent = (agent: HTMLElement) => {
-      const content = agent.textContent ?? ""
-      parts.push({
-        type: "agent",
-        name: agent.dataset.name!,
-        content,
-        start: position,
-        end: position + content.length,
-      })
-      position += content.length
-    }
-
-    const visit = (node: Node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        buffer += node.textContent ?? ""
-        return
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return
-
-      const el = node as HTMLElement
-      if (el.dataset.type === "file") {
-        flushText()
-        pushFile(el)
-        return
-      }
-      if (el.dataset.type === "agent") {
-        flushText()
-        pushAgent(el)
-        return
-      }
-      if (el.tagName === "BR") {
-        buffer += "\n"
-        return
-      }
-
-      for (const child of Array.from(el.childNodes)) {
-        visit(child)
-      }
-    }
-
-    const children = Array.from(editorRef.childNodes)
-    children.forEach((child, index) => {
-      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
-      visit(child)
-      if (isBlock && index < children.length - 1) {
-        buffer += "\n"
-      }
-    })
-
-    flushText()
-
-    if (parts.length === 0) parts.push(...DEFAULT_PROMPT)
-    return parts
-  }
-
   const handleInput = () => {
-    const rawParts = parseFromDOM()
+    const rawParts = parseFromDOM(editorRef)
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
     const rawText =
@@ -1095,14 +971,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (mode === "auto-edit") return "Auto Edit"
     return "Ask"
   })
-  const acceptLabel = createMemo(() =>
+  const _acceptLabel = createMemo(() =>
     language.t(accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable"),
   )
   const setAcceptMode = (value: string) => {
     const mode = value === "Full Auto" ? true : value === "Auto Edit" ? ("auto-edit" as const) : false
     permission.setAcceptMode(mode, params.id, sdk.directory)
   }
-  const toggleAccept = () => {
+  const _toggleAccept = () => {
     if (!params.id) {
       permission.toggleAutoAcceptDirectory(sdk.directory)
       return
@@ -1136,167 +1012,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSubmit: props.onSubmit,
   })
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
-      event.preventDefault()
-      if (store.mode !== "normal") return
-      pick()
-      return
-    }
-
-    if (event.key === "Backspace") {
-      const selection = window.getSelection()
-      if (selection && selection.isCollapsed) {
-        const node = selection.anchorNode
-        const offset = selection.anchorOffset
-        if (node && node.nodeType === Node.TEXT_NODE) {
-          const text = node.textContent ?? ""
-          if (/^\u200B+$/.test(text) && offset > 0) {
-            const range = document.createRange()
-            range.setStart(node, 0)
-            range.collapse(true)
-            selection.removeAllRanges()
-            selection.addRange(range)
-          }
-        }
-      }
-    }
-
-    if (event.key === "!" && store.mode === "normal") {
-      const cursorPosition = getCursorPosition(editorRef)
-      if (cursorPosition === 0) {
-        setStore("mode", "shell")
-        setStore("popover", null)
-        event.preventDefault()
-        return
-      }
-    }
-
-    if (event.key === "Escape") {
-      if (store.popover) {
-        closePopover()
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-
-      if (store.mode === "shell") {
-        setStore("mode", "normal")
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-
-      if (working()) {
-        abort()
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-
-      if (escBlur()) {
-        editorRef.blur()
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-    }
-
-    if (store.mode === "shell") {
-      const { collapsed, cursorPosition, textLength } = getCaretState()
-      if (event.key === "Backspace" && collapsed && cursorPosition === 0 && textLength === 0) {
-        setStore("mode", "normal")
-        event.preventDefault()
-        return
-      }
-    }
-
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
-    if (event.key === "Enter" && event.shiftKey) {
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
-      event.preventDefault()
-      return
-    }
-
-    if (event.key === "Enter" && isImeComposing(event)) {
-      return
-    }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-
-    if (store.popover) {
-      if (event.key === "Tab") {
-        selectPopoverActive()
-        event.preventDefault()
-        return
-      }
-      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
-      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
-      if (nav || ctrlNav) {
-        if (store.popover === "at") {
-          atOnKeyDown(event)
-          event.preventDefault()
-          return
-        }
-        if (store.popover === "slash") {
-          slashOnKeyDown(event)
-        }
-        event.preventDefault()
-        return
-      }
-    }
-
-    if (ctrl && event.code === "KeyG") {
-      if (store.popover) {
-        closePopover()
-        event.preventDefault()
-        return
-      }
-      if (working()) {
-        abort()
-        event.preventDefault()
-      }
-      return
-    }
-
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed } = getCaretState()
-      if (!collapsed) return
-
-      const cursorPosition = getCursorPosition(editorRef)
-      const textContent = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
-      if (navigateHistory(direction)) {
-        event.preventDefault()
-      }
-      return
-    }
-
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
-        return
-      }
-      handleSubmit(event)
-    }
-  }
+  const handleKeyDown = createKeyDownHandler({
+    getEditorRef: () => editorRef,
+    getMode: () => store.mode,
+    setMode: (v) => setStore("mode", v),
+    getPopover: () => store.popover,
+    getHistoryIndex: () => store.historyIndex,
+    pick,
+    closePopover,
+    working,
+    abort,
+    escBlur,
+    getCaretState,
+    addPart,
+    getCurrentPrompt: () => prompt.current(),
+    imageAttachments,
+    commentCount,
+    isImeComposing,
+    selectPopoverActive,
+    atOnKeyDown,
+    slashOnKeyDown,
+    navigateHistory,
+    handleSubmit,
+  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">

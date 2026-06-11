@@ -14,10 +14,10 @@ import {
   VirtualizedFileDiff,
   Virtualizer,
 } from "@pierre/diffs"
-import { type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createMediaQuery } from "@solid-primitives/media"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"

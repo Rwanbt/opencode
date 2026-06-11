@@ -7,7 +7,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
@@ -467,7 +467,6 @@ export namespace File {
                   status: "added",
                 })
               } catch {
-                continue
               }
             }
           }

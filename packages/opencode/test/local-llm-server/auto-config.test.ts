@@ -58,9 +58,12 @@ describe("deriveConfig", () => {
     expect(critical.batchSize).toBeLessThan(nominal.batchSize)
   })
 
-  test("KV quant uses f16 only when VRAM >> model", () => {
+  test("KV quant adapts to VRAM headroom (f16 / q8_0 / q4_0)", () => {
+    // 12GB VRAM, 3GB model → 12 > 3×3=9 → f16
     expect(deriveConfig(profile({ vramMb: 12 * 1024 }), 3 * 1024).kvCacheType).toBe("f16")
+    // 7GB VRAM, 3GB model → 7 > 1.5×3=4.5 → q8_0
     expect(deriveConfig(profile({ vramMb: 7 * 1024 }), 3 * 1024).kvCacheType).toBe("q8_0")
+    // 3GB VRAM, 3GB model → 3 <= 1.5×3=4.5 → q4_0
     expect(deriveConfig(profile({ vramMb: 3 * 1024 }), 3 * 1024).kvCacheType).toBe("q4_0")
   })
 

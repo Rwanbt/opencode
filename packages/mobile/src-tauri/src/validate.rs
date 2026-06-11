@@ -58,11 +58,9 @@ pub fn validate_voice_clone_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
-// `validate_url` pulls in the `url` crate which is declared only under
-// `[target.'cfg(target_os = "android")'.dependencies]` in Cargo.toml. The
-// only caller (`download_model` in llm.rs) is itself android-only, so the
-// function is cfg-gated to match.
-#[cfg(target_os = "android")]
+// `validate_url` pulls in the `url` crate which is in android target-deps.
+// Also compiled for test builds so host-machine unit tests can reach it.
+#[cfg(any(target_os = "android", test))]
 pub fn validate_url(url: &str) -> Result<&str, String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("invalid url: {e}"))?;
     if parsed.scheme() != "https" {

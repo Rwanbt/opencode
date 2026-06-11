@@ -56,6 +56,7 @@ export namespace SystemPrompt {
         `</env>`,
         `<directories>`,
         `  ${
+          // biome-ignore lint/correctness/noConstantCondition:  false intentionally disables this branch
           project.vcs === "git" && false
             ? await Ripgrep.tree({
                 cwd: Instance.directory,

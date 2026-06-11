@@ -1,5 +1,10 @@
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { expect, type Locator, type Page } from "@playwright/test"
+
+// Use the per-test timeout (PLAYWRIGHT_TIMEOUT=90s on CI) for all poll-based waits.
+// expect.poll() stops as soon as the predicate is true — the timeout is only a ceiling.
+// Using the higher value ensures PTY startup and terminal settle have enough headroom.
+const DEFAULT_TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT ?? process.env.PLAYWRIGHT_EXPECT_TIMEOUT ?? 60_000)
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -119,7 +124,7 @@ async function promptSlashSelected(page: Page, input: { id: string; count: numbe
 
 export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? DEFAULT_TIMEOUT
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
   await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
@@ -127,7 +132,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
 
 export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? DEFAULT_TIMEOUT
   await waitTerminalReady(page, { term, timeout })
   await expect.poll(() => terminalFocusIdle(page, term), { timeout }).toBe(true)
 }
@@ -137,7 +142,7 @@ export async function showPromptSlash(
   input: { id: string; text: string; prompt?: Locator; timeout?: number },
 ) {
   const prompt = input.prompt ?? page.locator(promptSelector)
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? DEFAULT_TIMEOUT
   await expect
     .poll(
       async () => {
@@ -155,7 +160,7 @@ export async function runPromptSlash(
   input: { id: string; text: string; prompt?: Locator; timeout?: number },
 ) {
   const prompt = input.prompt ?? page.locator(promptSelector)
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? DEFAULT_TIMEOUT
   const count = await promptSlashSelects(page)
   await showPromptSlash(page, input)
   await prompt.press("Enter")
@@ -164,7 +169,7 @@ export async function runPromptSlash(
 
 export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
   const term = input.term ?? page.locator(terminalSelector).first()
-  const timeout = input.timeout ?? 10_000
+  const timeout = input.timeout ?? DEFAULT_TIMEOUT
   await waitTerminalReady(page, { term, timeout })
   const textarea = term.locator("textarea")
   await term.click()
@@ -246,7 +251,7 @@ async function assertHealthy(page: Page, context: string) {
 async function waitSidebarButton(page: Page, context: string) {
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
   const boundary = page.getByRole("heading", { name: /something went wrong/i }).first()
-  await button.or(boundary).first().waitFor({ state: "visible", timeout: 10_000 })
+  await button.or(boundary).first().waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT })
   await assertHealthy(page, context)
   return button
 }
@@ -442,7 +447,7 @@ export async function waitSession(
   return { directory: target, slug: base64Encode(target) }
 }
 
-export async function waitSessionSaved(directory: string, sessionID: string, timeout = 30_000, serverUrl?: string) {
+export async function waitSessionSaved(directory: string, sessionID: string, timeout = DEFAULT_TIMEOUT, serverUrl?: string) {
   const sdk = createSdk(directory, serverUrl)
   const target = await resolveDirectory(directory, serverUrl)
 
@@ -491,7 +496,7 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
 
   const scroller = page.locator(".scroll-view__viewport").first()
   await expect(scroller).toBeVisible()
-  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT })
 
   const menu = page
     .locator(dropdownMenuContentSelector)
@@ -533,10 +538,10 @@ export async function confirmDialog(page: Page, buttonName: string | RegExp) {
 export async function openSharePopover(page: Page) {
   const scroller = page.locator(".scroll-view__viewport").first()
   await expect(scroller).toBeVisible()
-  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT })
 
   const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
-  await expect(menuTrigger).toBeVisible({ timeout: 30_000 })
+  await expect(menuTrigger).toBeVisible({ timeout: DEFAULT_TIMEOUT })
 
   const popoverBody = page
     .locator('[data-component="popover-content"]')
@@ -553,7 +558,7 @@ export async function openSharePopover(page: Page) {
     await menuTrigger.click()
     await clickMenuItem(menu, /share/i)
     await expect(menu).toHaveCount(0)
-    await expect(popoverBody).toBeVisible({ timeout: 30_000 })
+    await expect(popoverBody).toBeVisible({ timeout: DEFAULT_TIMEOUT })
   }
   return { rightSection: scroller, popoverBody }
 }
@@ -589,7 +594,7 @@ async function status(sdk: ReturnType<typeof createSdk>, sessionID: string) {
   return data?.[sessionID]
 }
 
-async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 10_000) {
+async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = DEFAULT_TIMEOUT) {
   let prev = ""
   await expect
     .poll(
@@ -611,7 +616,7 @@ async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, time
     .toBe(true)
 }
 
-export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
+export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = DEFAULT_TIMEOUT) {
   await expect.poll(() => status(sdk, sessionID).then((x) => !x || x.type === "idle"), { timeout }).toBe(true)
 }
 
@@ -656,7 +661,7 @@ const seedSystem = [
 ].join(" ")
 
 const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: number }) => {
-  const timeout = input.timeout ?? 30_000
+  const timeout = input.timeout ?? DEFAULT_TIMEOUT
   const end = Date.now() + timeout
   while (Date.now() < end) {
     const value = await input.probe()
@@ -712,7 +717,7 @@ export async function seedSessionQuestion(
     sdk,
     sessionID: input.sessionID,
     prompt: text,
-    timeout: 30_000,
+    timeout: DEFAULT_TIMEOUT,
     probe: async () => {
       const list = await sdk.question.list().then((x) => x.data ?? [])
       return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
@@ -890,7 +895,7 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
     const menu = await openProjectMenu(page, projectSlug)
     const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
     await expect(toggle).toBeVisible()
-    await expect(toggle).toBeEnabled({ timeout: 30_000 })
+    await expect(toggle).toBeEnabled({ timeout: DEFAULT_TIMEOUT })
     const clicked = await toggle
       .click({ force: true, timeout })
       .then(() => true)
@@ -920,7 +925,7 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
 
   const expected = enabled ? "New workspace" : "New session"
   await expect.poll(current, { timeout: 60_000 }).toBe(enabled)
-  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT })
 }
 
 export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {

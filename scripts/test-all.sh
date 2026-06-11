@@ -3,7 +3,7 @@
 # Usage: bash scripts/test-all.sh
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 echo "========================================"
 echo "  OpenCode Local LLM Test Suite"
@@ -12,7 +12,7 @@ echo ""
 
 # Phase 1: Unit tests (fast, no LLM needed)
 echo "=== Phase 1: Unit Tests (bun test) ==="
-cd packages/opencode
+cd packages/opencode || exit 1
 UNIT_RESULT=$(bun test test/tool/preflight-guards.test.ts 2>&1)
 UNIT_PASS=$(echo "$UNIT_RESULT" | grep -o '[0-9]* pass' | head -1)
 UNIT_FAIL=$(echo "$UNIT_RESULT" | grep -o '[0-9]* fail' | head -1)

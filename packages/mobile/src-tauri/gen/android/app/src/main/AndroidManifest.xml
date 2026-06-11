@@ -20,6 +20,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Prevent CPU deep sleep during LLM inference. Without this, the SoC can
+         enter idle power states between token generation steps when the screen is
+         off, causing intermittent ~200ms stalls and degraded throughput.
+         The lock is acquired in LlamaService.spawnServer() and released in
+         stopChildProcess(). A ForegroundService alone does NOT imply a wake lock. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Speech-to-text: WebView captures mic via getUserMedia; RustWebChromeClient
          forwards the AUDIO_CAPTURE request to the Android permission dialog. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -53,22 +60,6 @@
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
-            <intent-filter android:autoVerify="true" >
-                <action android:name="android.intent.action.VIEW" />
-                <!-- ChromeOS ARC++ uses a different action for deep links -->
-                <action android:name="org.chromium.arc.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:scheme="http" />
-                <data android:host="opencode.ai" />
-
-
-                <data android:pathPrefix="/mobile" />
-
-            </intent-filter>
-            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
             <!-- Custom scheme for QR-based pairing from desktop Settings → Remote Access -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -76,6 +67,21 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="opencode" />
             </intent-filter>
+            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+            <intent-filter >
+                <action android:name="android.intent.action.VIEW" />
+                <!-- ChromeOS ARC++ uses a different action for deep links -->
+                <action android:name="org.chromium.arc.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="opencode" />
+                
+                
+                
+                
+                
+            </intent-filter>
+            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
 
         <provider

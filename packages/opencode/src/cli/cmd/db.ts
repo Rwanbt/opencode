@@ -1,11 +1,11 @@
 import type { Argv } from "yargs"
-import { spawn } from "child_process"
+import { spawn } from "node:child_process"
 import { Database } from "../../storage/db"
 import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { JsonMigration } from "../../storage/json-migration"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { errorMessage } from "../../util/error"
 
 const QueryCommand = cmd({

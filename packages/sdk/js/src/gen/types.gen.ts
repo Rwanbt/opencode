@@ -2721,7 +2721,7 @@ export type SessionPromptAsyncResponses = {
   /**
    * Prompt accepted
    */
-  204: void
+  204: undefined
 }
 
 export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]

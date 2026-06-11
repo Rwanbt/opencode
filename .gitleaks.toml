@@ -1,0 +1,23 @@
+title = "OpenCode Secret Scanner"
+
+[extend]
+useDefault = true
+
+[[rules]]
+description = "OpenCode API Key"
+id = "opencode-api-key"
+regex = '''OPENCODE_API_KEY\s*=\s*['""]?[A-Za-z0-9_-]{20,}['""]?'''
+tags = ["key", "opencode"]
+
+[[rules]]
+description = "Anthropic API Key"
+id = "anthropic-api-key"
+regex = '''sk-ant-[A-Za-z0-9_-]{20,}'''
+tags = ["key", "anthropic"]
+
+[allowlist]
+paths = [
+  "packages/opencode/src/security/scanner.ts",
+  "packages/opencode/test/security/",
+  ".gstack/",
+]

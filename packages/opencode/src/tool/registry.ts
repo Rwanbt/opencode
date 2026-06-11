@@ -13,11 +13,11 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
-import { Permission } from "../permission"
-import { Tool } from "./tool"
+import type { Permission } from "../permission"
+import type { Tool } from "./tool"
 import { Config } from "../config/config"
-import path from "path"
-import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import path from "node:path"
+import type { ToolContext as PluginToolContext, ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { ProviderID, type ModelID } from "../provider/schema"
@@ -30,7 +30,7 @@ import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { TeamTool } from "./team"
 import { Glob } from "../util/glob"
-import { pathToFileURL } from "url"
+import { pathToFileURL } from "node:url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -208,6 +208,7 @@ export namespace ToolRegistry {
           "glob",
           "grep",
           "question",
+          "todowrite",
           "websearch",
           "webfetch",
         ])
@@ -219,6 +220,7 @@ export namespace ToolRegistry {
           glob: "Find files by glob pattern. Args: {pattern: string, path?: string}. Returns matching paths.",
           grep: "Search file contents with regex. Args: {pattern: string, path?: string}. Returns matching lines.",
           question: "Ask user a question. Args: {question: string}. Use when you need clarification.",
+          todowrite: "Track your plan as a list of tasks. Args: {todos: [{content: string, status: 'pending'|'in_progress'|'completed', priority: 'high'|'medium'|'low'}]}. Call this to persist your plan so you don't lose it across context windows.",
           websearch: "Search the web. Args: {query: string}. Search BEFORE coding when unsure about any library API, crate name, or version.",
           webfetch: "Fetch a URL as text. Args: {url: string}. Use to read docs, READMEs, or pages found via websearch.",
         }

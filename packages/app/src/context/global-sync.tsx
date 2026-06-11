@@ -86,18 +86,25 @@ function createGlobalSync() {
   const cacheProjects = () => {
     setProjectCache(
       "value",
-      untrack(() => globalStore.project.map(sanitizeProject)),
+      // JSON round-trip strips reactive Proxies so projectCache never holds SolidJS
+      // store references that would cause a double-proxy error on restore
+      untrack(() => JSON.parse(JSON.stringify(globalStore.project.map(sanitizeProject))) as Project[]),
     )
   }
 
-  const setProjects = (next: Project[] | ((draft: Project[]) => void)) => {
+  const setProjects = (next: Project[] | ((state: Project[]) => Project[])) => {
     projectWritten = true
     if (typeof next === "function") {
-      setGlobalStore("project", produce(next))
+      // Pass the function directly — callers that need immer-style mutations must
+      // wrap in produce() themselves. Double-wrapping produce(produce(fn)) creates
+      // a Proxy-of-Proxy which SolidJS rejects with a Symbol(solid-proxy) error.
+      setGlobalStore("project", next)
       cacheProjects()
       return
     }
-    setGlobalStore("project", next)
+    // Always deep-clone arrays to strip any reactive SolidJS Proxies that callers
+    // may have passed (e.g. spreading globalStore.project into a new array)
+    setGlobalStore("project", JSON.parse(JSON.stringify(next)) as Project[])
     cacheProjects()
   }
 
@@ -111,7 +118,7 @@ function createGlobalSync() {
 
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => void))
+      setProjects(input[1] as Project[] | ((state: Project[]) => Project[]))
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
@@ -123,7 +130,9 @@ function createGlobalSync() {
       if (projectWritten) return
       const cached = projectCache.value
       if (cached.length === 0) return
-      setGlobalStore("project", cached)
+      // cached may be a reactive Proxy if cacheProjects ran before projectInit resolved;
+      // JSON round-trip guarantees plain objects so setGlobalStore never sees a double-proxy
+      setGlobalStore("project", JSON.parse(JSON.stringify(cached)) as Project[])
     })
   }
 

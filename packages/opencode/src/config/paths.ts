@@ -1,5 +1,5 @@
-import path from "path"
-import os from "os"
+import path from "node:path"
+import os from "node:os"
 import z from "zod"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { NamedError } from "@opencode-ai/util/error"

@@ -9,7 +9,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 import { Log } from "../util/log"
 
-const log = Log.create({ service: "session-status" })
+const _log = Log.create({ service: "session-status" })
 
 export namespace SessionStatus {
   export const TaskStatus = z.enum([

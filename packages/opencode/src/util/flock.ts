@@ -1,7 +1,7 @@
-import path from "path"
-import os from "os"
-import { randomBytes, randomUUID } from "crypto"
-import { mkdir, readFile, rm, stat, utimes, writeFile } from "fs/promises"
+import path from "node:path"
+import os from "node:os"
+import { randomBytes, randomUUID } from "node:crypto"
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises"
 import { Global } from "@/global"
 import { Hash } from "@/util/hash"
 

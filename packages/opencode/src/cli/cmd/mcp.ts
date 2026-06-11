@@ -10,7 +10,7 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
-import path from "path"
+import path from "node:path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "../../util/filesystem"
@@ -333,7 +333,7 @@ export const McpLogoutCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Logout")
 
-        const authPath = path.join(Global.Path.data, "mcp-auth.json")
+        const _authPath = path.join(Global.Path.data, "mcp-auth.json")
         const credentials = await McpAuth.all()
         const serverNames = Object.keys(credentials)
 

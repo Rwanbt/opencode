@@ -1,4 +1,9 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+
+// Instance.provide (used by every test here) starts the full OpenCode server.
+// On Windows CI runners (NTFS + Defender), each startup exceeds 3 min — unacceptable
+// for a 30+ test file. Linux covers this suite; skip on Windows CI.
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -64,7 +69,7 @@ async function errs(dir: string) {
   })
 }
 
-describe("plugin.loader.shared", () => {
+describe.skipIf(skipOnWindowsCI)("plugin.loader.shared", () => {
   test("loads a file:// plugin function export", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

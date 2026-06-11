@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import path from "node:path"
 import { Tool } from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"

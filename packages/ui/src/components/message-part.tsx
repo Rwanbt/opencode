@@ -1,5 +1,5 @@
 import {
-  Component,
+  type Component,
   createEffect,
   createMemo,
   createSignal,
@@ -15,7 +15,7 @@ import {
 import { createStore } from "solid-js/store"
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
-import {
+import type {
   AgentPart,
   AssistantMessage,
   FilePart,
@@ -36,7 +36,6 @@ import { type UiI18n, useI18n } from "../context/i18n"
 import { BasicTool, GenericTool } from "./basic-tool"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { Card } from "./card"
 import { Collapsible } from "./collapsible"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
@@ -1040,7 +1039,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <>
+        
           <div data-slot="user-message-body">
             <div data-slot="user-message-text">
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
@@ -1100,7 +1099,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               />
             </Tooltip>
           </div>
-        </>
+        
       </Show>
     </div>
   )

@@ -1,5 +1,5 @@
 import z from "zod"
-import os from "os"
+import os from "node:os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -9,7 +9,7 @@ import { Npm } from "../npm"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import { type LanguageModelV3 } from "@ai-sdk/provider"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -17,7 +17,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
-import path from "path"
+import path from "node:path"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -56,69 +56,10 @@ import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
+import { shouldUseCopilotResponsesApi, wrapSSE, e2eURL } from "./helpers"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
-
-  function shouldUseCopilotResponsesApi(modelID: string): boolean {
-    const match = /^gpt-(\d+)/.exec(modelID)
-    if (!match) return false
-    return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-  }
-
-  function wrapSSE(res: Response, ms: number, ctl: AbortController) {
-    if (typeof ms !== "number" || ms <= 0) return res
-    if (!res.body) return res
-    if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
-
-    const reader = res.body.getReader()
-    const body = new ReadableStream<Uint8Array>({
-      async pull(ctrl) {
-        const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-          const id = setTimeout(() => {
-            const err = new Error("SSE read timed out")
-            ctl.abort(err)
-            void reader.cancel(err)
-            reject(err)
-          }, ms)
-
-          reader.read().then(
-            (part) => {
-              clearTimeout(id)
-              resolve(part)
-            },
-            (err) => {
-              clearTimeout(id)
-              reject(err)
-            },
-          )
-        })
-
-        if (part.done) {
-          ctrl.close()
-          return
-        }
-
-        ctrl.enqueue(part.value)
-      },
-      async cancel(reason) {
-        ctl.abort(reason)
-        await reader.cancel(reason)
-      },
-    })
-
-    return new Response(body, {
-      headers: new Headers(res.headers),
-      status: res.status,
-      statusText: res.statusText,
-    })
-  }
-
-  function e2eURL() {
-    const url = Env.get("OPENCODE_E2E_LLM_URL")
-    if (typeof url !== "string" || url === "") return
-    return url
-  }
 
   type BundledSDK = {
     languageModel(modelId: string): LanguageModelV3
@@ -1390,7 +1331,6 @@ export namespace Provider {
 
             const res = await fetchFn(input, {
               ...opts,
-              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
               timeout: false,
             })
 

@@ -37,18 +37,55 @@ fn llm_command(app: &AppHandle, cmd: &str, timeout_secs: u64) -> Result<String, 
     fs::write(&request_file, cmd).map_err(|e| format!("Write request: {}", e))?;
     log::debug!("[LLM] Sent command: {}", &cmd[..cmd.len().min(100)]);
 
+    let is_load = cmd.starts_with("load|");
+    // Extract filename for progress events (everything after "load|")
+    let load_filename = if is_load {
+        cmd.get(5..).and_then(|p| std::path::Path::new(p).file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
     // Poll for result
     let start = Instant::now();
     let timeout = Duration::from_secs(timeout_secs);
+    let mut last_progress = Instant::now();
+    // Emit initial progress event immediately for load commands
+    if is_load {
+        let _ = app.emit("llm-model-loading", serde_json::json!({
+            "elapsed_secs": 0,
+            "max_secs": timeout_secs,
+            "filename": &load_filename,
+        }));
+    }
     loop {
         if start.elapsed() > timeout {
+            if is_load {
+                let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": "timed out" }));
+            }
             return Err("Command timed out".to_string());
+        }
+        // Emit progress every 5s during model load so the frontend can show elapsed time
+        if is_load && last_progress.elapsed().as_secs() >= 5 {
+            let _ = app.emit("llm-model-loading", serde_json::json!({
+                "elapsed_secs": start.elapsed().as_secs(),
+                "max_secs": timeout_secs,
+                "filename": &load_filename,
+            }));
+            last_progress = Instant::now();
         }
         if result_file.exists() {
             let result = fs::read_to_string(&result_file).unwrap_or_default();
             let _ = fs::remove_file(&result_file);
             if let Some(msg) = result.strip_prefix("error:") {
+                if is_load {
+                    let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": msg }));
+                }
                 return Err(msg.to_string());
+            }
+            if is_load {
+                let _ = app.emit("llm-model-loading-done", serde_json::json!({ "error": null }));
             }
             return Ok(result);
         }
@@ -66,9 +103,9 @@ pub async fn list_models(app: AppHandle) -> Vec<ModelInfo> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map(|e| e == "gguf").unwrap_or(false) {
-                if let Ok(meta) = fs::metadata(&path) {
+                if let (Some(name), Ok(meta)) = (path.file_name(), fs::metadata(&path)) {
                     models.push(ModelInfo {
-                        filename: path.file_name().unwrap().to_string_lossy().to_string(),
+                        filename: name.to_string_lossy().to_string(),
                         size: meta.len(),
                     });
                 }
@@ -174,6 +211,9 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 }
 
 /// Write LLM configuration to IPC file for Kotlin LlamaEngine to read.
+/// Format: one `key=value` per line. Keys not set as env vars are written
+/// as their string-default value so the Kotlin parser stays simple
+/// (`when (parts[0])` switch with explicit fallbacks per field).
 fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let ipc_dir = runtime_dir(app).join("llm_ipc");
     let _ = fs::create_dir_all(&ipc_dir);
@@ -184,21 +224,65 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let flash_attn = std::env::var("OPENCODE_FLASH_ATTN").unwrap_or_else(|_| "true".to_string());
     let offload_mode = std::env::var("OPENCODE_OFFLOAD_MODE").unwrap_or_else(|_| "auto".to_string());
     let mmap_mode = std::env::var("OPENCODE_MMAP_MODE").unwrap_or_else(|_| "auto".to_string());
+    // New 2026-04-28 params (set by frontend Configuration tab via set_llm_config).
+    // Empty string = "use llama.cpp default", so the Kotlin side knows when to
+    // skip the corresponding flag entirely.
+    let threads = std::env::var("OPENCODE_LLAMA_THREADS").unwrap_or_default();
+    let n_batch = std::env::var("OPENCODE_LLAMA_N_BATCH").unwrap_or_default();
+    let cache_reuse = std::env::var("OPENCODE_LLAMA_CACHE_REUSE").unwrap_or_default();
+    let top_k = std::env::var("OPENCODE_LLM_TOP_K").unwrap_or_default();
+    let top_p = std::env::var("OPENCODE_LLM_TOP_P").unwrap_or_default();
+    let temperature = std::env::var("OPENCODE_LLM_TEMPERATURE").unwrap_or_default();
+    let system_prompt = std::env::var("OPENCODE_LLM_SYSTEM_PROMPT").unwrap_or_default();
+    // Multimodal projector — explicit env override or auto-detect a sibling
+    // mmproj-*.gguf next to the model. Same heuristic as desktop/llm.rs.
+    let mmproj_path = std::env::var("OPENCODE_LLAMA_MMPROJ").ok().filter(|s| !s.is_empty()).or_else(|| {
+        let model_dir = runtime_dir(app).join("models");
+        std::fs::read_dir(&model_dir)
+            .ok()?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("mmproj") && n.ends_with(".gguf"))
+                    .unwrap_or(false)
+            })
+            .min_by_key(|p| {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                if name.contains("f16") && !name.contains("bf16") { 0 }
+                else if name.contains("bf16") { 1 }
+                else if name.contains("f32") { 2 }
+                else { 3 }
+            })
+            .map(|p| p.to_string_lossy().to_string())
+    }).unwrap_or_default();
 
     // Build draft model path if provided
     let draft_path = draft_model.map(|d| {
         runtime_dir(app).join("models").join(&d).to_string_lossy().to_string()
     }).unwrap_or_default();
 
+    // System prompt may contain newlines/backslashes — escape so the
+    // line-based config parser stays simple. Decoded on the Kotlin side.
+    let system_prompt_escaped = system_prompt
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+
     // n_gpu_layers: overridden by Kotlin LlamaEngine based on empirical backend choice
     // (CPU for small models, Vulkan/OpenCL for large models on capable SoCs).
     let config = format!(
-        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n",
-        kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path
+        "kv_cache_type={}\nflash_attn={}\noffload_mode={}\nmmap_mode={}\ndraft_model={}\n\
+         threads={}\nn_batch={}\ncache_reuse={}\ntop_k={}\ntop_p={}\ntemperature={}\nsystem_prompt_escaped={}\nmmproj_path={}\n",
+        kv_cache_type, flash_attn, offload_mode, mmap_mode, draft_path,
+        threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt_escaped, mmproj_path
     );
 
     match fs::write(&config_file, &config) {
-        Ok(_) => log::debug!("[LLM] Config written: kv={}, flash={}, offload={}, mmap={}", kv_cache_type, flash_attn, offload_mode, mmap_mode),
+        Ok(_) => log::debug!(
+            "[LLM] Config written: kv={}, flash={}, offload={}, mmap={}, threads={}, n_batch={}, cache_reuse={}, top_k={}, top_p={}, temp={}, sys_prompt_set={}, mmproj_set={}",
+            kv_cache_type, flash_attn, offload_mode, mmap_mode, threads, n_batch, cache_reuse, top_k, top_p, temperature, !system_prompt.is_empty(), !mmproj_path.is_empty()
+        ),
         Err(e) => log::warn!("[LLM] Failed to write config: {}", e),
     }
 }
@@ -313,13 +397,24 @@ pub async fn llm_idle_tick() -> Result<(), String> {
     Ok(())
 }
 
-/// Set LLM configuration env vars (called by frontend before load)
+/// Set LLM configuration env vars (called by frontend before load).
+/// Backwards-compatible: every field is optional. New fields (accelerator,
+/// threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt)
+/// are read by LlamaEngine.kt on the next load_llm_model() call.
 #[tauri::command]
 pub async fn set_llm_config(
     kv_cache_type: Option<String>,
     flash_attn: Option<bool>,
     offload_mode: Option<String>,
     mmap_mode: Option<String>,
+    accelerator: Option<String>,
+    threads: Option<i32>,
+    n_batch: Option<i32>,
+    cache_reuse: Option<bool>,
+    top_k: Option<i32>,
+    top_p: Option<f64>,
+    temperature: Option<f64>,
+    system_prompt: Option<String>,
 ) -> Result<(), String> {
     if let Some(kv) = kv_cache_type {
         std::env::set_var("OPENCODE_KV_CACHE_TYPE", &kv);
@@ -333,8 +428,159 @@ pub async fn set_llm_config(
     if let Some(mm) = mmap_mode {
         std::env::set_var("OPENCODE_MMAP_MODE", &mm);
     }
+    if let Some(acc) = accelerator {
+        // "auto" | "cpu" | "gpu" | "npu" — LlamaEngine.detectBestBackend()
+        // honours this override; "auto" clears any prior pin.
+        std::env::set_var("OPENCODE_LLAMA_BACKEND", &acc);
+    }
+    if let Some(t) = threads {
+        // 0 means auto-detect big-cores; LlamaEngine.detectBigCoreMask() handles fallback.
+        std::env::set_var("OPENCODE_LLAMA_THREADS", t.to_string());
+    }
+    if let Some(nb) = n_batch {
+        std::env::set_var("OPENCODE_LLAMA_N_BATCH", nb.to_string());
+    }
+    if let Some(cr) = cache_reuse {
+        std::env::set_var("OPENCODE_LLAMA_CACHE_REUSE", if cr { "true" } else { "false" });
+    }
+    if let Some(tk) = top_k {
+        std::env::set_var("OPENCODE_LLM_TOP_K", tk.to_string());
+    }
+    if let Some(tp) = top_p {
+        std::env::set_var("OPENCODE_LLM_TOP_P", format!("{}", tp));
+    }
+    if let Some(temp) = temperature {
+        std::env::set_var("OPENCODE_LLM_TEMPERATURE", format!("{}", temp));
+    }
+    if let Some(sp) = system_prompt {
+        // Empty string = clear/unset.
+        if sp.is_empty() {
+            std::env::remove_var("OPENCODE_LLM_SYSTEM_PROMPT");
+        } else {
+            std::env::set_var("OPENCODE_LLM_SYSTEM_PROMPT", &sp);
+        }
+    }
     log::debug!("[LLM] Config updated via set_llm_config");
     Ok(())
+}
+
+// ─── Benchmark ─────────────────────────────────────────────────────────
+//
+// Settings → Benchmark tab calls these to measure llama-server throughput
+// on the user's actual device. Returns enough structured data for the UI
+// to plot a per-model history and surface a winner.
+
+const BENCH_LLM_PORT: u16 = 14097;
+
+#[tauri::command]
+pub async fn detect_active_backend() -> Result<String, String> {
+    Ok(std::env::var("OPENCODE_LLAMA_BACKEND").unwrap_or_else(|_| "auto".to_string()))
+}
+
+#[derive(Debug, Serialize)]
+pub struct BenchmarkResult {
+    pub prompt_tokens: u32,
+    pub generated_tokens: u32,
+    pub prefill_ms: f64,
+    pub decode_ms: f64,
+    pub prefill_tps: f64,
+    pub decode_tps: f64,
+    pub peak_ram_mib: Option<u64>,
+    pub device_label: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct LlamaCompletionTimings {
+    prompt_n: Option<u32>,
+    prompt_ms: Option<f64>,
+    prompt_per_second: Option<f64>,
+    predicted_n: Option<u32>,
+    predicted_ms: Option<f64>,
+    predicted_per_second: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct LlamaCompletionResponse {
+    #[serde(default)]
+    tokens_predicted: Option<u32>,
+    #[serde(default)]
+    tokens_evaluated: Option<u32>,
+    #[serde(default)]
+    timings: Option<LlamaCompletionTimings>,
+}
+
+/// Run a single fixed-shape prompt against the loaded llama-server and
+/// parse the timings block from its response. The mobile llama-server
+/// listens on port 14097 (Hexagon / OpenCL / CPU build, depending on
+/// LlamaEngine.detectBestBackend()).
+#[tauri::command]
+pub async fn run_inference_benchmark(
+    prompt: String,
+    n_predict: i32,
+) -> Result<BenchmarkResult, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+
+    let body = serde_json::json!({
+        "prompt": prompt,
+        "n_predict": n_predict,
+        "temperature": 0.0,
+        "top_k": 1,
+        "top_p": 1.0,
+        "stream": false,
+        "cache_prompt": false,
+    });
+    // Build request body manually (mobile reqwest is built without the
+    // "json" feature to keep the APK lean) — same wire format.
+    let body_string = serde_json::to_string(&body).map_err(|e| format!("serialize body: {e}"))?;
+
+    let url = format!("http://127.0.0.1:{}/completion", BENCH_LLM_PORT);
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(body_string)
+        .send()
+        .await
+        .map_err(|e| format!("llama-server unreachable: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("llama-server HTTP {}", resp.status()));
+    }
+    let body_text = resp.text().await.map_err(|e| format!("response body: {e}"))?;
+    let parsed: LlamaCompletionResponse = serde_json::from_str(&body_text)
+        .map_err(|e| format!("response parse: {e}"))?;
+    let t = parsed
+        .timings
+        .ok_or_else(|| "llama-server response missing timings block".to_string())?;
+
+    let prompt_tokens = t.prompt_n.or(parsed.tokens_evaluated).unwrap_or(0);
+    let generated_tokens = t.predicted_n.or(parsed.tokens_predicted).unwrap_or(0);
+    let prefill_ms = t.prompt_ms.unwrap_or(0.0);
+    let decode_ms = t.predicted_ms.unwrap_or(0.0);
+    let prefill_tps = t.prompt_per_second.unwrap_or_else(|| {
+        if prefill_ms > 0.0 { prompt_tokens as f64 * 1000.0 / prefill_ms } else { 0.0 }
+    });
+    let decode_tps = t.predicted_per_second.unwrap_or_else(|| {
+        if decode_ms > 0.0 { generated_tokens as f64 * 1000.0 / decode_ms } else { 0.0 }
+    });
+
+    // Peak RAM: read /proc/meminfo once (best-effort).
+    let peak_ram_mib = match get_memory_info().await {
+        Ok(m) => Some(m.used_mb),
+        Err(_) => None,
+    };
+
+    Ok(BenchmarkResult {
+        prompt_tokens,
+        generated_tokens,
+        prefill_ms,
+        decode_ms,
+        prefill_tps,
+        decode_tps,
+        peak_ram_mib,
+        device_label: Some("Device RAM".to_string()),
+    })
 }
 
 // ─── Memory monitoring ─────────────────────────────────────────────────

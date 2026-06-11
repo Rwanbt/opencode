@@ -1,7 +1,7 @@
 import z from "zod"
-import * as path from "path"
-import * as fs from "fs/promises"
-import { readFileSync } from "fs"
+import * as path from "node:path"
+import * as fs from "node:fs/promises"
+import { readFileSync } from "node:fs"
 import { Log } from "../util/log"
 
 export namespace Patch {
@@ -526,7 +526,7 @@ export namespace Patch {
 
     for (const hunk of hunks) {
       switch (hunk.type) {
-        case "add":
+        case "add": {
           // Create parent directories
           const addDir = path.dirname(hunk.path)
           if (addDir !== "." && addDir !== "/") {
@@ -537,6 +537,7 @@ export namespace Patch {
           added.push(hunk.path)
           log.info(`Added file: ${hunk.path}`)
           break
+        }
 
         case "delete":
           await fs.unlink(hunk.path)
@@ -544,7 +545,7 @@ export namespace Patch {
           log.info(`Deleted file: ${hunk.path}`)
           break
 
-        case "update":
+        case "update": {
           const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks)
 
           if (hunk.move_path) {
@@ -565,6 +566,7 @@ export namespace Patch {
             log.info(`Updated file: ${hunk.path}`)
           }
           break
+        }
       }
     }
 
@@ -602,7 +604,7 @@ export namespace Patch {
     const result = maybeParseApplyPatch(argv)
 
     switch (result.type) {
-      case MaybeApplyPatch.Body:
+      case MaybeApplyPatch.Body: {
         const { args } = result
         const effectiveCwd = args.workdir ? path.resolve(cwd, args.workdir) : cwd
         const changes = new Map<string, ApplyPatchFileChange>()
@@ -621,7 +623,7 @@ export namespace Patch {
               })
               break
 
-            case "delete":
+            case "delete": {
               // For delete, we need to read the current content
               const deletePath = path.resolve(effectiveCwd, hunk.path)
               try {
@@ -630,15 +632,16 @@ export namespace Patch {
                   type: "delete",
                   content,
                 })
-              } catch (error) {
+              } catch (_error) {
                 return {
                   type: MaybeApplyPatchVerified.CorrectnessError,
                   error: new Error(`Failed to read file for deletion: ${deletePath}`),
                 }
               }
               break
+            }
 
-            case "update":
+            case "update": {
               const updatePath = path.resolve(effectiveCwd, hunk.path)
               try {
                 const fileUpdate = deriveNewContentsFromChunks(updatePath, hunk.chunks)
@@ -655,6 +658,7 @@ export namespace Patch {
                 }
               }
               break
+            }
           }
         }
 
@@ -666,6 +670,7 @@ export namespace Patch {
             cwd: effectiveCwd,
           },
         }
+      }
 
       case MaybeApplyPatch.PatchParseError:
         return {

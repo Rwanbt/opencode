@@ -4,7 +4,7 @@ import { Session } from "../../session"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
 import { SessionTable } from "../../session/session.sql"
-import { Project } from "../../project/project"
+import type { Project } from "../../project/project"
 import { Instance } from "../../project/instance"
 
 interface SessionStats {
@@ -330,13 +330,13 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log("┌────────────────────────────────────────────────────────┐")
   console.log("│                    COST & TOKENS                       │")
   console.log("├────────────────────────────────────────────────────────┤")
-  const cost = isNaN(stats.totalCost) ? 0 : stats.totalCost
-  const costPerDay = isNaN(stats.costPerDay) ? 0 : stats.costPerDay
-  const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
+  const cost = Number.isNaN(stats.totalCost) ? 0 : stats.totalCost
+  const costPerDay = Number.isNaN(stats.costPerDay) ? 0 : stats.costPerDay
+  const tokensPerSession = Number.isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
   console.log(renderRow("Total Cost", `$${cost.toFixed(2)}`))
   console.log(renderRow("Avg Cost/Day", `$${costPerDay.toFixed(2)}`))
   console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
-  const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
+  const medianTokensPerSession = Number.isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
   console.log(renderRow("Median Tokens/Session", formatNumber(Math.round(medianTokensPerSession))))
   console.log(renderRow("Input", formatNumber(stats.totalTokens.input)))
   console.log(renderRow("Output", formatNumber(stats.totalTokens.output)))

@@ -1,10 +1,10 @@
 import { Slug } from "@opencode-ai/util/slug"
-import path from "path"
+import path from "node:path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type ProviderMetadata } from "ai"
+import type { ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
@@ -620,6 +620,7 @@ export namespace Session {
         )
       })
 
+      // biome-ignore lint/correctness/useYield: Effect.fn synchronous return-only function
       const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
         if (input.limit) {
           return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items

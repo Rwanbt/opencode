@@ -371,15 +371,37 @@ pub async fn tts_start(app: AppHandle) -> Result<u16, String> {
         state.tts_client.clone()
     };
 
-    // Wait for server ready
+    // Wait for server ready — detect early crash so we don't block 60s
     let start = std::time::Instant::now();
     loop {
+        // Check if the process already exited (import error, wrong Python, etc.)
+        {
+            let state = app.state::<SpeechState>();
+            let exited = state
+                .tts_child
+                .lock_safe()
+                .as_mut()
+                .and_then(|c| c.try_wait().ok().flatten());
+            if let Some(exit) = exited {
+                return Err(format!(
+                    "Pocket TTS crashed at startup (exit code {:?}). \
+                     Check installation: pip install pocket-tts\n\
+                     If already installed, verify Python version compatibility \
+                     (requires Python 3.10+).",
+                    exit.code()
+                ));
+            }
+        }
         if start.elapsed().as_secs() > 60 {
             let state = app.state::<SpeechState>();
             if let Some(mut c) = state.tts_child.lock_safe().take() {
                 let _ = c.start_kill();
             }
-            return Err("TTS server failed to start".to_string());
+            return Err(
+                "TTS server failed to start after 60s. \
+                 Run `pocket-tts serve` manually to see the error."
+                    .to_string(),
+            );
         }
         if let Ok(resp) = client
             .get(format!("http://127.0.0.1:{}/health", TTS_PORT))

@@ -351,7 +351,7 @@ export namespace Worktree {
 
       function cleanDirectory(target: string) {
         return Effect.promise(() =>
-          import("fs/promises")
+          import("node:fs/promises")
             .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
             .catch((error) => {
               const message = errorMessage(error)

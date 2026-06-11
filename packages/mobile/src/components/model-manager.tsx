@@ -142,6 +142,16 @@ export function ModelManager(props: Props) {
     clearError()
     try {
       await downloadModel(catalog.url, catalog.filename)
+      // If the catalog entry declares a multimodal projector, fetch it now
+      // so it lands in the same models/ directory and gets auto-detected at
+      // load time. Failure is non-fatal: text-only inference still works.
+      if (catalog.mmprojUrl && catalog.mmprojFilename) {
+        try {
+          await downloadModel(catalog.mmprojUrl, catalog.mmprojFilename)
+        } catch (mmpErr) {
+          console.warn("[catalog] mmproj download failed (text-only mode will still work):", mmpErr)
+        }
+      }
     } catch (err) {
       setError("Download failed: " + (err instanceof Error ? err.message : String(err)))
     }

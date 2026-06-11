@@ -82,7 +82,7 @@ export interface CommandOption {
   suggested?: boolean
   disabled?: boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
-  onHighlight?: () => (() => void) | void
+  onHighlight?: () => (() => void) | undefined
 }
 
 type CommandSource = "palette" | "keybind" | "slash"

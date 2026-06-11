@@ -12,6 +12,9 @@
      5. Native-mobile feel (spacing, scrolling, feedback)
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ─── 0. GLOBAL ANIMATIONS ──────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg) } }
+
 /* ─── 1. ROOT & SAFE AREA ────────────────────────────────────────────────── */
 
 /* Portrait: top/bottom safe areas already handled in index.html.
@@ -579,6 +582,10 @@ a:active,
    Shrink it, but keep the native vertical layout — switching to
    horizontal tabs broke content visibility on Android WebView.       */
 @media (max-width: 767px) {
+  .settings-dialog {
+    flex-direction: column !important;
+  }
+
   .settings-dialog > [data-slot="tabs-list"] {
     width: 110px !important;
     min-width: 110px !important;

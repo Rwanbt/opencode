@@ -1,7 +1,7 @@
-import fs from "fs/promises"
+import fs from "node:fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
-import path from "path"
-import os from "os"
+import path from "node:path"
+import os from "node:os"
 import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
@@ -49,6 +49,6 @@ if (version !== CACHE_VERSION) {
         }),
       ),
     )
-  } catch (e) {}
+  } catch (_e) {}
   await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
 }

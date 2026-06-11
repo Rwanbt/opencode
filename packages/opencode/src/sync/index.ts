@@ -1,6 +1,6 @@
 import z from "zod"
 import type { ZodObject } from "zod"
-import { EventEmitter } from "events"
+import { EventEmitter } from "node:events"
 import { Database, eq } from "@/storage/db"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"

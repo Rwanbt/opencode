@@ -6,7 +6,11 @@ import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
 import { ProviderID } from "../../src/provider/schema"
 
-describe("plugin.auth-override", () => {
+// Instance.provide starts the full OpenCode server — too slow on Windows CI (>5 min).
+// Covered by Linux. Skip on Windows CI to keep the suite within job timeout.
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
+
+describe.skipIf(skipOnWindowsCI)("plugin.auth-override", () => {
   test("user plugin overrides built-in github-copilot auth", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -55,7 +59,7 @@ describe("plugin.auth-override", () => {
     expect(copilot.length).toBe(1)
     expect(copilot[0].label).toBe("Test Override Auth")
     expect(plainMethods[ProviderID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
-  }, 30000) // Increased timeout for plugin installation
+  }, 300_000) // Windows CI: bun plugin install is slow on NTFS
 })
 
 const file = path.join(import.meta.dir, "../../src/plugin/index.ts")

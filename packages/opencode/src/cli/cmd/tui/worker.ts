@@ -12,7 +12,6 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 import { writeHeapSnapshot } from "node:v8"
-import { WorkspaceID } from "@/control-plane/schema"
 import { Heap } from "@/cli/heap"
 
 await Log.init({

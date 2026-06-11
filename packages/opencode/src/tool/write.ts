@@ -1,5 +1,5 @@
 import z from "zod"
-import * as path from "path"
+import * as path from "node:path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
@@ -24,7 +24,12 @@ export const WriteTool = Tool.define("write", {
   parameters: z.object({
     content: z.string().describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
-    dry_run: z.boolean().optional().describe("Preview the write operation without modifying the file"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .describe(
+        "Set to true ONLY when the user explicitly asks to preview the write operation without applying it. By default leave this unset to actually write the file.",
+      ),
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)

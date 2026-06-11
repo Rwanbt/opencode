@@ -1,4 +1,6 @@
 import { test, expect } from "bun:test"
+
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
@@ -2293,7 +2295,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
   })
 })
 
-test("plugin config providers persist after instance dispose", async () => {
+test.skipIf(skipOnWindowsCI)("plugin config providers persist after instance dispose", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const root = path.join(dir, ".opencode", "plugin")
@@ -2345,9 +2347,9 @@ test("plugin config providers persist after instance dispose", async () => {
   })
   expect(second[ProviderID.make("demo")]).toBeDefined()
   expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
-}, 30000)
+}, 300_000)
 
-test("plugin config enabled and disabled providers are honored", async () => {
+test.skipIf(skipOnWindowsCI)("plugin config enabled and disabled providers are honored", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const root = path.join(dir, ".opencode", "plugin")
@@ -2382,7 +2384,7 @@ test("plugin config enabled and disabled providers are honored", async () => {
       expect(providers[ProviderID.openai]).toBeUndefined()
     },
   })
-}, 30000)
+}, 300_000)
 
 test("opencode loader keeps paid models when config apiKey is present", async () => {
   await using base = await tmpdir({

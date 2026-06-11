@@ -1,12 +1,11 @@
 import { Tool } from "./tool"
 import z from "zod"
 import { Session } from "../session"
-import { SessionID, MessageID } from "../session/schema"
+import { type SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { Config } from "../config/config"
-import { Permission } from "@/permission"
 import { SessionStatus } from "../session/status"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -48,7 +47,7 @@ const parameters = z.object({
     .optional(),
 })
 
-function sleep(ms: number) {
+function _sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
@@ -73,7 +72,7 @@ async function getSessionTokens(sessionID: SessionID): Promise<number> {
   }, 0)
 }
 
-export const TeamTool = Tool.define("team", async (ctx) => {
+export const TeamTool = Tool.define("team", async (_ctx) => {
   return {
     description: [
       "Launch a coordinated team of agents to accomplish a complex task.",
@@ -84,7 +83,7 @@ export const TeamTool = Tool.define("team", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
-      const maxParallel = params.budget?.max_agents ?? MAX_TEAM_TASKS
+      const _maxParallel = params.budget?.max_agents ?? MAX_TEAM_TASKS
       const maxCost = params.budget?.max_cost
       const maxTokens = params.budget?.max_tokens
 

@@ -6,7 +6,6 @@ import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
-import { showToast } from "@opencode-ai/ui/toast"
 
 export type LocalPTY = {
   id: string

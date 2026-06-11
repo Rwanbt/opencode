@@ -31,7 +31,7 @@ export function MobileDiff(props: MobileDiffProps) {
     else if (dx < -threshold && hasNext()) setCurrentIndex((i) => i + 1)
   }
 
-  function renderLine(line: string, idx: number) {
+  function renderLine(line: string, _idx: number) {
     const type = line.startsWith("+") ? "added" : line.startsWith("-") ? "removed" : line.startsWith("@@") ? "hunk" : "context"
     const colors = {
       added: "bg-green-500/10 text-green-400",

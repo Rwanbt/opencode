@@ -202,7 +202,11 @@ mod tests {
         PathBuf::from(r"C:\Users\barat\AppData\Roaming\ai.opencode.desktop.dev\speech\kokoro")
     }
 
+    // These tests require a local Kokoro model at a hardcoded Windows path.
+    // They are intentionally ignored in CI and must be run manually with
+    // `cargo test -- --ignored` on a machine with the model installed.
     #[test]
+    #[ignore]
     fn test_kokoro_load() {
         let mut engine = KokoroEngine::new();
         let dir = model_dir();
@@ -218,6 +222,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_kokoro_synthesize_hello() {
         let mut engine = KokoroEngine::new();
         let dir = model_dir();

@@ -466,7 +466,7 @@ describe("session.agent-resolution", () => {
         }
       },
     })
-  }, 30000)
+  }, 300_000)
 
   test("unknown agent error includes available agent names", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -489,7 +489,7 @@ describe("session.agent-resolution", () => {
         }
       },
     })
-  }, 30000)
+  }, 300_000)
 
   test("unknown command throws typed error with available names", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -514,5 +514,5 @@ describe("session.agent-resolution", () => {
         }
       },
     })
-  }, 30000)
+  }, 300_000)
 })

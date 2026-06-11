@@ -1,6 +1,6 @@
 import { Button as Kobalte } from "@kobalte/core/button"
 import { type ComponentProps, splitProps } from "solid-js"
-import { Icon, IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
 
 export interface IconButtonProps extends ComponentProps<typeof Kobalte> {
   icon: IconProps["name"]

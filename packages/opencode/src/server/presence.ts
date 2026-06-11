@@ -26,7 +26,7 @@ export namespace Presence {
     if (checkInterval) return
     checkInterval = setInterval(() => {
       const now = Date.now()
-      for (const [userID, info] of users) {
+      for (const [_userID, info] of users) {
         const elapsed = now - info.lastSeen
         let newStatus: Status = "online"
         if (elapsed > AWAY_TIMEOUT) newStatus = "away"

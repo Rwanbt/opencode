@@ -29,7 +29,7 @@ import {
 } from "@agentclientprotocol/sdk"
 
 import { Log } from "../util/log"
-import { pathToFileURL } from "url"
+import { pathToFileURL } from "node:url"
 import { Filesystem } from "../util/filesystem"
 import { Hash } from "../util/hash"
 import { ACPSessionManager } from "./session"
@@ -39,7 +39,7 @@ import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config/config"
+import type { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
@@ -230,7 +230,7 @@ export namespace ACP {
                 return
               }
 
-              if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+              if (res.outcome.optionId !== "reject" && permission.permission === "edit") {
                 const metadata = permission.metadata || {}
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
@@ -280,7 +280,7 @@ export namespace ACP {
                 this.bashSnapshots.delete(part.callID)
                 return
 
-              case "running":
+              case "running": {
                 const output = this.bashOutput(part)
                 const content: ToolCallContent[] = []
                 if (output) {
@@ -333,6 +333,7 @@ export namespace ACP {
                     log.error("failed to send tool in_progress to ACP", { error })
                   })
                 return
+              }
 
               case "completed": {
                 this.toolStarts.delete(part.callID)
@@ -834,7 +835,7 @@ export namespace ACP {
             case "pending":
               this.bashSnapshots.delete(part.callID)
               break
-            case "running":
+            case "running": {
               const output = this.bashOutput(part)
               const runningContent: ToolCallContent[] = []
               if (output) {
@@ -864,7 +865,8 @@ export namespace ACP {
                   log.error("failed to send tool in_progress to ACP", { error: err })
                 })
               break
-            case "completed":
+            }
+            case "completed": {
               this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
@@ -944,6 +946,7 @@ export namespace ACP {
                   log.error("failed to send tool completed to ACP", { error: err })
                 })
               break
+            }
             case "error":
               this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
@@ -1296,13 +1299,14 @@ export namespace ACP {
       }
     }
 
-    async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
+    async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | undefined> {
       const session = this.sessionManager.get(params.sessionId)
       const availableModes = await this.loadAvailableModes(session.cwd)
       if (!availableModes.some((mode) => mode.id === params.modeId)) {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
+      return undefined
     }
 
     async prompt(params: PromptRequest) {
@@ -1323,7 +1327,7 @@ export namespace ACP {
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
-          case "text":
+          case "text": {
             const audience = part.annotations?.audience
             const forAssistant = audience?.length === 1 && audience[0] === "assistant"
             const forUser = audience?.length === 1 && audience[0] === "user"
@@ -1334,6 +1338,7 @@ export namespace ACP {
               ...(forUser && { ignored: true }),
             })
             break
+          }
           case "image": {
             const parsed = parseUri(part.uri ?? "")
             const filename = parsed.type === "file" ? parsed.filename : "image"
@@ -1355,7 +1360,7 @@ export namespace ACP {
             break
           }
 
-          case "resource_link":
+          case "resource_link": {
             const parsed = parseUri(part.uri)
             // Use the name from resource_link if available
             if (part.name && parsed.type === "file") {
@@ -1364,6 +1369,7 @@ export namespace ACP {
             parts.push(parsed)
 
             break
+          }
 
           case "resource": {
             const resource = part.resource

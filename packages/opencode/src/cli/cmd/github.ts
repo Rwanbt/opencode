@@ -1,5 +1,5 @@
-import path from "path"
-import { exec } from "child_process"
+import path from "node:path"
+import { exec } from "node:child_process"
 import { Filesystem } from "../../util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -223,7 +223,7 @@ export const GithubInstallCommand = cmd({
           printNextSteps()
 
           function printNextSteps() {
-            let step2
+            let step2: string
             if (provider === "amazon-bedrock") {
               step2 =
                 "Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services"
@@ -357,6 +357,7 @@ export const GithubInstallCommand = cmd({
 
               retries++
               await sleep(1000)
+            // biome-ignore lint/correctness/noConstantCondition: intentional infinite polling loop
             } while (true)
 
             s.stop("Installed GitHub app")
@@ -921,7 +922,7 @@ export const GithubRunCommand = cmd({
       async function summarize(response: string) {
         try {
           return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-        } catch (e) {
+        } catch (_e) {
           const title = issueEvent
             ? issueEvent.issue.title
             : (payload as PullRequestReviewCommentEvent).pull_request.title
@@ -1209,7 +1210,7 @@ export const GithubRunCommand = cmd({
         // Only called for non-schedule events, so actor is defined
         console.log(`Asserting permissions for user ${actor}...`)
 
-        let permission
+        let permission: string
         try {
           const response = await octoRest.repos.getCollaboratorPermissionLevel({
             owner,

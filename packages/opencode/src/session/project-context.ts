@@ -1,5 +1,5 @@
-import fs from "fs"
-import path from "path"
+import fs from "node:fs"
+import path from "node:path"
 import { Glob } from "../util/glob"
 import { FileIgnore } from "../file/ignore"
 import { Log } from "../util/log"
@@ -111,7 +111,6 @@ export namespace ProjectContext {
         if (!FileIgnore.isIndexable(rel, lineCount, stat.size)) continue
         results.push({ relativePath: rel, absolutePath: abs, lines: lineCount })
       } catch {
-        continue
       }
     }
 

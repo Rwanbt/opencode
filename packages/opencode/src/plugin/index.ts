@@ -134,7 +134,7 @@ export namespace Plugin {
               if (cfg?.experimental?.anythingllm?.enabled) {
                 const { AnythingLLMPlugin } = await import("../anythingllm/plugin")
                 if (AnythingLLMPlugin.init && (await AnythingLLMPlugin.init())) {
-                  internalPlugins.push(((input: PluginInput) => Promise.resolve(AnythingLLMPlugin.hooks)) as any)
+                  internalPlugins.push(((_input: PluginInput) => Promise.resolve(AnythingLLMPlugin.hooks)) as any)
                   log.info("anythingllm plugin enabled")
                 }
               }

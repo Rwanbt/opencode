@@ -1,5 +1,5 @@
-import path from "path"
-import { fileURLToPath } from "url"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"

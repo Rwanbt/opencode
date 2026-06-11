@@ -197,29 +197,39 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
-              const parts = MessageV2.parts(ctx.assistantMessage.id)
-              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+              // Cross-message tool history. Local 4B models retry failed tool
+              // calls in NEW assistant messages (each turn = new message), so a
+              // single-message inspection misses identical-input loops. Pull
+              // recent tool parts from the whole session instead.
+              const recentTools = MessageV2.recentToolParts(
+                ctx.assistantMessage.sessionID,
+                Math.max(DOOM_LOOP_THRESHOLD, 6),
+              )
+              const recentParts = recentTools.slice(-DOOM_LOOP_THRESHOLD)
 
               // Check 1: identical consecutive calls (original doom loop)
               const identicalLoop =
                 recentParts.length === DOOM_LOOP_THRESHOLD &&
                 recentParts.every(
                   (part) =>
-                    part.type === "tool" &&
                     part.tool === value.toolName &&
                     part.state.status !== "pending" &&
                     JSON.stringify(part.state.input) === JSON.stringify(value.input),
                 )
 
-              // Check 2: repeated failed edits on the same file (catches alternating read→edit(fail) loops)
-              const recentWindow = parts.slice(-6)
+              // Check 2: repeated failed edits on the same file (catches alternating
+              // read→edit(fail) loops). Only blocks subsequent EDIT calls — earlier
+              // versions also blocked bash/write/etc. on the same file, which broke
+              // recovery flows where the model legitimately switches tool after a
+              // string of failed edits (e.g. fall back to write, or run cargo check).
+              const recentWindow = recentTools.slice(-6)
               const failedEdits = recentWindow.filter(
-                (part): part is MessageV2.ToolPart =>
-                  part.type === "tool" &&
+                (part) =>
                   part.tool === "edit" &&
                   part.state.status === "error",
               )
               const editFileLoop =
+                value.toolName === "edit" &&
                 failedEdits.length >= DOOM_LOOP_THRESHOLD &&
                 failedEdits.every(
                   (part) =>
@@ -233,7 +243,10 @@ export namespace SessionProcessor {
 
               const loopType = identicalLoop ? "identical args" : "repeated failed edits on same file"
 
-              // Local models: auto-break instead of asking permission (4B models can't recover from loops)
+              // Local models: hard stop with recovery text.
+              // 4B models cannot reliably handle "explain and ask for help" — they
+              // tend to repeat the same call instead. We stop the agentic loop (blocked=true)
+              // and emit a short text part so the user understands why the agent stopped.
               if (ctx.model.providerID === "local-llm") {
                 log.warn("doom loop detected for local model", { tool: value.toolName, loopType })
                 ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
@@ -242,10 +255,22 @@ export namespace SessionProcessor {
                   state: {
                     status: "error",
                     input: value.input,
-                    error: `STOP: ${loopType}. Do not retry. Explain what you were trying to do and ask the user for help.`,
+                    error: `Stopped: ${loopType}`,
                     time: { start: Date.now(), end: Date.now() },
                   },
                 } satisfies MessageV2.ToolPart)
+                // Recovery message visible in the conversation thread.
+                yield* session.updatePart({
+                  id: PartID.ascending(),
+                  messageID: ctx.assistantMessage.id,
+                  sessionID: ctx.assistantMessage.sessionID,
+                  type: "text",
+                  text: `Loop detected (${loopType} on \`${value.toolName}\`). Please tell me how to proceed or suggest an alternative approach.`,
+                  time: { start: Date.now(), end: Date.now() },
+                } satisfies MessageV2.TextPart)
+                // Block the agentic loop — result will be "stop" so the user must re-prompt.
+                // Without this, the 4B model continues generating and usually repeats the same call.
+                ctx.blocked = true
                 return
               }
 

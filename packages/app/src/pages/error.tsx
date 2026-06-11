@@ -1,7 +1,7 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, Show, onMount } from "solid-js"
+import { type Component, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"

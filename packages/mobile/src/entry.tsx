@@ -165,6 +165,36 @@ function App() {
   }
 
   onMount(() => {
+    // Auto-trigger the local connect at boot. The legacy selector (Local /
+    // Remote) was a development-time convenience; in normal use the user
+    // always picks Local, and on Android MIUI we cannot inject the click
+    // via `adb shell input` (security policy blocks INJECT_EVENTS unless a
+    // hidden devsetting toggle is on). Auto-connecting at mount removes
+    // that interaction entirely. To force the selector, set
+    // `localStorage.setItem("openCodeShowSelector","1")` from the WebView
+    // dev console before reload.
+    void (async () => {
+      try {
+        if (localStorage.getItem("openCodeShowSelector") === "1") return
+      } catch {}
+      // Fresh install / not-yet-extracted runtime: route through
+      // ExtractionProgress so install_extended_env runs (Alpine rootfs +
+      // toolchain wrappers). Without this, start_embedded_server fires
+      // before rootfs extraction and the cargo/rustc/python wrappers come
+      // up empty (rootfs missing).
+      try {
+        const { checkRuntime } = await import("./runtime")
+        const info = await checkRuntime()
+        if (!info.ready || !info.extended_env) {
+          setMode("extracting")
+          return
+        }
+      } catch {}
+      void handleLocalConnect()
+    })()
+  })
+
+  onMount(() => {
     // A.4-part1: pause/resume detection via visibilitychange.
     // On background: notify Rust (placeholder for foreground-service keepalive).
     // On resume: health-check and emit reload event if server died.
@@ -401,16 +431,40 @@ function App() {
   )
 }
 
+interface LLMLoadingState {
+  loading: boolean
+  elapsed_secs?: number
+  max_secs?: number
+  filename?: string
+}
+
 function FullApp(props: {
   platform: Awaited<ReturnType<typeof createPlatform>>;
   serverInfo: ServerInfo;
   onOpenModelManager?: () => void;
 }) {
+  const [llmLoading, setLlmLoading] = createSignal<LLMLoadingState>({ loading: false })
+  const [noModelBanner, setNoModelBanner] = createSignal(false)
+
   // Listen for "open-model-manager" custom event from the model selector
   onMount(() => {
     const handler = () => props.onOpenModelManager?.()
     window.addEventListener("open-model-manager", handler)
     onCleanup(() => window.removeEventListener("open-model-manager", handler))
+  })
+
+  // Track model loading progress to show a status banner
+  onMount(() => {
+    const handler = (e: CustomEvent<LLMLoadingState>) => setLlmLoading(e.detail)
+    window.addEventListener("llm-loading-progress" as any, handler as any)
+    onCleanup(() => window.removeEventListener("llm-loading-progress" as any, handler as any))
+  })
+
+  // Show onboarding banner when local-llm is selected but no model is installed
+  onMount(() => {
+    const handler = () => setNoModelBanner(true)
+    window.addEventListener("no-model-found" as any, handler as any)
+    onCleanup(() => window.removeEventListener("no-model-found" as any, handler as any))
   })
 
   // Auto-start local LLM when model is selected
@@ -462,6 +516,66 @@ function FullApp(props: {
           defaultServer={defaultKey()}
           servers={servers()}
         />
+        <Show when={llmLoading().loading}>
+          <div style={{
+            position: "fixed", bottom: "0", left: "0", right: "0",
+            padding: "10px 16px",
+            background: "rgba(15, 23, 42, 0.95)",
+            "border-top": "1px solid #1e3a5f",
+            display: "flex", "align-items": "center", gap: "10px",
+            "z-index": "9999",
+            "font-family": "system-ui, -apple-system, sans-serif",
+          }}>
+            <div style={{
+              width: "14px", height: "14px", border: "2px solid #334155",
+              "border-top-color": "#3b82f6", "border-radius": "50%",
+              animation: "spin 1s linear infinite", "flex-shrink": "0",
+            }} />
+            <span style={{ color: "#94a3b8", "font-size": "13px" }}>
+              Loading model
+              {llmLoading().filename ? ` ${llmLoading().filename}` : ""}
+              {llmLoading().elapsed_secs ? `… ${llmLoading().elapsed_secs}s` : "…"}
+            </span>
+          </div>
+        </Show>
+        <Show when={noModelBanner()}>
+          <div style={{
+            position: "fixed", bottom: "0", left: "0", right: "0",
+            padding: "14px 16px",
+            background: "rgba(15, 23, 42, 0.97)",
+            "border-top": "1px solid #334155",
+            display: "flex", "align-items": "center", "justify-content": "space-between",
+            gap: "12px", "z-index": "9999",
+            "font-family": "system-ui, -apple-system, sans-serif",
+          }}>
+            <span style={{ color: "#94a3b8", "font-size": "13px", flex: "1" }}>
+              No local model installed. Download one to use on-device AI.
+            </span>
+            <button
+              onClick={() => { setNoModelBanner(false); props.onOpenModelManager?.() }}
+              style={{
+                padding: "8px 14px", "border-radius": "8px",
+                border: "1px solid #3b82f6", background: "#1e3a5f",
+                color: "#e5e5e5", "font-size": "13px", cursor: "pointer",
+                "white-space": "nowrap", "flex-shrink": "0",
+              }}
+            >
+              Add model
+            </button>
+            <button
+              onClick={() => setNoModelBanner(false)}
+              style={{
+                padding: "8px", "border-radius": "6px",
+                border: "none", background: "transparent",
+                color: "#64748b", "font-size": "16px", cursor: "pointer",
+                "flex-shrink": "0", "line-height": "1",
+              }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </Show>
       </AppBaseProviders>
     </PlatformProvider>
   )

@@ -27,12 +27,22 @@ export namespace ProviderTransform {
    * Rules (in priority order):
    *   reasoning === true  → never suppress (explicit opt-in)
    *   reasoning === false → always suppress (explicit opt-out)
-   *   no declaration      → suppress only for Qwen/QwQ family (by model ID)
+   *   no declaration      → allow thinking for Qwen/QwQ unless context < 8K
+   *                         (model.limit.context is updated to the real server n_ctx
+   *                          before this is called — see getLocalLLMAdaptiveLimits in llm.ts)
    */
   export function shouldSuppressThinking(model: Provider.Model): boolean {
     if (model.capabilities.reasoning === true) return false
     if (model.capabilities.reasoning === false) return true
-    return /qwen|qwq/i.test(model.api.id)
+    // Undefined reasoning capability: infer from model family.
+    // Qwen/QwQ family supports thinking via <think> blocks — allow it by default.
+    // Suppress only when the real context is tiny (<8K) to avoid starving the response.
+    // reasoning_budget (injected in llm.ts) caps the token cost proportionally.
+    if (/qwen|qwq/i.test(model.api.id)) {
+      const MIN_CONTEXT_FOR_THINKING = 8_000
+      return model.limit.context > 0 && model.limit.context < MIN_CONTEXT_FOR_THINKING
+    }
+    return false
   }
 
   // Maps npm package to the key the AI SDK expects for providerOptions
@@ -68,7 +78,7 @@ export namespace ProviderTransform {
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
-    options: Record<string, unknown>,
+    _options: Record<string, unknown>,
   ): ModelMessage[] {
     // Local LLM: strip reasoning parts from history and append /no_think to suppress
     // Qwen/DeepSeek thinking tags that llama.cpp can't disable via API.
@@ -388,6 +398,12 @@ export namespace ProviderTransform {
       }
       return 0.6
     }
+    // Gemma-4 default sampler chain ships temp=1.0 + top_k=64 which is too
+    // hot for code generation on small (≤4B) variants — produces verbose,
+    // hallucinated APIs (observed on E4B Q4_0/Q4_K_M Prism-EQ bench:
+    // duplicate imports, fake constants like MAIN_INPUT_CHANNELS).
+    // 0.5 brings it close to the recommended Gemma-4 IT setting for code.
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 0.5
     return undefined
   }
 
@@ -397,6 +413,7 @@ export namespace ProviderTransform {
     if (["minimax-m2", "gemini", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
       return 0.95
     }
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 0.92
     return undefined
   }
 
@@ -407,6 +424,7 @@ export namespace ProviderTransform {
       return 20
     }
     if (id.includes("gemini")) return 64
+    if (id.includes("gemma-4") || id.includes("gemma4")) return 40
     return undefined
   }
 
@@ -427,8 +445,7 @@ export namespace ProviderTransform {
       id.includes("glm") ||
       id.includes("mistral") ||
       id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("k2p5") // models.dev ships "k2p5" and "kimi-k2.5" as distinct IDs
     )
       return {}
 
@@ -511,7 +528,7 @@ export namespace ProviderTransform {
         }
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/github-copilot":
+      case "@ai-sdk/github-copilot": {
         if (model.id.includes("gemini")) {
           // currently github copilot only returns thinking
           return {}
@@ -538,6 +555,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
@@ -552,7 +570,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/openai-compatible":
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/azure":
+      case "@ai-sdk/azure": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
@@ -569,7 +587,8 @@ export namespace ProviderTransform {
             },
           ]),
         )
-      case "@ai-sdk/openai":
+      }
+      case "@ai-sdk/openai": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
@@ -599,6 +618,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
@@ -682,7 +702,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/google-vertex":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
-      case "@ai-sdk/google":
+      case "@ai-sdk/google": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
         if (id.includes("2.5")) {
           return {
@@ -716,6 +736,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/mistral":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
@@ -725,7 +746,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
         return {}
 
-      case "@ai-sdk/groq":
+      case "@ai-sdk/groq": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/groq
         const groqEffort = ["none", ...WIDELY_SUPPORTED_EFFORTS]
         return Object.fromEntries(
@@ -736,6 +757,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
+      }
 
       case "@ai-sdk/perplexity":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity

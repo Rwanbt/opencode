@@ -1,5 +1,5 @@
-import { APICallError } from "ai"
-import { STATUS_CODES } from "http"
+import type { APICallError } from "ai"
+import { STATUS_CODES } from "node:http"
 import { iife } from "@/util/iife"
 import type { ProviderID } from "./schema"
 
@@ -46,7 +46,7 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
-  function message(providerID: ProviderID, e: APICallError) {
+  function message(_providerID: ProviderID, e: APICallError) {
     return iife(() => {
       const msg = e.message
       if (msg === "") {

@@ -4,7 +4,7 @@
 # Runs all testable features without Tauri rebuild
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 PASS=0; FAIL=0; SKIP=0
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOG="packages/opencode/test/tool/eval-results/full-$TIMESTAMP.log"
@@ -18,10 +18,12 @@ run_test() {
     echo "PASS"; ((PASS++))
   else
     echo "FAIL"; ((FAIL++))
-    echo "    Expected pattern: $expect" >> "$LOG"
-    echo "    Got (last 5 lines):" >> "$LOG"
-    echo "$OUTPUT" | tail -5 >> "$LOG"
-    echo "" >> "$LOG"
+    {
+      echo "    Expected pattern: $expect"
+      echo "    Got (last 5 lines):"
+      echo "$OUTPUT" | tail -5
+      echo ""
+    } >> "$LOG"
   fi
 }
 

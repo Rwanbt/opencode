@@ -135,6 +135,16 @@ object LlamaHttpServer {
             val maxTokens = json.optInt("max_tokens", 2048)
             val temperature = json.optDouble("temperature", 0.7).toFloat()
 
+            // The Android JNI path uses text-only ChatML inference. llama-server is not
+            // built with multimodal (CLIP/mmproj) support, so image_url blocks cannot be
+            // processed. Return a clear error instead of silently discarding images and
+            // producing a confusing "I don't see any image" response.
+            if (hasImageContent(messages)) {
+                sendJson(output, 422,
+                    """{"error":{"message":"Image attachments are not supported by the on-device model. Please describe the image in text, or switch to a cloud provider (Settings → Model).","code":422,"type":"multimodal_not_supported"}}""")
+                return
+            }
+
             val prompt = formatChatML(messages)
 
             if (!LlamaEngine.loaded()) {
@@ -275,6 +285,23 @@ object LlamaHttpServer {
         return sb.toString()
     }
 
+    /** Returns true if any user/system message contains an image_url or image content block. */
+    private fun hasImageContent(messages: JSONArray): Boolean {
+        for (i in 0 until messages.length()) {
+            val msg = messages.optJSONObject(i) ?: continue
+            val content = msg.opt("content") ?: continue
+            if (content is JSONArray) {
+                for (j in 0 until content.length()) {
+                    val part = content.optJSONObject(j) ?: continue
+                    when (part.optString("type")) {
+                        "image_url", "image" -> return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
     private fun extractContent(msg: JSONObject): String {
         if (!msg.has("content") || msg.isNull("content")) return ""
         return when (val c = msg.get("content")) {
@@ -295,8 +322,8 @@ object LlamaHttpServer {
 
     private fun sendJson(output: BufferedOutputStream, status: Int, body: String) {
         val statusText = when (status) {
-            200 -> "OK"; 404 -> "Not Found"; 500 -> "Internal Server Error"
-            503 -> "Service Unavailable"; else -> "Error"
+            200 -> "OK"; 404 -> "Not Found"; 422 -> "Unprocessable Entity"
+            500 -> "Internal Server Error"; 503 -> "Service Unavailable"; else -> "Error"
         }
         val bytes = body.toByteArray(Charsets.UTF_8)
         val response = "HTTP/1.1 $status $statusText\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n"

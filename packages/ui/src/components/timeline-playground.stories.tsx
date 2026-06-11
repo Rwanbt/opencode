@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, createEffect, on, For, Show, Index, batch } from "solid-js"
+import { createSignal, createMemo, createEffect, on, For, Show, batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
@@ -555,7 +555,7 @@ function toolPart(sample: (typeof TOOL_SAMPLES)[keyof typeof TOOL_SAMPLES], stat
   } as ToolPart
 }
 
-function compactionPart(): CompactionPart {
+function _compactionPart(): CompactionPart {
   return { id: uid(), type: "compaction", auto: true } as CompactionPart
 }
 

@@ -13,8 +13,8 @@
 //! Keep this file simple and avoid external deps — it runs in the opencode
 //! sidecar hot path.
 
-import os from "os"
-import { spawnSync } from "child_process"
+import os from "node:os"
+import { spawnSync } from "node:child_process"
 
 export type GpuBackend = "cuda" | "rocm" | "vulkan" | "opencl" | "metal" | "none"
 export type ThermalState = "nominal" | "fair" | "serious" | "critical"
@@ -223,9 +223,12 @@ export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers 
   const batchSize = Math.max(64, Math.floor((128 + 384 * ramRatio) * thermalMult))
   const uBatchSize = Math.max(32, batchSize >> 2)
 
-  // KV cache quant: finer quant when we have VRAM headroom, q4_0 otherwise.
-  const kvCacheType =
-    p.vramMb > modelSizeMb * 3 ? "f16" : p.vramMb > modelSizeMb * 2 ? "q8_0" : "q4_0"
+  // KV cache quant: q8_0 quand VRAM serrée, f16 si confortable.
+  // turbo3 (TurboQuant, Google ICLR 2026) serait idéal mais exige head_dim ≤ 128 pour la
+  // matrice WHT 128×128 — incompatible avec Gemma-4 (head_dim=512) et d'autres modèles.
+  // Activable manuellement via OPENCODE_KV_CACHE_TYPE=turbo3 si le modèle est compatible.
+  const kvCacheType: "f16" | "q8_0" | "q4_0" =
+    p.vramMb > modelSizeMb * 3 ? "f16" : p.vramMb > modelSizeMb * 1.5 ? "q8_0" : "q4_0"
 
   // Context: scales with total RAM, capped to keep KV cache reasonable.
   const contextSize = p.totalRamMb < 4096 ? 4096 : p.totalRamMb < 8192 ? 8192 : 16384

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "fs"
-import { resolve } from "path"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 
 /**
  * Validates that the mobile CSS file contains all critical rules

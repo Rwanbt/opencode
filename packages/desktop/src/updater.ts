@@ -1,4 +1,4 @@
-import { check } from "@tauri-apps/plugin-updater"
+import { check, type Update } from "@tauri-apps/plugin-updater"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { ask, message } from "@tauri-apps/plugin-dialog"
 import { type as ostype } from "@tauri-apps/plugin-os"
@@ -11,7 +11,7 @@ export const UPDATER_ENABLED = window.__OPENCODE__?.updaterEnabled ?? false
 export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   await initI18n()
 
-  let update
+  let update: Update | null
   try {
     update = await check()
   } catch {

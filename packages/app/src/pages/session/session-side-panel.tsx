@@ -208,8 +208,7 @@ export function SessionSidePanel(props: {
   })
 
   return (
-    <>
-      <aside
+    <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
@@ -462,6 +461,5 @@ export function SessionSidePanel(props: {
           </div>
         </div>
       </aside>
-    </>
   )
 }

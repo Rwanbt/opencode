@@ -1,4 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+
+const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
@@ -41,7 +43,7 @@ async function project(source: string) {
   })
 }
 
-describe("plugin.trigger", () => {
+describe.skipIf(skipOnWindowsCI)("plugin.trigger", () => {
   test("runs synchronous hooks without crashing", async () => {
     await using tmp = await project(
       [

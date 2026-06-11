@@ -20,7 +20,7 @@ const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
-  setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
+  setGlobalProject: (next: Project[] | ((state: Project[]) => Project[])) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
@@ -32,14 +32,16 @@ export function applyGlobalEvent(input: {
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
-    input.setGlobalProject((draft) => {
-      draft[result.index] = { ...draft[result.index], ...properties }
-    })
+    input.setGlobalProject(produce((draft) => {
+      // Mutate individual properties instead of replacing the object to avoid
+      // spreading reactive Proxies (SolidJS Proxy-in-Proxy causes an invariant error)
+      Object.assign(draft[result.index], properties)
+    }))
     return
   }
-  input.setGlobalProject((draft) => {
+  input.setGlobalProject(produce((draft) => {
     draft.splice(result.index, 0, properties)
-  })
+  }))
 }
 
 function cleanupSessionCaches(

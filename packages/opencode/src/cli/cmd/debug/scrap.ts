@@ -1,4 +1,4 @@
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { Project } from "../../../project/project"
 import { Log } from "../../../util/log"
 import { cmd } from "../cmd"

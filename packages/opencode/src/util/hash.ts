@@ -1,4 +1,4 @@
-import { createHash } from "crypto"
+import { createHash } from "node:crypto"
 
 export namespace Hash {
   export function fast(input: string | Buffer): string {

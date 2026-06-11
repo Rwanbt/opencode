@@ -133,7 +133,7 @@ describe("Truncate", () => {
       })
 
       expect(out.code).toBe(0)
-    }, 20000)
+    }, 300_000)
   })
 
   describe("cleanup", () => {

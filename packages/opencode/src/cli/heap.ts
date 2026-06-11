@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { writeHeapSnapshot } from "node:v8"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"

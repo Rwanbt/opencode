@@ -98,6 +98,7 @@ class MainActivity : TauriActivity() {
     // Load llama.cpp libraries and start command loop
     try {
       LlamaEngine.nativeLibDir = nativeLibDir
+      LlamaEngine.applicationContext = applicationContext
       LlamaEngine.init()
       android.util.Log.i("OpenCode", "LlamaEngine initialized")
       val llmDir = File(baseDir, "runtime/llm_ipc")
@@ -209,6 +210,25 @@ class MainActivity : TauriActivity() {
           100
         )
       }
+    }
+  }
+
+  override fun onStart() {
+    super.onStart()
+    // Re-promote to foreground when the app comes back to the foreground.
+    // This is a no-op if the service is already in foreground.
+    LlamaService.get()?.promoteToForeground()
+  }
+
+  override fun onStop() {
+    super.onStop()
+    // If no inference is running, drop the foreground status (and its persistent
+    // notification) while the app is in the background. This saves battery and
+    // avoids the "stuck notification" UX complaint. The service itself stays
+    // alive so pty_server and the IPC directory remain intact.
+    val svc = LlamaService.get() ?: return
+    if (!svc.isModelActive()) {
+      svc.tryDemoteFromForeground()
     }
   }
 

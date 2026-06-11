@@ -1,4 +1,4 @@
-import { type SelectedLineRange } from "@pierre/diffs"
+import type { SelectedLineRange } from "@pierre/diffs"
 import { toRange } from "./selection-bridge"
 
 export function findElement(node: Node | null): HTMLElement | undefined {

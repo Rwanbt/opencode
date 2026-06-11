@@ -1,0 +1,75 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "dev"
+	},
+	"files": {
+		"ignoreUnknown": true,
+		"includes": [
+			"packages/opencode/src/**/*.ts",
+			"packages/app/src/**/*.ts",
+			"packages/app/src/**/*.tsx",
+			"packages/ui/src/**/*.ts",
+			"packages/ui/src/**/*.tsx",
+			"packages/desktop/src/**/*.ts",
+			"packages/mobile/src/**/*.ts",
+			"packages/util/src/**/*.ts",
+			"packages/plugin/src/**/*.ts",
+			"packages/sdk/js/src/**/*.ts"
+		]
+	},
+	"formatter": {
+		"enabled": false
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"a11y": {
+				"recommended": false
+			},
+			"style": {
+				"noNonNullAssertion": "off",
+				"useTemplate": "off",
+				"useLiteralEnumMembers": "off",
+				"useConst": "off",
+				"useExponentiationOperator": "off"
+			},
+			"complexity": {
+				"useLiteralKeys": "off",
+				"useOptionalChain": "off",
+				"noBannedTypes": "off",
+				"noUselessEscapeInRegex": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noAssignInExpressions": "off",
+				"useIterableCallbackReturn": "off",
+				"noControlCharactersInRegex": "off",
+				"noTemplateCurlyInString": "off"
+			},
+			"correctness": {
+				"useParseIntRadix": "off"
+			}
+		}
+	},
+	"assist": {
+		"enabled": false
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.stories.tsx", "**/*.stories.ts", "**/*.test.ts", "**/*.test.tsx"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noImplicitAnyLet": "off",
+						"noShadowRestrictedNames": "off"
+					}
+				}
+			}
+		}
+	]
+}

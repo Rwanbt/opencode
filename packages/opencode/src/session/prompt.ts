@@ -1,6 +1,6 @@
-import path from "path"
-import fs from "fs"
-import os from "os"
+import path from "node:path"
+import fs from "node:fs"
+import os from "node:os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -27,7 +27,6 @@ import { canFuzzyMatch } from "../tool/edit"
 import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
-import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
@@ -35,7 +34,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
-import { pathToFileURL, fileURLToPath } from "url"
+import { pathToFileURL, fileURLToPath } from "node:url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { ProjectContext } from "./project-context"
@@ -45,8 +44,7 @@ import { readRecentLearnings } from "./learnings-context"
 import type { ProjectID } from "../project/schema"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
-import { Tool } from "@/tool/tool"
+import type { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
@@ -59,7 +57,6 @@ import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
-// @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
@@ -494,6 +491,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           // Guard 1 — read before edit
+          // Also allow edit if the model wrote the file in this session (it has the content).
           const hasRead = messages.some((m) =>
             m.parts.some(
               (p) =>
@@ -503,7 +501,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 (p.state as any).input?.filePath === args.filePath,
             ),
           )
-          if (!hasRead) {
+          const hasWrite = messages.some((m) =>
+            m.parts.some(
+              (p) =>
+                p.type === "tool" &&
+                p.tool === "write" &&
+                p.state.status === "completed" &&
+                (p.state as any).input?.filePath === args.filePath,
+            ),
+          )
+          if (!hasRead && !hasWrite) {
             return "You must read this file before editing it: " + args.filePath
           }
         }
@@ -875,7 +882,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         } satisfies MessageV2.TextPart)
       })
 
-      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, signal: AbortSignal) {
+      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, _signal: AbortSignal) {
         const ctx = yield* InstanceState.context
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
@@ -1116,7 +1123,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         yield* Effect.addFinalizer(() =>
-          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatMap((x) => x)),
+          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatten),
         )
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
@@ -1724,11 +1731,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
               Effect.fnUntraced(function* (exit) {
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
+                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatten)
               }),
             )
             if (outcome === "break") break
-            continue
           }
 
           yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))

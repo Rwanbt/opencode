@@ -1,4 +1,4 @@
-import z from "zod"
+import type z from "zod"
 import { Worktree } from "@/worktree"
 import { type Adaptor, WorkspaceInfo } from "../types"
 
@@ -8,6 +8,7 @@ const Config = WorkspaceInfo.extend({
   directory: WorkspaceInfo.shape.directory.unwrap(),
 })
 
+// biome-ignore lint/correctness/noUnusedVariables: companion type for Zod schema
 type Config = z.infer<typeof Config>
 
 export const WorktreeAdaptor: Adaptor = {

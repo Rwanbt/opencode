@@ -19,3 +19,42 @@ jobs:
 
       - name: Run typecheck
         run: bun typecheck
+
+      - name: Audit innerHTML usage
+        run: |
+          UNKNOWN=$(grep -rn "innerHTML" packages/web/src packages/app/src packages/ui/src \
+            --include="*.tsx" --include="*.ts" \
+            | grep -v "\.test\.ts:" \
+            | grep -v "content-bash.tsx" \
+            | grep -v "content-code.tsx" \
+            | grep -v "content-markdown.tsx" \
+            | grep -v "file-tree.tsx" \
+            | grep -v "prompt-input.tsx" \
+            | grep -v "settings-general.tsx" \
+            | grep -v "ui/src/components/markdown.tsx" \
+            | grep -v "ui/src/components/file-ssr.tsx" \
+            | grep -v "ui/src/components/icon.tsx" \
+            | grep -v "ui/src/components/file.tsx" \
+            | grep -v "ui/src/pierre/file-find.ts" \
+            || true)
+          if [ -n "$UNKNOWN" ]; then
+            echo "::error::Unvetted innerHTML usage detected. Audit and add to .eslintrc.restrict.cjs before merging."
+            echo "$UNKNOWN"
+            exit 1
+          fi
+
+      - name: LOC gate (packages/app)
+        run: |
+          # Gate : aucun fichier TypeScript dans packages/app/src ne doit dépasser 1500 LOC
+          # Exceptions documentées : aucune (les fichiers > 1500 sont dans upstream packages)
+          GATE=1500
+          VIOLATIONS=$(find packages/app/src -name "*.ts" -o -name "*.tsx" | \
+            xargs wc -l 2>/dev/null | \
+            awk -v t=$GATE '$1 > t && $2 != "total" { print $1, $2 }' | \
+            grep -v "node_modules" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "❌ LOC gate FAILED — fichiers > ${GATE} LOC dans packages/app/src :"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "✅ LOC gate passed — aucun fichier packages/app/src > ${GATE} LOC"

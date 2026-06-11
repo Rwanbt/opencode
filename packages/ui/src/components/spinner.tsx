@@ -1,4 +1,4 @@
-import { ComponentProps, For } from "solid-js"
+import { type ComponentProps, For } from "solid-js"
 
 const outerIndices = new Set([1, 2, 4, 7, 8, 11, 13, 14])
 const cornerIndices = new Set([0, 3, 12, 15])

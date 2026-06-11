@@ -1,4 +1,4 @@
-import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
+import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render as renderSolid } from "solid-js/web"

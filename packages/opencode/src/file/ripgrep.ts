@@ -1,7 +1,7 @@
 // Ripgrep utility functions
-import path from "path"
+import path from "node:path"
 import { Global } from "../global"
-import fs from "fs/promises"
+import fs from "node:fs/promises"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"

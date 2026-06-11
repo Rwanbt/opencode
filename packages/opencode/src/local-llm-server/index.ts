@@ -9,20 +9,46 @@
  *   owner.pid      — PID owner:PID child du process qui a spawné le serveur
  *   start.lock     — lock exclusif atomique (O_EXCL) pendant le spawn
  */
-import path from "path"
-import os from "os"
-import fs from "fs"
-import net from "net"
+import path from "node:path"
+import os from "node:os"
+import fs from "node:fs"
+import net from "node:net"
 import { Log } from "@/util/log"
 import { detectProfile, deriveConfig } from "./auto-config"
 
 const log = Log.create({ service: "local-llm-server" })
 
-const PORT = 14097
-const BASE_DIR = path.join(os.tmpdir(), `opencode-llm-${PORT}`)
-const REF_DIR = path.join(BASE_DIR, "refs")
-const OWNER_FILE = path.join(BASE_DIR, "owner.pid")
-const LOCK_FILE = path.join(BASE_DIR, "start.lock")
+const PORT = Number(process.env.OPENCODE_LLAMA_PORT ?? 14097)
+
+// Resolve the tmp base dir in a way that works on Android, where `/` is
+// read-only for sandboxed apps and `os.tmpdir()` returns the bionic default
+// "/tmp" regardless of environment. We honor TMPDIR/TMP/TEMP first (the
+// mobile runtime.rs sets these to an app-private cache), fall back to
+// $HOME/.cache/tmp when only HOME is set, and only use os.tmpdir() on
+// desktop where /tmp is writable.
+function resolveTmpDir(): string {
+  const envTmp = process.env.TMPDIR || process.env.TMP || process.env.TEMP
+  if (envTmp && envTmp.trim()) return envTmp.trim()
+  if (process.env.HOME) return path.join(process.env.HOME, ".cache", "tmp")
+  return os.tmpdir()
+}
+
+// Paths are lazily initialized. On mobile, mobile-entry.ts loads .env_vars
+// AFTER this module's top-level code has run; capturing resolveTmpDir()
+// eagerly would bake in "/tmp" and crash at the first mkdirSync.
+let BASE_DIR = ""
+let REF_DIR = ""
+let OWNER_FILE = ""
+let LOCK_FILE = ""
+let _pathsReady = false
+function initPaths(): void {
+  if (_pathsReady) return
+  BASE_DIR = path.join(resolveTmpDir(), `opencode-llm-${PORT}`)
+  REF_DIR = path.join(BASE_DIR, "refs")
+  OWNER_FILE = path.join(BASE_DIR, "owner.pid")
+  LOCK_FILE = path.join(BASE_DIR, "start.lock")
+  _pathsReady = true
+}
 
 const STARTUP_TIMEOUT_MS = 120_000
 const LOCK_ACQUIRE_TIMEOUT_MS = 150_000
@@ -41,6 +67,9 @@ const ALLOWED_KV_CACHE_TYPES = new Set([
   "iq4_nl",
   "q5_0",
   "q5_1",
+  "turbo2", // TurboQuant 3.25 bpw — Hadamard + PolarQuant + QJL (Google ICLR 2026)
+  "turbo3", // TurboQuant 3.75 bpw — meilleur compromis compression/qualité
+  "turbo4", // TurboQuant 4.25 bpw — proche q4_0 en taille, supérieur en qualité
 ])
 
 // ─── Module state ─────────────────────────────────────────────────────────────
@@ -233,10 +262,12 @@ export namespace LocalLLMServer {
   // ── Ref files & cleanup ───────────────────────────────────────────────────
 
   function ensureBaseDirs() {
+    initPaths()
     fs.mkdirSync(REF_DIR, { recursive: true })
   }
 
   function refPath(pid = process.pid) {
+    initPaths()
     return path.join(REF_DIR, `${pid}.ref`)
   }
 
@@ -290,6 +321,7 @@ export namespace LocalLLMServer {
   }
 
   function readOwner(): { ownerPid: number; childPid: number } | null {
+    initPaths()
     try {
       const raw = fs.readFileSync(OWNER_FILE, "utf8").trim()
       const [ownerStr, childStr] = raw.split(":")
@@ -333,6 +365,7 @@ export namespace LocalLLMServer {
    *   - Owner vivant → ne rien faire (il gère son cycle de vie, ex: Tauri idle-unload)
    */
   function syncCleanup() {
+    if (!_pathsReady) return
     try {
       fs.unlinkSync(refPath())
     } catch {}
@@ -421,6 +454,7 @@ export namespace LocalLLMServer {
   // ── Spawn helpers ─────────────────────────────────────────────────────────
 
   function buildArgs(modelPath: string): string[] {
+    initPaths()
     // deriveConfig picks GPU layers / threads / batch / KV quant based on
     // the running device (see auto-config.ts). Env overrides remain available
     // for advanced users who want to pin a specific value.
@@ -508,6 +542,14 @@ export namespace LocalLLMServer {
       // behaviour for the server mode). 256 is a conservative window.
       "--cache-reuse",
       "256",
+      // Required for Gemma-4 (and any SWA / hybrid-recurrent arch) to actually
+      // hit the cache reuse path. Without this, llama-server logs
+      //   "forcing full prompt re-processing due to lack of cache data
+      //    (likely due to SWA or hybrid/recurrent memory)"
+      // and erases every checkpoint, defeating --cache-reuse entirely. See
+      // llama.cpp PR #21749/#22288 (merged 2026-04-23). Older binaries (pre
+      // b8731) silently ignore the flag.
+      "--swa-full",
     ]
     if (useFit) args.push("--fit", "on", "-fitt", "512", "-fitc", "16384")
 
@@ -736,6 +778,42 @@ export namespace LocalLLMServer {
     modelID: string,
     signal?: AbortSignal,
   ): Promise<void> {
+    // On Android, LlamaService (Kotlin/JNI) owns the llama-server lifecycle:
+    // it spawns libllama_server.so, loads the model, and serves HTTP on 14097.
+    // The bun sidecar must not try to spawn its own llama-server — the desktop
+    // runtime dir (~/.local/share/ai.opencode.desktop/llama-runtime/) doesn't
+    // exist on-device, so findRuntimeDir()/findModelFile() would fail with
+    // "Runtime or model not found", even though the JNI server is healthy.
+    // But we still need to block here until the model has finished loading,
+    // otherwise the caller hits /v1/chat/completions too early and gets 503
+    // `{"status":"loading"}` which the AI SDK gives up on after 3 retries.
+    if (process.env.OPENCODE_CLIENT === "mobile-embedded") {
+      log.info("mobile-embedded: waiting for JNI llama-server to report ready")
+      const t0 = Date.now()
+      while (Date.now() - t0 < STARTUP_TIMEOUT_MS) {
+        if (signal?.aborted) throw new Error("[LocalLLMServer] Cancelled waiting for mobile JNI")
+        try {
+          const res = await fetch(`http://127.0.0.1:${PORT}/health`, {
+            signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+          })
+          if (res.ok) {
+            // LlamaHttpServer returns {"status":"ok"} when ready, {"status":"loading"} while the model streams in
+            const data = (await res.json().catch(() => ({}))) as { status?: string }
+            if (data.status === "ok") {
+              log.info("mobile JNI ready", { elapsed: Date.now() - t0 })
+              return
+            }
+          }
+        } catch {
+          // connection refused / timeout → retry
+        }
+        await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS))
+      }
+      throw new Error(
+        `[LocalLLMServer] Mobile JNI llama-server did not become ready within ${STARTUP_TIMEOUT_MS}ms`,
+      )
+    }
+    initPaths()
     pruneStaleRefs()
 
     // Single-flight : si un démarrage est en cours dans ce process, attendre
