@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="Bannière OpencodeX.png" alt="RBannière OpencodeX" >
   <a href="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
@@ -38,8 +39,6 @@
   <a href="README.gr.md">Ελληνικά</a> |
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
-
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 <!-- WHY-FORK-MATRIX -->
 ## Pourquoi ce fork ?
@@ -496,6 +495,8 @@ Three major initiatives are planned on dedicated feature branches. Each is desig
 **Scale**: ~1500+ LOC for the bridge layer, ~500 LOC for the Agent Skill adapter, ~300 LOC for vector store unification.
 
 ---
+
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ### Installation
 
