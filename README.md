@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="Bannière OpencodeX.png" alt="RBannière OpencodeX" >
   <a href="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
@@ -38,8 +39,6 @@
   <a href="README.gr.md">Ελληνικά</a> |
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
-
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
@@ -725,6 +724,8 @@ Config: `experimental.anythingllm.enabled: true`
 </details>
 
 ---
+
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ### Installation
 
