@@ -7,9 +7,10 @@
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
 > **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé ; **D-15** fait (graphe régénéré) ;
 > **D-08** progressé (tree-store + view-cache, 27 tests) ; **D-14** tranché ; **D-03/D-05** gate LOC CI ajouté ;
-> **D-18** fait (single-flight, vérifié WSL Linux 14/0).
-> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), **D-01** (décomposer runtime.rs
-> — plan dé-risqué consigné, session Linux/device-in-loop dédiée), **D-19** (busybox — validation device requise),
+> **D-18** fait (single-flight, vérifié WSL Linux 14/0) ; **D-01 étape 1 faite** (`runtime/toolchain.rs`
+> extrait, runtime.rs 2136→1592 LOC, compilé + 14/14 tests + clippy `-D warnings` clean sous WSL Linux).
+> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), **D-01 étapes 2-3**
+> (server.rs device-critique + extraction.rs — session device-in-loop), **D-19** (busybox — validation device requise),
 > D-06 (upstream, opportuniste)). Note : build Rust mobile vérifiable sous WSL avec `CARGO_TARGET_DIR` sur D:
 > (évite de saturer C:). Le `ext4.vhdx` (51,75 Go) gagnerait à être compacté en admin (`Optimize-VHD`).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
@@ -49,7 +50,7 @@ Norme SonarQube : vert ≤ 500, alerte 800, bloquant 1500. État au 2026-06-16 :
 
 | ID | Fichier | LOC | Zone | Sévérité | Note |
 |----|---------|-----|------|----------|------|
-| D-01 | `packages/mobile/src-tauri/src/runtime.rs` | 1869 | **Fork** | **P1** | God file, 7 responsabilités — voir §E |
+| D-01 | `packages/mobile/src-tauri/src/runtime.rs` | 1592 | **Fork** | **P1** | God file en décomposition — étape 1 faite (`toolchain.rs` extrait, −544 LOC) ; reste server/extraction — voir §E |
 | D-02 | `packages/app/src/components/prompt-input.tsx` | 1482 | Fork | P2 | Approche le plancher bloquant |
 | D-03 | `packages/app/src/pages/layout.tsx` | 1126 | Fork | P2 | Coordinateur, exception [ADR-0002](adr/0002-coordinator-loc-floor.md) |
 | D-04 | `packages/app/src/components/settings-general.tsx` | 1108 | Fork | P2 | Décomposable par sections de réglages |
@@ -138,7 +139,7 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-07** Suite de tests `packages/ui` démarrée sur des modules critiques purs : `theme/color.ts` (système de thème — round-trips hex/rgb/oklch, clamp, blend, scales : `theme/color.test.ts`, 32 tests ✅) et `pierre/media.ts` (détection média du viewer de fichiers : `pierre/media.test.ts`, 20 tests ✅). *(L'editor-store n'existe pas encore — Phase 1 roadmap ; les composants `.tsx` DOM nécessitent happydom, à câbler en suivant.)*
 - [x] **D-09** Tests d'intégration Rust mobile host-runnable (rootfs mocké) : `repair_rootfs_hardlinks` (2 directions + cas vide), `force_symlink` (remplacement de lien périmé), gardes de `prepare_toolchain_wrappers` (Err sans interposeurs, skip `.so`/fichiers <1 Ko) + idempotence (cf. D-16). *(Compile côté host via D-21 ; non exécuté sur ce CI — GTK/NDK absents.)* Server spawn complet (`start_embedded_server`) reste device-dépendant.
 - [ ] **D-01** Décomposer `runtime.rs` (~2070 LOC) en `runtime/{mod,toolchain,server,extraction}.rs`. **Différé à une session dédiée Linux + device-in-loop** (pas un move massif via éditions distantes sur Windows à compile lent). Filet de tests pré-requis en place (D-09/D-16/D-21, 14 tests host). **Plan d'exécution dé-risqué** (analyse 2026-06-17) :
-  - **Étape 1 — `runtime/toolchain.rs`** (la plus sûre, ~555 LOC, 100% test-couverte) : extraire `repair_rootfs_hardlinks` (169-261), `force_symlink` (262-309), `prepare_toolchain_wrappers` (310-~715). Cluster **auto-contenu** : aucune dépendance interne sortante ; helpers `resolve_in_rootfs`/`parse_shebang_interp`/`is_static_elf64` sont **imbriqués** (se déplacent avec) ; `use` locaux (`PermissionsExt`, `io::Read`) imbriqués aussi. Mécanique : `git mv runtime.rs runtime/mod.rs` ; `mod.rs` → `mod toolchain; use toolchain::{force_symlink, repair_rootfs_hardlinks, prepare_toolchain_wrappers};` ; fns → `pub(super)` ; `toolchain.rs` ouvre par `use super::*;` ; les tests restent dans `mod.rs` (`use super::*` les voit). Appelants à conserver : `force_symlink` ×8 dans `start_embedded_server` + `prepare`/`repair` dans `install_extended_env`.
+  - [x] **Étape 1 — `runtime/toolchain.rs` FAITE** (2026-06-17, ~555 LOC, 100% test-couverte) : `repair_rootfs_hardlinks` / `force_symlink` / `prepare_toolchain_wrappers` extraits verbatim. Cluster **auto-contenu** confirmé (zéro dépendance sortante ; helpers `resolve_in_rootfs`/`parse_shebang_interp`/`is_static_elf64` imbriqués, déplacés avec ; `use` locaux idem). Mécanique retenue (moins invasive que `git mv` → préserve le blame sur runtime.rs) : `runtime.rs` conservé + sous-module sibling `runtime/toolchain.rs` ; runtime.rs déclare `mod toolchain; use toolchain::{force_symlink, prepare_toolchain_wrappers, repair_rootfs_hardlinks};` ; fns → `pub(super)` ; `toolchain.rs` ouvre par `use super::*;` ; tests inchangés dans `mod tests`. **Vérifié WSL Linux** : `runtime.rs` 2136→1592 LOC, `toolchain.rs` 569 LOC, `cargo test --lib runtime` 14/0, `cargo clippy --lib --tests -- -D warnings` clean (2 warnings `repeat().take()` pré-existants des tests D-09 corrigés en `resize` au passage — Boy-Scout).
   - **Étape 2 — `runtime/server.rs`** : `start_embedded_server` (670 LOC, **device-critique, 0 test host**) + stop/health/logs + `SERVER_PROCESS`/`server_start_lock`. À valider **on-device** (la mécanique seule compile-verte ne suffit pas).
   - **Étape 3 — `runtime/extraction.rs`** : extract/install/schema/readiness.
   - Sortie : `mod.rs` ≈ check_runtime + helpers chemins + list_storage_roots. Chaque étape = un commit vérifié séparément.
