@@ -153,7 +153,7 @@ describe("File guard against symlink escapes and mutating ops (D-22)", () => {
       directory: tmp.path,
       fn: async () => {
         const result = await File.mkdir("nested/created")
-        expect(result.absolute).toContain("nested/created")
+        expect(result.absolute).toContain(path.join("nested", "created"))
       },
     })
   })
