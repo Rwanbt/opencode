@@ -2,10 +2,13 @@
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
-> Dernière mise à jour : **2026-06-16** (audit ciblé ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 ;
+> Dernière mise à jour : **2026-06-17** (vérification branche `claude/debt-wave1-p1` + suite ;
+> **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 (Rust mobile confirmé 14/0 sous WSL Linux) ;
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
-> **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé (coordinateur).
-> Restent : D-08 (tests DOM coordinateurs — happydom à câbler), D-18/D-19 (Rust mobile, compilateur-in-loop), D-06/D-15 (upstream/graphe, opportuniste)).
+> **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé ; **D-15** fait (graphe régénéré) ;
+> **D-08** progressé (tree-store testé, 13 tests) ; **D-14** tranché (convention 0% utilisée → décision documentée).
+> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), D-01/D-18/D-19 (Rust mobile,
+> différés tant que C: n'est pas récupéré — compactage vhdx admin requis), D-06 (upstream, opportuniste)).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
@@ -137,19 +140,19 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-20** Gate CI synchro SDK : `.github/workflows/sdk-sync.yml` régénère le SDK (`./script/generate.ts`) sur chaque PR et échoue si `packages/sdk` diverge, avec message de remédiation.
 - [x] **D-21** Tests `runtime.rs` rendus host-runnable : `mod runtime` compilé sous `cfg(any(target_os="android", test))` (pattern `proxy`/`validate`), module de tests dé-gaté `target_os="android"` → `unix` ; nouveau job `.github/workflows/mobile-runtime-tests.yml` (deps GTK + `cargo test --lib`). *(Compilation host non vérifiée sur ce CI — à confirmer côté PC.)*
 - [x] **D-10 / D-11** Logging ajouté aux swallows de `file/index.ts` : les 3 `orElseSucceed(() => [])` (scan répertoire — D-10) et les 2 `catchCause(() => void)` du `cachedScan` + le `catch` de `ensureDir` (D-11) loggent désormais la cause (`log.warn` + `Cause.pretty`) avant le fallback. Typecheck ✅ (le seul échec restant est l'artefact généré `models-snapshot.js`, gitignored, hors scope).
-- [~] **D-08** Logique critique de `context/file` testée : `path.ts` (déjà couvert) + nouveau `content-cache.test.ts` (LRU mémoire du viewer — éviction par count/bytes, keep-set, bookkeeping ; 13 tests ✅). Reste à couvrir : les **coordinateurs** `file-tabs.tsx` / `context/file.tsx` / `session.tsx` qui nécessitent des tests de rendu SolidJS (`@solidjs/testing-library` à câbler) — infra dédiée.
+- [~] **D-08** Logique critique de `context/file` testée : `path.ts`, `content-cache.test.ts` (LRU viewer, 13 tests ✅), `watcher.test.ts`, et **nouveau `tree-store.test.ts`** (état de l'explorateur — load/cache/force, dedup in-flight, garde de scope stale, pruning récursif des dossiers supprimés, expand/collapse, reset ; 13 tests ✅, vérifié Windows). Reste à couvrir : `view-cache.ts` (helpers `normalizeSelectedLines`/`equalSelectedLines` non exportés → exporter pour test) et les **coordinateurs** `file-tabs.tsx` / `context/file.tsx` / `session.tsx` (tests de rendu SolidJS — `@solidjs/testing-library` à ajouter, infra dédiée).
 - [ ] **D-03 / D-05** Geler la croissance des coordinateurs (budgets : layout ≤ +30, session ≤ +80) ; extraire toute nouvelle logique en hooks/composants.
 - [~] **D-02** `prompt-input.tsx` (1482) est en fait **déjà décomposé** en 12 sous-modules `prompt-input/` (attachments, build-request-parts, editor-dom, files, history, keyboard-handler, paste, placeholder, submit… dont 5 testés) ; le fichier restant est un **coordinateur** (logique réactive/JSX, plancher type ADR-0002). Pas d'extraction pure résiduelle évidente — laisser tel quel sauf nouvel ajout.
 - [x] **D-04** `settings-general.tsx` décomposé : **1108 → 589 LOC** (sous le seuil d'alerte 800). `RemoteAccessSection` (~500 LOC) extraite en `settings-remote-access.tsx` (composant autonome qui ré-acquiert ses contextes via hooks — réactivité préservée) ; `SettingsRow` extrait en `settings-row.tsx` partagé. `app` typecheck ✅. *(Rendu runtime à valider sur PC.)*
 - [x] **D-23** `/find/symbol` réactivé proprement (`server/routes/file.ts`) : `LSP.workspaceSymbol(query)` enveloppé dans `withTimeout(…, 5000)` + fallback `[]` loggé, au lieu du stub commenté renvoyant `[]`.
 - [ ] **D-18** Protéger `start_embedded_server()` contre les appels concurrents (single-flight).
 - [ ] **D-19** Détection runtime des applets busybox défaillants + message clair.
-- [ ] **D-14** Audit des modifs upstream : encadrer en blocs `// FORK:`.
+- [~] **D-14** Audit fait (2026-06-17) : **0 marqueur `// FORK:` dans tout le repo** (`packages/opencode|ui|sdk`) — la convention prescrite par [ADR-0003](adr/0003-fork-strategy.md) n'a jamais été appliquée. Un retrofit complet sur les milliers de divergences upstream est hors scope. **Décision** : (a) appliquer `// FORK:` aux **nouvelles** modifs upstream à partir de maintenant, vérifié en revue ; (b) les changements déjà tracés `// DEBT: D-NN` restent acceptables (ils documentent le WHY). À acter : mettre à jour ADR-0003 pour refléter que la stratégie réelle = divergence + résolution au merge (pas blocs `// FORK:` systématiques), OU adopter la convention pour de bon avec un gate de revue.
 - [x] **D-24** Recensement fait : le comptage « 65 » incluait strings/i18n/généré. **13 vrais marqueurs de commentaire de code** (tous `TODO`, aucun `FIXME`/`HACK`/`XXX`), tous des notes inline mineures majoritairement upstream : `server/router.ts:44`, `routes/global.ts:166`, `provider.ts:230,447`, `agent/agent.ts:496`, `account/index.ts:395`, `session/index.ts:316`, `session/llm.ts:208`, `cli/.../prompt/index.tsx:292`, `cli/.../routes/home.tsx:12`, `cli/cmd/github.ts:213`, `tool/bash.ts:585`, `sync/index.ts:162`. Aucune dette fork critique ; à traiter à la règle Boy-Scout au point de contact.
 
 ### P3 — Faible / Upstream (opportuniste)
 - [ ] **D-06** God files upstream — traiter via contribution upstream ou session dédiée Track B.
-- [ ] **D-15** Re-générer le graphe graphify (`graphify update .`) après gros changements.
+- [x] **D-15** Graphe graphify régénéré (2026-06-17, `graphify update .`, AST-only) : 42675 nœuds, 77614 arêtes, 3630 communautés (était daté du commit `0238f7b7` du 29/05).
 
 ---
 
