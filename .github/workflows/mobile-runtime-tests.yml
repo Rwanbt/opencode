@@ -1,0 +1,59 @@
+name: mobile-runtime-tests
+
+# DEBT: D-21 — the runtime.rs unit tests were gated to target_os="android" and
+# therefore never ran in CI (test.yml only runs proxy::tests). The FS-pure
+# logic (extraction readiness, symlink repair, toolchain-wrapper idempotence)
+# is now host-runnable; this job builds the mobile crate on a Linux runner and
+# runs those tests so regressions are caught without a device or emulator.
+
+on:
+  pull_request:
+    paths:
+      - "packages/mobile/src-tauri/**"
+      - ".github/workflows/mobile-runtime-tests.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-tests:
+    name: runtime.rs unit tests (host)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tauri Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            librsvg2-dev \
+            pkg-config \
+            build-essential
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/mobile/src-tauri/target
+          key: ${{ runner.os }}-mobile-cargo-${{ hashFiles('packages/mobile/src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-mobile-cargo-
+
+      - name: Run runtime.rs host tests
+        run: cargo test --manifest-path packages/mobile/src-tauri/Cargo.toml --lib

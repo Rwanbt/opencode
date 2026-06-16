@@ -1691,9 +1691,12 @@ pub(crate) async fn check_health(port: u32, password: Option<&str>) -> bool {
     }
 }
 
-// runtime.rs uses Unix-specific APIs (set_mode, forkpty, etc.) so tests only
-// compile and run on Android/Linux targets — not on Windows dev machines.
-#[cfg(all(test, target_os = "android"))]
+// runtime.rs uses Unix-specific APIs (set_mode, symlink, etc.) so tests only
+// compile and run on Unix targets (Android + Linux/macOS CI) — not on Windows
+// dev machines. Previously gated to Android only, which made the suite
+// unrunnable in CI; now host-runnable so the FS-pure logic is actually
+// exercised. (D-21)
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -1887,6 +1890,125 @@ mod tests {
             std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
             "cc1 must remain a shebang script after the second pass"
         );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // ─── repair_rootfs_hardlinks / force_symlink (D-09 / D-12 / D-13) ──
+    //
+    // SELinux blocks tar from recreating Alpine's hardlinked toolchain
+    // duplicates on-device, so repair_rootfs_hardlinks turns whichever side
+    // survived extraction into a symlink. These cover both directions and the
+    // symlink-recreation helper.
+
+    #[test]
+    fn repair_rootfs_hardlinks_links_missing_prefixed_name() {
+        let base = temp_test_dir("repair_fwd");
+        let bin = base.join("usr/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // Only the short canonical name survived extraction.
+        std::fs::write(bin.join("gcc"), b"ELF").unwrap();
+
+        repair_rootfs_hardlinks(&base);
+
+        let prefixed = bin.join("aarch64-alpine-linux-musl-gcc");
+        let md = std::fs::symlink_metadata(&prefixed).expect("prefixed name should exist");
+        assert!(md.file_type().is_symlink(), "missing prefixed name must become a symlink");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn repair_rootfs_hardlinks_links_missing_short_name() {
+        let base = temp_test_dir("repair_rev");
+        let bin = base.join("usr/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // Only the prefixed name survived extraction.
+        std::fs::write(bin.join("aarch64-alpine-linux-musl-g++"), b"ELF").unwrap();
+
+        repair_rootfs_hardlinks(&base);
+
+        let short = bin.join("g++");
+        let md = std::fs::symlink_metadata(&short).expect("short name should exist");
+        assert!(md.file_type().is_symlink(), "missing short name must become a symlink");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn repair_rootfs_hardlinks_no_panic_when_both_absent() {
+        let base = temp_test_dir("repair_none");
+        std::fs::create_dir_all(base.join("usr/bin")).unwrap();
+        // Neither side present — must not panic and must not fabricate files.
+        repair_rootfs_hardlinks(&base);
+        assert!(!base.join("usr/bin/gcc").exists());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn force_symlink_replaces_stale_link() {
+        let base = temp_test_dir("force_link");
+        std::fs::create_dir_all(&base).unwrap();
+        let old_target = base.join("old");
+        let new_target = base.join("new");
+        std::fs::write(&old_target, b"old").unwrap();
+        std::fs::write(&new_target, b"new").unwrap();
+        let link = base.join("link");
+
+        force_symlink(&old_target, &link);
+        assert_eq!(std::fs::read_link(&link).unwrap(), old_target);
+
+        // Re-pointing an existing link must replace it, not fail.
+        force_symlink(&new_target, &link);
+        assert_eq!(std::fs::read_link(&link).unwrap(), new_target);
+        assert_eq!(std::fs::read_to_string(&link).unwrap(), "new");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn prepare_toolchain_wrappers_errors_without_interposer_libs() {
+        let base = temp_test_dir("wrap_no_libs");
+        let rootfs = base.join("rootfs");
+        let nlib = base.join("nlib"); // intentionally missing libbash_exec.so
+        let cache = base.join("cache");
+        std::fs::create_dir_all(&nlib).unwrap();
+        std::fs::create_dir_all(&cache).unwrap();
+
+        let err = prepare_toolchain_wrappers(&rootfs, &nlib, &cache);
+        assert!(err.is_err(), "must fail when interposer libs are absent");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn prepare_toolchain_wrappers_skips_so_and_small_files() {
+        let base = temp_test_dir("wrap_skip");
+        let rootfs = base.join("rootfs");
+        let nlib = base.join("nlib");
+        let cache = base.join("cache");
+        std::fs::create_dir_all(&nlib).unwrap();
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::create_dir_all(rootfs.join("usr/bin")).unwrap();
+        std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+
+        let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
+        std::fs::create_dir_all(&libexec).unwrap();
+        // A .so plugin must stay a real shared library (dlopen-able), never wrapped.
+        let plugin = libexec.join("liblto_plugin.so");
+        let mut so_bytes = vec![0x7f, b'E', b'L', b'F'];
+        so_bytes.extend(std::iter::repeat(0u8).take(2048));
+        std::fs::write(&plugin, &so_bytes).unwrap();
+        // A tiny "ELF" below the 1024-byte threshold must be skipped.
+        let tiny = libexec.join("tinytool");
+        std::fs::write(&tiny, b"\x7fELFsmall").unwrap();
+
+        prepare_toolchain_wrappers(&rootfs, &nlib, &cache).expect("should succeed");
+
+        assert!(!libexec.join("liblto_plugin.so.elf64").exists(), ".so must not be wrapped");
+        assert_eq!(std::fs::read(&plugin).unwrap(), so_bytes, ".so bytes must be untouched");
+        assert!(!libexec.join("tinytool.elf64").exists(), "sub-1KB file must not be wrapped");
 
         let _ = std::fs::remove_dir_all(&base);
     }

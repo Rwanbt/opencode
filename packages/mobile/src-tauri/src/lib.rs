@@ -1,6 +1,12 @@
 use tauri::Manager;
 
-#[cfg(target_os = "android")]
+// runtime is Android-only at runtime, but its FS-pure logic (extraction
+// readiness, symlink repair, toolchain wrapping) is unit-tested on host
+// machines — see runtime.rs `mod tests`. Compile it under `test` too (same
+// pattern as `proxy`/`validate`). dead_code is allowed off-Android because
+// most Tauri-command entry points have no caller in the host test build. (D-21)
+#[cfg(any(target_os = "android", test))]
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod runtime;
 #[cfg(target_os = "android")]
 mod llm;

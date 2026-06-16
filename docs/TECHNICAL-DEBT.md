@@ -2,7 +2,7 @@
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
-> Dernière mise à jour : **2026-06-16** (audit ciblé modules roadmap-critiques ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22).
+> Dernière mise à jour : **2026-06-16** (audit ciblé ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 ; **Vague 2 avancée** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
@@ -126,13 +126,13 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-13** `repair_rootfs_hardlinks` : échecs de lien loggés, cas « ni l'un ni l'autre présent » loggé, + vérification post-extraction des drivers critiques (gcc/g++/cc/c++) avec warning explicite.
 - [x] **D-16** Chaîne shebang+LD_PRELOAD documentée (diagramme + modes de panne) dans `KNOWN_FAILURE_PATTERNS.md` ; test `prepare_toolchain_wrappers_is_idempotent` ajouté (module gated `target_os="android"` — son exécution en CI relève de D-21).
 - [x] **D-17** Bundling CLI unifié : `prepare-android-runtime.sh` délègue à `scripts/bundle-mobile.mjs` (source unique, injection migrations par prepend — le `--define` divergent est supprimé).
-- [ ] **D-07** Établir une suite de tests `packages/ui` (≥ composants critiques) — démarre avec l'editor-store.
-- [ ] **D-09** Tests d'intégration Rust mobile pour toolchain wrappers + server spawn (avec rootfs mocké).
-- [ ] **D-01** Décomposer `runtime.rs` en `{extraction, toolchain, server_lifecycle}` (réduit D-12/D-16/D-18).
+- [x] **D-07** Suite de tests `packages/ui` démarrée sur des modules critiques purs : `theme/color.ts` (système de thème — round-trips hex/rgb/oklch, clamp, blend, scales : `theme/color.test.ts`, 32 tests ✅) et `pierre/media.ts` (détection média du viewer de fichiers : `pierre/media.test.ts`, 20 tests ✅). *(L'editor-store n'existe pas encore — Phase 1 roadmap ; les composants `.tsx` DOM nécessitent happydom, à câbler en suivant.)*
+- [x] **D-09** Tests d'intégration Rust mobile host-runnable (rootfs mocké) : `repair_rootfs_hardlinks` (2 directions + cas vide), `force_symlink` (remplacement de lien périmé), gardes de `prepare_toolchain_wrappers` (Err sans interposeurs, skip `.so`/fichiers <1 Ko) + idempotence (cf. D-16). *(Compile côté host via D-21 ; non exécuté sur ce CI — GTK/NDK absents.)* Server spawn complet (`start_embedded_server`) reste device-dépendant.
+- [ ] **D-01** Décomposer `runtime.rs` en `{extraction, toolchain, server_lifecycle}` (réduit D-12/D-16/D-18). **Différé** : refactor structurel de ~1900 LOC à faire avec compilateur dans la boucle (non vérifiable sur ce CI). Le filet de tests pré-requis (D-09/D-16/D-21) est désormais en place pour sécuriser l'extraction.
 
 ### P2 — Moyen (backlog priorisé)
-- [ ] **D-20** Ajouter un gate CI de synchro SDK (échoue si `packages/sdk/js` désynchronisé du serveur).
-- [ ] **D-21** Rendre les tests `runtime.rs` exécutables hors Android (abstraction FS/OS) OU job émulateur CI.
+- [x] **D-20** Gate CI synchro SDK : `.github/workflows/sdk-sync.yml` régénère le SDK (`./script/generate.ts`) sur chaque PR et échoue si `packages/sdk` diverge, avec message de remédiation.
+- [x] **D-21** Tests `runtime.rs` rendus host-runnable : `mod runtime` compilé sous `cfg(any(target_os="android", test))` (pattern `proxy`/`validate`), module de tests dé-gaté `target_os="android"` → `unix` ; nouveau job `.github/workflows/mobile-runtime-tests.yml` (deps GTK + `cargo test --lib`). *(Compilation host non vérifiée sur ce CI — à confirmer côté PC.)*
 - [ ] **D-10 / D-11** Ajouter du logging aux `orElseSucceed`/`catch` silencieux de `file/index.ts`.
 - [ ] **D-08** Tests d'intégration `file-tabs.tsx`, `context/file.tsx`, `session.tsx`.
 - [ ] **D-03 / D-05** Geler la croissance des coordinateurs (budgets : layout ≤ +30, session ≤ +80) ; extraire toute nouvelle logique en hooks/composants.
