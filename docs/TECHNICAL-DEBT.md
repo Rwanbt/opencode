@@ -2,7 +2,10 @@
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
-> Dernière mise à jour : **2026-06-16** (audit ciblé ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 ; **Vague 2 avancée** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop).
+> Dernière mise à jour : **2026-06-16** (audit ciblé ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 ;
+> **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
+> **Vague 3** — D-10/D-11/D-23/D-24 faits. Restent : D-02/D-04 (décompo god files fork),
+> D-08 (tests DOM coordinateurs — happydom à câbler), D-18/D-19 (Rust mobile, compilateur-in-loop), D-06/D-15 (upstream/graphe, opportuniste)).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
@@ -133,16 +136,16 @@ chaque occurrence doit avoir un ticket ou être résolue.
 ### P2 — Moyen (backlog priorisé)
 - [x] **D-20** Gate CI synchro SDK : `.github/workflows/sdk-sync.yml` régénère le SDK (`./script/generate.ts`) sur chaque PR et échoue si `packages/sdk` diverge, avec message de remédiation.
 - [x] **D-21** Tests `runtime.rs` rendus host-runnable : `mod runtime` compilé sous `cfg(any(target_os="android", test))` (pattern `proxy`/`validate`), module de tests dé-gaté `target_os="android"` → `unix` ; nouveau job `.github/workflows/mobile-runtime-tests.yml` (deps GTK + `cargo test --lib`). *(Compilation host non vérifiée sur ce CI — à confirmer côté PC.)*
-- [ ] **D-10 / D-11** Ajouter du logging aux `orElseSucceed`/`catch` silencieux de `file/index.ts`.
+- [x] **D-10 / D-11** Logging ajouté aux swallows de `file/index.ts` : les 3 `orElseSucceed(() => [])` (scan répertoire — D-10) et les 2 `catchCause(() => void)` du `cachedScan` + le `catch` de `ensureDir` (D-11) loggent désormais la cause (`log.warn` + `Cause.pretty`) avant le fallback. Typecheck ✅ (le seul échec restant est l'artefact généré `models-snapshot.js`, gitignored, hors scope).
 - [ ] **D-08** Tests d'intégration `file-tabs.tsx`, `context/file.tsx`, `session.tsx`.
 - [ ] **D-03 / D-05** Geler la croissance des coordinateurs (budgets : layout ≤ +30, session ≤ +80) ; extraire toute nouvelle logique en hooks/composants.
 - [ ] **D-02** Décomposer `prompt-input.tsx` (1482) avant tout nouvel ajout.
 - [ ] **D-04** Décomposer `settings-general.tsx` par sections de réglages.
-- [ ] **D-23** Réactiver `/find/symbol` avec `Effect.timeout` + fallback, OU supprimer le code mort si non prévu.
+- [x] **D-23** `/find/symbol` réactivé proprement (`server/routes/file.ts`) : `LSP.workspaceSymbol(query)` enveloppé dans `withTimeout(…, 5000)` + fallback `[]` loggé, au lieu du stub commenté renvoyant `[]`.
 - [ ] **D-18** Protéger `start_embedded_server()` contre les appels concurrents (single-flight).
 - [ ] **D-19** Détection runtime des applets busybox défaillants + message clair.
 - [ ] **D-14** Audit des modifs upstream : encadrer en blocs `// FORK:`.
-- [ ] **D-24** Recenser/résoudre les 65 marqueurs TODO/FIXME/HACK.
+- [x] **D-24** Recensement fait : le comptage « 65 » incluait strings/i18n/généré. **13 vrais marqueurs de commentaire de code** (tous `TODO`, aucun `FIXME`/`HACK`/`XXX`), tous des notes inline mineures majoritairement upstream : `server/router.ts:44`, `routes/global.ts:166`, `provider.ts:230,447`, `agent/agent.ts:496`, `account/index.ts:395`, `session/index.ts:316`, `session/llm.ts:208`, `cli/.../prompt/index.tsx:292`, `cli/.../routes/home.tsx:12`, `cli/cmd/github.ts:213`, `tool/bash.ts:585`, `sync/index.ts:162`. Aucune dette fork critique ; à traiter à la règle Boy-Scout au point de contact.
 
 ### P3 — Faible / Upstream (opportuniste)
 - [ ] **D-06** God files upstream — traiter via contribution upstream ou session dédiée Track B.

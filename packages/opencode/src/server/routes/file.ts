@@ -6,6 +6,10 @@ import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
+import { Log } from "../../util/log"
+import { withTimeout } from "../../util/timeout"
+
+const log = Log.create({ service: "server" })
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -106,12 +110,18 @@ export const FileRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        /*
-      const query = c.req.valid("query").query
-      const result = await LSP.workspaceSymbol(query)
-      return c.json(result)
-      */
-        return c.json([])
+        const query = c.req.valid("query").query
+        // DEBT: D-23 — this route was accidentally stubbed to [] by an OpenAPI
+        // regen (f969b1dac), not for perf. Re-enabled with a timeout + fallback
+        // so a slow or stuck LSP degrades to an empty result instead of hanging
+        // the request.
+        const result = await withTimeout(LSP.workspaceSymbol(query), 5000).catch((err) => {
+          log.warn("find.symbols failed", {
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return [] as LSP.Symbol[]
+        })
+        return c.json(result)
       },
     )
     .get(
