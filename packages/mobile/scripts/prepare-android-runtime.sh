@@ -125,43 +125,22 @@ else
 fi
 
 # ─── OpenCode CLI Bundle ─────────────────────────────────────────────
-echo "[5/6] Bundling OpenCode CLI..."
+# DEBT: D-17 — single source of truth for CLI bundling is
+# scripts/bundle-mobile.mjs. It inlines the SQL migrations by PREPENDING
+# `globalThis.OPENCODE_MIGRATIONS = …` (the `--define` approach used here
+# before did not survive bun's module reordering, so db.ts could init before
+# the migrations were defined — see the script header) and syncs the bundle
+# into the gen/android assets dir. Maintaining a second `bun build` here risked
+# shipping a stale CLI on local builds vs CI.
+echo "[5/6] Bundling OpenCode CLI (via scripts/bundle-mobile.mjs)..."
 OPENCODE_DIR="$(cd "$MOBILE_DIR/../opencode" && pwd)"
 REPO_ROOT="$(cd "$MOBILE_DIR/../.." && pwd)"
 
 if [ -f "$OPENCODE_DIR/src/mobile-entry.ts" ]; then
-  cd "$REPO_ROOT"
+  node "$REPO_ROOT/scripts/bundle-mobile.mjs" --outdir "$RUNTIME_DIR"
 
-  # Inline SQL migrations so the bundle doesn't need filesystem access at runtime
-  MIGRATIONS=$(node -e "
-    const fs=require('fs'),p=require('path'),d=p.join('packages/opencode/migration');
-    const r=fs.readdirSync(d,{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name).map(n=>{
-      const f=p.join(d,n,'migration.sql');if(!fs.existsSync(f))return null;
-      const m=/^(\d{14})/.exec(n);
-      const t=m?Date.UTC(+m[1].slice(0,4),+m[1].slice(4,6)-1,+m[1].slice(6,8),+m[1].slice(8,10),+m[1].slice(10,12),+m[1].slice(12,14)):0;
-      return{sql:fs.readFileSync(f,'utf8'),timestamp:t,name:n}
-    }).filter(Boolean);console.log(JSON.stringify(r))")
-
-  # Bundle the mobile-specific entry point (no TUI dependencies)
-  bun build packages/opencode/src/mobile-entry.ts \
-    --target=bun \
-    --outdir="$RUNTIME_DIR" \
-    --external "@parcel/watcher" \
-    --external "@parcel/watcher/wrapper" \
-    --external "@opentui/core" \
-    --external "@opentui/solid" \
-    --define "OPENCODE_MIGRATIONS=$MIGRATIONS" \
-    2>&1 || {
-      echo "  ERROR: Bun build failed."
-      exit 1
-    }
-
-  # Rename entry to opencode-cli.js
-  if [ -f "$RUNTIME_DIR/mobile-entry.js" ]; then
-    mv "$RUNTIME_DIR/mobile-entry.js" "$RUNTIME_DIR/opencode-cli.js"
-  fi
-
-  # Create shim for @parcel/watcher (native module not available on Android)
+  # Create shim for @parcel/watcher (native module not available on Android).
+  # bundle-mobile.mjs externalizes it; this provides the stub it resolves to.
   mkdir -p "$RUNTIME_DIR/node_modules/@parcel/watcher"
   echo 'export function createWrapper() { return undefined }' > "$RUNTIME_DIR/node_modules/@parcel/watcher/wrapper.js"
   echo '{"name":"@parcel/watcher","version":"0.0.0","main":"wrapper.js"}' > "$RUNTIME_DIR/node_modules/@parcel/watcher/package.json"

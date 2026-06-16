@@ -190,11 +190,82 @@ fn repair_rootfs_hardlinks(rootfs_dir: &Path) {
         let b_path = bin.join(b);
         let a_exists = a_path.exists() || fs::symlink_metadata(&a_path).is_ok();
         let b_exists = b_path.exists() || fs::symlink_metadata(&b_path).is_ok();
+        // DEBT: D-13 — failures here used to be swallowed with `let _ =`, so a
+        // toolchain with a broken compiler driver looked healthy. Log instead.
         match (a_exists, b_exists) {
-            (true, false) => { let _ = std::os::unix::fs::symlink(a, &b_path); }
-            (false, true) => { let _ = std::os::unix::fs::symlink(b, &a_path); }
-            _ => {}
+            (true, false) => {
+                if let Err(e) = std::os::unix::fs::symlink(a, &b_path) {
+                    log::warn!(
+                        "[OpenCode] repair_rootfs_hardlinks: failed to link {} -> {}: {}",
+                        b_path.display(),
+                        a,
+                        e
+                    );
+                }
+            }
+            (false, true) => {
+                if let Err(e) = std::os::unix::fs::symlink(b, &a_path) {
+                    log::warn!(
+                        "[OpenCode] repair_rootfs_hardlinks: failed to link {} -> {}: {}",
+                        a_path.display(),
+                        b,
+                        e
+                    );
+                }
+            }
+            (false, false) => {
+                log::warn!(
+                    "[OpenCode] repair_rootfs_hardlinks: neither {} nor {} present after extraction",
+                    a,
+                    b
+                );
+            }
+            (true, true) => {}
         }
+    }
+
+    // D-13: a missing C/C++ compiler driver only surfaces much later as a
+    // confusing "command not found" deep inside cargo/gcc. Check the critical
+    // drivers right after repair and warn loudly if any are absent.
+    const CRITICAL: &[&str] = &["gcc", "g++", "cc", "c++"];
+    let missing: Vec<&str> = CRITICAL
+        .iter()
+        .copied()
+        .filter(|name| {
+            let p = bin.join(name);
+            !(p.exists() || fs::symlink_metadata(&p).is_ok())
+        })
+        .collect();
+    if !missing.is_empty() {
+        log::warn!(
+            "[OpenCode] repair_rootfs_hardlinks: critical toolchain binaries missing after extraction: {:?} — on-device compilation will fail",
+            missing
+        );
+    }
+}
+
+/// Recreate `link` as a symlink pointing at `src`, logging any failure rather
+/// than swallowing it. Used for the 50+ binary/applet symlinks rebuilt on
+/// every launch (their nativeLibraryDir target changes with each APK install).
+/// A silent failure here leaves a dangling command with no diagnostic.
+/// DEBT: D-12 — replaces the `let _ = fs::remove_file(); let _ = symlink();` pairs.
+fn force_symlink(src: &Path, link: &Path) {
+    if let Err(e) = fs::remove_file(link) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            log::warn!(
+                "[OpenCode] force_symlink: failed to remove stale {}: {}",
+                link.display(),
+                e
+            );
+        }
+    }
+    if let Err(e) = std::os::unix::fs::symlink(src, link) {
+        log::warn!(
+            "[OpenCode] force_symlink: failed to link {} -> {}: {}",
+            link.display(),
+            src.display(),
+            e
+        );
     }
 }
 
@@ -405,7 +476,11 @@ fn prepare_toolchain_wrappers(
     let ld = rootfs_dir.join("usr/bin/ld");
     let ld_bfd = rootfs_dir.join("usr/bin/ld.bfd");
     if ld_bfd.exists() && !ld.exists() {
-        let _ = std::os::unix::fs::symlink("ld.bfd", &ld);
+        // DEBT: D-12 — collect2 resolves `ld` by bare name; a silent failure
+        // here breaks linking with a misleading error far downstream.
+        if let Err(e) = std::os::unix::fs::symlink("ld.bfd", &ld) {
+            log::warn!("[OpenCode] failed to recreate ld -> ld.bfd symlink: {}", e);
+        }
     }
 
     // 4. Generate /cache/wrappers/ entry-point scripts.
@@ -707,8 +782,7 @@ pub async fn start_embedded_server(
             Err(_) => true,
         };
         if needs_update && src.exists() {
-            let _ = fs::remove_file(&link);
-            let _ = std::os::unix::fs::symlink(&src, &link);
+            force_symlink(&src, &link);
         }
     }
     // Symlink librust_pty.so into the path bun-pty searches automatically.
@@ -723,8 +797,7 @@ pub async fn start_embedded_server(
             Err(_) => true,
         };
         if needs_pty_link {
-            let _ = fs::remove_file(&pty_link);
-            let _ = std::os::unix::fs::symlink(&pty_lib_src, &pty_link);
+            force_symlink(&pty_lib_src, &pty_link);
         }
         // Also create the non-arm64 name as fallback
         let pty_link2 = pty_dir.join("librust_pty.so");
@@ -733,8 +806,7 @@ pub async fn start_embedded_server(
             Err(_) => true,
         };
         if needs_pty_link2 {
-            let _ = fs::remove_file(&pty_link2);
-            let _ = std::os::unix::fs::symlink(&pty_lib_src, &pty_link2);
+            force_symlink(&pty_lib_src, &pty_link2);
         }
     }
 
@@ -768,8 +840,7 @@ pub async fn start_embedded_server(
             Err(_) => true,
         };
         if needs && src.exists() {
-            let _ = fs::remove_file(&link);
-            let _ = std::os::unix::fs::symlink(&src, &link);
+            force_symlink(&src, &link);
         }
     }
 
@@ -815,8 +886,7 @@ pub async fn start_embedded_server(
                 Err(_) => true,
             };
             if needs {
-                let _ = fs::remove_file(&link);
-                let _ = std::os::unix::fs::symlink(&toybox_src, &link);
+                force_symlink(&toybox_src, &link);
             }
         }
     }
@@ -876,8 +946,7 @@ pub async fn start_embedded_server(
                 Err(_) => true,
             };
             if needs {
-                let _ = fs::remove_file(&link);
-                let _ = std::os::unix::fs::symlink(&system_toybox, &link);
+                force_symlink(&system_toybox, &link);
             }
         }
     }
@@ -900,8 +969,7 @@ pub async fn start_embedded_server(
             Err(_) => true,
         };
         if needs {
-            let _ = fs::remove_file(&link);
-            let _ = std::os::unix::fs::symlink(&target, &link);
+            force_symlink(&target, &link);
         }
     }
 
@@ -924,8 +992,7 @@ pub async fn start_embedded_server(
                 Err(_) => true,
             };
             if needs {
-                let _ = fs::remove_file(&link);
-                let _ = std::os::unix::fs::symlink(&busybox_src, &link);
+                force_symlink(&busybox_src, &link);
             }
         }
     }
@@ -1758,6 +1825,70 @@ mod tests {
         let _ = std::fs::remove_dir_all(&nlib_dir);
 
         assert!(result, "correct .schema_version and all files should return true");
+    }
+
+    // ─── prepare_toolchain_wrappers idempotence (D-16) ───────────────
+    //
+    // The wrap pass renames an ELF to `<name>.elf64` and replaces it with a
+    // shebang script. The documented invariant is that re-running never
+    // double-wraps (`<name>.elf64.elf64`) nor corrupts the backed-up ELF —
+    // this is load-bearing because extraction can run more than once per
+    // install. See the shebang/LD_PRELOAD chain in
+    // docs/KNOWN_FAILURE_PATTERNS.md.
+
+    #[test]
+    fn prepare_toolchain_wrappers_is_idempotent() {
+        let base = temp_test_dir("wrap_idem");
+        let rootfs = base.join("rootfs");
+        let nlib = base.join("nlib");
+        let cache = base.join("cache");
+        std::fs::create_dir_all(&nlib).unwrap();
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::create_dir_all(rootfs.join("usr/bin")).unwrap();
+
+        // Interposer libs must exist or the function bails early.
+        std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+
+        // A fake ELF deep in the gcc libexec tree: ELF magic + >= 1024 bytes.
+        let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
+        std::fs::create_dir_all(&libexec).unwrap();
+        let cc1 = libexec.join("cc1");
+        let mut elf = vec![0x7f, b'E', b'L', b'F'];
+        elf.extend(std::iter::repeat(0u8).take(2048));
+        std::fs::write(&cc1, &elf).unwrap();
+
+        // First pass: cc1 becomes a script, original bytes saved to cc1.elf64.
+        prepare_toolchain_wrappers(&rootfs, &nlib, &cache).expect("first pass should succeed");
+        let backup = libexec.join("cc1.elf64");
+        assert!(backup.exists(), "first pass should create the .elf64 backup");
+        assert_eq!(
+            std::fs::read(&backup).unwrap(),
+            elf,
+            "backup must hold the original ELF bytes"
+        );
+        assert!(
+            std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
+            "cc1 must become a shebang script"
+        );
+
+        // Second pass must not double-wrap nor mangle the backup.
+        prepare_toolchain_wrappers(&rootfs, &nlib, &cache).expect("second pass should succeed");
+        assert!(
+            !libexec.join("cc1.elf64.elf64").exists(),
+            "second pass must not create cc1.elf64.elf64"
+        );
+        assert_eq!(
+            std::fs::read(&backup).unwrap(),
+            elf,
+            "backup bytes must be unchanged after the second pass"
+        );
+        assert!(
+            std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
+            "cc1 must remain a shebang script after the second pass"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
 

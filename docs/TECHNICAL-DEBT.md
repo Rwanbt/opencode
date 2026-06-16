@@ -2,7 +2,7 @@
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
-> Dernière mise à jour : **2026-06-16** (audit ciblé modules roadmap-critiques).
+> Dernière mise à jour : **2026-06-16** (audit ciblé modules roadmap-critiques ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
@@ -121,11 +121,11 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [ ] *(aucune entrée P0 active au 2026-06-16 — maintenir vide)*
 
 ### P1 — Élevé (≤ 7 jours quand activé)
-- [ ] **D-22** Implémenter le guard `assertInsideProject` sur write/rename/move/delete **avant** d'exposer la moindre route d'écriture.
-- [ ] **D-12** Supprimer le swallow `let _ =` sur symlink/fs dans `runtime.rs`, ajouter logging d'échec.
-- [ ] **D-13** `repair_rootfs_hardlinks` : vérifier la présence des binaires critiques post-extraction, logger les liens échoués.
-- [ ] **D-16** Documenter la chaîne shebang+LD_PRELOAD dans `KNOWN_FAILURE_PATTERNS.md` (diagramme) + test d'idempotence `prepare_toolchain_wrappers()`.
-- [ ] **D-17** Unifier le bundling CLI (`prepare-android-runtime.sh` ↔ `bundle-mobile.mjs`) sur une source unique.
+- [x] **D-22** Guard `assertInsideProject` : aucune route d'écriture exposée pour l'instant (write/rename/move/delete n'existent pas) — l'objectif est donc préventif. Contrat du guard verrouillé par tests : branche symlink-escape (`File.read`/`File.list`) + `File.mkdir` désormais couverts (`test/file/path-traversal.test.ts`, ✅ vert). Toute future route d'écriture réutilise ce guard.
+- [x] **D-12** Swallows `let _ =` sur symlink/fs supprimés dans `runtime.rs` : helper `force_symlink()` (remove+symlink loggés) appliqué aux 8 sites de recréation + symlink `ld→ld.bfd`. *(Rust non compilable sur ce CI Linux — GTK/NDK absents ; relu, non exécuté.)*
+- [x] **D-13** `repair_rootfs_hardlinks` : échecs de lien loggés, cas « ni l'un ni l'autre présent » loggé, + vérification post-extraction des drivers critiques (gcc/g++/cc/c++) avec warning explicite.
+- [x] **D-16** Chaîne shebang+LD_PRELOAD documentée (diagramme + modes de panne) dans `KNOWN_FAILURE_PATTERNS.md` ; test `prepare_toolchain_wrappers_is_idempotent` ajouté (module gated `target_os="android"` — son exécution en CI relève de D-21).
+- [x] **D-17** Bundling CLI unifié : `prepare-android-runtime.sh` délègue à `scripts/bundle-mobile.mjs` (source unique, injection migrations par prepend — le `--define` divergent est supprimé).
 - [ ] **D-07** Établir une suite de tests `packages/ui` (≥ composants critiques) — démarre avec l'editor-store.
 - [ ] **D-09** Tests d'intégration Rust mobile pour toolchain wrappers + server spawn (avec rootfs mocké).
 - [ ] **D-01** Décomposer `runtime.rs` en `{extraction, toolchain, server_lifecycle}` (réduit D-12/D-16/D-18).
