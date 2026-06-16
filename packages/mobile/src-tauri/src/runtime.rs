@@ -16,6 +16,16 @@ const RUNTIME_SCHEMA_VERSION: u32 = 1;
 /// Static storage for the server child process.
 static SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 
+/// DEBT: D-18 — single-flight gate for `start_embedded_server`. Without it, two
+/// rapid concurrent starts can both spawn a server and orphan one (the static
+/// only tracks the last `Child`). Serializing starts guarantees each call kills
+/// the previously-tracked child before spawning, so exactly one server lives.
+static SERVER_START_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+
+fn server_start_lock() -> &'static tokio::sync::Mutex<()> {
+    SERVER_START_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RuntimeInfo {
     pub ready: bool,
@@ -717,6 +727,11 @@ pub async fn start_embedded_server(
     port: u32,
     password: String,
 ) -> Result<(), String> {
+    // DEBT: D-18 — serialize concurrent starts. Held across the whole spawn so a
+    // second caller can't race past the "kill existing server" step below and
+    // leave an orphaned process untracked by SERVER_PROCESS.
+    let _start_guard = server_start_lock().lock().await;
+
     let dir = runtime_dir(&app);
     let home_dir = dir.join("home");
     let cli_path = dir.join("opencode-cli.js");
