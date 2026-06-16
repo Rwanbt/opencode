@@ -44,6 +44,39 @@ desktop + Android (+ iOS futur).
 | Permissions Android | ⚠️ Runtime déjà câblé en Kotlin. Manque = **UX** (état visible, assistant, diagnostic) | `MainActivity.kt:174-276` ; doc `ANDROID_DEVELOPMENT.md §5` stale |
 | Skills system | 📄 Design doc existant (SKILL.md text/js/native) | `docs/SKILLS-SYSTEM-DESIGN.md` |
 
+## Audit dette technique (2026-06-16) & révisions
+
+Audit ciblé sur les modules roadmap-critiques (déterministe LOC/TODO/tests/docs + 3 agents).
+
+**Frontend — dette FAIBLE/MOYENNE.** `packages/ui/src/components/file.tsx` (1097 LOC, upstream) est un
+viewer **pur à API props** : l'éditeur s'ajoute **sans le modifier**, via le point d'injection
+`useFileComponent()` (`FileComponentProvider`, `packages/app/src/app.tsx:147`). Tout le code éditeur
+(~1100 LOC) vit dans `packages/app/src` (domaine fork). `context/file.tsx` (280 LOC) accueille le dirty
+state. **Risques** : `session.tsx` (1022) et `layout.tsx` (1126) sont au plancher ADR-0002 ; `packages/ui`
+a **0 test** sur file/tabs/session.
+
+**Backend — dette BASSE, effort ~10-12h.** `AppFileSystem` (`writeWithDirs/ensureDir`) et le wrapper git
+`run()` rendent write-routes (2-3h) et git-write (3-4h) peu risqués. **Mais** : (a) `assertInsideProject`
+n'est PAS encore appliqué à l'écriture → à étendre ; (b) `/find/symbol` a été désactivé par effet de bord
+d'une régénération OpenAPI (commit f969b1dac), pas pour perf → réactivable avec timeout ; (c) **friction SDK** :
+chaque route Hono exige `describeRoute()` + régénération `packages/sdk/js` (~10-15 min/route, footgun si oubli).
+
+**Mobile — dette ÉLEVÉE (7.5/10).** `runtime.rs` (1869 LOC, 7 responsabilités) documenté mais fragile :
+chaîne shebang+LD_PRELOAD **sans test**, swallow d'erreurs `let _ =` sur symlinks, double bundling CLI.
+CI : APK build+sign OK, mais seuls `proxy::tests` tournent (runtime tests Android-gated), **zéro test
+émulateur**. → Phase 4 on-device = 6-8 semaines, bloquée sur durcissement préalable.
+
+### Révisions appliquées
+
+1. **Frontière fork** : éditeur 100% `packages/app` via `useFileComponent` (zéro modif `file.tsx`) ;
+   ajouts backend en blocs `// FORK:` avec interfaces publiques propres (ADR-0003).
+2. **Budgets LOC durs** : `file.tsx` +0 ; `session.tsx` ≤ +80 ; `layout.tsx` ≤ +30 ; tout nouveau
+   fichier `packages/app` < 500 LOC.
+3. **CI/QA enrichi** : gate de synchro SDK + tests `packages/app`/`ui` (file-tabs + editor-store dès P1).
+4. **Nouveau pré-requis Phase 0+ (durcissement mobile)** avant Phase 4.
+5. **Phase 4 re-scopée** : DAP on-device → *stretch* (préférer debug desktop/remote).
+6. **Détails** : timeout sur `/find/symbol` (P2) ; auth push/pull (SSH/token) = sous-chantier (P3).
+
 ## Principe transversal : Dual-mode Agent ⇄ IDE
 
 À introduire **dès la Phase 1** et à respecter dans chaque phase suivante :
@@ -69,12 +102,24 @@ Ce track court **en parallèle** de toutes les phases.
   - Flows Maestro étendus : permissions, settings, model switch, ouverture projet, édition+save.
   - Golden tests sortie LLM Android (déterminisme).
 - **Cross-platform / dual-boot** : CI build depuis Linux → `ORT_LIB_LOCATION` par env var, pas en dur.
+- **Gate synchro SDK** (issu de l'audit) : CI échoue si `packages/sdk/js` est désynchronisé du serveur
+  (route ajoutée sans `describeRoute()` ou SDK non régénéré). Évite les routes invisibles aux clients.
+- **Observabilité** (dette différée) : ajouter du logging aux `orElseSucceed(() => [])` / `let _ =`
+  silencieux (file/index.ts backend, runtime.rs mobile) — non bloquant MVP, mais à tracer.
 
 ## Phases
 
 ### Phase 0 — Baseline device QA
 Matrice réelle : Xiaomi/Pixel/tablette × Android 12-15, stockage externe, terminal, modèle local,
 STT/TTS, deep-link remote, permissions. Corriger les docs stale (en priorité permissions runtime).
+
+### Phase 0+ — Durcissement mobile (PRÉ-REQUIS de la Phase 4)
+Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/test on-device :
+- Documenter la chaîne shebang + LD_PRELOAD dans `KNOWN_FAILURE_PATTERNS.md` (diagramme) + tests
+  d'idempotence de `prepare_toolchain_wrappers()`.
+- Supprimer le swallow d'erreurs silencieux (`let _ =` sur symlink/fs dans `runtime.rs`) → logging.
+- Unifier le bundling CLI (`prepare-android-runtime.sh` vs `bundle-mobile.mjs`) → source unique.
+- (Optionnel) décomposer `runtime.rs` (1869 LOC) en {extraction, toolchain, server_lifecycle}.
 
 ### Phase 1 — Éditeur MVP + API fichier write (PRIORITÉ)
 
@@ -86,23 +131,35 @@ STT/TTS, deep-link remote, permissions. Corriger les docs stale (en priorité pe
 - **Events** : publier `File.Event.Edited` (déjà déclaré file/index.ts:77-78) à chaque write.
 - **Tests** : store éditeur (dirty/save/conflict) + routes fichier (succès, escape refusé, conflit).
 
-**Frontend** : intégrer **CodeMirror 6** dans `packages/ui` (partagé desktop+mobile+iOS) ; store éditeur
-(buffers, dirty, save/discard/reload, undo/redo, recherche/remplacement, conflit, gros fichiers read-only,
-sélection tactile). **Dual-mode** : poser le toggle Mode Agent ⇄ Mode IDE.
+**Frontend (révisé par l'audit — respect frontière fork)** : ne PAS modifier `file.tsx` upstream.
+Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.tsx:147`). Code 100% dans
+`packages/app/src` :
+- `components/editable-file-tab.tsx` (~500 LOC) — wrapper **CodeMirror 6**.
+- `stores/editor-store.ts` (~150 LOC) — buffers, dirty, save/discard/reload, undo/redo, conflit.
+- `context/file.tsx` — étendre `FileState` (`buffer?`, `dirty?`) ; brancher dans `file-tabs.tsx` (~20 LOC).
+- **Dual-mode** : `hooks/use-view-mode.ts` (~60 LOC) + `session-header-view-toggle.tsx` (~50 LOC) — NE PAS
+  gonfler session.tsx/layout.tsx (budgets : session ≤ +80, layout ≤ +30).
+- **Tests** (dette ui 0%) : tests d'intégration file-tabs + editor-store **avant merge**.
 
 ### Phase 2 — LSP exposé à l'humain
-Réactiver `/find/symbol` (file.ts:109-114). Brancher dans l'éditeur : diagnostics gutter, hover,
-go-to-definition, references, document symbols (outline), workspace symbols. Ensuite : autocomplete,
-rename, code actions.
+Réactiver `/find/symbol` (file.ts:109-114) — **avec `Effect.timeout` + fallback `[]`** (le LSP peut
+timeout/crasher si le serveur est indisponible ; ne pas juste décommenter). Brancher dans l'éditeur :
+diagnostics gutter, hover, go-to-definition, references, document symbols (outline), workspace symbols.
+Ensuite : autocomplete, rename, code actions. Chaque nouvelle route → `describeRoute()` + régén SDK.
 
 ### Phase 3 — Workspace + Git (backend ET UI)
-Créer d'abord la couche **backend git d'écriture** (`commit/stage/unstage/push/pull/branch-switch/blame/log`
-dans `git/index.ts`). Puis UI Source Control (stage/commit/branches/pull/push/blame/history/conflict resolver)
-+ UI workspace (clone/ouvrir/créer, fichiers récents).
+Créer d'abord la couche **backend git d'écriture** sur le wrapper `run()` existant (effort 3-4h)
+(`commit/stage/unstage/push/pull/branch-switch/blame/log` dans `git/index.ts`, blocs `// FORK:`).
+**Sous-chantier à part entière : auth push/pull** (SSH key / token, stockage sécurisé, UX mobile) —
+ne pas sous-estimer. Puis UI Source Control (stage/commit/branches/pull/push/blame/history/conflict
+resolver) + UI workspace (clone/ouvrir/créer, fichiers récents). Routes → régén SDK.
 
-### Phase 4 — Build / Test / Debug
-Task runner du projet *ouvert* (package.json/Cargo.toml/Makefile, distinct du Turbo/Bun interne),
-exécuté via le PTY existant, logs structurés, problem matchers. Test explorer. DAP (breakpoints/stack/variables).
+### Phase 4 — Build / Test / Debug (re-scopée par l'audit)
+**Pré-requis : Phase 0+ (durcissement mobile) terminée.** Cœur réaliste : task runner du projet *ouvert*
+(package.json/Cargo.toml/Makefile, distinct du Turbo/Bun interne), exécuté via le PTY existant, logs
+structurés, problem matchers ; test explorer. **DAP / debug on-device → démoté en *stretch*** (6-8 semaines,
+chaîne shebang fragile, faible ROI) : préférer le debug via desktop/remote-control. L'émulateur CI
+(Phase 4 mobile) reste un investissement lourd à planifier séparément.
 
 ### Phase 5 — Plugins / Skills / MCP mobile
 Plugin manager (install npm/local, activer/désactiver, permissions/trust, logs, update/uninstall).
