@@ -4,8 +4,8 @@
 > et avant tout push majeur (`/verify-standards`, `/health`).
 > Dernière mise à jour : **2026-06-16** (audit ciblé ; **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 ;
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
-> **Vague 3** — D-10/D-11/D-23/D-24 faits. Restent : D-02/D-04 (décompo god files fork),
-> D-08 (tests DOM coordinateurs — happydom à câbler), D-18/D-19 (Rust mobile, compilateur-in-loop), D-06/D-15 (upstream/graphe, opportuniste)).
+> **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé (coordinateur).
+> Restent : D-08 (tests DOM coordinateurs — happydom à câbler), D-18/D-19 (Rust mobile, compilateur-in-loop), D-06/D-15 (upstream/graphe, opportuniste)).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
@@ -139,8 +139,8 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-10 / D-11** Logging ajouté aux swallows de `file/index.ts` : les 3 `orElseSucceed(() => [])` (scan répertoire — D-10) et les 2 `catchCause(() => void)` du `cachedScan` + le `catch` de `ensureDir` (D-11) loggent désormais la cause (`log.warn` + `Cause.pretty`) avant le fallback. Typecheck ✅ (le seul échec restant est l'artefact généré `models-snapshot.js`, gitignored, hors scope).
 - [ ] **D-08** Tests d'intégration `file-tabs.tsx`, `context/file.tsx`, `session.tsx`.
 - [ ] **D-03 / D-05** Geler la croissance des coordinateurs (budgets : layout ≤ +30, session ≤ +80) ; extraire toute nouvelle logique en hooks/composants.
-- [ ] **D-02** Décomposer `prompt-input.tsx` (1482) avant tout nouvel ajout.
-- [ ] **D-04** Décomposer `settings-general.tsx` par sections de réglages.
+- [~] **D-02** `prompt-input.tsx` (1482) est en fait **déjà décomposé** en 12 sous-modules `prompt-input/` (attachments, build-request-parts, editor-dom, files, history, keyboard-handler, paste, placeholder, submit… dont 5 testés) ; le fichier restant est un **coordinateur** (logique réactive/JSX, plancher type ADR-0002). Pas d'extraction pure résiduelle évidente — laisser tel quel sauf nouvel ajout.
+- [x] **D-04** `settings-general.tsx` décomposé : **1108 → 589 LOC** (sous le seuil d'alerte 800). `RemoteAccessSection` (~500 LOC) extraite en `settings-remote-access.tsx` (composant autonome qui ré-acquiert ses contextes via hooks — réactivité préservée) ; `SettingsRow` extrait en `settings-row.tsx` partagé. `app` typecheck ✅. *(Rendu runtime à valider sur PC.)*
 - [x] **D-23** `/find/symbol` réactivé proprement (`server/routes/file.ts`) : `LSP.workspaceSymbol(query)` enveloppé dans `withTimeout(…, 5000)` + fallback `[]` loggé, au lieu du stub commenté renvoyant `[]`.
 - [ ] **D-18** Protéger `start_embedded_server()` contre les appels concurrents (single-flight).
 - [ ] **D-19** Détection runtime des applets busybox défaillants + message clair.
