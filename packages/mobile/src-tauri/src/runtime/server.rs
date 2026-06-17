@@ -87,46 +87,7 @@ pub async fn start_embedded_server(
     // Android JNI requires lib*.so naming, but bun looks for libstdc++.so.6 etc.
     let lib_link_dir = dir.join("lib_links");
     let _ = fs::create_dir_all(&lib_link_dir);
-    let links = [
-        ("libstdcpp_compat.so", "libstdc++.so.6"),
-        ("libgcc_compat.so", "libgcc_s.so.1"),
-    ];
-    for (src_name, link_name) in &links {
-        let src = nlib_dir.join(src_name);
-        let link = lib_link_dir.join(link_name);
-        // Recreate if dangling (target moved after APK reinstall) or missing
-        let needs_update = match fs::read_link(&link) {
-            Ok(target) => target != src,
-            Err(_) => true,
-        };
-        if needs_update && src.exists() {
-            force_symlink(&src, &link);
-        }
-    }
-    // Symlink librust_pty.so into the path bun-pty searches automatically.
-    // bun-pty looks at: {dataDir}/rust-pty/target/release/librust_pty_arm64.so
-    let pty_lib_src = nlib_dir.join("librust_pty.so");
-    if pty_lib_src.exists() {
-        let pty_dir = dir.join("rust-pty").join("target").join("release");
-        let _ = fs::create_dir_all(&pty_dir);
-        let pty_link = pty_dir.join("librust_pty_arm64.so");
-        let needs_pty_link = match fs::read_link(&pty_link) {
-            Ok(target) => target != pty_lib_src,
-            Err(_) => true,
-        };
-        if needs_pty_link {
-            force_symlink(&pty_lib_src, &pty_link);
-        }
-        // Also create the non-arm64 name as fallback
-        let pty_link2 = pty_dir.join("librust_pty.so");
-        let needs_pty_link2 = match fs::read_link(&pty_link2) {
-            Ok(target) => target != pty_lib_src,
-            Err(_) => true,
-        };
-        if needs_pty_link2 {
-            force_symlink(&pty_lib_src, &pty_link2);
-        }
-    }
+    setup_compat_lib_symlinks(&nlib_dir, &dir, &lib_link_dir);
 
     // Create symlinks for executable binaries so they're found by `which`.
     // Android packages them as lib*.so but tools look for "bash", "rg", etc.
@@ -141,152 +102,12 @@ pub async fn start_embedded_server(
     // Do NOT re-export ENV here (causes infinite source loop in mksh).
     let mkshrc_path = home_dir.join(".mkshrc");
 
-    // Rootfs tool invocation via direct ld-musl loader — NOT proot.
-    //
-    // Why not proot: Android 13+ SELinux denies `execute_no_trans` on any
-    // file under `app_data_file` label. proot copies its internal helper
-    // (`prooted-XXX`) to PROOT_TMP_DIR (runtime/tmp, which has app_data_file
-    // label) and exec's it via ptrace → EACCES. Termux patches proot to
-    // work around this but that binary isn't in an easy-to-consume form.
-    //
-    // Alternative: invoke binaries via the musl dynamic linker directly.
-    // libmusl_linker.so is bundled in nativeLibraryDir (JNI lib) which has
-    // the `same_process_app_data_file` label and IS exec-allowed. The ld
-    // loader then mmap's (not exec's) the target binary from the rootfs,
-    // and mmap only needs READ — allowed under app_data_file for same UID.
-    //
-    // Syntax:
-    //   LD_LIBRARY_PATH=$rootfs/lib:$rootfs/usr/lib  libmusl_linker.so  $rootfs/usr/bin/git  "$@"
-    //
-    // Caveat: binaries that fork sub-binaries via execve (e.g. `git clone`
-    // → `git-remote-https`) still hit the same EACCES. Basic git (init,
-    // status, add, commit, log, diff, branch, checkout) uses internal
-    // functions only and works. Clone/push/fetch need additional work
-    // (bundle git-core binaries individually via the same trick, or ship
-    // a patched Termux proot later).
-    let ld_musl_path = nlib_dir.join("libmusl_linker.so");
-    let rootfs_path = dir.join("rootfs");
-    let rootfs_lib_path = format!(
-        "{}/lib:{}/usr/lib:{}/usr/libexec/git-core",
-        rootfs_path.display(),
-        rootfs_path.display(),
-        rootfs_path.display()
-    );
-    let musl_exec_path = rootfs_path.join("usr/lib/libmusl_exec.so");
-    let tools = [
-        "git", "nano", "less", "vim",
-        "make", "patch",
-        "tmux", "screen",
-        "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
-        "rsync", "wget",
-        "python3", "python", "node", "npm", "pip", "pip3",
-        // Toolchain on-device (Alpine build-base + rust cargo). Adding the
-        // wrappers here lets the user build native Rust / C / C++ projects
-        // entirely on the phone, without a PC cargo proxy. The actual
-        // binaries are installed in the rootfs by build-alpine-rootfs.sh.
-        "gcc", "g++", "cc", "ar", "ld", "as", "ranlib", "objdump", "strip",
-        "rustc", "cargo", "rustup",
-        "jq", "tree", "htop", "fzf", "fd", "bat", "exa",
-    ];
-    let mut tool_fns = String::new();
-    // GIT_EXEC_PATH: git uses this to locate sub-binaries (git-remote-https etc.)
-    tool_fns.push_str(&format!(
-        "export GIT_EXEC_PATH=\"{rootfs}/usr/libexec/git-core\"\n",
-        rootfs = rootfs_path.display()
-    ));
-    for t in &tools {
-        // Top-level invocation: exec via musl linker (exec-allowed from nativeLibraryDir).
-        // LD_PRELOAD=libmusl_exec.so (musl-compiled, lives in rootfs) is injected so
-        // sub-forks (git-remote-https, pip subprocesses, npm scripts) also get
-        // redirected through the musl linker instead of hitting SELinux execute_no_trans.
-        // MUSL_LINKER env var tells libmusl_exec where to redirect execve calls.
-        // LD_LIBRARY_PATH lets the musl linker find Alpine shared libs at runtime.
-        tool_fns.push_str(&format!(
-            "{t}() {{ \
-                LD_LIBRARY_PATH=\"{libs}\" \
-                LD_PRELOAD=\"{musl_exec}\" \
-                MUSL_LINKER=\"{ld}\" \
-                \"{ld}\" \"{rootfs}/usr/bin/{t}\" \"$@\"; \
-            }}\n",
-            t = t,
-            ld = ld_musl_path.display(),
-            rootfs = rootfs_path.display(),
-            libs = rootfs_lib_path,
-            musl_exec = musl_exec_path.display(),
-        ));
-    }
+    let tool_fns = build_tool_functions(&dir, &nlib_dir);
 
-    // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
-    let mkshrc_content = format!(
-        "# OpenCode mobile shell init\n\
-PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"\n\
-alias ls='ls --color=auto'\n\
-alias ll='ls -la --color=auto'\n\
-alias la='ls -A --color=auto'\n\
-alias grep='grep --color=auto'\n\
-alias ..='cd ..'\n\
-alias cls='clear'\n\
-{tool_fns}"
-    );
-    let _ = fs::write(&mkshrc_path, &mkshrc_content);
+    write_shell_rc_files(&home_dir, &mkshrc_path, &tool_fns);
 
-    // .bashrc for bash (which is the real shell via libbash_exec.so symlinked
-    // as both `bash` and `sh`). Same content as .mkshrc — mksh-specific PS1
-    // escape syntax ($'\e[...]') also works in bash via ANSI-C quoting.
-    let bashrc_path = home_dir.join(".bashrc");
-    let _ = fs::write(&bashrc_path, &mkshrc_content);
-
-    // .profile for login shells — source both rc files for robustness.
-    let profile_path = home_dir.join(".profile");
-    let _ = fs::write(
-        &profile_path,
-        "# Source shell rc — works for bash and mksh\n\
-[ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"\n\
-[ -z \"$BASH_VERSION\" ] && [ -f \"$HOME/.mkshrc\" ] && . \"$HOME/.mkshrc\"\n",
-    );
-
-    // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
-    let resolv_path = dir.join("resolv.conf");
-    let _ = fs::write(&resolv_path, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n");
-
-    // Refresh rootfs /etc/resolv.conf every launch so git-http / wget / pip
-    // keep working after network changes or /tmp cleanup.
+    let (resolv_path, ca_bundle_path) = setup_dns_and_ca(&dir);
     let rootfs_dir = dir.join("rootfs");
-    if rootfs_dir.exists() {
-        let _ = fs::create_dir_all(rootfs_dir.join("etc"));
-        let _ = fs::write(
-            rootfs_dir.join("etc/resolv.conf"),
-            "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
-        );
-    }
-
-    // Concatenate Android CA certificates into a single PEM file for TLS.
-    // musl-linked Bun/BoringSSL can't find Android's certs at /system/etc/security/cacerts/.
-    let ca_bundle_path = dir.join("ca-certificates.crt");
-    if !ca_bundle_path.exists() {
-        let mut bundle = String::new();
-        let cert_dirs = ["/system/etc/security/cacerts", "/system/etc/security/cacerts_google"];
-        for cert_dir in &cert_dirs {
-            if let Ok(entries) = fs::read_dir(cert_dir) {
-                for entry in entries.flatten() {
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
-                        if content.contains("BEGIN CERTIFICATE") {
-                            bundle.push_str(&content);
-                            if !content.ends_with('\n') {
-                                bundle.push('\n');
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if !bundle.is_empty() {
-            let _ = fs::write(&ca_bundle_path, &bundle);
-            log::info!("[OpenCode] Created CA bundle with {} bytes", bundle.len());
-        } else {
-            log::warn!("[OpenCode] No CA certificates found on device");
-        }
-    }
 
     // Library search path: lib_links (for symlinked names) + nlib_dir
     let lib_path = format!("{}:{}", lib_link_dir.display(), nlib_dir.display());
@@ -786,6 +607,215 @@ fn setup_command_symlinks(nlib_dir: &Path, bin_link_dir: &Path) {
             }
         }
     }
+}
+
+/// Recreate the compat-name and bun-pty shared-library symlinks (D-01 step 2b).
+/// Android ships libs as lib*.so JNI names; bun and bun-pty look them up under
+/// their canonical names, so we point those at the nativeLibraryDir originals.
+fn setup_compat_lib_symlinks(nlib_dir: &Path, dir: &Path, lib_link_dir: &Path) {
+    let links = [
+        ("libstdcpp_compat.so", "libstdc++.so.6"),
+        ("libgcc_compat.so", "libgcc_s.so.1"),
+    ];
+    for (src_name, link_name) in &links {
+        let src = nlib_dir.join(src_name);
+        let link = lib_link_dir.join(link_name);
+        // Recreate if dangling (target moved after APK reinstall) or missing
+        let needs_update = match fs::read_link(&link) {
+            Ok(target) => target != src,
+            Err(_) => true,
+        };
+        if needs_update && src.exists() {
+            force_symlink(&src, &link);
+        }
+    }
+    // Symlink librust_pty.so into the path bun-pty searches automatically.
+    // bun-pty looks at: {dataDir}/rust-pty/target/release/librust_pty_arm64.so
+    let pty_lib_src = nlib_dir.join("librust_pty.so");
+    if pty_lib_src.exists() {
+        let pty_dir = dir.join("rust-pty").join("target").join("release");
+        let _ = fs::create_dir_all(&pty_dir);
+        let pty_link = pty_dir.join("librust_pty_arm64.so");
+        let needs_pty_link = match fs::read_link(&pty_link) {
+            Ok(target) => target != pty_lib_src,
+            Err(_) => true,
+        };
+        if needs_pty_link {
+            force_symlink(&pty_lib_src, &pty_link);
+        }
+        // Also create the non-arm64 name as fallback
+        let pty_link2 = pty_dir.join("librust_pty.so");
+        let needs_pty_link2 = match fs::read_link(&pty_link2) {
+            Ok(target) => target != pty_lib_src,
+            Err(_) => true,
+        };
+        if needs_pty_link2 {
+            force_symlink(&pty_lib_src, &pty_link2);
+        }
+    }
+}
+
+/// Build the shell-function wrappers (cargo/rustc/git/...) sourced by the bash
+/// tool (D-01 step 2b extraction). Each wrapper invokes the binary through the
+/// musl dynamic linker with LD_PRELOAD=libmusl_exec.so so sub-forks bypass the
+/// SELinux execute_no_trans denial. Pure: derives all paths from dir/nlib_dir.
+fn build_tool_functions(dir: &Path, nlib_dir: &Path) -> String {
+    // Rootfs tool invocation via direct ld-musl loader — NOT proot.
+    //
+    // Why not proot: Android 13+ SELinux denies `execute_no_trans` on any
+    // file under `app_data_file` label. proot copies its internal helper
+    // (`prooted-XXX`) to PROOT_TMP_DIR (runtime/tmp, which has app_data_file
+    // label) and exec's it via ptrace → EACCES. Termux patches proot to
+    // work around this but that binary isn't in an easy-to-consume form.
+    //
+    // Alternative: invoke binaries via the musl dynamic linker directly.
+    // libmusl_linker.so is bundled in nativeLibraryDir (JNI lib) which has
+    // the `same_process_app_data_file` label and IS exec-allowed. The ld
+    // loader then mmap's (not exec's) the target binary from the rootfs,
+    // and mmap only needs READ — allowed under app_data_file for same UID.
+    //
+    // Syntax:
+    //   LD_LIBRARY_PATH=$rootfs/lib:$rootfs/usr/lib  libmusl_linker.so  $rootfs/usr/bin/git  "$@"
+    //
+    // Caveat: binaries that fork sub-binaries via execve (e.g. `git clone`
+    // → `git-remote-https`) still hit the same EACCES. Basic git (init,
+    // status, add, commit, log, diff, branch, checkout) uses internal
+    // functions only and works. Clone/push/fetch need additional work
+    // (bundle git-core binaries individually via the same trick, or ship
+    // a patched Termux proot later).
+    let ld_musl_path = nlib_dir.join("libmusl_linker.so");
+    let rootfs_path = dir.join("rootfs");
+    let rootfs_lib_path = format!(
+        "{}/lib:{}/usr/lib:{}/usr/libexec/git-core",
+        rootfs_path.display(),
+        rootfs_path.display(),
+        rootfs_path.display()
+    );
+    let musl_exec_path = rootfs_path.join("usr/lib/libmusl_exec.so");
+    let tools = [
+        "git", "nano", "less", "vim",
+        "make", "patch",
+        "tmux", "screen",
+        "ssh", "scp", "sftp", "ssh-keygen", "ssh-add",
+        "rsync", "wget",
+        "python3", "python", "node", "npm", "pip", "pip3",
+        // Toolchain on-device (Alpine build-base + rust cargo). Adding the
+        // wrappers here lets the user build native Rust / C / C++ projects
+        // entirely on the phone, without a PC cargo proxy. The actual
+        // binaries are installed in the rootfs by build-alpine-rootfs.sh.
+        "gcc", "g++", "cc", "ar", "ld", "as", "ranlib", "objdump", "strip",
+        "rustc", "cargo", "rustup",
+        "jq", "tree", "htop", "fzf", "fd", "bat", "exa",
+    ];
+    let mut tool_fns = String::new();
+    // GIT_EXEC_PATH: git uses this to locate sub-binaries (git-remote-https etc.)
+    tool_fns.push_str(&format!(
+        "export GIT_EXEC_PATH=\"{rootfs}/usr/libexec/git-core\"\n",
+        rootfs = rootfs_path.display()
+    ));
+    for t in &tools {
+        // Top-level invocation: exec via musl linker (exec-allowed from nativeLibraryDir).
+        // LD_PRELOAD=libmusl_exec.so (musl-compiled, lives in rootfs) is injected so
+        // sub-forks (git-remote-https, pip subprocesses, npm scripts) also get
+        // redirected through the musl linker instead of hitting SELinux execute_no_trans.
+        // MUSL_LINKER env var tells libmusl_exec where to redirect execve calls.
+        // LD_LIBRARY_PATH lets the musl linker find Alpine shared libs at runtime.
+        tool_fns.push_str(&format!(
+            "{t}() {{ \
+                LD_LIBRARY_PATH=\"{libs}\" \
+                LD_PRELOAD=\"{musl_exec}\" \
+                MUSL_LINKER=\"{ld}\" \
+                \"{ld}\" \"{rootfs}/usr/bin/{t}\" \"$@\"; \
+            }}\n",
+            t = t,
+            ld = ld_musl_path.display(),
+            rootfs = rootfs_path.display(),
+            libs = rootfs_lib_path,
+            musl_exec = musl_exec_path.display(),
+        ));
+    }
+    tool_fns
+}
+
+/// Write the interactive shell rc files (.mkshrc/.bashrc/.profile) that source
+/// the tool wrappers and set the prompt/aliases (D-01 step 2b extraction).
+fn write_shell_rc_files(home_dir: &Path, mkshrc_path: &Path, tool_fns: &str) {
+    // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
+    let mkshrc_content = format!(
+        "# OpenCode mobile shell init\n\
+PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"\n\
+alias ls='ls --color=auto'\n\
+alias ll='ls -la --color=auto'\n\
+alias la='ls -A --color=auto'\n\
+alias grep='grep --color=auto'\n\
+alias ..='cd ..'\n\
+alias cls='clear'\n\
+{tool_fns}"
+    );
+    let _ = fs::write(&mkshrc_path, &mkshrc_content);
+
+    // .bashrc for bash (which is the real shell via libbash_exec.so symlinked
+    // as both `bash` and `sh`). Same content as .mkshrc — mksh-specific PS1
+    // escape syntax ($'\e[...]') also works in bash via ANSI-C quoting.
+    let bashrc_path = home_dir.join(".bashrc");
+    let _ = fs::write(&bashrc_path, &mkshrc_content);
+
+    // .profile for login shells — source both rc files for robustness.
+    let profile_path = home_dir.join(".profile");
+    let _ = fs::write(
+        &profile_path,
+        "# Source shell rc — works for bash and mksh\n\
+[ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"\n\
+[ -z \"$BASH_VERSION\" ] && [ -f \"$HOME/.mkshrc\" ] && . \"$HOME/.mkshrc\"\n",
+    );
+}
+
+/// Write resolv.conf (app + rootfs) and assemble the Android CA bundle for TLS
+/// (D-01 step 2b extraction). Returns (resolv_path, ca_bundle_path).
+fn setup_dns_and_ca(dir: &Path) -> (PathBuf, PathBuf) {
+    // Create resolv.conf with public DNS servers (Android has no /etc/resolv.conf)
+    let resolv_path = dir.join("resolv.conf");
+    let _ = fs::write(&resolv_path, "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n");
+
+    // Refresh rootfs /etc/resolv.conf every launch so git-http / wget / pip
+    // keep working after network changes or /tmp cleanup.
+    let rootfs_dir = dir.join("rootfs");
+    if rootfs_dir.exists() {
+        let _ = fs::create_dir_all(rootfs_dir.join("etc"));
+        let _ = fs::write(
+            rootfs_dir.join("etc/resolv.conf"),
+            "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
+        );
+    }
+
+    // Concatenate Android CA certificates into a single PEM file for TLS.
+    // musl-linked Bun/BoringSSL can't find Android's certs at /system/etc/security/cacerts/.
+    let ca_bundle_path = dir.join("ca-certificates.crt");
+    if !ca_bundle_path.exists() {
+        let mut bundle = String::new();
+        let cert_dirs = ["/system/etc/security/cacerts", "/system/etc/security/cacerts_google"];
+        for cert_dir in &cert_dirs {
+            if let Ok(entries) = fs::read_dir(cert_dir) {
+                for entry in entries.flatten() {
+                    if let Ok(content) = fs::read_to_string(entry.path()) {
+                        if content.contains("BEGIN CERTIFICATE") {
+                            bundle.push_str(&content);
+                            if !content.ends_with('\n') {
+                                bundle.push('\n');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !bundle.is_empty() {
+            let _ = fs::write(&ca_bundle_path, &bundle);
+            log::info!("[OpenCode] Created CA bundle with {} bytes", bundle.len());
+        } else {
+            log::warn!("[OpenCode] No CA certificates found on device");
+        }
+    }
+    (resolv_path, ca_bundle_path)
 }
 
 #[cfg(all(test, unix))]
