@@ -419,6 +419,16 @@ fn build_server_command(
     }
 }
 
+/// Non-interactive applets sourced from the static busybox (D-19): only those
+/// toybox lacks. Must stay disjoint from [`SECCOMP_RISK_APPLETS`].
+const BUSYBOX_FALLBACK_APPLETS: &[&str] = &["gawk", "ed", "bc", "dc", "expr"];
+
+/// Interactive applets that SIGSYS under Android's zygote seccomp when run from
+/// the static busybox (D-19). These must be served by the seccomp-safe
+/// /system/bin/toybox, never by busybox — enforced by a unit test.
+const SECCOMP_RISK_APPLETS: &[&str] =
+    &["vi", "vim", "less", "top", "htop", "nano", "more", "microcom"];
+
 /// Populate `bin_link_dir` with command symlinks (D-01 step 2b extraction):
 /// the bundled JNI binaries (bash/sh/rg/bun/toybox/busybox/proot), the toybox
 /// applet set, Android's seccomp-safe /system/bin/toybox applets, a few direct
@@ -584,17 +594,14 @@ fn setup_command_symlinks(nlib_dir: &Path, bin_link_dir: &Path) {
         }
     }
 
-    // Busybox only for applets NOT in toybox Android (scripting/calc).
-    // Note: busybox is static so some of these may still SIGSYS, but
-    // most non-interactive applets (awk/sed/ed/bc/dc/expr) work.
+    // Busybox only for non-interactive applets toybox lacks (scripting/calc).
+    // D-19: busybox is a STATIC binary; interactive applets (vi/less/top/…) hit
+    // SIGSYS under Android's zygote seccomp. We therefore route those to the
+    // seccomp-safe /system/bin/toybox above and NEVER list them here. The
+    // BUSYBOX_FALLBACK_APPLETS / SECCOMP_RISK_APPLETS split makes that invariant
+    // explicit and is enforced by `busybox_fallback_excludes_seccomp_risk_applets`.
     if busybox_src.exists() {
-        let busybox_cmds = [
-            "gawk",         // busybox has no gawk, fallback for awk compat
-            "ed",           // line editor, no toybox equivalent
-            "bc", "dc",     // calculators, no toybox equivalent
-            "expr",         // toybox has expr but busybox is richer
-        ];
-        for cmd in &busybox_cmds {
+        for cmd in BUSYBOX_FALLBACK_APPLETS {
             let link = bin_link_dir.join(cmd);
             // Don't override if a system binary already claimed this slot.
             if link.exists() { continue; }
@@ -821,6 +828,19 @@ fn setup_dns_and_ca(dir: &Path) -> (PathBuf, PathBuf) {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn busybox_fallback_excludes_seccomp_risk_applets() {
+        // D-19 invariant: the static busybox (which SIGSYS's on interactive
+        // applets under Android seccomp) must never be the source for any
+        // known risk applet. Adding e.g. "vi" to the fallback list fails here.
+        for applet in BUSYBOX_FALLBACK_APPLETS {
+            assert!(
+                !SECCOMP_RISK_APPLETS.contains(applet),
+                "{applet} routes to the static busybox but is a known SIGSYS-risk applet"
+            );
+        }
+    }
 
     #[test]
     fn build_server_command_via_musl_linker_with_preload() {
