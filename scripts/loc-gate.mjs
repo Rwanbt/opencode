@@ -18,14 +18,20 @@ const ROOT = "packages/app/src"
 const BLOCK = 1500
 const WARN = 800
 const EXTENSIONS = new Set([".ts", ".tsx"])
-// Flat data/translation files are not "god files" — exclude from the logic LOC rule.
+// Flat data/translation files and type declarations are not "god files" —
+// exclude from the logic LOC rule. (.d.ts files are checked in as symlinks in
+// this repo, which break readFileSync on a fresh Linux CI checkout anyway.)
 const EXCLUDE_DIRS = new Set(["i18n"])
-const EXCLUDE_SUFFIX = [".test.ts", ".test.tsx", ".stories.tsx", ".gen.ts"]
+const EXCLUDE_SUFFIX = [".test.ts", ".test.tsx", ".stories.tsx", ".gen.ts", ".d.ts"]
 
 /** @param {string} dir @returns {string[]} */
 function walk(dir) {
   const out = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // Never follow symlinks: their target may live outside the tree or not
+    // exist on a fresh checkout (e.g. *.d.ts shims), and a LOC gate must not
+    // double-count or crash on them.
+    if (entry.isSymbolicLink()) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       if (EXCLUDE_DIRS.has(entry.name)) continue
