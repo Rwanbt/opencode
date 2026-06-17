@@ -7,10 +7,12 @@
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
 > **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé ; **D-15** fait (graphe régénéré) ;
 > **D-08** progressé (tree-store + view-cache, 27 tests) ; **D-14** tranché ; **D-03/D-05** gate LOC CI ajouté ;
-> **D-18** fait (single-flight, vérifié WSL Linux 14/0) ; **D-01 étape 1 faite** (`runtime/toolchain.rs`
-> extrait, runtime.rs 2136→1592 LOC, compilé + 14/14 tests + clippy `-D warnings` clean sous WSL Linux).
-> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), **D-01 étapes 2-3**
-> (server.rs device-critique + extraction.rs — session device-in-loop), **D-19** (busybox — validation device requise),
+> **D-18** fait (single-flight, vérifié WSL Linux 14/0) ; **D-01 étapes 1+3 faites** (`runtime/toolchain.rs`
+> + `runtime/extraction.rs` extraits, **runtime.rs 2136→1491 LOC = sous le gate de 1500** ; compilé + 14/14 tests
+> + clippy `-D warnings` clean sous WSL Linux). Le god *file* est résolu ; ne reste que le god *function*
+> `start_embedded_server` (669 LOC) → étape 2, **relocalisation + décomposition ensemble en session device-in-loop**.
+> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), **D-01 étape 2**
+> (server.rs : décomposer `start_embedded_server` — device-in-loop), **D-19** (busybox — validation device requise),
 > D-06 (upstream, opportuniste)). Note : build Rust mobile vérifiable sous WSL avec `CARGO_TARGET_DIR` sur D:
 > (évite de saturer C:). Le `ext4.vhdx` (51,75 Go) gagnerait à être compacté en admin (`Optimize-VHD`).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
@@ -50,7 +52,7 @@ Norme SonarQube : vert ≤ 500, alerte 800, bloquant 1500. État au 2026-06-16 :
 
 | ID | Fichier | LOC | Zone | Sévérité | Note |
 |----|---------|-----|------|----------|------|
-| D-01 | `packages/mobile/src-tauri/src/runtime.rs` | 1592 | **Fork** | **P1** | God file en décomposition — étape 1 faite (`toolchain.rs` extrait, −544 LOC) ; reste server/extraction — voir §E |
+| D-01 | `packages/mobile/src-tauri/src/runtime.rs` | 1491 | **Fork** | **P1** | God *file* résolu (sous 1500) — étapes 1+3 faites (`toolchain.rs` + `extraction.rs`, −645 LOC) ; reste le god *function* `start_embedded_server` (étape 2, device) — voir §E |
 | D-02 | `packages/app/src/components/prompt-input.tsx` | 1482 | Fork | P2 | Approche le plancher bloquant |
 | D-03 | `packages/app/src/pages/layout.tsx` | 1126 | Fork | P2 | Coordinateur, exception [ADR-0002](adr/0002-coordinator-loc-floor.md) |
 | D-04 | `packages/app/src/components/settings-general.tsx` | 1108 | Fork | P2 | Décomposable par sections de réglages |
@@ -138,11 +140,11 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-17** Bundling CLI unifié : `prepare-android-runtime.sh` délègue à `scripts/bundle-mobile.mjs` (source unique, injection migrations par prepend — le `--define` divergent est supprimé).
 - [x] **D-07** Suite de tests `packages/ui` démarrée sur des modules critiques purs : `theme/color.ts` (système de thème — round-trips hex/rgb/oklch, clamp, blend, scales : `theme/color.test.ts`, 32 tests ✅) et `pierre/media.ts` (détection média du viewer de fichiers : `pierre/media.test.ts`, 20 tests ✅). *(L'editor-store n'existe pas encore — Phase 1 roadmap ; les composants `.tsx` DOM nécessitent happydom, à câbler en suivant.)*
 - [x] **D-09** Tests d'intégration Rust mobile host-runnable (rootfs mocké) : `repair_rootfs_hardlinks` (2 directions + cas vide), `force_symlink` (remplacement de lien périmé), gardes de `prepare_toolchain_wrappers` (Err sans interposeurs, skip `.so`/fichiers <1 Ko) + idempotence (cf. D-16). *(Compile côté host via D-21 ; non exécuté sur ce CI — GTK/NDK absents.)* Server spawn complet (`start_embedded_server`) reste device-dépendant.
-- [ ] **D-01** Décomposer `runtime.rs` (~2070 LOC) en `runtime/{mod,toolchain,server,extraction}.rs`. **Différé à une session dédiée Linux + device-in-loop** (pas un move massif via éditions distantes sur Windows à compile lent). Filet de tests pré-requis en place (D-09/D-16/D-21, 14 tests host). **Plan d'exécution dé-risqué** (analyse 2026-06-17) :
+- [~] **D-01** Décomposer `runtime.rs` en sous-modules `runtime/{toolchain,extraction,server}.rs`. **Étapes 1+3 faites** (2026-06-17, host-vérifiées WSL) → `runtime.rs` **2136→1491 LOC, sous le gate 1500**. Le god *file* est résolu ; ne reste que l'étape 2 (décomposer le god *function* `start_embedded_server`), device-in-loop. Filet de tests en place (D-09/D-16/D-21, 14 tests host). Mécanique validée : sous-modules sibling (`runtime.rs` conservé, préserve le blame), `use super::*` dans l'enfant + re-export ciblé dans le parent, fns → `pub(super)`, tests inchangés. **Self-verifying move** : l'Edit-delete depuis runtime.rs ne réussit que si le texte est byte-identique → prouve l'absence de transcription erronée. **Plan d'exécution** :
   - [x] **Étape 1 — `runtime/toolchain.rs` FAITE** (2026-06-17, ~555 LOC, 100% test-couverte) : `repair_rootfs_hardlinks` / `force_symlink` / `prepare_toolchain_wrappers` extraits verbatim. Cluster **auto-contenu** confirmé (zéro dépendance sortante ; helpers `resolve_in_rootfs`/`parse_shebang_interp`/`is_static_elf64` imbriqués, déplacés avec ; `use` locaux idem). Mécanique retenue (moins invasive que `git mv` → préserve le blame sur runtime.rs) : `runtime.rs` conservé + sous-module sibling `runtime/toolchain.rs` ; runtime.rs déclare `mod toolchain; use toolchain::{force_symlink, prepare_toolchain_wrappers, repair_rootfs_hardlinks};` ; fns → `pub(super)` ; `toolchain.rs` ouvre par `use super::*;` ; tests inchangés dans `mod tests`. **Vérifié WSL Linux** : `runtime.rs` 2136→1592 LOC, `toolchain.rs` 569 LOC, `cargo test --lib runtime` 14/0, `cargo clippy --lib --tests -- -D warnings` clean (2 warnings `repeat().take()` pré-existants des tests D-09 corrigés en `resize` au passage — Boy-Scout).
-  - **Étape 2 — `runtime/server.rs`** : `start_embedded_server` (670 LOC, **device-critique, 0 test host**) + stop/health/logs + `SERVER_PROCESS`/`server_start_lock`. À valider **on-device** (la mécanique seule compile-verte ne suffit pas).
-  - **Étape 3 — `runtime/extraction.rs`** : extract/install/schema/readiness.
-  - Sortie : `mod.rs` ≈ check_runtime + helpers chemins + list_storage_roots. Chaque étape = un commit vérifié séparément.
+  - [x] **Étape 3 — `runtime/extraction.rs` FAITE** (2026-06-17, ~139 LOC) : `extract_runtime` (command) + `check_extraction_progress` + `is_ready_without_schema_check` + `is_runtime_ready` + `write_schema_version`. Helpers partagés (`runtime_dir`, `native_lib_dir`, `check_health`), consts `RUNTIME_*` et struct `ExtractionProgress` **restés** dans runtime.rs (utilisés ailleurs) → accédés par `use super::*`. `extract_runtime` re-exporté `#[allow(unused_imports)] pub use` (le `generate_handler!` qui le consomme est `#[cfg(target_os="android")]`, donc inutilisé en host) ; `is_runtime_ready` re-importé (check_runtime) ; fns test-only importées dans `mod tests`. **Vérifié WSL** : 14/0 + clippy `-D warnings` clean.
+  - **Étape 2 — `runtime/server.rs` (RESTE, device-in-loop)** : `start_embedded_server` est un god *function* de 669 LOC. **Décision** : ne PAS se contenter de relocaliser (ce serait une demi-mesure — le fichier serait propre mais la fonction resterait > 200 LOC bloquant). La relocaliser **et** la décomposer en sous-fonctions doivent se faire ensemble, ce qui touche la logique de spawn (force_symlink ×8, env, PATH, LD_*) → validation **on-device** requise (un changement de logique, pas un pur move). Co-déplacer alors `check_local_health`/`read_server_logs`/`stop_local_server` + `SERVER_PROCESS`/`server_start_lock`.
+  - Sortie atteinte : runtime.rs = check_runtime + helpers chemins/health + install_extended_env + start_embedded_server (à sortir) + list_storage_roots. Chaque étape = un commit vérifié séparément (étape 1 : `e240bbe852`).
 
 ### P2 — Moyen (backlog priorisé)
 - [x] **D-20** Gate CI synchro SDK : `.github/workflows/sdk-sync.yml` régénère le SDK (`./script/generate.ts`) sur chaque PR et échoue si `packages/sdk` diverge, avec message de remédiation.

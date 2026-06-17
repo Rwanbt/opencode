@@ -13,6 +13,18 @@ use tauri::{AppHandle, Emitter, Manager};
 mod toolchain;
 use toolchain::{force_symlink, prepare_toolchain_wrappers, repair_rootfs_hardlinks};
 
+// D-01 step 3: runtime extraction + readiness/schema gating lives in
+// `runtime/extraction.rs`. `extract_runtime` is re-exported for the Tauri
+// handler (`runtime::extract_runtime`); `is_runtime_ready` / `write_schema_version`
+// are re-imported because `check_runtime` and the tests still call them.
+mod extraction;
+// Re-exported so lib.rs's `generate_handler!` can reference
+// `runtime::extract_runtime`. That handler is `#[cfg(target_os = "android")]`,
+// so on host/test builds this re-export has no user — hence the allow.
+#[allow(unused_imports)]
+pub use extraction::extract_runtime;
+use extraction::is_runtime_ready;
+
 const DEFAULT_PORT: u32 = 14096;
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 const RUNTIME_SUBDIR: &str = "runtime";
@@ -102,71 +114,8 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
     }
 }
 
-/// Extract runtime binaries from APK assets to the app's private directory.
-/// On Android, the extraction is initiated by the Kotlin RuntimeExtractor (called from
-/// MainActivity.onCreate). This command polls until extraction is complete or times out.
-/// Emits "extraction-progress" events so the frontend can show a progress bar.
-#[tauri::command]
-pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
-    let dir = runtime_dir(&app);
-
-    // If already extracted, return immediately
-    if is_runtime_ready(&dir) {
-        let _ = app.emit(
-            "extraction-progress",
-            ExtractionProgress {
-                phase: "Ready!".to_string(),
-                progress: 1.0,
-            },
-        );
-        return Ok(());
-    }
-
-    let _ = app.emit(
-        "extraction-progress",
-        ExtractionProgress {
-            phase: "Extracting runtime binaries...".to_string(),
-            progress: 0.1,
-        },
-    );
-
-    // On Android, MainActivity.onCreate starts the extraction in a background thread
-    // via RuntimeExtractor.extractAll(). We poll until it's done.
-    let max_wait = Duration::from_secs(120); // 2 minutes max
-    let poll_interval = Duration::from_millis(500);
-    let start = std::time::Instant::now();
-
-    loop {
-        if is_ready_without_schema_check(&dir) {
-            // Write the schema version sentinel so future launches skip re-extraction
-            write_schema_version(&dir);
-            let _ = app.emit(
-                "extraction-progress",
-                ExtractionProgress {
-                    phase: "Ready!".to_string(),
-                    progress: 1.0,
-                },
-            );
-            return Ok(());
-        }
-
-        if start.elapsed() > max_wait {
-            return Err("Extraction timed out after 120s. Restart the app to retry.".to_string());
-        }
-
-        // Emit progress based on which files exist
-        let progress = check_extraction_progress(&dir);
-        let _ = app.emit(
-            "extraction-progress",
-            ExtractionProgress {
-                phase: format!("Extracting... ({:.0}%)", progress * 100.0),
-                progress,
-            },
-        );
-
-        tokio::time::sleep(poll_interval).await;
-    }
-}
+// D-01 step 3: extract_runtime (with its doc) moved to runtime/extraction.rs
+// (re-exported via `pub use extraction::extract_runtime` at the top of this file).
 
 // D-01 step 1: repair_rootfs_hardlinks, force_symlink, and
 // prepare_toolchain_wrappers moved verbatim to runtime/toolchain.rs and
@@ -1066,15 +1015,7 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
 
 // ─── Internal ───────────────────────────────────────────────────────
 
-fn check_extraction_progress(dir: &Path) -> f32 {
-    // Only non-executable assets need extraction now
-    let checks = [
-        dir.join("opencode-cli.js"),
-        dir.join(".native_lib_dir"),
-    ];
-    let done = checks.iter().filter(|p| p.exists()).count();
-    done as f32 / checks.len() as f32
-}
+// D-01 step 3: check_extraction_progress moved to runtime/extraction.rs.
 
 pub(crate) fn runtime_dir(app: &AppHandle) -> PathBuf {
     app.path()
@@ -1089,56 +1030,11 @@ pub(crate) fn native_lib_dir(runtime_dir: &Path) -> Option<PathBuf> {
     fs::read_to_string(&path_file).ok().map(|s| PathBuf::from(s.trim()))
 }
 
-/// Check if the runtime binaries are present, ignoring schema version.
-/// Used during the extraction polling loop before write_schema_version is called.
-fn is_ready_without_schema_check(dir: &Path) -> bool {
-    dir.join("opencode-cli.js").exists()
-        && dir.join(".native_lib_dir").exists()
-        && native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
-}
-
-fn is_runtime_ready(dir: &Path) -> bool {
-    // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
-    if !dir.join("opencode-cli.js").exists()
-        || !dir.join(".native_lib_dir").exists()
-        || !native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
-    {
-        return false;
-    }
-    // Schema version guard: if version file is missing or stale, wipe rootfs
-    // (not models) and force re-extraction. This prevents silent corruption
-    // after an APK update that ships a new Alpine rootfs layout.
-    let version_file = dir.join(".schema_version");
-    let current = fs::read_to_string(&version_file)
-        .ok()
-        .and_then(|s| s.trim().parse::<u32>().ok())
-        .unwrap_or(0);
-    if current != RUNTIME_SCHEMA_VERSION {
-        log::warn!(
-            "[runtime] schema version mismatch (have={} want={}), wiping rootfs",
-            current,
-            RUNTIME_SCHEMA_VERSION
-        );
-        let rootfs = dir.join("rootfs");
-        if rootfs.exists() {
-            if let Err(e) = fs::remove_dir_all(&rootfs) {
-                log::warn!("[runtime] failed to wipe rootfs: {}", e);
-            }
-        }
-        // Remove version file so next ready-check re-triggers extraction
-        let _ = fs::remove_file(&version_file);
-        return false;
-    }
-    true
-}
-
-/// Write the current schema version sentinel after a successful extraction.
-pub fn write_schema_version(dir: &Path) {
-    let path = dir.join(".schema_version");
-    if let Err(e) = fs::write(&path, RUNTIME_SCHEMA_VERSION.to_string()) {
-        log::warn!("[runtime] failed to write schema version: {}", e);
-    }
-}
+// D-01 step 3: is_ready_without_schema_check, is_runtime_ready, and
+// write_schema_version moved to runtime/extraction.rs. is_runtime_ready and
+// write_schema_version are re-imported at the top of this file (used by
+// check_runtime and the tests); is_ready_without_schema_check is reached by the
+// tests via `super::extraction`.
 
 pub(crate) async fn check_health(port: u32, password: Option<&str>) -> bool {
     let url = format!("http://127.0.0.1:{}/global/health", port);
@@ -1170,6 +1066,9 @@ pub(crate) async fn check_health(port: u32, password: Option<&str>) -> bool {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    // These live in the extraction submodule and have no non-test caller in
+    // `runtime`, so they are not re-imported at module scope — reach them here.
+    use super::extraction::{is_ready_without_schema_check, write_schema_version};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static COUNTER: AtomicU32 = AtomicU32::new(0);
