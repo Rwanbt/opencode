@@ -132,188 +132,8 @@ pub async fn start_embedded_server(
     // Android packages them as lib*.so but tools look for "bash", "rg", etc.
     let bin_link_dir = dir.join("bin");
     let _ = fs::create_dir_all(&bin_link_dir);
-    let bin_links = [
-        ("libbash_exec.so", "bash"),
-        ("libbash_exec.so", "sh"),
-        ("librg_exec.so", "rg"),
-        ("libbun_exec.so", "bun"),
-        ("libtoybox_exec.so", "toybox"),
-        // Busybox is optional — bundled only when `prepare-android-runtime.sh`
-        // has downloaded it. If absent the block below silently skips it and
-        // toybox continues to provide ls/cat/etc. Busybox's added value is
-        // richer applets (vi, nano, awk, sed implementations, less, etc.).
-        ("libbusybox_exec.so", "busybox"),
-        // proot is bundled as a JNI lib so it benefits from nativeLibraryDir
-        // exec permission. Downloading proot at runtime to runtime/bin/ fails
-        // with EACCES because Android SELinux (targetSdk 29+) blocks exec of
-        // files written to app private data dir. Only .so files extracted to
-        // nativeLibraryDir by the installer get the exec label.
-        ("libproot_exec.so", "proot"),
-    ];
-    for (src_name, link_name) in &bin_links {
-        let src = nlib_dir.join(src_name);
-        let link = bin_link_dir.join(link_name);
-        let needs = match fs::read_link(&link) {
-            Ok(target) => target != src,
-            Err(_) => true,
-        };
-        if needs && src.exists() {
-            force_symlink(&src, &link);
-        }
-    }
-
-    // Toybox applet symlinks — provides standard Unix commands (ls, cat, grep, etc.)
-    // Android SELinux blocks exec of /system/bin/* from app sandbox, but binaries
-    // in nativeLibraryDir are allowed. Toybox multi-call binary detects the command
-    // name from argv[0] (the symlink name).
-    let toybox_src = nlib_dir.join("libtoybox_exec.so");
-    if toybox_src.exists() {
-        let toybox_cmds = [
-            // Core file operations
-            "ls", "cat", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch",
-            "chmod", "chown", "chgrp", "stat", "file", "readlink", "realpath",
-            // Text processing
-            "grep", "egrep", "fgrep", "sed", "head", "tail", "wc", "sort",
-            "uniq", "tr", "cut", "tee", "xargs", "diff", "paste", "fold",
-            "expand", "fmt", "nl", "od", "strings", "rev",
-            // Search & navigation
-            "find", "which", "dirname", "basename",
-            // Editors & viewers
-            "vi", "more", "hexedit",
-            // Archives
-            "tar", "gzip", "gunzip", "zcat", "bunzip2", "bzcat", "cpio",
-            // System info
-            "ps", "kill", "killall", "df", "du", "free", "uptime", "uname",
-            "hostname", "id", "whoami", "env", "printenv", "date", "cal",
-            "dmesg", "top", "w", "nproc", "pgrep", "pkill",
-            // Network
-            "ping", "wget", "nc", "netcat", "netstat", "ifconfig", "host",
-            // Misc utilities
-            "printf", "echo", "test", "true", "false", "sleep", "yes",
-            "md5sum", "sha1sum", "sha256sum", "seq", "dd", "clear",
-            "reset", "time", "timeout", "watch", "tee",
-            "base64", "xxd", "cmp", "patch", "split", "truncate",
-            "nohup", "nice", "xargs", "install",
-        ];
-        for cmd in &toybox_cmds {
-            let link = bin_link_dir.join(cmd);
-            // Always verify target matches — symlinks become dangling after APK updates
-            // because nativeLibraryDir path changes with each install.
-            let needs = match fs::read_link(&link) {
-                Ok(target) => target != toybox_src,
-                Err(_) => true,
-            };
-            if needs {
-                force_symlink(&toybox_src, &link);
-            }
-        }
-    }
-
-    // Busybox applet symlinks — busybox is a STATIC binary that uses modern
-    // syscalls (rseq/statx/clone3?) blocked by Android zygote seccomp.
-    // Interactive applets (vi, less, nano, top) hit SIGSYS ("bad system
-    // call"). Non-interactive applets happen to work by luck.
-    //
-    // STRATEGY: prefer Android's /system/bin/toybox (dynamic-bionic,
-    // seccomp-safe) for every applet it provides. Fall back to busybox
-    // only for applets toybox lacks (awk, gawk, ed, bc, dc, tr variant).
-    // Android's toybox 0.8.6 covers most coreutils including vi.
-    let busybox_src = nlib_dir.join("libbusybox_exec.so");
-    let system_toybox = std::path::PathBuf::from("/system/bin/toybox");
-
-    // Comprehensive list of applets that Android /system/bin/toybox
-    // provides on modern Android (0.8.6+). Verified via `toybox` applet
-    // list on Xiaomi Android 14. Interactive applets (vi, top, more,
-    // microcom) + coreutils + filesystem + archive + network tools.
-    if system_toybox.exists() {
-        let system_toybox_cmds = [
-            // Text editors / pagers
-            "vi", "vim", "more", "less",
-            // Process management
-            "top", "ps", "kill", "killall", "pkill", "pgrep", "nice", "renice",
-            "iotop", "ionice", "pidof", "pmap", "time", "timeout", "nohup", "watch",
-            // File ops
-            "ls", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch", "readlink",
-            "realpath", "stat", "chmod", "chown", "chgrp", "chattr", "file", "find",
-            // Text processing
-            "cat", "tac", "head", "tail", "wc", "sort", "uniq", "cut", "paste",
-            "tr", "tee", "sed", "grep", "egrep", "fgrep", "expand", "fold", "fmt",
-            "nl", "rev", "split", "strings", "xxd", "od", "dos2unix", "unix2dos",
-            // Archive / compression
-            "tar", "gzip", "gunzip", "zcat", "bzcat", "cpio", "uudecode", "uuencode",
-            // Network
-            "ping", "ping6", "nc", "netcat", "netstat", "ifconfig", "hostname",
-            "traceroute", "traceroute6",
-            // System info
-            "df", "du", "free", "uptime", "uname", "whoami", "who", "groups",
-            "id", "dmesg", "hostname", "lsof", "lspci", "lsusb", "lsmod",
-            // Misc utilities
-            "env", "printenv", "xargs", "yes", "seq", "sleep", "usleep",
-            "echo", "printf", "true", "false", "test", "[", "which", "dirname",
-            "basename", "pwd", "tty", "clear", "reset",
-            // Hashing
-            "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum",
-            "cmp", "diff",
-            // Misc
-            "date", "hwclock", "cal", "getopt", "install", "mktemp",
-        ];
-        for cmd in &system_toybox_cmds {
-            let link = bin_link_dir.join(cmd);
-            let needs = match fs::read_link(&link) {
-                Ok(target) => target != system_toybox,
-                Err(_) => true,
-            };
-            if needs {
-                force_symlink(&system_toybox, &link);
-            }
-        }
-    }
-
-    // Additional system binaries in /system/bin/ (dynamic-bionic, safe).
-    // These are real binaries, not toybox applets, so we symlink to them
-    // directly. Available on most modern Android.
-    let system_bin_cmds: &[(&str, &str)] = &[
-        ("curl",   "/system/bin/curl"),
-        ("strace", "/system/bin/strace"),
-        ("wget",   "/system/bin/wget"),
-        ("awk",    "/system/bin/awk"),
-    ];
-    for (name, target_path) in system_bin_cmds {
-        let target = std::path::PathBuf::from(target_path);
-        if !target.exists() { continue; }
-        let link = bin_link_dir.join(name);
-        let needs = match fs::read_link(&link) {
-            Ok(t) => t != target,
-            Err(_) => true,
-        };
-        if needs {
-            force_symlink(&target, &link);
-        }
-    }
-
-    // Busybox only for applets NOT in toybox Android (scripting/calc).
-    // Note: busybox is static so some of these may still SIGSYS, but
-    // most non-interactive applets (awk/sed/ed/bc/dc/expr) work.
-    if busybox_src.exists() {
-        let busybox_cmds = [
-            "gawk",         // busybox has no gawk, fallback for awk compat
-            "ed",           // line editor, no toybox equivalent
-            "bc", "dc",     // calculators, no toybox equivalent
-            "expr",         // toybox has expr but busybox is richer
-        ];
-        for cmd in &busybox_cmds {
-            let link = bin_link_dir.join(cmd);
-            // Don't override if a system binary already claimed this slot.
-            if link.exists() { continue; }
-            let needs = match fs::read_link(&link) {
-                Ok(target) => target != busybox_src,
-                Err(_) => true,
-            };
-            if needs {
-                force_symlink(&busybox_src, &link);
-            }
-        }
-    }
+    // Symlink Android JNI binaries + toybox/busybox/system applets into bin/.
+    setup_command_symlinks(&nlib_dir, &bin_link_dir);
 
     // Create shell init file (.mkshrc) for /system/bin/sh (mksh).
     // Sourced via ENV variable (set in .env_vars, passed to PTY spawn env).
@@ -775,6 +595,196 @@ fn build_server_command(
         let mut args = vec![cli_path.to_string_lossy().to_string()];
         args.extend(serve_args);
         (bun_path.to_path_buf(), args)
+    }
+}
+
+/// Populate `bin_link_dir` with command symlinks (D-01 step 2b extraction):
+/// the bundled JNI binaries (bash/sh/rg/bun/toybox/busybox/proot), the toybox
+/// applet set, Android's seccomp-safe /system/bin/toybox applets, a few direct
+/// /system/bin binaries, and busybox-only fallbacks. Idempotent: each symlink
+/// is recreated only when missing or pointing at a stale target.
+fn setup_command_symlinks(nlib_dir: &Path, bin_link_dir: &Path) {
+    let bin_links = [
+        ("libbash_exec.so", "bash"),
+        ("libbash_exec.so", "sh"),
+        ("librg_exec.so", "rg"),
+        ("libbun_exec.so", "bun"),
+        ("libtoybox_exec.so", "toybox"),
+        // Busybox is optional — bundled only when `prepare-android-runtime.sh`
+        // has downloaded it. If absent the block below silently skips it and
+        // toybox continues to provide ls/cat/etc. Busybox's added value is
+        // richer applets (vi, nano, awk, sed implementations, less, etc.).
+        ("libbusybox_exec.so", "busybox"),
+        // proot is bundled as a JNI lib so it benefits from nativeLibraryDir
+        // exec permission. Downloading proot at runtime to runtime/bin/ fails
+        // with EACCES because Android SELinux (targetSdk 29+) blocks exec of
+        // files written to app private data dir. Only .so files extracted to
+        // nativeLibraryDir by the installer get the exec label.
+        ("libproot_exec.so", "proot"),
+    ];
+    for (src_name, link_name) in &bin_links {
+        let src = nlib_dir.join(src_name);
+        let link = bin_link_dir.join(link_name);
+        let needs = match fs::read_link(&link) {
+            Ok(target) => target != src,
+            Err(_) => true,
+        };
+        if needs && src.exists() {
+            force_symlink(&src, &link);
+        }
+    }
+
+    // Toybox applet symlinks — provides standard Unix commands (ls, cat, grep, etc.)
+    // Android SELinux blocks exec of /system/bin/* from app sandbox, but binaries
+    // in nativeLibraryDir are allowed. Toybox multi-call binary detects the command
+    // name from argv[0] (the symlink name).
+    let toybox_src = nlib_dir.join("libtoybox_exec.so");
+    if toybox_src.exists() {
+        let toybox_cmds = [
+            // Core file operations
+            "ls", "cat", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch",
+            "chmod", "chown", "chgrp", "stat", "file", "readlink", "realpath",
+            // Text processing
+            "grep", "egrep", "fgrep", "sed", "head", "tail", "wc", "sort",
+            "uniq", "tr", "cut", "tee", "xargs", "diff", "paste", "fold",
+            "expand", "fmt", "nl", "od", "strings", "rev",
+            // Search & navigation
+            "find", "which", "dirname", "basename",
+            // Editors & viewers
+            "vi", "more", "hexedit",
+            // Archives
+            "tar", "gzip", "gunzip", "zcat", "bunzip2", "bzcat", "cpio",
+            // System info
+            "ps", "kill", "killall", "df", "du", "free", "uptime", "uname",
+            "hostname", "id", "whoami", "env", "printenv", "date", "cal",
+            "dmesg", "top", "w", "nproc", "pgrep", "pkill",
+            // Network
+            "ping", "wget", "nc", "netcat", "netstat", "ifconfig", "host",
+            // Misc utilities
+            "printf", "echo", "test", "true", "false", "sleep", "yes",
+            "md5sum", "sha1sum", "sha256sum", "seq", "dd", "clear",
+            "reset", "time", "timeout", "watch", "tee",
+            "base64", "xxd", "cmp", "patch", "split", "truncate",
+            "nohup", "nice", "xargs", "install",
+        ];
+        for cmd in &toybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            // Always verify target matches — symlinks become dangling after APK updates
+            // because nativeLibraryDir path changes with each install.
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != toybox_src,
+                Err(_) => true,
+            };
+            if needs {
+                force_symlink(&toybox_src, &link);
+            }
+        }
+    }
+
+    // Busybox applet symlinks — busybox is a STATIC binary that uses modern
+    // syscalls (rseq/statx/clone3?) blocked by Android zygote seccomp.
+    // Interactive applets (vi, less, nano, top) hit SIGSYS ("bad system
+    // call"). Non-interactive applets happen to work by luck.
+    //
+    // STRATEGY: prefer Android's /system/bin/toybox (dynamic-bionic,
+    // seccomp-safe) for every applet it provides. Fall back to busybox
+    // only for applets toybox lacks (awk, gawk, ed, bc, dc, tr variant).
+    // Android's toybox 0.8.6 covers most coreutils including vi.
+    let busybox_src = nlib_dir.join("libbusybox_exec.so");
+    let system_toybox = std::path::PathBuf::from("/system/bin/toybox");
+
+    // Comprehensive list of applets that Android /system/bin/toybox
+    // provides on modern Android (0.8.6+). Verified via `toybox` applet
+    // list on Xiaomi Android 14. Interactive applets (vi, top, more,
+    // microcom) + coreutils + filesystem + archive + network tools.
+    if system_toybox.exists() {
+        let system_toybox_cmds = [
+            // Text editors / pagers
+            "vi", "vim", "more", "less",
+            // Process management
+            "top", "ps", "kill", "killall", "pkill", "pgrep", "nice", "renice",
+            "iotop", "ionice", "pidof", "pmap", "time", "timeout", "nohup", "watch",
+            // File ops
+            "ls", "cp", "mv", "rm", "mkdir", "rmdir", "ln", "touch", "readlink",
+            "realpath", "stat", "chmod", "chown", "chgrp", "chattr", "file", "find",
+            // Text processing
+            "cat", "tac", "head", "tail", "wc", "sort", "uniq", "cut", "paste",
+            "tr", "tee", "sed", "grep", "egrep", "fgrep", "expand", "fold", "fmt",
+            "nl", "rev", "split", "strings", "xxd", "od", "dos2unix", "unix2dos",
+            // Archive / compression
+            "tar", "gzip", "gunzip", "zcat", "bzcat", "cpio", "uudecode", "uuencode",
+            // Network
+            "ping", "ping6", "nc", "netcat", "netstat", "ifconfig", "hostname",
+            "traceroute", "traceroute6",
+            // System info
+            "df", "du", "free", "uptime", "uname", "whoami", "who", "groups",
+            "id", "dmesg", "hostname", "lsof", "lspci", "lsusb", "lsmod",
+            // Misc utilities
+            "env", "printenv", "xargs", "yes", "seq", "sleep", "usleep",
+            "echo", "printf", "true", "false", "test", "[", "which", "dirname",
+            "basename", "pwd", "tty", "clear", "reset",
+            // Hashing
+            "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum",
+            "cmp", "diff",
+            // Misc
+            "date", "hwclock", "cal", "getopt", "install", "mktemp",
+        ];
+        for cmd in &system_toybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != system_toybox,
+                Err(_) => true,
+            };
+            if needs {
+                force_symlink(&system_toybox, &link);
+            }
+        }
+    }
+
+    // Additional system binaries in /system/bin/ (dynamic-bionic, safe).
+    // These are real binaries, not toybox applets, so we symlink to them
+    // directly. Available on most modern Android.
+    let system_bin_cmds: &[(&str, &str)] = &[
+        ("curl",   "/system/bin/curl"),
+        ("strace", "/system/bin/strace"),
+        ("wget",   "/system/bin/wget"),
+        ("awk",    "/system/bin/awk"),
+    ];
+    for (name, target_path) in system_bin_cmds {
+        let target = std::path::PathBuf::from(target_path);
+        if !target.exists() { continue; }
+        let link = bin_link_dir.join(name);
+        let needs = match fs::read_link(&link) {
+            Ok(t) => t != target,
+            Err(_) => true,
+        };
+        if needs {
+            force_symlink(&target, &link);
+        }
+    }
+
+    // Busybox only for applets NOT in toybox Android (scripting/calc).
+    // Note: busybox is static so some of these may still SIGSYS, but
+    // most non-interactive applets (awk/sed/ed/bc/dc/expr) work.
+    if busybox_src.exists() {
+        let busybox_cmds = [
+            "gawk",         // busybox has no gawk, fallback for awk compat
+            "ed",           // line editor, no toybox equivalent
+            "bc", "dc",     // calculators, no toybox equivalent
+            "expr",         // toybox has expr but busybox is richer
+        ];
+        for cmd in &busybox_cmds {
+            let link = bin_link_dir.join(cmd);
+            // Don't override if a system binary already claimed this slot.
+            if link.exists() { continue; }
+            let needs = match fs::read_link(&link) {
+                Ok(target) => target != busybox_src,
+                Err(_) => true,
+            };
+            if needs {
+                force_symlink(&busybox_src, &link);
+            }
+        }
     }
 }
 
