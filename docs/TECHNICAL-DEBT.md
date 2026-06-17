@@ -7,14 +7,15 @@
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
 > **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé ; **D-15** fait (graphe régénéré) ;
 > **D-08** progressé (tree-store + view-cache, 27 tests) ; **D-14** tranché ; **D-03/D-05** gate LOC CI ajouté ;
-> **D-18** fait (single-flight, vérifié WSL Linux 14/0) ; **D-01 étapes 1+3 faites** (`runtime/toolchain.rs`
-> + `runtime/extraction.rs` extraits, **runtime.rs 2136→1491 LOC = sous le gate de 1500** ; compilé + 14/14 tests
-> + clippy `-D warnings` clean sous WSL Linux). Le god *file* est résolu ; ne reste que le god *function*
-> `start_embedded_server` (669 LOC) → étape 2, **relocalisation + décomposition ensemble en session device-in-loop**.
-> Restent : D-08 reliquat (coordinateurs DOM — `@solidjs/testing-library` à ajouter), **D-01 étape 2**
-> (server.rs : décomposer `start_embedded_server` — device-in-loop), **D-19** (busybox — validation device requise),
-> D-06 (upstream, opportuniste)). Note : build Rust mobile vérifiable sous WSL avec `CARGO_TARGET_DIR` sur D:
-> (évite de saturer C:). Le `ext4.vhdx` (51,75 Go) gagnerait à être compacté en admin (`Optimize-VHD`).
+> **D-18** fait (single-flight) ; **D-01 RÉSOLU intégralement** (étapes 1+2+3 : `runtime/{toolchain,extraction,server}.rs`,
+> **runtime.rs 2136→745 LOC**, `start_embedded_server` 666→281 via 6 helpers nommés, `build_server_command` pur+testé,
+> WSL `cargo test --lib` 18/0 + `cargo build -D warnings` clean) ;
+> **D-14 RÉSOLU** (ADR-0003 amendé) ; **D-19** prévention seccomp explicitée + garde-fou testé (runtime-detection reste device) ;
+> **D-02 RÉSOLU** (déjà décomposé + `EXAMPLES` extrait, 1455 LOC) ; **D-07 RÉSOLU** (theme/color 32 tests + pierre/media 20 tests).
+> **Restent (vrais blocages externes)** : D-08 reliquat (coordinateurs à `createStore` interne = E2E only, par design — voir note),
+> D-19 runtime-detection (device requis), D-06 (upstream, opportuniste). ⚠️ `cargo clippy --lib --tests` ICE
+> (bug interne clippy sous cfg(test) ; `cargo clippy --lib` OK) → fallback Rust mobile = `cargo build -D warnings` + `cargo test`.
+> Note : build Rust mobile vérifiable sous WSL avec `CARGO_TARGET_DIR` sur D: (évite de saturer C:).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
 > [KNOWN_FAILURE_PATTERNS.md](KNOWN_FAILURE_PATTERNS.md), [MOBILE-IDE-ROADMAP.md](MOBILE-IDE-ROADMAP.md),
 > [ARCHITECTURE.md](ARCHITECTURE.md), [lock-hierarchy.md](lock-hierarchy.md).
