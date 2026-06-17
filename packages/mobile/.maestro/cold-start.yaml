@@ -1,0 +1,18 @@
+# Cold-start smoke flow. Launches the app from a clean state and verifies it
+# reaches a stable screen without crashing — which on Android exercises the
+# whole extraction + embedded-server-spawn path on launch (D-01/D-09).
+#
+# Run on a connected device / emulator:  maestro test packages/mobile/.maestro/
+appId: ai.opencode.mobile
+---
+- launchApp:
+    clearState: true
+# Extraction + first server spawn can take a while on first launch.
+- extendedWaitUntil:
+    notVisible:
+      text: ".*[Ee]xtracting.*"
+    timeout: 120000
+- takeScreenshot: cold-start
+# Deeper assertions (assertVisible on the composer / session screen) require
+# stable selectors — see README.md (testID prerequisite). Until then this flow
+# is a crash/launch smoke: launchApp fails the run if the app does not start.
