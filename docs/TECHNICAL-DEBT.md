@@ -58,10 +58,11 @@ Norme SonarQube : vert ≤ 500, alerte 800, bloquant 1500. État au 2026-06-16 :
 | D-03 | `packages/app/src/pages/layout.tsx` | 1126 | Fork | P2 | Coordinateur, exception [ADR-0002](adr/0002-coordinator-loc-floor.md) |
 | D-04 | `packages/app/src/components/settings-general.tsx` | 1108 | Fork | P2 | Décomposable par sections de réglages |
 | D-05 | `packages/app/src/pages/session.tsx` | 1022 | Fork | P2 | Coordinateur, exception ADR-0002 |
-| D-06 | Upstream god files (9 fichiers) | 1618–2292 | **Upstream** | P3 | `prompt.ts` 2085, `lsp/server.ts` 1958, `config.ts` 1802, `message-part.tsx` 2268, `provider.ts` 1618, TUI session index 2292, `github.ts` 1647, copilot model 1769, `acp/agent.ts` 1769 — voir [loc-debt-upstream.md](loc-debt-upstream.md) |
+| D-06 | Upstream god files (9 fichiers) | 1618–2292 | **Upstream** | ~~P3~~ **won't-fix** | `prompt.ts` 2085, `message-part.tsx` 2268, … — voir [loc-debt-upstream.md](loc-debt-upstream.md). **Décision 2026-06-17 : ne PAS contribuer upstream** (le fork a trop divergé d'`anomalyco/opencode` — une PR de décomposition ne serait jamais acceptée). Divergence permanente assumée ; hors scope du gate. Si un de ces fichiers devient un point de douleur fork, extraire les parties fork-spécifiques vers `packages/app/` plutôt que d'éditer l'upstream. |
 
 > **Note fork** : seuls les fichiers `packages/app/` sont sous gate LOC strict (ADR-0003). Les upstream
-> (D-06) sont hors scope du gate mais restent une dette réelle si contribution upstream visée.
+> (D-06) sont hors scope du gate **et won't-fix** — pas de contribution upstream prévue (divergence trop
+> importante). On vit avec, on minimise les edits upstream (ADR-0003 §Amendement).
 
 ### B. Couverture de tests
 
@@ -107,7 +108,7 @@ Norme SonarQube : vert ≤ 500, alerte 800, bloquant 1500. État au 2026-06-16 :
 
 | ID | Sujet | Sévérité | Détail |
 |----|-------|----------|--------|
-| D-22 | Guard d'écriture absent | **P1 (préventif)** | `assertInsideProject` (file/index.ts:513-526) protège `read/list/mkdir` mais **PAS l'écriture** (write/rename/move/delete n'existent pas encore). Tout ajout d'écriture DOIT passer ce guard — sinon évasion hors workspace. |
+| D-22 | Guard d'écriture absent | **préventif — réglé** | `assertInsideProject` (file/index.ts:513-526) protège `read/list/mkdir` ; contrat verrouillé par `test/file/path-traversal.test.ts`. **Décision 2026-06-17 : lié à la feature** — write/rename/move/delete n'existent pas encore. Quand la Phase 1 (éditeur) les introduira, chaque route DOIT passer ce guard + un test d'évasion (`../`, absolu, symlink). Rien à faire avant la feature. |
 
 ### H. Code désactivé / mort
 
