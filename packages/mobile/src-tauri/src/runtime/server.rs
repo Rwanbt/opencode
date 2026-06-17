@@ -5,6 +5,13 @@
 //! shared helpers it relies on (`runtime_dir`, `native_lib_dir`, `force_symlink`,
 //! `prepare_toolchain_wrappers`, `check_health`) stay in `runtime.rs` and are
 //! reached through `use super::*`.
+//!
+//! NOTE: `clippy::needless_borrows_for_generic_args` is disabled here because it
+//! ICEs (rustc/clippy bug, "slice index starts at 27 but ends at 26", reproduced
+//! on stable 1.94.1 and nightly) while computing its suggestion span over this
+//! module under `cfg(test)`. rustc `-D warnings` is clean; all other clippy lints
+//! still run. Remove once the upstream clippy bug is fixed.
+#![allow(clippy::needless_borrows_for_generic_args)]
 use super::*;
 
 /// Static storage for the server child process.
