@@ -561,42 +561,15 @@ alias cls='clear'\n\
     // Build command: use --preload to load resolv_override.so via CLI arg
     // (bypasses env var transmission issue with musl linker)
     let resolv_override = nlib_dir.join("libresolv_override.so");
-
-    let (cmd_path, cmd_args) = if ld_musl.exists() {
-        let mut args = vec![
-            "--library-path".to_string(),
-            lib_path.clone(),
-        ];
-        // --preload passes LD_PRELOAD via CLI instead of env var
-        if resolv_override.exists() {
-            args.push("--preload".to_string());
-            args.push(resolv_override.to_string_lossy().to_string());
-        }
-        args.extend([
-            bun_path.to_string_lossy().to_string(),
-            cli_path.to_string_lossy().to_string(),
-            "serve".to_string(),
-            "--hostname".to_string(),
-            "127.0.0.1".to_string(),
-            "--port".to_string(),
-            port.to_string(),
-            "--print-logs".to_string(),
-        ]);
-        (ld_musl, args)
-    } else {
-        (
-            bun_path.clone(),
-            vec![
-                cli_path.to_string_lossy().to_string(),
-                "serve".to_string(),
-                "--hostname".to_string(),
-                "127.0.0.1".to_string(),
-                "--port".to_string(),
-                port.to_string(),
-                "--print-logs".to_string(),
-            ],
-        )
-    };
+    let (cmd_path, cmd_args) = build_server_command(
+        &ld_musl,
+        ld_musl.exists(),
+        &bun_path,
+        &cli_path,
+        &lib_path,
+        resolv_override.exists().then_some(resolv_override.as_path()),
+        port,
+    );
 
     let resolv_override_path = nlib_dir.join("libresolv_override.so");
     log::debug!("[OpenCode] Spawning: {} {:?}", cmd_path.display(), cmd_args);
@@ -760,4 +733,118 @@ pub async fn stop_local_server(port: u32, password: Option<String>) -> Result<()
     }
 
     Ok(())
+}
+
+/// Build the spawn command for the bun sidecar (D-01 step 2b extraction).
+///
+/// On Android, bun is musl-linked and must be launched through the musl dynamic
+/// linker (`ld_musl`) with `--library-path` and an optional `--preload` of the
+/// resolv override; without the linker bun is launched directly. Pure: the
+/// caller performs the filesystem existence checks and passes the results in,
+/// which keeps this unit-testable.
+fn build_server_command(
+    ld_musl: &Path,
+    ld_musl_exists: bool,
+    bun_path: &Path,
+    cli_path: &Path,
+    lib_path: &str,
+    resolv_override: Option<&Path>,
+    port: u32,
+) -> (PathBuf, Vec<String>) {
+    let serve_args = [
+        "serve".to_string(),
+        "--hostname".to_string(),
+        "127.0.0.1".to_string(),
+        "--port".to_string(),
+        port.to_string(),
+        "--print-logs".to_string(),
+    ];
+    if ld_musl_exists {
+        let mut args = vec!["--library-path".to_string(), lib_path.to_string()];
+        // --preload passes LD_PRELOAD via CLI instead of an env var (the musl
+        // linker does not forward Command::env() to bun).
+        if let Some(ro) = resolv_override {
+            args.push("--preload".to_string());
+            args.push(ro.to_string_lossy().to_string());
+        }
+        args.push(bun_path.to_string_lossy().to_string());
+        args.push(cli_path.to_string_lossy().to_string());
+        args.extend(serve_args);
+        (ld_musl.to_path_buf(), args)
+    } else {
+        let mut args = vec![cli_path.to_string_lossy().to_string()];
+        args.extend(serve_args);
+        (bun_path.to_path_buf(), args)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_server_command_via_musl_linker_with_preload() {
+        let (cmd, args) = build_server_command(
+            Path::new("/nlib/libmusl_linker.so"),
+            true,
+            Path::new("/nlib/libbun_exec.so"),
+            Path::new("/data/opencode-cli.js"),
+            "/lib:/usr/lib",
+            Some(Path::new("/nlib/libresolv_override.so")),
+            14096,
+        );
+        assert_eq!(cmd, PathBuf::from("/nlib/libmusl_linker.so"));
+        let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+        assert_eq!(
+            argv,
+            vec![
+                "--library-path",
+                "/lib:/usr/lib",
+                "--preload",
+                "/nlib/libresolv_override.so",
+                "/nlib/libbun_exec.so",
+                "/data/opencode-cli.js",
+                "serve",
+                "--hostname",
+                "127.0.0.1",
+                "--port",
+                "14096",
+                "--print-logs",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_server_command_via_musl_linker_without_preload() {
+        let (cmd, args) = build_server_command(
+            Path::new("/nlib/libmusl_linker.so"),
+            true,
+            Path::new("/nlib/libbun_exec.so"),
+            Path::new("/data/cli.js"),
+            "/lib",
+            None,
+            14096,
+        );
+        assert_eq!(cmd, PathBuf::from("/nlib/libmusl_linker.so"));
+        assert!(!args.iter().any(|a| a == "--preload"));
+        assert_eq!(&args[0], "--library-path");
+        assert_eq!(&args[1], "/lib");
+    }
+
+    #[test]
+    fn build_server_command_direct_when_no_linker() {
+        let (cmd, args) = build_server_command(
+            Path::new("/unused"),
+            false,
+            Path::new("/nlib/libbun_exec.so"),
+            Path::new("/data/cli.js"),
+            "/lib",
+            Some(Path::new("/ro.so")),
+            14096,
+        );
+        assert_eq!(cmd, PathBuf::from("/nlib/libbun_exec.so"));
+        assert_eq!(&args[0], "/data/cli.js");
+        assert_eq!(&args[1], "serve");
+        assert!(!args.iter().any(|a| a == "--library-path"));
+    }
 }
