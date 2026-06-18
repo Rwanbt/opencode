@@ -57,3 +57,79 @@ jobs:
 
       - name: Run runtime.rs host tests
         run: cargo test --manifest-path packages/mobile/src-tauri/Cargo.toml --lib
+
+  android-cross-compile-check:
+    # DEBT: D-21 follow-up — the host job above never compiles the
+    # `#[cfg(target_os="android")]` code, so android-only wiring bugs are
+    # invisible to it. A real example slipped through and was only caught at
+    # APK-build time on a device: a D-01 decomposition re-exported the command
+    # fns but not the `__cmd__*` companions that `generate_handler!` resolves,
+    # giving E0433 — but ONLY when compiling for android. android.yml has an
+    # equivalent check, yet it runs only on push-to-`dev` inside a ~60-min full
+    # APK build, so PRs never saw it. This job cross-compiles (check only, no
+    # link → no NDK link step, no llama.cpp/bun assets) on every PR touching the
+    # crate, catching such bugs in minutes.
+    name: android cross-compile check (cargo check)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android NDK
+        run: |
+          # Build scripts of -sys deps compile C for the target, so the NDK
+          # toolchain must be present even for `cargo check`. Pin the same NDK
+          # as android.yml to keep the two checks consistent.
+          rm -rf "$ANDROID_HOME/ndk/"* 2>/dev/null || true
+          sdkmanager "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - name: Setup Rust (with android target)
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: packages/mobile/src-tauri
+          key: android-check
+          cache-targets: true
+
+      - name: Download ONNX Runtime for Android (build-script dep)
+        run: |
+          # `ort` uses `download-binaries`, which has no aarch64-linux-android
+          # prebuilt; without ORT_LIB_LOCATION the ort-sys build script fails
+          # even under `cargo check`. Provide the official AAR's .so (no linking
+          # happens — check stops at metadata — but the build script needs the
+          # path). Mirrors android.yml exactly.
+          ORT_VERSION="1.22.0"
+          curl -fsSL "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" -o /tmp/ort.aar
+          cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
+          mkdir -p /tmp/ort-android/lib
+          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/lib/
+          echo "ORT_LIB_LOCATION=/tmp/ort-android" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
+
+      - name: cargo check (aarch64-linux-android)
+        working-directory: packages/mobile/src-tauri
+        run: |
+          # Checks the lib (the cdylib that the APK links) AND the test harness,
+          # both compiled with target_os="android" active — this is what makes
+          # generate_handler! expand and surface __cmd__/wiring errors.
+          NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang" \
+          AR_aarch64_linux_android="$NDK_BIN/llvm-ar" \
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android24-clang" \
+          cargo check --lib --tests --target aarch64-linux-android
