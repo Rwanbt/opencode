@@ -12,96 +12,101 @@
 //! them through `runtime`'s `use toolchain::{…}` re-export.
 use super::*;
 
-/// Recreate rootfs hardlink aliases as symlinks. Alpine ships several
-/// duplicate names (`gcc-ar` ↔ `aarch64-alpine-linux-musl-gcc-ar`,
-/// `g++` ↔ `aarch64-alpine-linux-musl-g++`, etc.) as hardlinks; SELinux
-/// `app_data_file` blocks `link()`, so tar can't recreate them on-device.
-/// We turn them into symlinks instead.
+/// Recreate rootfs hardlink aliases as symlinks. Alpine ships each compiler
+/// driver / binutils tool under several names hardlinked to ONE inode
+/// (`gcc` ↔ `aarch64-alpine-linux-musl-gcc`, and crucially `c++` ↔ `g++` ↔
+/// their prefixed forms — all the *same* C++ driver). `tar` serialises the
+/// first member of a hardlink set as a real file and the rest as hardlink
+/// entries; SELinux `app_data_file` blocks `link()` on-device, so typically
+/// only ONE member of each set survives extraction. We pick the survivor and
+/// symlink every missing member to it.
+///
+/// DEBT: D-13 device finding (Mi 10 Pro) — the previous per-*pair* logic
+/// treated `(c++, prefixed-c++)` and `(g++, prefixed-g++)` as independent
+/// sets. When tar happened to keep `g++` (or its prefixed form), the c++ pair
+/// was `(absent, absent)` and could not self-heal, leaving on-device C++
+/// compilation broken. Modelling the four C++ names as one equivalence group
+/// fixes this: a surviving `g++` now backs `c++`. Likewise `cc` ≡ `gcc`.
 pub(super) fn repair_rootfs_hardlinks(rootfs_dir: &Path) {
     let bin = rootfs_dir.join("usr/bin");
-    // Each tuple is a (canonical_short, target_prefixed) pair that Alpine
-    // ships as hardlinks. Whichever side tar managed to extract is the
-    // "real" file; the missing side becomes a symlink to it. The direction
-    // depends on tar archive ordering, which is non-deterministic — so we
-    // detect at runtime instead of assuming.
-    let pairs: &[(&str, &str)] = &[
-        ("gcc",        "aarch64-alpine-linux-musl-gcc"),
-        ("gcc-ar",     "aarch64-alpine-linux-musl-gcc-ar"),
-        ("gcc-nm",     "aarch64-alpine-linux-musl-gcc-nm"),
-        ("gcc-ranlib", "aarch64-alpine-linux-musl-gcc-ranlib"),
-        ("c++",        "aarch64-alpine-linux-musl-c++"),
-        ("cpp",        "aarch64-alpine-linux-musl-cpp"),
-        ("cc",         "aarch64-alpine-linux-musl-cc"),
-        ("g++",        "aarch64-alpine-linux-musl-g++"),
-        ("ar",         "aarch64-alpine-linux-musl-ar"),
-        ("ranlib",     "aarch64-alpine-linux-musl-ranlib"),
-        ("strip",      "aarch64-alpine-linux-musl-strip"),
-        ("objcopy",    "aarch64-alpine-linux-musl-objcopy"),
-        ("objdump",    "aarch64-alpine-linux-musl-objdump"),
-        ("nm",         "aarch64-alpine-linux-musl-nm"),
-        ("as",         "aarch64-alpine-linux-musl-as"),
-        ("readelf",    "aarch64-alpine-linux-musl-readelf"),
-        ("addr2line",  "aarch64-alpine-linux-musl-addr2line"),
-        ("size",       "aarch64-alpine-linux-musl-size"),
-        ("strings",    "aarch64-alpine-linux-musl-strings"),
-        ("c++filt",    "aarch64-alpine-linux-musl-c++filt"),
+
+    // Each inner slice is one hardlink / functionally-equivalent driver set.
+    // `cc` is the generic name for `gcc` and `c++` for `g++` (same drivers), so
+    // any survivor in a compiler group can stand in for the whole group — that
+    // is what closes the c++ gap above.
+    const GROUPS: &[&[&str]] = &[
+        &["gcc", "aarch64-alpine-linux-musl-gcc", "cc", "aarch64-alpine-linux-musl-cc"],
+        &["g++", "aarch64-alpine-linux-musl-g++", "c++", "aarch64-alpine-linux-musl-c++"],
+        &["cpp", "aarch64-alpine-linux-musl-cpp"],
+        &["gcc-ar", "aarch64-alpine-linux-musl-gcc-ar"],
+        &["gcc-nm", "aarch64-alpine-linux-musl-gcc-nm"],
+        &["gcc-ranlib", "aarch64-alpine-linux-musl-gcc-ranlib"],
+        &["ar", "aarch64-alpine-linux-musl-ar"],
+        &["ranlib", "aarch64-alpine-linux-musl-ranlib"],
+        &["strip", "aarch64-alpine-linux-musl-strip"],
+        &["objcopy", "aarch64-alpine-linux-musl-objcopy"],
+        &["objdump", "aarch64-alpine-linux-musl-objdump"],
+        &["nm", "aarch64-alpine-linux-musl-nm"],
+        &["as", "aarch64-alpine-linux-musl-as"],
+        &["readelf", "aarch64-alpine-linux-musl-readelf"],
+        &["addr2line", "aarch64-alpine-linux-musl-addr2line"],
+        &["size", "aarch64-alpine-linux-musl-size"],
+        &["strings", "aarch64-alpine-linux-musl-strings"],
+        &["c++filt", "aarch64-alpine-linux-musl-c++filt"],
     ];
-    for (a, b) in pairs {
-        let a_path = bin.join(a);
-        let b_path = bin.join(b);
-        let a_exists = a_path.exists() || fs::symlink_metadata(&a_path).is_ok();
-        let b_exists = b_path.exists() || fs::symlink_metadata(&b_path).is_ok();
-        // DEBT: D-13 — failures here used to be swallowed with `let _ =`, so a
-        // toolchain with a broken compiler driver looked healthy. Log instead.
-        match (a_exists, b_exists) {
-            (true, false) => {
-                if let Err(e) = std::os::unix::fs::symlink(a, &b_path) {
-                    log::warn!(
-                        "[OpenCode] repair_rootfs_hardlinks: failed to link {} -> {}: {}",
-                        b_path.display(),
-                        a,
-                        e
-                    );
-                }
-            }
-            (false, true) => {
-                if let Err(e) = std::os::unix::fs::symlink(b, &a_path) {
-                    log::warn!(
-                        "[OpenCode] repair_rootfs_hardlinks: failed to link {} -> {}: {}",
-                        a_path.display(),
-                        b,
-                        e
-                    );
-                }
-            }
-            (false, false) => {
-                log::warn!(
-                    "[OpenCode] repair_rootfs_hardlinks: neither {} nor {} present after extraction",
-                    a,
-                    b
-                );
-            }
-            (true, true) => {}
-        }
+
+    for group in GROUPS {
+        repair_hardlink_group(&bin, group);
     }
 
     // D-13: a missing C/C++ compiler driver only surfaces much later as a
     // confusing "command not found" deep inside cargo/gcc. Check the critical
-    // drivers right after repair and warn loudly if any are absent.
+    // drivers right after repair and warn loudly if any are still absent.
     const CRITICAL: &[&str] = &["gcc", "g++", "cc", "c++"];
     let missing: Vec<&str> = CRITICAL
         .iter()
         .copied()
-        .filter(|name| {
-            let p = bin.join(name);
-            !(p.exists() || fs::symlink_metadata(&p).is_ok())
-        })
+        .filter(|name| !resolves_to_file(&bin.join(name)))
         .collect();
     if !missing.is_empty() {
         log::warn!(
             "[OpenCode] repair_rootfs_hardlinks: critical toolchain binaries missing after extraction: {:?} — on-device compilation will fail",
             missing
         );
+    }
+}
+
+/// True if `p` resolves (following symlinks) to an existing regular file.
+/// A dangling symlink resolves to nothing → `false`, so such a member is
+/// treated as missing and gets re-pointed at a live survivor.
+pub(super) fn resolves_to_file(p: &Path) -> bool {
+    fs::metadata(p).map(|m| m.is_file()).unwrap_or(false)
+}
+
+/// Symlink every missing member of one hardlink/equivalence group to a
+/// surviving member. No-op if the whole group is absent (warns instead — the
+/// caller's CRITICAL check escalates that for compiler drivers).
+pub(super) fn repair_hardlink_group(bin: &Path, group: &[&str]) {
+    // First member that resolves to a real file becomes the link target.
+    let Some(survivor) = group.iter().copied().find(|m| resolves_to_file(&bin.join(m))) else {
+        log::warn!(
+            "[OpenCode] repair_rootfs_hardlinks: no member of group {:?} present after extraction",
+            group
+        );
+        return;
+    };
+    for member in group.iter().copied() {
+        if member == survivor {
+            continue;
+        }
+        let member_path = bin.join(member);
+        // Already a working file (real, or a symlink that resolves)? leave it.
+        if resolves_to_file(&member_path) {
+            continue;
+        }
+        // Absent or a dangling symlink → (re)create it pointing at the
+        // survivor. Relative target: both live in usr/bin.
+        force_symlink(Path::new(survivor), &member_path);
     }
 }
 

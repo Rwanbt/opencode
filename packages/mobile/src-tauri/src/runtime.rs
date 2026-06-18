@@ -643,6 +643,102 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    // ─── repair_rootfs_hardlinks equivalence groups (D-13) ───────────
+    //
+    // Regression for the on-device c++ gap (Mi 10 Pro): SELinux blocks tar's
+    // link() on app_data_file, so only one member of each hardlink set
+    // survives extraction. The repair must self-heal the whole equivalence
+    // group from whichever member survived — including backing `c++` with a
+    // surviving `g++` (same driver), which the old per-pair logic could not.
+
+    /// `<rootfs>/usr/bin` with `names` as real files. Returns (rootfs, bin).
+    fn rootfs_with_bins(tag: &str, names: &[&str]) -> (std::path::PathBuf, std::path::PathBuf) {
+        let rootfs = temp_test_dir(tag);
+        let bin = rootfs.join("usr/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        for n in names {
+            std::fs::write(bin.join(n), b"\x7fELF").unwrap();
+        }
+        (rootfs, bin)
+    }
+
+    /// True if `p` resolves (following symlinks) to a regular file.
+    fn resolves(p: &Path) -> bool {
+        std::fs::metadata(p).map(|m| m.is_file()).unwrap_or(false)
+    }
+
+    /// True if `p` is itself a symlink (regardless of whether it resolves).
+    fn is_symlink(p: &Path) -> bool {
+        std::fs::symlink_metadata(p)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+    }
+
+    #[test]
+    fn repair_hardlinks_cpp_group_heals_from_gpp() {
+        // Only g++ survived — the exact device case that left c++ broken.
+        let (rootfs, bin) = rootfs_with_bins("hl_cpp", &["g++"]);
+        repair_rootfs_hardlinks(&rootfs);
+
+        for name in ["c++", "aarch64-alpine-linux-musl-c++", "aarch64-alpine-linux-musl-g++"] {
+            assert!(resolves(&bin.join(name)), "{name} should resolve after repair");
+            assert!(is_symlink(&bin.join(name)), "{name} should be a symlink");
+        }
+        // The created symlinks must point at the surviving driver, not dangle.
+        assert_eq!(std::fs::read_link(bin.join("c++")).unwrap(), Path::new("g++"));
+
+        let _ = std::fs::remove_dir_all(&rootfs);
+    }
+
+    #[test]
+    fn repair_hardlinks_c_group_heals_from_prefixed_gcc() {
+        // Only the prefixed gcc survived → gcc, cc, prefixed-cc must self-heal.
+        let (rootfs, bin) = rootfs_with_bins("hl_c", &["aarch64-alpine-linux-musl-gcc"]);
+        repair_rootfs_hardlinks(&rootfs);
+
+        for name in ["gcc", "cc", "aarch64-alpine-linux-musl-cc"] {
+            assert!(resolves(&bin.join(name)), "{name} should resolve after repair");
+        }
+        let _ = std::fs::remove_dir_all(&rootfs);
+    }
+
+    #[test]
+    fn repair_hardlinks_repairs_dangling_symlink() {
+        // c++ extracted as a hardlink-turned-dangling-symlink to a name that
+        // never made it; repair must re-point it at the live survivor.
+        let (rootfs, bin) = rootfs_with_bins("hl_dangle", &["g++"]);
+        std::os::unix::fs::symlink("does-not-exist", bin.join("c++")).unwrap();
+        assert!(!resolves(&bin.join("c++")), "precondition: c++ dangles");
+
+        repair_rootfs_hardlinks(&rootfs);
+
+        assert!(resolves(&bin.join("c++")), "dangling c++ should be repaired");
+        assert_eq!(std::fs::read_link(bin.join("c++")).unwrap(), Path::new("g++"));
+        let _ = std::fs::remove_dir_all(&rootfs);
+    }
+
+    #[test]
+    fn repair_hardlinks_empty_group_does_not_panic() {
+        // No compiler survived at all — must degrade gracefully (warn, no panic,
+        // no bogus symlink) so the CRITICAL check can report it.
+        let (rootfs, bin) = rootfs_with_bins("hl_empty", &[]);
+        repair_rootfs_hardlinks(&rootfs);
+        assert!(!resolves(&bin.join("c++")), "absent c++ must stay absent");
+        assert!(!bin.join("c++").exists(), "no bogus c++ symlink should be created");
+        let _ = std::fs::remove_dir_all(&rootfs);
+    }
+
+    #[test]
+    fn repair_hardlinks_leaves_existing_real_files_untouched() {
+        // When both names survived as real files, repair must not overwrite
+        // either with a symlink.
+        let (rootfs, bin) = rootfs_with_bins("hl_both", &["g++", "c++"]);
+        repair_rootfs_hardlinks(&rootfs);
+        assert!(!is_symlink(&bin.join("g++")), "real g++ must stay a real file");
+        assert!(!is_symlink(&bin.join("c++")), "real c++ must stay a real file");
+        let _ = std::fs::remove_dir_all(&rootfs);
+    }
 }
 
 #[derive(Clone, Serialize, Debug)]

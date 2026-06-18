@@ -125,6 +125,14 @@ pub async fn start_embedded_server(
     // on prepare_toolchain_wrappers for the full SELinux story.
     let cache_dir = home_dir.join(".cache");
     let _ = fs::create_dir_all(&cache_dir);
+    // D-13: re-run hardlink/equivalence-group repair on every launch, BEFORE
+    // wrappers are generated. Extraction already runs it once, but installs
+    // created before the c++ equivalence-group fix never re-extract (schema
+    // unchanged), so the broken c++ would persist forever. The repair is
+    // idempotent and cheap (a few stats; symlinks only the still-missing
+    // members), so running it here self-heals existing installs with no 80 MB
+    // re-extraction — and guarantees c++ exists before it gets wrapped.
+    repair_rootfs_hardlinks(&rootfs_dir);
     let wrappers_dir = match prepare_toolchain_wrappers(&rootfs_dir, &nlib_dir, &cache_dir) {
         Ok(p) => Some(p),
         Err(e) => {

@@ -94,6 +94,19 @@ if [ "$DEBUGGABLE" = 1 ]; then
       ok "$probe → ${out%%$'\n'*}"
     fi
   done
+  # D-13: the C/C++ compiler drivers are hardlink sets; SELinux drops tar's
+  # link() so typically one member per set survives. The on-device finding was
+  # that `c++` was absent while `g++` survived. The equivalence-group repair
+  # must leave every driver resolving to a real file. Test resolution (not
+  # execution — that needs the app's full LD_PRELOAD/MUSL_LINKER env).
+  for drv in gcc cc g++ c++; do
+    out="$(RA "[ -e \"$RT/usr/bin/$drv\" ] && readlink -f \"$RT/usr/bin/$drv\" || echo MISSING")"
+    if echo "$out" | grep -q "MISSING"; then
+      ko "compiler driver $drv missing/dangling (D-13 regression)"
+    else
+      ok "compiler driver $drv resolves → ${out##*/}"
+    fi
+  done
 else
   skip "§2 needs a debuggable build (run-as)"
 fi
