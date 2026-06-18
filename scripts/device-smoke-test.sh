@@ -97,14 +97,21 @@ if [ "$DEBUGGABLE" = 1 ]; then
   # D-13: the C/C++ compiler drivers are hardlink sets; SELinux drops tar's
   # link() so typically one member per set survives. The on-device finding was
   # that `c++` was absent while `g++` survived. The equivalence-group repair
-  # must leave every driver resolving to a real file. Test resolution (not
-  # execution — that needs the app's full LD_PRELOAD/MUSL_LINKER env).
+  # must leave every driver resolving to a real file. Drivers live in the
+  # *rootfs* tree (runtime/rootfs/usr/bin), NOT runtime/usr/bin.
+  #
+  # `readlink -f` follows the whole symlink chain and prints the canonical path
+  # ONLY when it resolves (empty on a dangling/absent target). Quoting matters:
+  # `adb shell` flattens its args, so RA's bare `sh -c "$1"` would hand the path
+  # to `$0` and leave readlink argument-less — we single-quote the inner `sh -c`
+  # command so the device shell preserves it as one argument.
+  CXXBIN="$RT/rootfs/usr/bin"
   for drv in gcc cc g++ c++; do
-    out="$(RA "[ -e \"$RT/usr/bin/$drv\" ] && readlink -f \"$RT/usr/bin/$drv\" || echo MISSING")"
-    if echo "$out" | grep -q "MISSING"; then
+    tgt="$(adb shell "run-as $PKG sh -c 'readlink -f $CXXBIN/$drv'" 2>&1 | tr -d '\r')"
+    if [ -z "$tgt" ] || echo "$tgt" | grep -qiE "No such|not found|cannot access|Permission|Needs"; then
       ko "compiler driver $drv missing/dangling (D-13 regression)"
     else
-      ok "compiler driver $drv resolves → ${out##*/}"
+      ok "compiler driver $drv resolves → ${tgt##*/}"
     fi
   done
 else
