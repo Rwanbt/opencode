@@ -22,7 +22,11 @@ mod extraction;
 // `runtime::extract_runtime`. That handler is `#[cfg(target_os = "android")]`,
 // so on host/test builds this re-export has no user — hence the allow.
 #[allow(unused_imports)]
-pub use extraction::extract_runtime;
+// NOTE: re-export the `#[tauri::command]` companion macro `__cmd__*` alongside
+// the fn — `generate_handler![runtime::extract_runtime]` in lib.rs (android-only,
+// so the host test build never exercises it) resolves `runtime::__cmd__extract_runtime`.
+// Re-exporting only the fn left the companion in the submodule → E0433 at APK build.
+pub use extraction::{__cmd__extract_runtime, extract_runtime};
 use extraction::is_runtime_ready;
 
 const DEFAULT_PORT: u32 = 14096;
@@ -38,7 +42,11 @@ const RUNTIME_SCHEMA_VERSION: u32 = 1;
 // reference `runtime::start_embedded_server` etc.
 mod server;
 #[allow(unused_imports)]
-pub use server::{check_local_health, read_server_logs, start_embedded_server, stop_local_server};
+pub use server::{
+    __cmd__check_local_health, __cmd__read_server_logs, __cmd__start_embedded_server,
+    __cmd__stop_local_server, check_local_health, read_server_logs, start_embedded_server,
+    stop_local_server,
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RuntimeInfo {

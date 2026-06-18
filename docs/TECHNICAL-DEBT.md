@@ -12,6 +12,13 @@
 > WSL `cargo test --lib` 18/0 + `cargo build -D warnings` clean) ;
 > **D-14 RÉSOLU** (ADR-0003 amendé) ; **D-19** prévention seccomp explicitée + garde-fou testé (runtime-detection reste device) ;
 > **D-02 RÉSOLU** (déjà décomposé + `EXAMPLES` extrait, 1455 LOC) ; **D-07 RÉSOLU** (theme/color 32 tests + pierre/media 20 tests).
+> **🔧 VALIDATION DEVICE (2026-06-18, Mi 10 Pro / Android 13) — smoke `scripts/device-smoke-test.sh` 11/0 VERT** sur APK
+> fraîchement décomposée : §1 D-09/D-01 (serveur spawn + health 200, module `runtime::server`), §2 D-16 (cargo/rustc/node
+> via wrappers, `runtime::toolchain`), §3 D-19 (top/busybox/toybox **zéro SIGSYS**). **Le build android a révélé + j'ai
+> corrigé un VRAI bug de la décomposition** : `pub use` re-exportait les fns commandes mais pas les companions
+> `#[tauri::command]` `__cmd__*` → `generate_handler!` (android-only, `#[cfg(target_os="android")]`) cassait à l'APK.
+> **Invisible en host** (CI mobile-runtime ne fait que `cargo test --lib`, jamais le cross-compile android) → **gap CI à combler**.
+> Garde-fou **D-13 validé on-device** : `repair_rootfs_hardlinks` a correctement détecté+loggé `c++` manquant (tar `link()` SELinux-denied) → **finding rootfs réel à tracer** (compilation C++ échouera ; cc/gcc/rustc OK).
 > **Restent (vrais blocages externes)** : D-08 reliquat (coordinateurs à `createStore` interne = E2E only, par design — voir note),
 > D-19 runtime-detection (device requis), D-06 (upstream, opportuniste). ⚠️ `cargo clippy --lib --tests` ICE
 > (bug interne clippy sous cfg(test) ; `cargo clippy --lib` OK) → fallback Rust mobile = `cargo build -D warnings` + `cargo test`.
