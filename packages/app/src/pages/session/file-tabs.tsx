@@ -23,6 +23,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
 import { CodeMirrorEditor, type CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
+import { EditorBanner } from "@/pages/session/editor-banner"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -194,7 +195,25 @@ export function FileTabContent(props: { tab: string }) {
   const [editing, setEditing] = createSignal(false)
   let editorHandle: CodeMirrorHandle | undefined
 
+  // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
+  // property changes like `conflict`, `stale`, `missing` in JSX).
+  const editorEntry = createMemo(() => {
+    const p = path()
+    if (!p) return undefined
+    return editorStore.get(p)
+  })
+
+  // Guard: hide the pencil for binary files (NUL bytes) and files over 1 MB.
+  const canEdit = createMemo(() => {
+    if (!state()?.loaded) return false
+    const text = contents()
+    if (text.length > 1_000_000) return false
+    if (text.includes("\0")) return false
+    return true
+  })
+
   // Derived: true once the editor store entry is ready (after open() resolves).
+  // Also false when the file is missing so the CM panel is not shown.
   const showEditor = createMemo(() => {
     if (!editing()) return false
     const p = path()
@@ -211,8 +230,7 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   // Called by CM on every user keystroke: update dirty state.
-  // NOTE: intentionally NOT wrapped in createEffect — it runs imperatively
-  // inside the CM updateListener callback, outside of SolidJS tracking.
+  // NOT inside a createEffect — runs imperatively in CM's updateListener.
   const handleEditorChange = (content: string) => {
     const p = path()
     if (!p) return
@@ -221,30 +239,62 @@ export function FileTabContent(props: { tab: string }) {
     editorStore.setDirty(p, content !== entry.baseline.content)
   }
 
+  const applyDocEffect = (eff: { type: string; content?: string }) => {
+    if (eff.type === "set" && eff.content !== undefined) {
+      editorHandle?.setContent(eff.content)
+    }
+  }
+
   const handleCtrlS = async () => {
     const p = path()
     if (!p) return
     const content = editorHandle?.getContent() ?? ""
     const format = settings.general.autoSave()
-    const effect = await editorStore.save(p, content, format)
-    if (effect.type === "set") {
-      // Formatter changed the content — reconcile the CM buffer.
-      editorHandle?.setContent(effect.content)
-    } else if (effect.type === "conflict") {
-      // ⑤: conflict banner will handle this; show a toast for now.
-      showToast({
-        variant: "error",
-        title: language.t("editor.conflict.title") ?? "Conflict",
-        description: language.t("editor.conflict.description") ?? "File changed on disk. Use Reload or Overwrite.",
-      })
-    } else if (effect.type === "missing") {
-      showToast({
-        variant: "error",
-        title: language.t("editor.missing.title") ?? "File deleted",
-        description: language.t("editor.missing.description") ?? "This file no longer exists on disk.",
-      })
-    }
+    // On conflict/missing the store sets the flag and the banner appears
+    // reactively — no toast needed here.
+    applyDocEffect(await editorStore.save(p, content, format))
   }
+
+  const handleReload = async () => {
+    const p = path()
+    if (!p) return
+    applyDocEffect(await editorStore.reload(p))
+  }
+
+  const handleOverwrite = async () => {
+    const p = path()
+    if (!p) return
+    const content = editorHandle?.getContent() ?? ""
+    applyDocEffect(await editorStore.resolveConflict(p, content, "overwrite"))
+  }
+
+  const handleDiscard = () => {
+    const p = path()
+    if (!p) return
+    editorStore.close(p)
+    setEditing(false)
+  }
+
+  const handleRecreate = async () => {
+    const p = path()
+    if (!p) return
+    const content = editorHandle?.getContent() ?? ""
+    const format = settings.general.autoSave()
+    applyDocEffect(await editorStore.recreate(p, content, format))
+  }
+
+  // Auto-apply external reloads to the CM buffer when the watcher triggers
+  // store.reload() on a clean entry (onExternalChange → clean → reload).
+  // The `setContent` guard (doc === content → no-op) makes this idempotent.
+  createEffect(() => {
+    if (!showEditor()) return
+    const entry = editorEntry()
+    if (!entry) return
+    // Only apply when the buffer is clean (no pending dirty/stale/saving/conflict).
+    // A dirty buffer is never touched by the watcher — it sets `stale` instead.
+    if (entry.dirty || entry.stale || entry.saving || entry.conflict || entry.missing) return
+    editorHandle?.setContent(entry.baseline.content)
+  })
   // END FORK
 
   let find: FileSearchHandle | null = null
@@ -514,8 +564,8 @@ export function FileTabContent(props: { tab: string }) {
 
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      {/* FORK: edit-mode pencil toggle — visible when a text file is loaded */}
-      <Show when={!editing() && state()?.loaded && path()}>
+      {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10) */}
+      <Show when={!editing() && canEdit() && path()}>
         <div class="absolute top-2 right-4 z-10">
           <IconButton
             icon="edit-small-2"
@@ -528,7 +578,21 @@ export function FileTabContent(props: { tab: string }) {
         </div>
       </Show>
 
-      {/* FORK: CodeMirror editor — shown when editing and the store entry is ready */}
+      {/* FORK: CM editor + conflict/stale/missing banners (ADR-0005 ⑥) */}
+      <Show when={editing()}>
+        <Show when={editorEntry()} keyed>
+          {(entry) => (
+            <EditorBanner
+              entry={entry}
+              onReload={() => void handleReload()}
+              onOverwrite={() => void handleOverwrite()}
+              onDiscard={handleDiscard}
+              onRecreate={() => void handleRecreate()}
+            />
+          )}
+        </Show>
+      </Show>
+
       <Show when={showEditor()}>
         <Show when={path()} keyed>
           {(p) => (
@@ -546,7 +610,7 @@ export function FileTabContent(props: { tab: string }) {
       </Show>
 
       {/* Loading spinner while store.open() is in flight after entering edit mode */}
-      <Show when={editing() && !showEditor()}>
+      <Show when={editing() && !showEditor() && !editorEntry()?.missing}>
         <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
       </Show>
       {/* END FORK */}

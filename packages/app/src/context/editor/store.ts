@@ -192,6 +192,39 @@ export function createEditorStore(deps: EditorDeps) {
     )
   }
 
+  /**
+   * Save WITHOUT a hash precondition — for recreating a file that was deleted on
+   * disk while the buffer was dirty. Sends no `expectedHash` so the backend
+   * creates/overwrites unconditionally (no 409 possible). The conflict flag is
+   * cleared on success.
+   */
+  async function recreate(path: string, content: string, format?: boolean): Promise<DocEffect> {
+    const entry = state.entries[path]
+    if (!entry || entry.saving) return { type: "none" }
+    set(path, { saving: true })
+    // No expectedHash → backend creates unconditionally.
+    const res = await deps.write({ path, content, format })
+    if (res.type === "conflict") {
+      // Defensive: backend should not return 409 without a precondition.
+      set(path, { saving: false, conflict: true })
+      return { type: "conflict" }
+    }
+    if (res.type === "not-found") {
+      // Permissions error or parent directory missing.
+      set(path, { saving: false, missing: true })
+      return { type: "missing" }
+    }
+    set(path, {
+      baseline: { content: res.content, hash: res.stamp.hash },
+      dirty: false,
+      stale: false,
+      conflict: false,
+      missing: false,
+      saving: false,
+    })
+    return res.formatted ? { type: "set", content: res.content } : { type: "none" }
+  }
+
   return {
     state,
     get,
@@ -201,6 +234,7 @@ export function createEditorStore(deps: EditorDeps) {
     discard,
     reload,
     resolveConflict,
+    recreate,
     onExternalChange,
     onExternalDelete,
     close,

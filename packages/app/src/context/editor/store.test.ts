@@ -256,3 +256,46 @@ describe("editor store — close", () => {
     expect(store.get("a.ts")).toBeUndefined()
   })
 })
+
+describe("editor store — recreate", () => {
+  test("saves without expectedHash, clears missing flag on success", async () => {
+    const { deps, disk } = fakeDeps() // file doesn't exist on disk
+    const store = createEditorStore(deps)
+    // Simulate: file was open, then deleted externally.
+    await store.open("a.ts") // returns missing
+    const eff = await store.recreate("a.ts", "new content")
+    expect(eff).toEqual({ type: "none" }) // no format change
+    const e = store.get("a.ts")!
+    expect(e.missing).toBe(false)
+    expect(e.dirty).toBe(false)
+    expect(e.baseline.content).toBe("new content")
+    expect(disk.get("a.ts")).toBe("new content")
+  })
+
+  test("formatted response → returns set effect for CM reconcile", async () => {
+    const { deps, setFormat } = fakeDeps()
+    setFormat((s) => s.trimEnd() + "\n")
+    const store = createEditorStore(deps)
+    await store.open("a.ts") // missing → entry flagged
+    const eff = await store.recreate("a.ts", "hello  ", true)
+    expect(eff).toEqual({ type: "set", content: "hello\n" })
+    expect(store.get("a.ts")!.baseline.content).toBe("hello\n")
+  })
+
+  test("save already in-flight → returns none immediately", async () => {
+    let resolveWrite: (r: WriteResult) => void = () => {}
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      write: () => new Promise<WriteResult>((r) => (resolveWrite = r)),
+    }
+    const store = createEditorStore(deps)
+    await store.open("a.ts") // missing
+    const first = store.recreate("a.ts", "x")
+    const second = await store.recreate("a.ts", "x") // in-flight guard
+    expect(second).toEqual({ type: "none" })
+    resolveWrite({ type: "ok", content: "x", stamp: { hash: hash("x") }, formatted: false })
+    await first
+  })
+})
