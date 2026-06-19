@@ -46,12 +46,17 @@ import type {
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  FileDeleteResponses,
   FileListResponses,
   FileMkdirResponses,
+  FileMoveResponses,
   FilePartInput,
   FilePartSource,
+  FileReadRawResponses,
   FileReadResponses,
+  FileRenameResponses,
   FileStatusResponses,
+  FileWriteResponses,
   FindFilesResponses,
   FindSymbolsResponses,
   FindTextResponses,
@@ -3717,6 +3722,45 @@ export class Find extends HeyApiClient {
 
 export class File extends HeyApiClient {
   /**
+   * Delete file
+   *
+   * Delete a file. 404 if absent; rejects (409) if the file changed since expectedHash.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      expectedHash?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "expectedHash" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<FileDeleteResponses, unknown, ThrowOnError>({
+      url: "/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * List files
    *
    * List files and directories in a specified path.
@@ -3837,6 +3881,163 @@ export class File extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<FileMkdirResponses, unknown, ThrowOnError>({
       url: "/file/mkdir",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read raw file
+   *
+   * Read raw (untrimmed) text content plus a content stamp for round-trip editing.
+   */
+  public readRaw<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<FileReadRawResponses, unknown, ThrowOnError>({
+      url: "/file/raw",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Write file
+   *
+   * Write text content to a file. Rejects (409) if the file changed on disk since expectedHash. With format=true, runs the formatter and returns the final content.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      content?: string
+      expectedHash?: string
+      format?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "content" },
+            { in: "body", key: "expectedHash" },
+            { in: "body", key: "format" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileWriteResponses, unknown, ThrowOnError>({
+      url: "/file/write",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Rename file
+   *
+   * Rename a file within the project. Rejects (409) if the destination exists or source changed.
+   */
+  public rename<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      from?: string
+      to?: string
+      expectedHash?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "from" },
+            { in: "body", key: "to" },
+            { in: "body", key: "expectedHash" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileRenameResponses, unknown, ThrowOnError>({
+      url: "/file/rename",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Move file
+   *
+   * Move a file within the project. Rejects (409) if the destination exists or source changed.
+   */
+  public move<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      from?: string
+      to?: string
+      expectedHash?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "from" },
+            { in: "body", key: "to" },
+            { in: "body", key: "expectedHash" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileMoveResponses, unknown, ThrowOnError>({
+      url: "/file/move",
       ...options,
       ...params,
       headers: {

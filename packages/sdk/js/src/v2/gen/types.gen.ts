@@ -333,18 +333,18 @@ export type EventSessionCompacted = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
   }
 }
 
@@ -1103,8 +1103,8 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
-  | EventFileEdited
   | EventFileWatcherUpdated
+  | EventFileEdited
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventTodoUpdated
@@ -5517,6 +5517,30 @@ export type FindSymbolsResponses = {
 
 export type FindSymbolsResponse = FindSymbolsResponses[keyof FindSymbolsResponses]
 
+export type FileDeleteData = {
+  body?: {
+    path: string
+    expectedHash?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file"
+}
+
+export type FileDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: {
+    deleted: boolean
+  }
+}
+
+export type FileDeleteResponse = FileDeleteResponses[keyof FileDeleteResponses]
+
 export type FileListData = {
   body?: never
   path?: never
@@ -5598,6 +5622,119 @@ export type FileMkdirResponses = {
 }
 
 export type FileMkdirResponse = FileMkdirResponses[keyof FileMkdirResponses]
+
+export type FileReadRawData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/file/raw"
+}
+
+export type FileReadRawResponses = {
+  /**
+   * Raw content + stamp
+   */
+  200: {
+    content: string
+    stamp: {
+      hash: string
+      mtime?: number
+      size?: number
+    }
+  }
+}
+
+export type FileReadRawResponse = FileReadRawResponses[keyof FileReadRawResponses]
+
+export type FileWriteData = {
+  body?: {
+    path: string
+    content: string
+    expectedHash?: string
+    format?: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file/write"
+}
+
+export type FileWriteResponses = {
+  /**
+   * Final content + stamp
+   */
+  200: {
+    content: string
+    stamp: {
+      hash: string
+      mtime?: number
+      size?: number
+    }
+    formatted: boolean
+  }
+}
+
+export type FileWriteResponse = FileWriteResponses[keyof FileWriteResponses]
+
+export type FileRenameData = {
+  body?: {
+    from: string
+    to: string
+    expectedHash?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file/rename"
+}
+
+export type FileRenameResponses = {
+  /**
+   * Content stamp
+   */
+  200: {
+    hash: string
+    mtime?: number
+    size?: number
+  }
+}
+
+export type FileRenameResponse = FileRenameResponses[keyof FileRenameResponses]
+
+export type FileMoveData = {
+  body?: {
+    from: string
+    to: string
+    expectedHash?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file/move"
+}
+
+export type FileMoveResponses = {
+  /**
+   * Content stamp
+   */
+  200: {
+    hash: string
+    mtime?: number
+    size?: number
+  }
+}
+
+export type FileMoveResponse = FileMoveResponses[keyof FileMoveResponses]
 
 export type EventSubscribeData = {
   body?: never
