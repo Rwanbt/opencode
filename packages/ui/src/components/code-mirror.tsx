@@ -1,4 +1,4 @@
-// FORK: CodeMirror 6 editor component (ADR-0005, 1b-core).
+// FORK: CodeMirror 6 editor component (ADR-0005, 1b-core + Phase 2 LSP).
 // CodeMirror owns the document — this component is intentionally NOT reactive
 // to content changes after mount. The parent keys it by path so it remounts
 // when the active file changes (each mount = fresh CM state for that file).
@@ -18,6 +18,7 @@ import { EditorState, Compartment, Annotation } from "@codemirror/state"
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search"
 import { indentOnInput, bracketMatching, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
+import { buildLspExtensions, type LspCallbacks } from "./code-mirror-lsp"
 
 // Used to tag programmatic (non-user) document changes so the updateListener
 // can skip them and avoid spurious onChange callbacks.
@@ -147,6 +148,10 @@ export function CodeMirrorEditor(props: {
   onSave?: (content: string) => void
   /** Exposes the imperative handle for focus, search, get/set content. */
   ref?: (handle: CodeMirrorHandle) => void
+  /** Optional LSP callbacks — when provided, enables diagnostics, hover and F12 go-to-definition. */
+  lsp?: LspCallbacks
+  /** Called by the go-to-definition command (F12) when a definition is found. */
+  onNavigate?: (file: string, line: number, character: number) => void
 }): JSX.Element {
   let container!: HTMLDivElement
   let view: EditorView | undefined
@@ -190,6 +195,9 @@ export function CodeMirrorEditor(props: {
           props.onChange(update.state.doc.toString())
         }),
         openCodeTheme,
+        // Phase 2: LSP extensions (diagnostics, hover, F12).
+        // Only activated when the parent passes lsp callbacks.
+        ...(props.lsp ? buildLspExtensions(props.path, props.lsp, props.onNavigate) : []),
       ],
     })
 

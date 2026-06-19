@@ -32,7 +32,7 @@ export interface SessionSyncEffectsDeps {
   loadVcs: (mode: VcsMode, force?: boolean) => Promise<void>
   refreshVcs: () => void
   activeFileTab: () => string | undefined
-  fileTreeTab: () => "changes" | "all"
+  fileTreeTab: () => "changes" | "all" | "git" | "tasks"
   /** Returns whether the vcs diff for the given mode is already loaded */
   isVcsReady: (mode: VcsMode) => boolean
 }

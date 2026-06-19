@@ -26,6 +26,8 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    // FORK: ADR-0005 dual-mode Agent ⇄ IDE
+    viewMode: "agent" | "ide"
   }
   updates: {
     startup: boolean
@@ -92,6 +94,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    viewMode: "agent" as "agent" | "ide",
   },
   updates: {
     startup: true,
@@ -182,6 +185,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        viewMode: withFallback(
+          () => store.general?.viewMode,
+          defaultSettings.general.viewMode,
+        ),
+        setViewMode(value: "agent" | "ide") {
+          setStore("general", "viewMode", value)
         },
       },
       updates: {

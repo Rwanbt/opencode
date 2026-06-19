@@ -1,4 +1,4 @@
-import { type Component, Show, createMemo, createResource, onMount } from "solid-js"
+import { type Component, Show, createMemo, createResource, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,6 +8,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import {
@@ -24,6 +25,82 @@ import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
 import { SettingsRemoteAccess } from "./settings-remote-access"
+
+// FORK: ADR-0005 Phase 6 — Export / Import global configuration.
+const ConfigExportImport: Component = () => {
+  const globalSDK = useGlobalSDK()
+  const [exporting, setExporting] = createSignal(false)
+  const [importing, setImporting] = createSignal(false)
+  let fileInputRef!: HTMLInputElement
+
+  const exportConfig = async () => {
+    setExporting(true)
+    try {
+      const result = await globalSDK.client.config.get()
+      if (!result.data) throw new Error("Aucune donnée reçue du serveur")
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "opencode-config.json"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      showToast({ variant: "error", title: "Export échoué", description: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const importConfig = async (file: File) => {
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const result = await globalSDK.client.config.update({ config: data })
+      if (result.error) throw new Error(JSON.stringify(result.error))
+      showToast({ variant: "error", title: "Configuration importée — rechargement en cours…" })
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (err) {
+      showToast({ variant: "error", title: "Import échoué", description: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">Configuration</h3>
+      <SettingsList>
+        <SettingsRow title="Exporter la configuration" description="Télécharger opencode-config.json avec tous vos réglages">
+          <Button size="small" variant="secondary" disabled={exporting()} onClick={exportConfig}>
+            {exporting() ? "Export…" : "Exporter"}
+          </Button>
+        </SettingsRow>
+        <SettingsRow title="Importer une configuration" description="Restaurer depuis un fichier opencode-config.json exporté">
+          <>
+            <input
+              ref={fileInputRef!}
+              type="file"
+              accept=".json,application/json"
+              class="hidden"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                if (file) void importConfig(file)
+                e.currentTarget.value = ""
+              }}
+            />
+            <Button size="small" variant="secondary" disabled={importing()} onClick={() => fileInputRef?.click()}>
+              {importing() ? "Import…" : "Importer"}
+            </Button>
+          </>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+}
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -545,6 +622,8 @@ export const SettingsGeneral: Component = () => {
         </Show>*/}
 
         <SettingsRemoteAccess />
+
+        <ConfigExportImport />
 
         <UpdatesSection />
 

@@ -57,6 +57,7 @@ import { createSessionMutations } from "@/pages/session/session-mutations"
 import { Persist, persisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { useViewMode } from "@/hooks/use-view-mode"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -77,6 +78,8 @@ export default function Page() {
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
+  useViewMode()
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -602,7 +605,7 @@ export default function Page() {
   })
 
   const fileTreeTab = () => layout.fileTree.tab()
-  const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
+  const setFileTreeTab = (value: "changes" | "all" | "git" | "tasks") => layout.fileTree.setTab(value)
 
   createSessionSyncEffects({
     sdk,

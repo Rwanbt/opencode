@@ -2441,6 +2441,83 @@ export type LspStatus = {
   status: "connected" | "error"
 }
 
+export type LspRange = {
+  start: {
+    line: number
+    character: number
+  }
+  end: {
+    line: number
+    character: number
+  }
+}
+
+export type LspDiagnosticEntry = {
+  range: LspRange
+  /**
+   * 1=Error 2=Warning 3=Information 4=Hint
+   */
+  severity?: number
+  code?: string | number
+  source?: string
+  message: string
+}
+
+export type LspHoverResult = {
+  contents?: unknown
+  range?: LspRange
+} | null
+
+export type LspLocation = {
+  uri: string
+  range: LspRange
+}
+
+export type DocumentSymbol = {
+  name: string
+  detail?: string
+  kind: number
+  range: Range
+  selectionRange: Range
+}
+
+export type GitWorkingStatusEntry = {
+  file: string
+  /**
+   * Two-character XY status code from git status --porcelain=v1
+   */
+  code: string
+  status: "added" | "deleted" | "modified"
+}
+
+export type GitOpResult = {
+  ok: boolean
+  error?: string
+}
+
+export type GitCommitEntry = {
+  hash: string
+  shortHash: string
+  author: string
+  email: string
+  timestamp: number
+  subject: string
+}
+
+export type GitBlameEntry = {
+  hash: string
+  line: number
+  author: string
+  timestamp: number
+  content: string
+}
+
+export type GitBranchEntry = {
+  name: string
+  current: boolean
+  remote: boolean
+}
+
 export type FormatterStatus = {
   name: string
   extensions: Array<string>
@@ -5995,6 +6072,39 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
+// FORK: ADR-0005 Phase 5 — remove MCP server
+export type McpRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/{name}"
+}
+
+export type McpRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpRemoveError = McpRemoveErrors[keyof McpRemoveErrors]
+
+export type McpRemoveResponses = {
+  /**
+   * MCP server removed
+   */
+  200: {
+    success: true
+  }
+}
+
+export type McpRemoveResponse = McpRemoveResponses[keyof McpRemoveResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string
@@ -6459,6 +6569,477 @@ export type LspStatusResponses = {
 }
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type LspDiagnosticsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    /**
+     * Filter to this file path
+     */
+    file?: string
+  }
+  url: "/lsp/diagnostics"
+}
+
+export type LspDiagnosticsResponses = {
+  /**
+   * Map of file path → diagnostic list
+   */
+  200: {
+    [key: string]: Array<LspDiagnosticEntry>
+  }
+}
+
+export type LspDiagnosticsResponse = LspDiagnosticsResponses[keyof LspDiagnosticsResponses]
+
+export type LspHoverData = {
+  body?: {
+    /**
+     * Absolute path to the file
+     */
+    file: string
+    /**
+     * Zero-based line number
+     */
+    line: number
+    /**
+     * Zero-based character offset
+     */
+    character: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/hover"
+}
+
+export type LspHoverErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspHoverError = LspHoverErrors[keyof LspHoverErrors]
+
+export type LspHoverResponses = {
+  /**
+   * Hover result or null when unavailable
+   */
+  200: LspHoverResult
+}
+
+export type LspHoverResponse = LspHoverResponses[keyof LspHoverResponses]
+
+export type LspDefinitionData = {
+  body?: {
+    /**
+     * Absolute path to the file
+     */
+    file: string
+    /**
+     * Zero-based line number
+     */
+    line: number
+    /**
+     * Zero-based character offset
+     */
+    character: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/definition"
+}
+
+export type LspDefinitionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspDefinitionError = LspDefinitionErrors[keyof LspDefinitionErrors]
+
+export type LspDefinitionResponses = {
+  /**
+   * List of definition locations (empty when not found)
+   */
+  200: Array<LspLocation>
+}
+
+export type LspDefinitionResponse = LspDefinitionResponses[keyof LspDefinitionResponses]
+
+export type LspReferencesData = {
+  body?: {
+    /**
+     * Absolute path to the file
+     */
+    file: string
+    /**
+     * Zero-based line number
+     */
+    line: number
+    /**
+     * Zero-based character offset
+     */
+    character: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/references"
+}
+
+export type LspReferencesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspReferencesError = LspReferencesErrors[keyof LspReferencesErrors]
+
+export type LspReferencesResponses = {
+  /**
+   * List of reference locations (empty when not found)
+   */
+  200: Array<LspLocation>
+}
+
+export type LspReferencesResponse = LspReferencesResponses[keyof LspReferencesResponses]
+
+export type LspDocumentSymbolData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    /**
+     * Absolute path to the file
+     */
+    file: string
+  }
+  url: "/lsp/document-symbol"
+}
+
+export type LspDocumentSymbolErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LspDocumentSymbolError = LspDocumentSymbolErrors[keyof LspDocumentSymbolErrors]
+
+export type LspDocumentSymbolResponses = {
+  /**
+   * List of document symbols (DocumentSymbol or flat Symbol)
+   */
+  200: Array<DocumentSymbol | Symbol>
+}
+
+export type LspDocumentSymbolResponse = LspDocumentSymbolResponses[keyof LspDocumentSymbolResponses]
+
+export type GitWorkingStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/working-status"
+}
+
+export type GitWorkingStatusResponses = {
+  /**
+   * Working tree status entries
+   */
+  200: Array<GitWorkingStatusEntry>
+}
+
+export type GitWorkingStatusResponse = GitWorkingStatusResponses[keyof GitWorkingStatusResponses]
+
+export type GitAddData = {
+  body?: {
+    /**
+     * Relative paths to stage; empty = all
+     */
+    files?: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/add"
+}
+
+export type GitAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GitAddError = GitAddErrors[keyof GitAddErrors]
+
+export type GitAddResponses = {
+  /**
+   * Whether staging succeeded
+   */
+  200: GitOpResult
+}
+
+export type GitAddResponse = GitAddResponses[keyof GitAddResponses]
+
+export type GitResetData = {
+  body?: {
+    /**
+     * Relative paths to unstage; empty = all
+     */
+    files?: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/reset"
+}
+
+export type GitResetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GitResetError = GitResetErrors[keyof GitResetErrors]
+
+export type GitResetResponses = {
+  /**
+   * Whether unstaging succeeded
+   */
+  200: GitOpResult
+}
+
+export type GitResetResponse = GitResetResponses[keyof GitResetResponses]
+
+export type GitCommitData = {
+  body?: {
+    /**
+     * Commit message
+     */
+    message: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/commit"
+}
+
+export type GitCommitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GitCommitError = GitCommitErrors[keyof GitCommitErrors]
+
+export type GitCommitResponses = {
+  /**
+   * Short hash of the new commit
+   */
+  200: {
+    hash: string
+  }
+}
+
+export type GitCommitResponse = GitCommitResponses[keyof GitCommitResponses]
+
+export type GitPushData = {
+  body?: {
+    /**
+     * Remote name
+     */
+    remote?: string
+    /**
+     * Branch to push (default: current)
+     */
+    branch?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/push"
+}
+
+export type GitPushResponses = {
+  /**
+   * Push result
+   */
+  200: GitOpResult
+}
+
+export type GitPushResponse = GitPushResponses[keyof GitPushResponses]
+
+export type GitPullData = {
+  body?: {
+    /**
+     * Remote name
+     */
+    remote?: string
+    /**
+     * Branch to pull (default: upstream tracking)
+     */
+    branch?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/pull"
+}
+
+export type GitPullResponses = {
+  /**
+   * Pull result
+   */
+  200: GitOpResult
+}
+
+export type GitPullResponse = GitPullResponses[keyof GitPullResponses]
+
+export type GitLogData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    /**
+     * Maximum number of commits to return
+     */
+    limit?: string
+  }
+  url: "/git/log"
+}
+
+export type GitLogResponses = {
+  /**
+   * Commit history
+   */
+  200: Array<GitCommitEntry>
+}
+
+export type GitLogResponse = GitLogResponses[keyof GitLogResponses]
+
+export type GitBlameData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    /**
+     * Relative path to the file
+     */
+    file: string
+  }
+  url: "/git/blame"
+}
+
+export type GitBlameErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GitBlameError = GitBlameErrors[keyof GitBlameErrors]
+
+export type GitBlameResponses = {
+  /**
+   * Blame entries (one per line, 1-indexed)
+   */
+  200: Array<GitBlameEntry>
+}
+
+export type GitBlameResponse = GitBlameResponses[keyof GitBlameResponses]
+
+export type GitBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/branches"
+}
+
+export type GitBranchesResponses = {
+  /**
+   * Branch list
+   */
+  200: Array<GitBranchEntry>
+}
+
+export type GitBranchesResponse = GitBranchesResponses[keyof GitBranchesResponses]
+
+export type GitBranchData = {
+  body?: {
+    /**
+     * Branch name
+     */
+    name: string
+    /**
+     * Create new branch if true, switch if false
+     */
+    create?: boolean
+    /**
+     * Start point for new branch (only used when create: true)
+     */
+    from?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/git/branch"
+}
+
+export type GitBranchErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GitBranchError = GitBranchErrors[keyof GitBranchErrors]
+
+export type GitBranchResponses = {
+  /**
+   * Whether the operation succeeded
+   */
+  200: GitOpResult
+}
+
+export type GitBranchResponse = GitBranchResponses[keyof GitBranchResponses]
 
 export type FormatterStatusData = {
   body?: never

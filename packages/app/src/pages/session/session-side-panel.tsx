@@ -13,6 +13,8 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { SourceControl } from "@/components/source-control"
+import { TaskPanel } from "@/components/task-panel"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
@@ -20,6 +22,8 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
+import { useTerminal } from "@/context/terminal"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -45,6 +49,8 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const platform = usePlatform()
+  const sdk = useSDK()
+  const terminal = useTerminal()
   const { sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -153,7 +159,7 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
+    if (value !== "changes" && value !== "all" && value !== "git" && value !== "tasks") return
     layout.fileTree.setTab(value)
   }
 
@@ -400,6 +406,13 @@ export function SessionSidePanel(props: {
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="git" class="flex-1" classes={{ button: "w-full" }}>
+                    Git
+                  </Tabs.Trigger>
+                  {/* FORK: ADR-0005 Phase 4 — task runner tab */}
+                  <Tabs.Trigger value="tasks" class="flex-1" classes={{ button: "w-full" }}>
+                    Tasks
+                  </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
@@ -440,6 +453,26 @@ export function SessionSidePanel(props: {
                       />
                     </Match>
                   </Switch>
+                </Tabs.Content>
+                <Tabs.Content value="git" class="bg-background-stronger h-full overflow-y-auto">
+                  <Show when={fileTreeTab() === "git"}>
+                    <SourceControl
+                      directory={sdk.directory}
+                      onOpenFile={(path) => openTab(file.tab(path))}
+                    />
+                  </Show>
+                </Tabs.Content>
+                {/* FORK: ADR-0005 Phase 4 — task runner content */}
+                <Tabs.Content value="tasks" class="bg-background-stronger h-full">
+                  <Show when={fileTreeTab() === "tasks"}>
+                    <TaskPanel
+                      directory={sdk.directory}
+                      onRunTask={(command, title) => {
+                        terminal.newWithCommand(command, title)
+                        view().terminal.open()
+                      }}
+                    />
+                  </Show>
                 </Tabs.Content>
               </Tabs>
             </div>

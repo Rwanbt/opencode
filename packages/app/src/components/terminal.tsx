@@ -740,6 +740,9 @@ export const Terminal = (props: TerminalProps) => {
               title: local.pty.title,
               cols: t.cols,
               rows: t.rows,
+              // FORK: ADR-0005 task runner — run a specific command instead of
+              // the default shell when set via terminal.newWithCommand().
+              ...(local.pty.command ? { command: local.pty.command } : {}),
             })
             // Pre-seed lastSize so the immediate scheduleSize below (and the
             // ones from WS open / ResizeObserver if dims are still identical)

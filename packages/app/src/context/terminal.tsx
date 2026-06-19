@@ -23,6 +23,10 @@ export type LocalPTY = {
   // grid dimensions so no SIGWINCH/readline-pad is ever needed. The sweep
   // and persist/migrate paths must skip pending entries.
   _pending?: boolean
+  // FORK: ADR-0005 task runner. When set, the Terminal component passes this
+  // command to pty.create instead of launching the default shell. The PTY
+  // exits when the command exits (same semantics as Pty.CreateInput.command).
+  command?: string
 }
 
 // Client-side PTY id generator. Must produce a string matching the server's
@@ -405,6 +409,24 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         setStore("active", id)
       })
     },
+    // FORK: ADR-0005 task runner — create a pending PTY pre-wired to run a
+    // specific command. The Terminal component passes the command to
+    // pty.create() when it lazy-creates the backend session.
+    newWithCommand(command: string, title?: string) {
+      const nextNumber = pickNextTerminalNumber()
+      const id = generateClientPtyId()
+      const pending: LocalPTY = {
+        id,
+        title: title ?? command.slice(0, 24),
+        titleNumber: nextNumber,
+        _pending: true,
+        command,
+      }
+      batch(() => {
+        setStore("all", store.all.length, pending)
+        setStore("active", id)
+      })
+    },
     finalizePending(id: string) {
       const index = store.all.findIndex((x) => x.id === id)
       if (index === -1) return
@@ -582,6 +604,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
+      // FORK: ADR-0005 task runner — delegate to inner workspace session.
+      newWithCommand: (command: string, title?: string) => workspace().newWithCommand(command, title),
       finalizePending: (id: string) => workspace().finalizePending(id),
       failPending: (id: string) => workspace().failPending(id),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),

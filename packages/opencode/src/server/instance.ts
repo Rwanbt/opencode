@@ -22,6 +22,8 @@ import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
+import { LspRoutes } from "./routes/lsp"
+import { GitRoutes } from "./routes/git"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
@@ -298,6 +300,10 @@ export const InstanceRoutes = (app?: Hono) =>
         return c.json(await LSP.status())
       },
     )
+    // FORK: Phase 2 LSP routes — diagnostics/hover/definition/references/documentSymbol
+    .route("/lsp", LspRoutes())
+    // FORK: Phase 3 Git write routes — add/reset/commit/push/pull/log/blame/branches
+    .route("/git", GitRoutes())
     .get(
       "/formatter",
       describeRoute({

@@ -22,7 +22,9 @@ import { createSessionTabs } from "@/pages/session/helpers"
 // FORK: editor (ADR-0005)
 import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
+import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
+import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry } from "@opencode-ai/ui/code-mirror-lsp"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -195,11 +197,39 @@ export function FileTabContent(props: { tab: string }) {
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   }).activeFileTab
 
-  // FORK: editor state (ADR-0005)
+  // FORK: editor state (ADR-0005) + Phase 2 LSP callbacks
+  const sdk = useSDK()
   const editorStore = useEditor()
   const settings = useSettings()
   const [editing, setEditing] = createSignal(false)
   let editorHandle: CodeMirrorHandle | undefined
+
+  // LSP callbacks — stable reference, file path is passed per-call.
+  const lspCallbacks: LspCallbacks = {
+    getDiagnostics: async (f: string) => {
+      const res = await sdk.client.lsp.diagnostics({ file: f })
+      const map = (res.data ?? {}) as unknown as Record<string, LspDiagnosticEntry[]>
+      return map[f] ?? []
+    },
+    hover: async (f: string, line: number, character: number) => {
+      const res = await sdk.client.lsp.hover({ file: f, line, character })
+      return (res.data ?? null) as LspHoverResult | null
+    },
+    definition: async (f: string, line: number, character: number) => {
+      const res = await sdk.client.lsp.definition({ file: f, line, character })
+      return (res.data ?? []) as LspLocation[]
+    },
+    references: async (f: string, line: number, character: number) => {
+      const res = await sdk.client.lsp.references({ file: f, line, character })
+      return (res.data ?? []) as LspLocation[]
+    },
+  }
+
+  // Phase 2: go-to-definition — opens the target file in a new tab.
+  // Line-level scroll is deferred to Phase 3 (requires EditorHandle.scrollToLine).
+  const handleNavigate = (targetFile: string) => {
+    void tabs().open(file.tab(targetFile))
+  }
 
   // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
   // property changes like `conflict`, `stale`, `missing` in JSX).
@@ -613,6 +643,8 @@ export function FileTabContent(props: { tab: string }) {
                 ref={(h) => {
                   editorHandle = h
                 }}
+                lsp={lspCallbacks}
+                onNavigate={handleNavigate}
               />
             </Suspense>
           )}

@@ -27,6 +27,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
+import { CommandPaletteMount } from "@/components/dialog-command-palette"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
@@ -97,6 +98,7 @@ function AppShellProviders(props: ParentProps) {
                 <HighlightsProvider>
                   <Layout>{props.children}</Layout>
                 </HighlightsProvider>
+                <CommandPaletteMount />
               </CommandProvider>
             </ModelsProvider>
           </NotificationProvider>

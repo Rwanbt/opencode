@@ -108,6 +108,7 @@ const mcp = Layer.succeed(
     authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
     finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
     removeAuth: () => Effect.void,
+    remove: () => Effect.void,
     supportsOAuth: () => Effect.succeed(false),
     hasStoredTokens: () => Effect.succeed(false),
     getAuthStatus: () => Effect.succeed("not_authenticated" as const),

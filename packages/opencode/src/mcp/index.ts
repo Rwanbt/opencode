@@ -227,6 +227,8 @@ export namespace MCP {
     readonly add: (name: string, mcp: Config.Mcp) => Effect.Effect<{ status: Record<string, Status> | Status }>
     readonly connect: (name: string) => Effect.Effect<void>
     readonly disconnect: (name: string) => Effect.Effect<void>
+    // FORK: ADR-0005 Phase 5 — remove a server from runtime state and config
+    readonly remove: (name: string) => Effect.Effect<void>
     readonly getPrompt: (
       clientName: string,
       name: string,
@@ -598,6 +600,9 @@ export namespace MCP {
 
       const add = Effect.fn("MCP.add")(function* (name: string, mcp: Config.Mcp) {
         yield* createAndStore(name, mcp)
+        // FORK: ADR-0005 Phase 5 — persist to config file so server survives restart
+        const cfg = yield* cfgSvc.get()
+        yield* cfgSvc.update({ ...cfg, mcp: { ...(cfg.mcp ?? {}), [name]: mcp } })
         const s = yield* InstanceState.get(state)
         return { status: s.status }
       })
@@ -616,6 +621,18 @@ export namespace MCP {
         yield* closeClient(s, name)
         delete s.clients[name]
         s.status[name] = { status: "disabled" }
+      })
+
+      // FORK: ADR-0005 Phase 5 — remove server from runtime + config file
+      const remove = Effect.fn("MCP.remove")(function* (name: string) {
+        const s = yield* InstanceState.get(state)
+        yield* closeClient(s, name)
+        delete s.clients[name]
+        delete s.status[name]
+        const cfg = yield* cfgSvc.get()
+        const mcp = { ...(cfg.mcp ?? {}) }
+        delete mcp[name]
+        yield* cfgSvc.update({ ...cfg, mcp })
       })
 
       const tools = Effect.fn("MCP.tools")(function* () {
@@ -920,6 +937,7 @@ export namespace MCP {
         add,
         connect,
         disconnect,
+        remove,
         getPrompt,
         readResource,
         startAuth,
@@ -964,6 +982,9 @@ export namespace MCP {
   export const connect = async (name: string) => runPromise((svc) => svc.connect(name))
 
   export const disconnect = async (name: string) => runPromise((svc) => svc.disconnect(name))
+
+  // FORK: ADR-0005 Phase 5
+  export const remove = async (name: string) => runPromise((svc) => svc.remove(name))
 
   export const getPrompt = async (clientName: string, name: string, args?: Record<string, string>) =>
     runPromise((svc) => svc.getPrompt(clientName, name, args))

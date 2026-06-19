@@ -1,4 +1,4 @@
-import type { Component } from "solid-js"
+import { type Component, Show } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -11,6 +11,8 @@ import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
 import { SettingsBenchmark } from "./settings-benchmark"
+import { SettingsPlugins } from "./settings-plugins"
+import { SettingsAndroid } from "./settings-android"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -60,6 +62,16 @@ export const DialogSettings: Component = () => {
                       <Icon name="settings-gear" />
                       Benchmark
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="plugins">
+                      <Icon name="mcp" />
+                      Plugins
+                    </Tabs.Trigger>
+                    <Show when={platform.os === "android"}>
+                      <Tabs.Trigger value="android">
+                        <Icon name="settings-gear" />
+                        Android
+                      </Tabs.Trigger>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -91,6 +103,14 @@ export const DialogSettings: Component = () => {
         <Tabs.Content value="benchmark" class="no-scrollbar">
           <SettingsBenchmark />
         </Tabs.Content>
+        <Tabs.Content value="plugins" class="no-scrollbar">
+          <SettingsPlugins />
+        </Tabs.Content>
+        <Show when={platform.os === "android"}>
+          <Tabs.Content value="android" class="no-scrollbar">
+            <SettingsAndroid />
+          </Tabs.Content>
+        </Show>
       </Tabs>
     </Dialog>
   )

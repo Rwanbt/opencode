@@ -65,6 +65,21 @@ import type {
   GdprDeleteErrors,
   GdprDeleteResponses,
   GdprExportResponses,
+  GitAddErrors,
+  GitAddResponses,
+  GitBlameErrors,
+  GitBlameResponses,
+  GitBranchErrors,
+  GitBranchesResponses,
+  GitBranchResponses,
+  GitCommitErrors,
+  GitCommitResponses,
+  GitLogResponses,
+  GitPullResponses,
+  GitPushResponses,
+  GitResetErrors,
+  GitResetResponses,
+  GitWorkingStatusResponses,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
@@ -75,6 +90,15 @@ import type {
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
+  LspDefinitionErrors,
+  LspDefinitionResponses,
+  LspDiagnosticsResponses,
+  LspDocumentSymbolErrors,
+  LspDocumentSymbolResponses,
+  LspHoverErrors,
+  LspHoverResponses,
+  LspReferencesErrors,
+  LspReferencesResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -88,6 +112,8 @@ import type {
   McpAuthStartResponses,
   McpConnectResponses,
   McpDisconnectResponses,
+  McpRemoveErrors,
+  McpRemoveResponses,
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
@@ -4350,6 +4376,39 @@ export class Mcp extends HeyApiClient {
     })
   }
 
+  /**
+   * Remove an MCP server
+   *
+   * Remove a Model Context Protocol (MCP) server from the configuration and disconnect it.
+   */
+  // FORK: ADR-0005 Phase 5
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<McpRemoveResponses, McpRemoveErrors, ThrowOnError>({
+      url: "/mcp/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
   private _auth?: Auth2
   get auth(): Auth2 {
     return (this._auth ??= new Auth2({ client: this.client }))
@@ -4993,6 +5052,549 @@ export class Lsp extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Get LSP diagnostics
+   *
+   * Return all diagnostics from connected LSP servers. Pass ?file= to filter to a single file path.
+   */
+  public diagnostics<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      file?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "file" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LspDiagnosticsResponses, unknown, ThrowOnError>({
+      url: "/lsp/diagnostics",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * LSP hover
+   *
+   * Get type / documentation hover information at a position in a file.
+   */
+  public hover<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      file?: string
+      line?: number
+      character?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "file" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspHoverResponses, LspHoverErrors, ThrowOnError>({
+      url: "/lsp/hover",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP go-to-definition
+   *
+   * Return source location(s) for the definition of the symbol at the given position.
+   */
+  public definition<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      file?: string
+      line?: number
+      character?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "file" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspDefinitionResponses, LspDefinitionErrors, ThrowOnError>({
+      url: "/lsp/definition",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP find references
+   *
+   * Return all references to the symbol at the given position.
+   */
+  public references<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      file?: string
+      line?: number
+      character?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "file" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspReferencesResponses, LspReferencesErrors, ThrowOnError>({
+      url: "/lsp/references",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP document symbols
+   *
+   * Return all symbols (functions, classes, variables, etc.) defined in a file. Pass ?file= as an absolute path; the route converts it to a file:// URI internally.
+   */
+  public documentSymbol<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      file: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "file" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LspDocumentSymbolResponses, LspDocumentSymbolErrors, ThrowOnError>({
+      url: "/lsp/document-symbol",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Git extends HeyApiClient {
+  /**
+   * Get working tree status
+   *
+   * Return the working tree status as parsed `git status --porcelain=v1` entries. Each entry includes the XY code so the UI can distinguish staged vs unstaged changes: index (X) is not a space/? → staged; worktree (Y) is not a space/? → unstaged.
+   */
+  public workingStatus<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GitWorkingStatusResponses, unknown, ThrowOnError>({
+      url: "/git/working-status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stage files
+   *
+   * Run `git add` on the given files. Pass an empty `files` array to stage all modified/untracked files (`git add -A`).
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitAddResponses, GitAddErrors, ThrowOnError>({
+      url: "/git/add",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Unstage files
+   *
+   * Run `git reset HEAD` on the given files. Pass an empty `files` array to unstage everything.
+   */
+  public reset<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitResetResponses, GitResetErrors, ThrowOnError>({
+      url: "/git/reset",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Create a commit
+   *
+   * Run `git commit -m <message>`. Returns the short hash of the new commit on success. Returns a 400 if there is nothing to commit or git rejects the operation.
+   */
+  public commit<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitCommitResponses, GitCommitErrors, ThrowOnError>({
+      url: "/git/commit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Push to remote
+   *
+   * Run `git push <remote> [<branch>]`. Uses system credential helpers — SSH/token auth UI is a separate sub-project. The `ok` field is false and `error` is populated when git exits non-zero.
+   */
+  public push<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      remote?: string
+      branch?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "remote" },
+            { in: "body", key: "branch" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitPushResponses, unknown, ThrowOnError>({
+      url: "/git/push",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Pull from remote
+   *
+   * Run `git pull --rebase <remote> [<branch>]`. Rebases the local branch on top of the remote — keeps history linear. Returns `ok: false` and `error` on failure (e.g. conflicts).
+   */
+  public pull<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      remote?: string
+      branch?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "remote" },
+            { in: "body", key: "branch" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitPullResponses, unknown, ThrowOnError>({
+      url: "/git/pull",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get commit history
+   *
+   * Return the last N commits in newest-first order. Default limit: 50.
+   */
+  public log<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GitLogResponses, unknown, ThrowOnError>({
+      url: "/git/log",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get blame info for a file
+   *
+   * Return per-line blame information using `git blame --porcelain`.
+   */
+  public blame<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      file: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "file" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GitBlameResponses, GitBlameErrors, ThrowOnError>({
+      url: "/git/blame",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List branches
+   *
+   * Return all local and remote-tracking branches with current-branch marker.
+   */
+  public branches<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GitBranchesResponses, unknown, ThrowOnError>({
+      url: "/git/branches",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create or switch branch
+   *
+   * Pass `create: true` to run `git checkout -b <name> [<from>]`. Pass `create: false` (default) to switch to an existing local branch via `git checkout <name>`.
+   */
+  public branch<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+      create?: boolean
+      from?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "create" },
+            { in: "body", key: "from" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GitBranchResponses, GitBranchErrors, ThrowOnError>({
+      url: "/git/branch",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Formatter extends HeyApiClient {
@@ -5173,6 +5775,11 @@ export class OpencodeClient extends HeyApiClient {
   private _lsp?: Lsp
   get lsp(): Lsp {
     return (this._lsp ??= new Lsp({ client: this.client }))
+  }
+
+  private _git?: Git
+  get git(): Git {
+    return (this._git ??= new Git({ client: this.client }))
   }
 
   private _formatter?: Formatter

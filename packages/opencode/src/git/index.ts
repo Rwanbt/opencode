@@ -47,6 +47,47 @@ export namespace Git {
     readonly deletions: number
   }
 
+  // FORK: Phase 3 — git write types
+
+  export type CommitEntry = {
+    readonly hash: string
+    readonly shortHash: string
+    readonly author: string
+    readonly email: string
+    readonly timestamp: number
+    readonly subject: string
+  }
+
+  export type BlameEntry = {
+    readonly hash: string
+    readonly line: number
+    readonly author: string
+    readonly timestamp: number
+    readonly content: string
+  }
+
+  export type BranchEntry = {
+    readonly name: string
+    readonly current: boolean
+    readonly remote: boolean
+  }
+
+  export type CommitResult = {
+    readonly ok: boolean
+    readonly hash: string
+    readonly error?: string
+  }
+
+  export type PushResult = {
+    readonly ok: boolean
+    readonly error?: string
+  }
+
+  export type PullResult = {
+    readonly ok: boolean
+    readonly error?: string
+  }
+
   export interface Result {
     readonly exitCode: number
     readonly text: () => string
@@ -73,6 +114,17 @@ export namespace Git {
     readonly fetch: (cwd: string, remote?: string) => Effect.Effect<boolean>
     readonly upstream: (cwd: string, branch?: string) => Effect.Effect<string | undefined>
     readonly revCount: (cwd: string, range: string) => Effect.Effect<number>
+    // FORK: Phase 3 — write operations
+    readonly add: (cwd: string, files?: string[]) => Effect.Effect<boolean>
+    readonly reset: (cwd: string, files?: string[]) => Effect.Effect<boolean>
+    readonly commit: (cwd: string, message: string) => Effect.Effect<CommitResult>
+    readonly push: (cwd: string, remote?: string, branch?: string) => Effect.Effect<PushResult>
+    readonly pull: (cwd: string, remote?: string, branch?: string) => Effect.Effect<PullResult>
+    readonly log: (cwd: string, limit?: number) => Effect.Effect<CommitEntry[]>
+    readonly blame: (cwd: string, file: string) => Effect.Effect<BlameEntry[]>
+    readonly branches: (cwd: string) => Effect.Effect<BranchEntry[]>
+    readonly createBranch: (cwd: string, name: string, from?: string) => Effect.Effect<boolean>
+    readonly switchBranch: (cwd: string, name: string) => Effect.Effect<boolean>
   }
 
   const kind = (code: string): Kind => {
@@ -273,6 +325,155 @@ export namespace Git {
         return Number.isFinite(n) ? n : 0
       })
 
+      // FORK: Phase 3 — write operations ─────────────────────────────────────
+
+      // Stage files. Passing an empty array stages all tracked modifications.
+      const add = Effect.fn("Git.add")(function* (cwd: string, files?: string[]) {
+        const args = files && files.length > 0 ? ["add", "--", ...files] : ["add", "-A"]
+        const result = yield* run(args, { cwd })
+        return result.exitCode === 0
+      })
+
+      // Unstage files. Passing an empty array unstages everything.
+      const reset = Effect.fn("Git.reset")(function* (cwd: string, files?: string[]) {
+        const args = files && files.length > 0 ? ["reset", "HEAD", "--", ...files] : ["reset", "HEAD"]
+        const result = yield* run(args, { cwd })
+        return result.exitCode === 0
+      })
+
+      // Create a commit with the given message. Returns CommitResult with
+      // the new short hash on success; ok: false + error message on failure.
+      const commit = Effect.fn("Git.commit")(function* (cwd: string, message: string) {
+        const result = yield* run(["commit", "-m", message], { cwd })
+        if (result.exitCode !== 0) {
+          return {
+            ok: false,
+            hash: "",
+            error: result.stderr.toString("utf8").trim() || "git commit failed",
+          } satisfies CommitResult
+        }
+        const hashResult = yield* run(["rev-parse", "--short", "HEAD"], { cwd })
+        return { ok: true, hash: out(hashResult) || "" } satisfies CommitResult
+      })
+
+      // Push the current branch to remote. Uses system credential helpers.
+      // Phase 3 does not add SSH/token UI — that is a dedicated sub-project.
+      const push = Effect.fn("Git.push")(function* (cwd: string, remote = "origin", branch?: string) {
+        const args = branch ? ["push", remote, branch] : ["push", remote]
+        const result = yield* run(args, { cwd })
+        return {
+          ok: result.exitCode === 0,
+          error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
+        } satisfies PushResult
+      })
+
+      // Pull from remote. Uses --rebase to keep history linear.
+      const pull = Effect.fn("Git.pull")(function* (cwd: string, remote = "origin", branch?: string) {
+        const args = branch ? ["pull", "--rebase", remote, branch] : ["pull", "--rebase", remote]
+        const result = yield* run(args, { cwd })
+        return {
+          ok: result.exitCode === 0,
+          error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
+        } satisfies PullResult
+      })
+
+      // Return the commit log. Uses unit-separator (0x1F) as field delimiter
+      // and NUL as commit delimiter — both safe against message content.
+      const log = Effect.fn("Git.log")(function* (cwd: string, limit = 50) {
+        const format = ["%H", "%h", "%an", "%ae", "%at", "%s"].join("\x1f") + "\x00"
+        const result = yield* run(["log", `--max-count=${limit}`, `--format=${format}`], { cwd })
+        if (result.exitCode !== 0) return [] as CommitEntry[]
+        return result
+          .text()
+          .split("\0")
+          .filter(Boolean)
+          .flatMap((entry): CommitEntry[] => {
+            const parts = entry.split("\x1f")
+            if (parts.length < 6) return []
+            const ts = Number.parseInt(parts[4] ?? "0", 10)
+            return [
+              {
+                hash: parts[0] ?? "",
+                shortHash: parts[1] ?? "",
+                author: parts[2] ?? "",
+                email: parts[3] ?? "",
+                timestamp: Number.isFinite(ts) ? ts : 0,
+                subject: parts[5] ?? "",
+              },
+            ]
+          })
+      })
+
+      // Return blame info for a file. Uses porcelain format for reliable parsing.
+      const blame = Effect.fn("Git.blame")(function* (cwd: string, file: string) {
+        const result = yield* run(["blame", "--porcelain", "--", file], { cwd })
+        if (result.exitCode !== 0) return [] as BlameEntry[]
+        const entries: BlameEntry[] = []
+        let currentHash = ""
+        let currentAuthor = ""
+        let currentTimestamp = 0
+        let currentLine = 0
+        for (const rawLine of result.text().split("\n")) {
+          const line = rawLine.trimEnd()
+          // Boundary line: "<40-hex> <orig-line> <result-line> [<count>]"
+          const boundaryMatch = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line)
+          if (boundaryMatch) {
+            currentHash = boundaryMatch[1] ?? ""
+            currentLine = Number.parseInt(boundaryMatch[2] ?? "0", 10)
+            continue
+          }
+          if (line.startsWith("author ")) {
+            currentAuthor = line.slice(7)
+            continue
+          }
+          if (line.startsWith("committer-time ")) {
+            currentTimestamp = Number.parseInt(line.slice(15), 10)
+            continue
+          }
+          if (line.startsWith("\t")) {
+            entries.push({
+              hash: currentHash,
+              line: currentLine,
+              author: currentAuthor,
+              timestamp: Number.isFinite(currentTimestamp) ? currentTimestamp : 0,
+              content: line.slice(1),
+            })
+          }
+        }
+        return entries
+      })
+
+      // List all branches (local and remote tracking). Marks the current branch.
+      const branches = Effect.fn("Git.branches")(function* (cwd: string) {
+        const result = yield* run(["branch", "-a", "--format=%(refname:short)\x1f%(HEAD)"], { cwd })
+        if (result.exitCode !== 0) return [] as BranchEntry[]
+        return result
+          .text()
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .flatMap((line): BranchEntry[] => {
+            const sep = line.indexOf("\x1f")
+            if (sep === -1) return []
+            const name = line.slice(0, sep).trim()
+            const head = line.slice(sep + 1).trim()
+            if (!name) return []
+            return [{ name, current: head === "*", remote: name.startsWith("remotes/") }]
+          })
+      })
+
+      // Create and switch to a new branch. Optionally specify the start point.
+      const createBranch = Effect.fn("Git.createBranch")(function* (cwd: string, name: string, from?: string) {
+        const args = from ? ["checkout", "-b", name, from] : ["checkout", "-b", name]
+        const result = yield* run(args, { cwd })
+        return result.exitCode === 0
+      })
+
+      // Switch to an existing local branch.
+      const switchBranch = Effect.fn("Git.switchBranch")(function* (cwd: string, name: string) {
+        const result = yield* run(["checkout", name], { cwd })
+        return result.exitCode === 0
+      })
+
       return Service.of({
         run,
         branch,
@@ -287,6 +488,16 @@ export namespace Git {
         fetch: fetchRemote,
         upstream,
         revCount,
+        add,
+        reset,
+        commit,
+        push,
+        pull,
+        log,
+        blame,
+        branches,
+        createBranch,
+        switchBranch,
       })
     }),
   )
@@ -345,5 +556,51 @@ export namespace Git {
 
   export async function revCount(cwd: string, range: string) {
     return runPromise((git) => git.revCount(cwd, range))
+  }
+
+  // FORK: Phase 3 — write operation wrappers ─────────────────────────────────
+
+  export async function workingStatus(cwd: string) {
+    return runPromise((git) => git.status(cwd))
+  }
+
+  export async function add(cwd: string, files?: string[]) {
+    return runPromise((git) => git.add(cwd, files))
+  }
+
+  export async function reset(cwd: string, files?: string[]) {
+    return runPromise((git) => git.reset(cwd, files))
+  }
+
+  export async function commit(cwd: string, message: string): Promise<CommitResult> {
+    return runPromise((git) => git.commit(cwd, message))
+  }
+
+  export async function push(cwd: string, remote?: string, branch?: string) {
+    return runPromise((git) => git.push(cwd, remote, branch))
+  }
+
+  export async function pull(cwd: string, remote?: string, branch?: string) {
+    return runPromise((git) => git.pull(cwd, remote, branch))
+  }
+
+  export async function log(cwd: string, limit?: number) {
+    return runPromise((git) => git.log(cwd, limit))
+  }
+
+  export async function blame(cwd: string, file: string) {
+    return runPromise((git) => git.blame(cwd, file))
+  }
+
+  export async function branches(cwd: string) {
+    return runPromise((git) => git.branches(cwd))
+  }
+
+  export async function createBranch(cwd: string, name: string, from?: string) {
+    return runPromise((git) => git.createBranch(cwd, name, from))
+  }
+
+  export async function switchBranch(cwd: string, name: string) {
+    return runPromise((git) => git.switchBranch(cwd, name))
   }
 }
