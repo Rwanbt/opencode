@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -19,6 +19,10 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+// FORK: editor (ADR-0005)
+import { useEditor } from "@/context/editor"
+import { useSettings } from "@/context/settings"
+import { CodeMirrorEditor, type CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -184,6 +188,65 @@ export function FileTabContent(props: { tab: string }) {
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   }).activeFileTab
 
+  // FORK: editor state (ADR-0005)
+  const editorStore = useEditor()
+  const settings = useSettings()
+  const [editing, setEditing] = createSignal(false)
+  let editorHandle: CodeMirrorHandle | undefined
+
+  // Derived: true once the editor store entry is ready (after open() resolves).
+  const showEditor = createMemo(() => {
+    if (!editing()) return false
+    const p = path()
+    if (!p) return false
+    const entry = editorStore.get(p)
+    return entry !== undefined && !entry.missing
+  })
+
+  const handleEnterEdit = () => {
+    const p = path()
+    if (!p) return
+    setEditing(true)
+    void editorStore.open(p)
+  }
+
+  // Called by CM on every user keystroke: update dirty state.
+  // NOTE: intentionally NOT wrapped in createEffect — it runs imperatively
+  // inside the CM updateListener callback, outside of SolidJS tracking.
+  const handleEditorChange = (content: string) => {
+    const p = path()
+    if (!p) return
+    const entry = editorStore.get(p)
+    if (!entry) return
+    editorStore.setDirty(p, content !== entry.baseline.content)
+  }
+
+  const handleCtrlS = async () => {
+    const p = path()
+    if (!p) return
+    const content = editorHandle?.getContent() ?? ""
+    const format = settings.general.autoSave()
+    const effect = await editorStore.save(p, content, format)
+    if (effect.type === "set") {
+      // Formatter changed the content — reconcile the CM buffer.
+      editorHandle?.setContent(effect.content)
+    } else if (effect.type === "conflict") {
+      // ⑤: conflict banner will handle this; show a toast for now.
+      showToast({
+        variant: "error",
+        title: language.t("editor.conflict.title") ?? "Conflict",
+        description: language.t("editor.conflict.description") ?? "File changed on disk. Use Reload or Overwrite.",
+      })
+    } else if (effect.type === "missing") {
+      showToast({
+        variant: "error",
+        title: language.t("editor.missing.title") ?? "File deleted",
+        description: language.t("editor.missing.description") ?? "This file no longer exists on disk.",
+      })
+    }
+  }
+  // END FORK
+
   let find: FileSearchHandle | null = null
 
   const search = {
@@ -345,7 +408,10 @@ export function FileTabContent(props: { tab: string }) {
       if (activeFileTab() !== props.tab) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
-
+      // FORK: in edit mode CM's searchKeymap handles Ctrl+F itself — let the
+      // event propagate down to the CM editor element instead of intercepting.
+      if (editing()) return
+      // END FORK
       event.preventDefault()
       event.stopPropagation()
       find?.focus()
@@ -448,15 +514,54 @@ export function FileTabContent(props: { tab: string }) {
 
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
-        <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+      {/* FORK: edit-mode pencil toggle — visible when a text file is loaded */}
+      <Show when={!editing() && state()?.loaded && path()}>
+        <div class="absolute top-2 right-4 z-10">
+          <IconButton
+            icon="edit-small-2"
+            variant="ghost"
+            size="small"
+            class="size-6 opacity-50 hover:opacity-100 transition-opacity"
+            onClick={handleEnterEdit}
+            aria-label="Edit file"
+          />
+        </div>
+      </Show>
+
+      {/* FORK: CodeMirror editor — shown when editing and the store entry is ready */}
+      <Show when={showEditor()}>
+        <Show when={path()} keyed>
+          {(p) => (
+            <CodeMirrorEditor
+              path={p}
+              initialContent={editorStore.get(p)?.baseline.content ?? ""}
+              onChange={handleEditorChange}
+              onSave={() => void handleCtrlS()}
+              ref={(h) => {
+                editorHandle = h
+              }}
+            />
+          )}
+        </Show>
+      </Show>
+
+      {/* Loading spinner while store.open() is in flight after entering edit mode */}
+      <Show when={editing() && !showEditor()}>
+        <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+      </Show>
+      {/* END FORK */}
+
+      <Show when={!editing()}>
+        <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+          <Switch>
+            <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+            <Match when={state()?.loading}>
+              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+            </Match>
+            <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+          </Switch>
+        </ScrollView>
+      </Show>
     </Tabs.Content>
   )
 }

@@ -1,0 +1,12 @@
+/* FORK: CodeMirror 6 container reset (ADR-0005) */
+
+/* Ensure the CM editor element fills its container div. */
+.cm-opencode .cm-editor {
+  height: 100%;
+  outline: none;
+}
+
+/* Give the content area a small left indent consistent with the file viewer. */
+.cm-opencode .cm-scroller {
+  padding-top: 0.5rem;
+}

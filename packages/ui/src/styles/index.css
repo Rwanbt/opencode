@@ -45,6 +45,7 @@
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
 @import "../components/scroll-view.css" layer(components);
+@import "../components/code-mirror.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/shell-submessage.css" layer(components);
