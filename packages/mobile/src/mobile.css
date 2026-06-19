@@ -799,6 +799,36 @@ a,
   }
 }
 
+/* ─── 33. CODE EDITOR (CodeMirror) — mobile ─────────────────────────────── */
+
+/* Text selection inside the CM editor must work on touch (contenteditable). */
+.cm-opencode [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+}
+
+/* On narrow screens, hide the line-number gutter to reclaim ~2.5rem of
+   horizontal space. The file path in the tab header is sufficient context. */
+@media (max-width: 767px) {
+  .cm-opencode .cm-gutters {
+    display: none !important;
+  }
+  /* Bump font size slightly for readability on small screens. */
+  .cm-opencode .cm-editor {
+    font-size: 14px !important;
+  }
+}
+
+/* Editor banners — enlarge buttons to 36 px tap targets on touch screens. */
+@media (max-width: 767px) {
+  .cm-editor-banners button {
+    min-height: 36px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
 /* ─── 32. WORKSPACE SIDEBAR — touch-friendly on mobile ─────────────────── */
 
 @media (max-width: 767px) {

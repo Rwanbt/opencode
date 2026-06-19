@@ -196,6 +196,16 @@ export function CodeMirrorEditor(props: {
     view = new EditorView({ state, parent: container })
     view.focus()
 
+    // Mobile IME: on Android WebView, a tap on a contenteditable div does not
+    // always trigger focus + IME attachment. Listening on touchend and calling
+    // focus() when CM is not already focused ensures the soft keyboard appears
+    // reliably. passive:true so we never block scroll.
+    container.addEventListener(
+      "touchend",
+      () => { if (!view?.hasFocus) view?.focus() },
+      { passive: true },
+    )
+
     // Async language load — safe to ignore if the component unmounts first.
     void loadLangExtension(ext).then((lang) => {
       if (!view || !lang) return

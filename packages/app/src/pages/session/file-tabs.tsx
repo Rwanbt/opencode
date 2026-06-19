@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, lazy, Match, on, onCleanup, Show, Suspense, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -22,8 +22,14 @@ import { createSessionTabs } from "@/pages/session/helpers"
 // FORK: editor (ADR-0005)
 import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
-import { CodeMirrorEditor, type CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
+import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import { EditorBanner } from "@/pages/session/editor-banner"
+
+// Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
+// chunk — only fetched when the user first enters edit mode.
+const CodeMirrorEditor = lazy(() =>
+  import("@opencode-ai/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
+)
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -579,32 +585,36 @@ export function FileTabContent(props: { tab: string }) {
       </Show>
 
       {/* FORK: CM editor + conflict/stale/missing banners (ADR-0005 ⑥) */}
-      <Show when={editing()}>
-        <Show when={editorEntry()} keyed>
-          {(entry) => (
-            <EditorBanner
-              entry={entry}
-              onReload={() => void handleReload()}
-              onOverwrite={() => void handleOverwrite()}
-              onDiscard={handleDiscard}
-              onRecreate={() => void handleRecreate()}
-            />
-          )}
+      <div class="cm-editor-banners">
+        <Show when={editing()}>
+          <Show when={editorEntry()} keyed>
+            {(entry) => (
+              <EditorBanner
+                entry={entry}
+                onReload={() => void handleReload()}
+                onOverwrite={() => void handleOverwrite()}
+                onDiscard={handleDiscard}
+                onRecreate={() => void handleRecreate()}
+              />
+            )}
+          </Show>
         </Show>
-      </Show>
+      </div>
 
       <Show when={showEditor()}>
         <Show when={path()} keyed>
           {(p) => (
-            <CodeMirrorEditor
-              path={p}
-              initialContent={editorStore.get(p)?.baseline.content ?? ""}
-              onChange={handleEditorChange}
-              onSave={() => void handleCtrlS()}
-              ref={(h) => {
-                editorHandle = h
-              }}
-            />
+            <Suspense>
+              <CodeMirrorEditor
+                path={p}
+                initialContent={editorStore.get(p)?.baseline.content ?? ""}
+                onChange={handleEditorChange}
+                onSave={() => void handleCtrlS()}
+                ref={(h) => {
+                  editorHandle = h
+                }}
+              />
+            </Suspense>
           )}
         </Show>
       </Show>
