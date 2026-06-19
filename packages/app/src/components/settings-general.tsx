@@ -80,22 +80,20 @@ const ConfigExportImport: Component = () => {
           </Button>
         </SettingsRow>
         <SettingsRow title="Importer une configuration" description="Restaurer depuis un fichier opencode-config.json exporté">
-          <>
-            <input
-              ref={fileInputRef!}
-              type="file"
-              accept=".json,application/json"
-              class="hidden"
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0]
-                if (file) void importConfig(file)
-                e.currentTarget.value = ""
-              }}
-            />
-            <Button size="small" variant="secondary" disabled={importing()} onClick={() => fileInputRef?.click()}>
-              {importing() ? "Import…" : "Importer"}
-            </Button>
-          </>
+          <input
+            ref={fileInputRef!}
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0]
+              if (file) void importConfig(file)
+              e.currentTarget.value = ""
+            }}
+          />
+          <Button size="small" variant="secondary" disabled={importing()} onClick={() => fileInputRef?.click()}>
+            {importing() ? "Import…" : "Importer"}
+          </Button>
         </SettingsRow>
       </SettingsList>
     </div>
