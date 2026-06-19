@@ -7,14 +7,20 @@ import { Cause, Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
+import { createHash } from "node:crypto"
+import { mkdir as fsMkdir, open as fsOpen, rename as fsRename, rm as fsRm } from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
+import { Bus } from "../bus"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
+import { LSP } from "../lsp"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+import { FileTime } from "./time"
+import { FileWatcher } from "./watcher"
 
 export namespace File {
   export const Info = z
@@ -321,6 +327,51 @@ export namespace File {
     return [...visible, ...hiddenItems]
   }
 
+  // Guard against symlink escapes: Instance.containsPath is a *textual* check on
+  // the joined path, so a symlink planted at `project/docs/evil` pointing to
+  // `/etc` would still pass. Resolve the real path and re-check containment. For
+  // paths that do not exist yet, the canonical form falls back to the textual
+  // path — use assertWritableTarget for write/create targets.
+  // Module-scope so both the Effect service (read/list/mkdir) and the file write
+  // API (write/rename/move/delete) share one guard. See ADR-0004.
+  function assertInsideProject(full: string) {
+    if (!Instance.containsPath(full)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    try {
+      const real = AppFileSystem.resolve(full)
+      if (!Instance.containsPath(real)) {
+        throw new Error("Access denied: symlink escapes project directory")
+      }
+    } catch (e: any) {
+      if (typeof e?.message === "string" && e.message.startsWith("Access denied")) {
+        throw e
+      }
+      // Missing path or permission issue — the textual check already passed.
+    }
+  }
+
+  // FORK: file write API (ADR-0004) — parent-aware escape guard.
+  // For a target that may not exist yet (write/create, rename/move destination),
+  // AppFileSystem.resolve(full) returns the textual path, so a symlinked parent
+  // pointing outside the project would slip through assertInsideProject. Resolve
+  // the nearest EXISTING ancestor and re-check containment against its realpath.
+  function assertWritableTarget(full: string) {
+    assertInsideProject(full)
+    let ancestor = path.dirname(full)
+    while (ancestor && ancestor !== path.dirname(ancestor)) {
+      if (Filesystem.stat(ancestor)) {
+        const real = AppFileSystem.resolve(ancestor)
+        if (!Instance.containsPath(real)) {
+          throw new Error("Access denied: symlink escapes project directory")
+        }
+        return
+      }
+      ancestor = path.dirname(ancestor)
+    }
+  }
+  // END FORK
+
   interface State {
     cache: Entry
   }
@@ -535,29 +586,6 @@ export namespace File {
         })
       })
 
-      // Guard against symlink escapes: Instance.containsPath is a *textual*
-      // check on the joined path, so a symlink planted at `projet/docs/evil`
-      // that points to `/etc` would still pass. Resolve the real path and
-      // re-check containment. For paths that do not exist yet (mkdir), fall
-      // back to the parent directory so we still block obviously-escaping
-      // canonical forms.
-      function assertInsideProject(full: string) {
-        if (!Instance.containsPath(full)) {
-          throw new Error("Access denied: path escapes project directory")
-        }
-        try {
-          const real = AppFileSystem.resolve(full)
-          if (!Instance.containsPath(real)) {
-            throw new Error("Access denied: symlink escapes project directory")
-          }
-        } catch (e: any) {
-          if (typeof e?.message === "string" && e.message.startsWith("Access denied")) {
-            throw e
-          }
-          // Missing path or permission issue — the textual check already passed.
-        }
-      }
-
       const read = Effect.fn("File.read")(function* (file: string) {
         using _ = log.time("read", { file })
         const full = path.join(Instance.directory, file)
@@ -761,4 +789,193 @@ export namespace File {
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
     return runPromise((svc) => svc.search(input))
   }
+
+  // FORK: file write API for the human editor (ADR-0004) — write/rename/move/delete.
+  // Implemented as plain async namespace functions (not through the Effect service)
+  // because they orchestrate other runPromise-backed APIs (FileTime.withLock, LSP,
+  // Bus) imperatively. Conflict = content sha256 (stateless, robust on Android FUSE
+  // where mtime is unreliable). Writes are atomic (temp + fsync + rename). Text-only;
+  // format-on-save lives in the editor frontend (PR 1b).
+
+  export interface Stamp {
+    hash: string
+    mtime: number | undefined
+    size: number | undefined
+  }
+
+  export interface RawContent {
+    content: string
+    stamp: Stamp
+  }
+
+  // 409 — file changed on disk since the client read it (or precondition stale).
+  export class ConflictError extends Error {
+    constructor(
+      readonly file: string,
+      message: string,
+    ) {
+      super(message)
+      this.name = "FileConflictError"
+    }
+  }
+  // 404 — operation target does not exist.
+  export class PathNotFoundError extends Error {
+    constructor(readonly file: string) {
+      super(`File not found: ${file}`)
+      this.name = "FilePathNotFoundError"
+    }
+  }
+  // 409 — destination already exists (best-effort no-clobber).
+  export class TargetExistsError extends Error {
+    constructor(readonly file: string) {
+      super(`Destination already exists: ${file}`)
+      this.name = "FileTargetExistsError"
+    }
+  }
+
+  function hashContent(content: string): string {
+    return createHash("sha256").update(content, "utf8").digest("hex")
+  }
+
+  function stampOf(content: string, info: ReturnType<typeof Filesystem.stat>): Stamp {
+    const size = info?.size
+    return {
+      hash: hashContent(content),
+      mtime: info?.mtimeMs !== undefined ? Math.floor(Number(info.mtimeMs)) : undefined,
+      size: size !== undefined ? Number(size) : undefined,
+    }
+  }
+
+  async function diskStamp(full: string): Promise<Stamp> {
+    const content = await Filesystem.readText(full)
+    return stampOf(content, Filesystem.stat(full))
+  }
+
+  // Atomic write: temp file in the same directory, fsync, then rename. Never
+  // leaves a truncated target on crash / process kill / sdcard-full / FUSE glitch.
+  async function atomicWrite(full: string, content: string): Promise<void> {
+    const dir = path.dirname(full)
+    await fsMkdir(dir, { recursive: true })
+    const tmp = path.join(dir, `.${path.basename(full)}.${process.pid}.${Date.now()}.tmp`)
+    const handle = await fsOpen(tmp, "w")
+    try {
+      await handle.writeFile(content, "utf8")
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    try {
+      await fsRename(tmp, full)
+    } catch (e) {
+      await fsRm(tmp, { force: true }).catch(() => {})
+      throw e
+    }
+  }
+
+  async function notifyWrite(full: string, kind: "add" | "change") {
+    Bus.publish(Event.Edited, { file: full })
+    await Bus.publish(FileWatcher.Event.Updated, { file: full, event: kind })
+    // LSP refresh is best-effort in 1a; the editor consumes diagnostics in Phase 2.
+    await LSP.touchFile(full, false).catch(() => {})
+  }
+
+  async function notifyDelete(full: string) {
+    Bus.publish(Event.Edited, { file: full })
+    await Bus.publish(FileWatcher.Event.Updated, { file: full, event: "unlink" })
+    await LSP.touchFile(full, false).catch(() => {})
+  }
+
+  /**
+   * Write text content to a file, guarded by a content-hash precondition.
+   * - expectedHash present: overwrite only if the on-disk content still hashes to it (else 409).
+   * - expectedHash absent: create only if the file does not exist (else 409 — no blind overwrite).
+   */
+  export async function write(input: { path: string; content: string; expectedHash?: string }): Promise<Stamp> {
+    const full = path.join(Instance.directory, input.path)
+    assertWritableTarget(full)
+    return FileTime.withLock(full, async () => {
+      const exists = await Filesystem.exists(full)
+      if (exists) {
+        if (input.expectedHash === undefined) {
+          throw new ConflictError(input.path, "expectedHash is required to overwrite an existing file")
+        }
+        const current = await diskStamp(full)
+        if (current.hash !== input.expectedHash) {
+          throw new ConflictError(input.path, "File changed on disk since it was last read")
+        }
+      } else if (input.expectedHash !== undefined) {
+        throw new ConflictError(input.path, "File no longer exists (a hash precondition was supplied)")
+      }
+      await atomicWrite(full, input.content)
+      await notifyWrite(full, exists ? "change" : "add")
+      return stampOf(input.content, Filesystem.stat(full))
+    })
+  }
+
+  /** Read raw (untrimmed) text + stamp, so the editor can round-trip the exact bytes for hashing. */
+  export async function readRaw(file: string): Promise<RawContent> {
+    const full = path.join(Instance.directory, file)
+    assertInsideProject(full)
+    if (!(await Filesystem.exists(full))) throw new PathNotFoundError(file)
+    if (await Filesystem.isDir(full)) throw new PathNotFoundError(file)
+    const content = await Filesystem.readText(full)
+    return { content, stamp: stampOf(content, Filesystem.stat(full)) }
+  }
+
+  // rename and move share this; locks source+dest in canonical order (deadlock-safe).
+  async function relocate(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    const fromFull = path.join(Instance.directory, from)
+    const toFull = path.join(Instance.directory, to)
+    assertInsideProject(fromFull)
+    assertWritableTarget(toFull)
+    const [first, second] = [fromFull, toFull].sort()
+    return FileTime.withLock(first, () =>
+      FileTime.withLock(second, async () => {
+        if (!(await Filesystem.exists(fromFull))) throw new PathNotFoundError(from)
+        if (expectedHash !== undefined) {
+          const current = await diskStamp(fromFull)
+          if (current.hash !== expectedHash) {
+            throw new ConflictError(from, "Source changed on disk since it was last read")
+          }
+        }
+        // Best-effort no-clobber: POSIX rename(2) overwrites and there is no atomic
+        // cross-platform no-replace primitive in Node/Bun (ADR-0004).
+        if (await Filesystem.exists(toFull)) throw new TargetExistsError(to)
+        await fsMkdir(path.dirname(toFull), { recursive: true })
+        await fsRename(fromFull, toFull)
+        await notifyDelete(fromFull)
+        await notifyWrite(toFull, "add")
+        return diskStamp(toFull)
+      }),
+    )
+  }
+
+  export function rename(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    return relocate(from, to, expectedHash)
+  }
+
+  export function move(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    return relocate(from, to, expectedHash)
+  }
+
+  /** Delete a file. 404 if absent; refuses directories; optional source-hash precondition. */
+  export async function remove(input: { path: string; expectedHash?: string }): Promise<void> {
+    const full = path.join(Instance.directory, input.path)
+    assertInsideProject(full)
+    return FileTime.withLock(full, async () => {
+      if (!(await Filesystem.exists(full))) throw new PathNotFoundError(input.path)
+      if (await Filesystem.isDir(full)) {
+        throw new Error("Access denied: refusing to delete a directory via file delete")
+      }
+      if (input.expectedHash !== undefined) {
+        const current = await diskStamp(full)
+        if (current.hash !== input.expectedHash) {
+          throw new ConflictError(input.path, "File changed on disk since it was last read")
+        }
+      }
+      await fsRm(full, { force: false })
+      await notifyDelete(full)
+    })
+  }
+  // END FORK
 }

@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { File } from "../../file"
@@ -10,6 +11,29 @@ import { Log } from "../../util/log"
 import { withTimeout } from "../../util/timeout"
 
 const log = Log.create({ service: "server" })
+
+// FORK: file write API (ADR-0004) — map File service errors to typed HTTP codes.
+// Without this, a plain Error falls through middleware.ts to a generic 500, so
+// the editor could not distinguish conflict / escape / missing.
+const StampSchema = z.object({
+  hash: z.string(),
+  mtime: z.number().optional(),
+  size: z.number().optional(),
+})
+
+function rethrowFileError(e: unknown): never {
+  if (e instanceof File.ConflictError || e instanceof File.TargetExistsError) {
+    throw new HTTPException(409, { message: e.message })
+  }
+  if (e instanceof File.PathNotFoundError) {
+    throw new HTTPException(404, { message: e.message })
+  }
+  if (e instanceof Error && e.message.startsWith("Access denied")) {
+    throw new HTTPException(403, { message: e.message })
+  }
+  throw e
+}
+// END FORK
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -232,5 +256,130 @@ export const FileRoutes = lazy(() =>
         const result = await File.mkdir(dir)
         return c.json(result)
       },
+    )
+    // FORK: file write API (ADR-0004) — write/rename/move/delete + raw read.
+    .get(
+      "/file/raw",
+      describeRoute({
+        summary: "Read raw file",
+        description: "Read raw (untrimmed) text content plus a content stamp for round-trip editing.",
+        operationId: "file.readRaw",
+        responses: {
+          200: {
+            description: "Raw content + stamp",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ content: z.string(), stamp: StampSchema })),
+              },
+            },
+          },
+        },
+      }),
+      validator("query", z.object({ path: z.string() })),
+      async (c) => {
+        const path = c.req.valid("query").path
+        try {
+          return c.json(await File.readRaw(path))
+        } catch (e) {
+          rethrowFileError(e)
+        }
+      },
+    )
+    .post(
+      "/file/write",
+      describeRoute({
+        summary: "Write file",
+        description: "Write text content to a file. Rejects (409) if the file changed on disk since expectedHash.",
+        operationId: "file.write",
+        responses: {
+          200: {
+            description: "Content stamp",
+            content: { "application/json": { schema: resolver(StampSchema) } },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({ path: z.string(), content: z.string(), expectedHash: z.string().optional() }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        try {
+          return c.json(await File.write(body))
+        } catch (e) {
+          rethrowFileError(e)
+        }
+      },
+    )
+    .post(
+      "/file/rename",
+      describeRoute({
+        summary: "Rename file",
+        description: "Rename a file within the project. Rejects (409) if the destination exists or source changed.",
+        operationId: "file.rename",
+        responses: {
+          200: {
+            description: "Content stamp",
+            content: { "application/json": { schema: resolver(StampSchema) } },
+          },
+        },
+      }),
+      validator("json", z.object({ from: z.string(), to: z.string(), expectedHash: z.string().optional() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        try {
+          return c.json(await File.rename(body.from, body.to, body.expectedHash))
+        } catch (e) {
+          rethrowFileError(e)
+        }
+      },
+    )
+    .post(
+      "/file/move",
+      describeRoute({
+        summary: "Move file",
+        description: "Move a file within the project. Rejects (409) if the destination exists or source changed.",
+        operationId: "file.move",
+        responses: {
+          200: {
+            description: "Content stamp",
+            content: { "application/json": { schema: resolver(StampSchema) } },
+          },
+        },
+      }),
+      validator("json", z.object({ from: z.string(), to: z.string(), expectedHash: z.string().optional() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        try {
+          return c.json(await File.move(body.from, body.to, body.expectedHash))
+        } catch (e) {
+          rethrowFileError(e)
+        }
+      },
+    )
+    .delete(
+      "/file",
+      describeRoute({
+        summary: "Delete file",
+        description: "Delete a file. 404 if absent; rejects (409) if the file changed since expectedHash.",
+        operationId: "file.delete",
+        responses: {
+          200: {
+            description: "Deleted",
+            content: { "application/json": { schema: resolver(z.object({ deleted: z.boolean() })) } },
+          },
+        },
+      }),
+      validator("json", z.object({ path: z.string(), expectedHash: z.string().optional() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        try {
+          await File.remove(body)
+          return c.json({ deleted: true })
+        } catch (e) {
+          rethrowFileError(e)
+        }
+      },
     ),
+  // END FORK
 )
