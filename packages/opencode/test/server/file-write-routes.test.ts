@@ -37,8 +37,10 @@ describe("POST /file/write", () => {
     await using tmp = await tmpdir()
     const r = await call("POST", "/file/write", tmp.path, { path: "a.txt", content: "hello" })
     expect(r.status).toBe(200)
-    const stamp = (await r.json()) as { hash: string }
-    expect(stamp.hash.length).toBe(64)
+    const res = (await r.json()) as { content: string; stamp: { hash: string }; formatted: boolean }
+    expect(res.stamp.hash.length).toBe(64)
+    expect(res.content).toBe("hello")
+    expect(res.formatted).toBe(false)
     expect(await Bun.file(path.join(tmp.path, "a.txt")).text()).toBe("hello")
   })
 

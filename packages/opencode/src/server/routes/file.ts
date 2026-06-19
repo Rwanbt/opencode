@@ -21,6 +21,14 @@ const StampSchema = z.object({
   size: z.number().optional(),
 })
 
+// ADR-0005: write returns the FINAL on-disk content (post-format) so the editor
+// reconciles its buffer; stamp.hash keeps the next save's precondition correct.
+const WriteResultSchema = z.object({
+  content: z.string(),
+  stamp: StampSchema,
+  formatted: z.boolean(),
+})
+
 function rethrowFileError(e: unknown): never {
   if (e instanceof File.ConflictError || e instanceof File.TargetExistsError) {
     throw new HTTPException(409, { message: e.message })
@@ -289,18 +297,24 @@ export const FileRoutes = lazy(() =>
       "/file/write",
       describeRoute({
         summary: "Write file",
-        description: "Write text content to a file. Rejects (409) if the file changed on disk since expectedHash.",
+        description:
+          "Write text content to a file. Rejects (409) if the file changed on disk since expectedHash. With format=true, runs the formatter and returns the final content.",
         operationId: "file.write",
         responses: {
           200: {
-            description: "Content stamp",
-            content: { "application/json": { schema: resolver(StampSchema) } },
+            description: "Final content + stamp",
+            content: { "application/json": { schema: resolver(WriteResultSchema) } },
           },
         },
       }),
       validator(
         "json",
-        z.object({ path: z.string(), content: z.string(), expectedHash: z.string().optional() }),
+        z.object({
+          path: z.string(),
+          content: z.string(),
+          expectedHash: z.string().optional(),
+          format: z.boolean().optional(),
+        }),
       ),
       async (c) => {
         const body = c.req.valid("json")

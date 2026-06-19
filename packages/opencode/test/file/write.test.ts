@@ -23,7 +23,7 @@ describe("File.write", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const stamp = await File.write({ path: "new.txt", content: "hello" })
+        const { stamp } = await File.write({ path: "new.txt", content: "hello" })
         expect(typeof stamp.hash).toBe("string")
         expect(stamp.hash.length).toBe(64)
         expect(await Bun.file(path.join(tmp.path, "new.txt")).text()).toBe("hello")
@@ -99,7 +99,7 @@ describe("File.write", () => {
       directory: tmp.path,
       fn: async () => {
         const content = "  leading and trailing  \n\n"
-        const stamp = await File.write({ path: "ws.txt", content })
+        const { stamp } = await File.write({ path: "ws.txt", content })
         expect(await Bun.file(path.join(tmp.path, "ws.txt")).text()).toBe(content)
         const raw = await File.readRaw("ws.txt")
         expect(raw.content).toBe(content)
@@ -129,6 +129,41 @@ describe("File.write", () => {
           u1()
           u2()
         }
+      },
+    })
+  })
+})
+
+describe("File.write format-on-save", () => {
+  test("format=false writes exact raw content, formatted=false", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const content = "const x=1\n"
+        const res = await File.write({ path: "a.ts", content, format: false })
+        expect(res.content).toBe(content)
+        expect(res.formatted).toBe(false)
+        expect(await Bun.file(path.join(tmp.path, "a.ts")).text()).toBe(content)
+      },
+    })
+  })
+
+  test("format=true with no formatter configured preserves raw content (no data loss)", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // A bare tmp project has no formatter configured, so Format.file is a
+        // best-effort no-op. The raw content must survive and formatted=false.
+        const content = "const   x =1\n"
+        const res = await File.write({ path: "a.ts", content, format: true })
+        expect(res.content).toBe(content)
+        expect(res.formatted).toBe(false)
+        expect(await Bun.file(path.join(tmp.path, "a.ts")).text()).toBe(content)
+        // stamp must match the final on-disk content so the next save round-trips
+        const raw = await File.readRaw("a.ts")
+        expect(res.stamp.hash).toBe(raw.stamp.hash)
       },
     })
   })

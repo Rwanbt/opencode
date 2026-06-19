@@ -12,6 +12,7 @@ import { mkdir as fsMkdir, open as fsOpen, rename as fsRename, rm as fsRm } from
 import path from "node:path"
 import z from "zod"
 import { Bus } from "../bus"
+import { Format } from "../format"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
@@ -885,12 +886,29 @@ export namespace File {
     await LSP.touchFile(full, false).catch(() => {})
   }
 
+  // Result of a write: the FINAL on-disk content (may differ from the sent
+  // content when format=true reformatted it) + its stamp, so the editor can
+  // reconcile its buffer and keep the next save's hash precondition correct.
+  export interface WriteResult {
+    content: string
+    stamp: Stamp
+    formatted: boolean
+  }
+
   /**
    * Write text content to a file, guarded by a content-hash precondition.
    * - expectedHash present: overwrite only if the on-disk content still hashes to it (else 409).
    * - expectedHash absent: create only if the file does not exist (else 409 — no blind overwrite).
+   * - format: after writing the raw content, run Format.file best-effort (it never
+   *   throws, rewrites in place), under the same lock = atomic write→format→reread.
+   *   Returns the final on-disk content; `formatted` indicates the formatter changed it.
    */
-  export async function write(input: { path: string; content: string; expectedHash?: string }): Promise<Stamp> {
+  export async function write(input: {
+    path: string
+    content: string
+    expectedHash?: string
+    format?: boolean
+  }): Promise<WriteResult> {
     const full = path.join(Instance.directory, input.path)
     assertWritableTarget(full)
     return FileTime.withLock(full, async () => {
@@ -906,9 +924,18 @@ export namespace File {
       } else if (input.expectedHash !== undefined) {
         throw new ConflictError(input.path, "File no longer exists (a hash precondition was supplied)")
       }
+      // Write the raw content first — it is always safely on disk even if a
+      // later format step is interrupted (no data loss).
       await atomicWrite(full, input.content)
+      let finalContent = input.content
+      let formatted = false
+      if (input.format) {
+        await Format.file(full).catch(() => {})
+        finalContent = await Filesystem.readText(full)
+        formatted = finalContent !== input.content
+      }
       await notifyWrite(full, exists ? "change" : "add")
-      return stampOf(input.content, Filesystem.stat(full))
+      return { content: finalContent, stamp: stampOf(finalContent, Filesystem.stat(full)), formatted }
     })
   }
 
