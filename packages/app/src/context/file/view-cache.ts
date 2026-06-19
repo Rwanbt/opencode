@@ -8,7 +8,8 @@ const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 
-function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
+// Exported for unit tests (D-08): pure line-range logic worth pinning.
+export function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   if (range.start <= range.end) return { ...range }
 
   const startSide = range.side
@@ -23,7 +24,7 @@ function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   }
 }
 
-function equalSelectedLines(a: SelectedLineRange | null | undefined, b: SelectedLineRange | null | undefined) {
+export function equalSelectedLines(a: SelectedLineRange | null | undefined, b: SelectedLineRange | null | undefined) {
   if (!a && !b) return true
   if (!a || !b) return false
   const left = normalizeSelectedLines(a)

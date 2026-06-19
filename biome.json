@@ -18,7 +18,8 @@
 			"packages/mobile/src/**/*.ts",
 			"packages/util/src/**/*.ts",
 			"packages/plugin/src/**/*.ts",
-			"packages/sdk/js/src/**/*.ts"
+			"packages/sdk/js/src/**/*.ts",
+			"!packages/sdk/js/src/**/gen"
 		]
 	},
 	"formatter": {

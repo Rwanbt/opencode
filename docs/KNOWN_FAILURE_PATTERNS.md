@@ -91,7 +91,60 @@
 #### Mobile CLI bundle stale
 **Symptôme** : comportement backend stale sur Android malgré recompilation.
 **Cause** : `prepare-android-runtime.sh` ne rebuild `opencode-cli.js` qu'à la 1ère compilation.
-**Fix** : forcer la recompilation explicitement avant le build Android.
+**Fix** : forcer la recompilation explicitement avant le build Android. Le bundling
+CLI a une **source unique** : `scripts/bundle-mobile.mjs` (appelé par
+`prepare-android-runtime.sh` ET la CI). Ne jamais réintroduire un second `bun build`
+divergent (dette D-17).
+
+#### Chaîne d'exécution toolchain on-device (shebang + LD_PRELOAD)
+**Contexte** : sur Android 13+, la policy SELinux `untrusted_app` refuse
+`execute_no_trans` sur les fichiers labellisés `app_data_file` (tout ce qui est
+écrit dans le data dir privé de l'app, donc le rootfs Alpine extrait). musl libc
+résout `execve`/`posix_spawn` en visibilité cachée → un interposeur LD_PRELOAD ne
+peut pas intercepter les sous-process spawnés par chemin absolu (`cc1`, `collect2`,
+`ld`, `as`, `rustc`…). Le kernel renvoie EACCES (rapporté ENOENT par le hook SELinux).
+
+**Chaîne mise en place** (`runtime.rs::prepare_toolchain_wrappers`) :
+
+```
+  invocation (cargo / gcc / rustc …)
+        │
+        ▼
+  binfmt_script   ── le kernel lit la 1re ligne "#!<...>" du wrapper
+        │
+        ▼
+  libbash_exec.so  ── vit dans nativeLibraryDir (label apk_data_file,
+        │              EXEC autorisé) → contourne l'EACCES du script
+        ▼
+  libmusl_linker.so <name>.elf64   ── relance l'ELF musl réel (mmap+reloc)
+        │
+        ▼
+  ELF cible (<name>.elf64)         ── le binaire d'origine, renommé
+```
+
+Deux étages :
+1. **Wrap in-rootfs** : chaque ELF musl spawné par chemin absolu est renommé
+   `<name>.elf64` et remplacé par un script `#!<nlib>/libbash_exec.so` qui
+   re-exec via `libmusl_linker.so <name>.elf64`.
+2. **Wrappers d'entrée** : `<cache>/wrappers/{cargo,rustc,…}` ; le PATH les met
+   en tête et `RUSTC` épingle le wrapper rustc.
+
+**Invariants critiques** (testés par `prepare_toolchain_wrappers_is_idempotent`) :
+- **Idempotence** : un 2e passage ne doit jamais produire `<name>.elf64.elf64` ni
+  altérer le `.elf64` sauvegardé. Le script est en revanche **toujours réécrit** car
+  `nativeLibraryDir` contient le hash d'install APK : un wrapper d'une install
+  précédente pointe vers un `libbash_exec.so` mort.
+- **`liblto_plugin.so` reste un .so** (dlopen-able), jamais wrappé.
+- **`ld` → `ld.bfd`** doit exister (collect2 le cherche par nom nu).
+
+**Symptômes d'une chaîne cassée** :
+- `cc: cannot execute: required file not found` → wrapper pointe vers un
+  `libbash_exec.so` d'une install précédente (path APK périmé).
+- `collect2: ld: No such file or directory` → symlink `ld` perdu par un wrap pass.
+- `Not a valid dynamic program` → double-wrap (`.elf64.elf64`).
+- Échec silencieux d'un `force_symlink`/`repair_rootfs_hardlinks` → un binaire
+  critique (gcc/g++) absent ; depuis D-12/D-13 ces échecs sont loggés
+  (`[OpenCode] … failed to …`), donc à scanner dans `adb logcat`.
 
 ---
 

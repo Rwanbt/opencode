@@ -4403,7 +4403,7 @@ export type SessionPromptAsyncResponses = {
   /**
    * Prompt accepted
    */
-  204: undefined
+  204: void
 }
 
 export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
@@ -5400,7 +5400,7 @@ export type GdprDeleteResponses = {
   /**
    * Deleted
    */
-  204: undefined
+  204: void
 }
 
 export type GdprDeleteResponse = GdprDeleteResponses[keyof GdprDeleteResponses]

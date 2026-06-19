@@ -3,7 +3,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -365,7 +365,17 @@ export namespace File {
           const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
           const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
           const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-          const top = yield* appFs.readDirectoryEntries(Instance.directory).pipe(Effect.orElseSucceed(() => []))
+          const top = yield* appFs.readDirectoryEntries(Instance.directory).pipe(
+            // DEBT: D-10 — don't swallow scan failures silently; an unreadable
+            // top dir means an incomplete listing, which must be observable.
+            Effect.catchCause((cause) => {
+              log.warn("readDirectoryEntries failed; listing may be incomplete", {
+                dir: Instance.directory,
+                cause: Cause.pretty(cause),
+              })
+              return Effect.succeed([])
+            }),
+          )
 
           for (const entry of top) {
             if (entry.type !== "directory") continue
@@ -373,7 +383,16 @@ export namespace File {
             dirs.add(entry.name + "/")
 
             const base = path.join(Instance.directory, entry.name)
-            const children = yield* appFs.readDirectoryEntries(base).pipe(Effect.orElseSucceed(() => []))
+            const children = yield* appFs.readDirectoryEntries(base).pipe(
+              // DEBT: D-10 — log rather than silently dropping a subtree.
+              Effect.catchCause((cause) => {
+                log.warn("readDirectoryEntries failed; subtree skipped", {
+                  dir: base,
+                  cause: Cause.pretty(cause),
+                })
+                return Effect.succeed([])
+              }),
+            )
             for (const child of children) {
               if (child.type !== "directory") continue
               if (shouldIgnoreNested(child.name)) continue
@@ -404,11 +423,17 @@ export namespace File {
         s.cache = next
       })
 
-      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
+      // DEBT: D-11 — a failed scan used to invalidate the cache silently. Log
+      // the cause so a stale or empty file cache is diagnosable.
+      const scanLoggingCause = (cause: Cause.Cause<unknown>) => {
+        log.warn("file scan failed; cache may be stale", { cause: Cause.pretty(cause) })
+        return Effect.void
+      }
+      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(scanLoggingCause)))
 
       const ensure = Effect.fn("File.ensure")(function* () {
         yield* cachedScan
-        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
+        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(scanLoggingCause)))
       })
 
       const init = Effect.fn("File.init")(function* () {
@@ -624,7 +649,16 @@ export namespace File {
         const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
         assertInsideProject(resolved)
 
-        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(Effect.orElseSucceed(() => []))
+        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(
+          // DEBT: D-10 — surface scan failures instead of returning an empty list.
+          Effect.catchCause((cause) => {
+            log.warn("readDirectoryEntries failed; listing may be incomplete", {
+              dir: resolved,
+              cause: Cause.pretty(cause),
+            })
+            return Effect.succeed([])
+          }),
+        )
 
         const nodes: File.Node[] = []
         for (const entry of entries) {
@@ -685,7 +719,13 @@ export namespace File {
         // symlink on the parent chain would itself be detected because
         // AppFileSystem.resolve walks existing segments.
         assertInsideProject(resolved)
-        yield* appFs.ensureDir(resolved).pipe(Effect.catch(() => Effect.void))
+        // DEBT: D-11 — a swallowed mkdir failure looked like success; log it.
+        yield* appFs.ensureDir(resolved).pipe(
+          Effect.catch((err) => {
+            log.warn("ensureDir failed", { dir: resolved, error: String(err) })
+            return Effect.void
+          }),
+        )
         return { absolute: resolved }
       })
 
