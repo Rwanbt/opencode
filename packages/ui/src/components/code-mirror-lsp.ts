@@ -89,11 +89,13 @@ function uriToPath(uri: string): string {
  *  - Diagnostics gutter + squiggles (750 ms debounce)
  *  - Hover tooltip (300 ms delay)
  *  - F12 → go-to-definition (calls `onNavigate` when found)
+ *  - Shift+F12 → find all references (calls `onReferences` when found)
  */
 export function buildLspExtensions(
   path: string,
   callbacks: LspCallbacks,
   onNavigate?: (file: string, line: number, character: number) => void,
+  onReferences?: (refs: LspLocation[]) => void,
 ): Extension[] {
   const extensions: Extension[] = []
 
@@ -178,8 +180,32 @@ export function buildLspExtensions(
               .definition(path, lspLine, lspChar)
               .then((locs) => {
                 if (locs.length === 0) return
-                const loc = locs[0]
+                const loc = locs[0]!
                 onNavigate(uriToPath(loc.uri), loc.range.start.line, loc.range.start.character)
+              })
+              .catch(() => {})
+            return true
+          },
+        },
+      ]),
+    )
+  }
+
+  // ── Find all references (Shift+F12) ──────────────────────────────────────
+  if (onReferences) {
+    extensions.push(
+      keymap.of([
+        {
+          key: "Shift-F12",
+          run: (view) => {
+            const pos = view.state.selection.main.head
+            const line = view.state.doc.lineAt(pos)
+            const lspLine = line.number - 1
+            const lspChar = pos - line.from
+            void callbacks
+              .references(path, lspLine, lspChar)
+              .then((refs) => {
+                onReferences(refs)
               })
               .catch(() => {})
             return true

@@ -18,7 +18,7 @@ import { EditorState, Compartment, Annotation } from "@codemirror/state"
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search"
 import { indentOnInput, bracketMatching, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
-import { buildLspExtensions, type LspCallbacks } from "./code-mirror-lsp"
+import { buildLspExtensions, type LspCallbacks, type LspLocation } from "./code-mirror-lsp"
 
 // Used to tag programmatic (non-user) document changes so the updateListener
 // can skip them and avoid spurious onChange callbacks.
@@ -152,6 +152,8 @@ export function CodeMirrorEditor(props: {
   lsp?: LspCallbacks
   /** Called by the go-to-definition command (F12) when a definition is found. */
   onNavigate?: (file: string, line: number, character: number) => void
+  /** Called by the find-all-references command (Shift+F12) with the list of locations. */
+  onReferences?: (refs: LspLocation[]) => void
 }): JSX.Element {
   let container!: HTMLDivElement
   let view: EditorView | undefined
@@ -197,7 +199,7 @@ export function CodeMirrorEditor(props: {
         openCodeTheme,
         // Phase 2: LSP extensions (diagnostics, hover, F12).
         // Only activated when the parent passes lsp callbacks.
-        ...(props.lsp ? buildLspExtensions(props.path, props.lsp, props.onNavigate) : []),
+        ...(props.lsp ? buildLspExtensions(props.path, props.lsp, props.onNavigate, props.onReferences) : []),
       ],
     })
 

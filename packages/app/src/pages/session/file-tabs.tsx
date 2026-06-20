@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, lazy, Match, on, onCleanup, Show, Suspense, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, lazy, Match, on, onCleanup, Show, Suspense, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -229,6 +229,18 @@ export function FileTabContent(props: { tab: string }) {
   // Line-level scroll is deferred to Phase 3 (requires EditorHandle.scrollToLine).
   const handleNavigate = (targetFile: string) => {
     void tabs().open(file.tab(targetFile))
+  }
+
+  // Stretch Phase 2: find-all-references (Shift+F12) — inline references panel.
+  const [refLocations, setRefLocations] = createSignal<LspLocation[]>([])
+
+  const handleReferences = (refs: LspLocation[]) => {
+    setRefLocations(refs)
+  }
+
+  function uriToDisplayPath(uri: string): string {
+    const p = uri.startsWith("file://") ? decodeURIComponent(uri.slice(7).replace(/^\/([A-Z]:)/, "$1")) : uri
+    return p.replace(/\\/g, "/")
   }
 
   // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
@@ -645,6 +657,7 @@ export function FileTabContent(props: { tab: string }) {
                 }}
                 lsp={lspCallbacks}
                 onNavigate={handleNavigate}
+                onReferences={handleReferences}
               />
             </Suspense>
           )}
@@ -654,6 +667,42 @@ export function FileTabContent(props: { tab: string }) {
       {/* Loading spinner while store.open() is in flight after entering edit mode */}
       <Show when={editing() && !showEditor() && !editorEntry()?.missing}>
         <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+      </Show>
+
+      {/* Stretch Phase 2: References panel (Shift+F12) */}
+      <Show when={refLocations().length > 0}>
+        <div class="border-t border-border-weak-base bg-background-stronger flex flex-col max-h-48 overflow-y-auto shrink-0">
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-weak-base sticky top-0 bg-background-stronger z-10">
+            <span class="text-11-regular text-text-weaker uppercase tracking-wide">
+              Références ({refLocations().length})
+            </span>
+            <button
+              type="button"
+              onClick={() => setRefLocations([])}
+              class="text-10-regular text-text-weaker hover:text-text-base px-1"
+            >
+              ✕
+            </button>
+          </div>
+          <For each={refLocations()}>
+            {(loc) => {
+              const displayPath = uriToDisplayPath(loc.uri)
+              const short = displayPath.split("/").slice(-2).join("/")
+              return (
+                <button
+                  type="button"
+                  class="flex items-center gap-2 px-3 py-1 hover:bg-surface-base text-left w-full"
+                  onClick={() => handleNavigate(displayPath)}
+                >
+                  <span class="text-11-regular text-text-base truncate flex-1 font-mono">{short}</span>
+                  <span class="text-10-regular text-text-weaker shrink-0">
+                    :{loc.range.start.line + 1}:{loc.range.start.character + 1}
+                  </span>
+                </button>
+              )
+            }}
+          </For>
+        </div>
       </Show>
       {/* END FORK */}
 
