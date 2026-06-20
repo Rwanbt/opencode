@@ -205,7 +205,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 
 **Stretch (partiellement implémenté)** :
 - **SKILL.md liste** ✅ (commit `a7f40d58f1`) — `SkillsSection` affiche les skills installés via `sdk.client.app.skills()` (SolidJS `createResource`), avec nom, description et chemin relatif. Format doc replié dans `<details>`. Le backend `GET /skill` + `Skill.all()` existait déjà.
-- **SKILL.md install/manage** — installation depuis URL et suppression (routes `POST/DELETE /skill`) non implémentées.
+- **SKILL.md install/manage** ✅ (commit `02c99c485b`) — `POST /skill/install` (URL directe SKILL.md ou index discovery) + `DELETE /skill/:name` (global seulement) + UI champ URL + bouton ✕ par skill global + refetch liste automatique.
 - **npm plugin local install/uninstall** — non implémenté.
 
 ### Phase 6 — Pro Android / Tablette ✅
@@ -227,7 +227,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 - **Phase 0** — Device QA matrix (Xiaomi/Pixel × Android 12-15) : non bloquante, tests manuels à planifier.
 - **Stretch Phase 2** : Shift+F12 ✅ + autocomplete ✅ + rename symbol ✅ + code actions ✅ (commits `6dd63051b7` / `d949e89e4d` / `8f534ac755` / `fe9b924722`) — **LSP triad complet**.
 - **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer (parser `cargo test`/`npm test`).
-- **Stretch Phase 5** : SKILL.md liste ✅ (commit `a7f40d58f1`) ; install/manage via URL.
+- **Stretch Phase 5** : SKILL.md liste ✅ + install/uninstall via URL ✅ (commits `a7f40d58f1` / `02c99c485b`) — **skills complets** ; npm plugin local reste hors scope.
 - **Stretch Phase 6** : split panes, mode tablette dédié.
 - **Sous-projet auth push/pull** : SSH key / token, stockage sécurisé Tauri Store.
 
