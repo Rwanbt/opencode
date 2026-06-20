@@ -157,12 +157,19 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
 
 **Stretch (Phase 3+)** : Shift+F12 references panel, autocomplete (`completionProvider`), rename, code actions, line-level scroll post navigation (`EditorHandle.scrollToLine`).
 
-### Phase 3 — Workspace + Git (backend ET UI)
-Créer d'abord la couche **backend git d'écriture** sur le wrapper `run()` existant (effort 3-4h)
-(`commit/stage/unstage/push/pull/branch-switch/blame/log` dans `git/index.ts`, blocs `// FORK:`).
-**Sous-chantier à part entière : auth push/pull** (SSH key / token, stockage sécurisé, UX mobile) —
-ne pas sous-estimer. Puis UI Source Control (stage/commit/branches/pull/push/blame/history/conflict
-resolver) + UI workspace (clone/ouvrir/créer, fichiers récents). Routes → régén SDK.
+### Phase 3 — Workspace + Git (backend ET UI) ✅
+
+**Implémenté** (commit `e174a0bb9a`).
+
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| Backend git write : `add/reset/commit/push/pull/log/blame/branches/createBranch/switchBranch` | `git/index.ts` | ✅ |
+| Routes HTTP : `/git/working-status`, `/git/add`, `/git/reset`, `/git/commit`, `/git/push`, `/git/pull`, `/git/log`, `/git/blame`, `/git/branches`, `/git/branch` | `routes/git.ts` | ✅ |
+| SDK v2 régénéré — classe `Git` avec toutes les méthodes | `packages/sdk/js/src/v2/gen/sdk.gen.ts` | ✅ |
+| UI Source Control — staged/unstaged, commit, push, pull, branch switcher, historique | `components/source-control.tsx` | ✅ |
+| Intégration side panel — onglet "git" dans `SessionSidePanel` | `pages/session/session-side-panel.tsx` | ✅ |
+
+**Auth push/pull** : délibérément via le credential store système (SSH/token = sous-projet séparé non implémenté). **Workspace** (clone/ouvrir/créer) : déféré Phase 3+.
 
 ### Phase 4 — Build / Test / Debug (re-scopée par l'audit)
 **Pré-requis : Phase 0+ (durcissement mobile) terminée.** Cœur réaliste : task runner du projet *ouvert*
