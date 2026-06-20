@@ -279,6 +279,54 @@ export const InstanceRoutes = (app?: Hono) =>
         return c.json(skills)
       },
     )
+    // FORK: Stretch Phase 5 — install skill via URL (direct SKILL.md or discovery index)
+    .post(
+      "/skill/install",
+      describeRoute({
+        summary: "Install a skill",
+        description:
+          "Install a skill from a URL. Accepts a direct SKILL.md URL or a discovery index URL. The skill is saved to the global ~/.claude/skills/ directory and immediately available.",
+        operationId: "app.skillInstall",
+        responses: {
+          200: {
+            description: "Installed skill info",
+            content: { "application/json": { schema: resolver(Skill.Info) } },
+          },
+          400: { description: "Bad request" },
+          422: { description: "Install failed" },
+        },
+      }),
+      validator("json", z.object({ url: z.string().url() })),
+      async (c) => {
+        const { url } = c.req.valid("json")
+        try {
+          const info = await Skill.install(url)
+          return c.json(info)
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          return c.json({ error: message }, 422)
+        }
+      },
+    )
+    // FORK: Stretch Phase 5 — uninstall a globally-installed skill
+    .delete(
+      "/skill/:name",
+      describeRoute({
+        summary: "Uninstall a skill",
+        description: "Remove a globally-installed skill by name. Only skills under ~/.claude/skills/ can be removed.",
+        operationId: "app.skillUninstall",
+        responses: {
+          200: { description: "Success" },
+          400: { description: "Bad request" },
+        },
+      }),
+      validator("param", z.object({ name: z.string().min(1) })),
+      async (c) => {
+        const { name } = c.req.valid("param")
+        await Skill.uninstall(name)
+        return c.json({ ok: true })
+      },
+    )
     .get(
       "/lsp",
       describeRoute({

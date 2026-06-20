@@ -307,8 +307,11 @@ function skillFileName(location: string): string {
 
 const SkillsSection: Component = () => {
   const sdk = useSDK()
+  const [installUrl, setInstallUrl] = createSignal("")
+  const [installing, setInstalling] = createSignal(false)
+  const [removingName, setRemovingName] = createSignal<string | null>(null)
 
-  const [skills] = createResource(
+  const [skills, { refetch: refetchSkills }] = createResource(
     () => sdk.directory,
     async (dir) => {
       try {
@@ -320,8 +323,79 @@ const SkillsSection: Component = () => {
     },
   )
 
+  const isGlobalSkill = (location: string) => {
+    const norm = location.replace(/\\/g, "/")
+    return norm.includes("/.claude/skills/") || norm.includes("/.agents/skills/")
+  }
+
+  async function handleInstall() {
+    const url = installUrl().trim()
+    if (!url) return
+    setInstalling(true)
+    try {
+      const res = await fetch(`${sdk.url}/skill/install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({ error: `HTTP ${res.status}` }))) as { error: string }
+        showToast({ variant: "error", title: "Échec installation", description: error })
+      } else {
+        const info = (await res.json()) as SkillInfo
+        showToast({ variant: "success", title: `Skill "${info.name}" installé` })
+        setInstallUrl("")
+        void refetchSkills()
+      }
+    } catch (e) {
+      showToast({ variant: "error", title: "Erreur réseau", description: String(e) })
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  async function handleUninstall(name: string) {
+    setRemovingName(name)
+    try {
+      const res = await fetch(`${sdk.url}/skill/${encodeURIComponent(name)}`, { method: "DELETE" })
+      if (!res.ok) {
+        showToast({ variant: "error", title: "Désinstallation échouée" })
+      } else {
+        showToast({ variant: "success", title: `Skill "${name}" supprimé` })
+        void refetchSkills()
+      }
+    } catch (e) {
+      showToast({ variant: "error", title: "Erreur réseau", description: String(e) })
+    } finally {
+      setRemovingName(null)
+    }
+  }
+
   return (
     <div class="flex flex-col gap-3">
+      {/* Install via URL */}
+      <div class="flex flex-col gap-2 px-1">
+        <p class="text-11-regular text-text-weaker uppercase tracking-wide">Installer un skill</p>
+        <div class="flex gap-2">
+          <input
+            class="flex-1 bg-surface-base border border-border-weak-base rounded px-2 py-1.5 text-12-regular text-text-base outline-none focus:border-accent-primary placeholder:text-text-weakest"
+            placeholder="URL directe SKILL.md ou index discovery…"
+            value={installUrl()}
+            onInput={(e) => setInstallUrl(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleInstall() }}
+            disabled={installing()}
+          />
+          <Button
+            size="small"
+            variant="primary"
+            disabled={!installUrl().trim() || installing()}
+            onClick={() => void handleInstall()}
+          >
+            {installing() ? "…" : "Installer"}
+          </Button>
+        </div>
+      </div>
+
       {/* Installed skills list */}
       <Show when={skills.loading}>
         <div class="text-text-weak text-12-regular px-3 py-2">Chargement…</div>
@@ -334,14 +408,27 @@ const SkillsSection: Component = () => {
           </p>
           <For each={skills()}>
             {(skill) => (
-              <div class="flex flex-col px-3 py-2 hover:bg-surface-base rounded gap-0.5">
-                <div class="flex items-baseline gap-2">
-                  <span class="text-12-medium text-text-strong">{skill.name}</span>
-                  <span class="text-11-regular text-text-weaker font-mono truncate max-w-[180px]" title={skill.location}>
-                    {skillFileName(skill.location)}
-                  </span>
+              <div class="flex items-start gap-2 px-2 py-2 hover:bg-surface-base rounded">
+                <div class="flex flex-col flex-1 min-w-0 gap-0.5">
+                  <div class="flex items-baseline gap-2">
+                    <span class="text-12-medium text-text-strong">{skill.name}</span>
+                    <span class="text-11-regular text-text-weaker font-mono truncate max-w-[180px]" title={skill.location}>
+                      {skillFileName(skill.location)}
+                    </span>
+                  </div>
+                  <span class="text-11-regular text-text-weak leading-snug">{skill.description}</span>
                 </div>
-                <span class="text-11-regular text-text-weak leading-snug">{skill.description}</span>
+                <Show when={isGlobalSkill(skill.location)}>
+                  <button
+                    type="button"
+                    disabled={removingName() === skill.name}
+                    onClick={() => void handleUninstall(skill.name)}
+                    class="text-10-regular text-text-weaker hover:text-error-base shrink-0 px-1 py-0.5 rounded"
+                    title="Désinstaller"
+                  >
+                    {removingName() === skill.name ? "…" : "✕"}
+                  </button>
+                </Show>
               </div>
             )}
           </For>

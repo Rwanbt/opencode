@@ -1,6 +1,8 @@
+import fs_native from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import matter from "gray-matter"
 import z from "zod"
 import { Effect, Layer, ServiceMap } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
@@ -61,6 +63,8 @@ export namespace Skill {
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly install: (url: string) => Effect.Effect<Info, Error>
+    readonly uninstall: (name: string) => Effect.Effect<void, Error>
   }
 
   const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
@@ -226,7 +230,92 @@ export namespace Skill {
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
 
-      return Service.of({ get, all, dirs, available })
+      // Install a skill from a direct SKILL.md URL into the global skills dir.
+      // Supported URL formats:
+      //   - Direct file: https://.../SKILL.md
+      //   - Index URL:   https://.../skills/ → pulls all skills via discovery
+      const install = Effect.fn("Skill.install")(function* (url: string) {
+        const globalSkillsDir = path.join(Global.Path.home, ".claude", "skills")
+
+        const fail = (message: string) => Effect.fail(new Error(`[skill install] ${message}`))
+
+        // Determine if URL is a direct SKILL.md or a discovery index
+        const isDirectMd = url.endsWith(".md") || url.toLowerCase().includes("skill.md")
+
+        if (isDirectMd) {
+          // Download the raw markdown file
+          let content: string
+          try {
+            const res = yield* Effect.tryPromise(() => fetch(url))
+            if (!res.ok) return yield* fail(`HTTP ${res.status}`)
+            content = yield* Effect.tryPromise(() => res.text())
+          } catch (e) {
+            return yield* fail(String(e))
+          }
+
+          // Parse name from frontmatter
+          let parsed_matter: matter.GrayMatterFile<string>
+          try {
+            parsed_matter = matter(content)
+          } catch {
+            return yield* fail("impossible de parser le frontmatter YAML")
+          }
+
+          const parsed = Info.pick({ name: true, description: true }).safeParse(parsed_matter.data)
+          if (!parsed.success) return yield* fail("champs `name` ou `description` manquants dans le frontmatter")
+
+          const { name, description } = parsed.data
+          const dest = path.join(globalSkillsDir, name, "SKILL.md")
+          const body = parsed_matter.content.trim()
+
+          yield* Effect.tryPromise(() => fs_native.mkdir(path.dirname(dest), { recursive: true }))
+          yield* Effect.tryPromise(() => fs_native.writeFile(dest, content, "utf8"))
+
+          const info: Info = { name, description, location: dest, content: body }
+          const s = yield* InstanceState.get(state)
+          s.skills[name] = info
+          s.dirs.add(path.dirname(dest))
+          log.info("skill installed", { name, url })
+          return info
+        }
+
+        // Index-based discovery (pulls all skills from the registry)
+        const dirs = yield* discovery.pull(url)
+        if (dirs.length === 0) return yield* fail("aucun skill trouvé à cette URL")
+
+        const s = yield* InstanceState.get(state)
+        let lastInfo: Info | undefined
+        for (const dir of dirs) {
+          yield* scan(s, bus, dir, SKILL_PATTERN)
+          const names = Object.keys(s.skills)
+          if (names.length > 0) lastInfo = s.skills[names[names.length - 1]]
+        }
+
+        if (!lastInfo) return yield* fail("aucun skill valide installé")
+        return lastInfo
+      })
+
+      const uninstall = Effect.fn("Skill.uninstall")(function* (name: string) {
+        const s = yield* InstanceState.get(state)
+        const skill = s.skills[name]
+        if (!skill) return
+
+        // Only delete if installed in global skills dir (never delete project skills)
+        const globalSkillsDir = path.join(Global.Path.home, ".claude", "skills")
+        const skillDir = path.dirname(skill.location)
+        if (skillDir.startsWith(globalSkillsDir)) {
+          yield* Effect.tryPromise({
+            try: () => fs_native.rm(skillDir, { recursive: true, force: true }),
+            catch: (e) => e instanceof Error ? e : new Error(String(e)),
+          })
+        }
+
+        delete s.skills[name]
+        s.dirs.delete(skillDir)
+        log.info("skill uninstalled", { name })
+      })
+
+      return Service.of({ get, all, dirs, available, install, uninstall })
     }),
   )
 
@@ -273,5 +362,13 @@ export namespace Skill {
 
   export async function available(agent?: Agent.Info) {
     return runPromise((skill) => skill.available(agent))
+  }
+
+  export async function install(url: string) {
+    return runPromise((skill) => skill.install(url))
+  }
+
+  export async function uninstall(name: string) {
+    return runPromise((skill) => skill.uninstall(name))
   }
 }
