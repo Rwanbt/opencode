@@ -182,6 +182,35 @@ export function LspRoutes() {
         return c.json(result ?? [])
       },
     )
+    // FORK: Stretch Phase 2 — LSP completion (autocomplete)
+    .post(
+      "/completion",
+      describeRoute({
+        summary: "LSP completion",
+        description: "Return completion items at the given position (for autocomplete).",
+        operationId: "lsp.completion",
+        responses: {
+          200: {
+            description: "List of completion items",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.any()).meta({ ref: "LspCompletionItems" })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", LocInputSchema.extend({ triggerCharacter: z.string().optional() })),
+      async (c) => {
+        const input = c.req.valid("json")
+        const result = await withTimeout(LSP.completion(input), TIMEOUT_MS).catch((err) => {
+          log.warn("lsp.completion failed", { error: err instanceof Error ? err.message : String(err) })
+          return [] as unknown[]
+        })
+        return c.json(result ?? [])
+      },
+    )
     .get(
       "/document-symbol",
       describeRoute({

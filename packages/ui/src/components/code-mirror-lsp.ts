@@ -6,6 +6,8 @@
 import { linter, lintGutter } from "@codemirror/lint"
 import type { Diagnostic as CMDiagnostic } from "@codemirror/lint"
 import { hoverTooltip, keymap } from "@codemirror/view"
+import { autocompletion } from "@codemirror/autocomplete"
+import type { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete"
 import type { Extension, Text } from "@codemirror/state"
 
 // ─── Public types (consumed by code-mirror.tsx props) ────────────────────────
@@ -41,6 +43,17 @@ export interface LspCallbacks {
   hover(file: string, line: number, character: number): Promise<LspHoverResult | null>
   definition(file: string, line: number, character: number): Promise<LspLocation[]>
   references(file: string, line: number, character: number): Promise<LspLocation[]>
+  complete(file: string, line: number, character: number, triggerChar?: string): Promise<LspCompletionItem[]>
+}
+
+export interface LspCompletionItem {
+  label: string
+  kind?: number
+  detail?: string
+  documentation?: unknown
+  insertText?: string
+  sortText?: string
+  filterText?: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -82,6 +95,59 @@ function uriToPath(uri: string): string {
   return decodeURIComponent(uri.slice(7).replace(/^\/([A-Z]:)/, "$1"))
 }
 
+// LSP CompletionItem.kind (1-25) → CM6 completion type string
+function lspKindToType(kind?: number): Completion["type"] {
+  if (!kind) return "text"
+  if (kind === 2 || kind === 3) return "function" // Method, Function
+  if (kind === 4) return "function" // Constructor
+  if (kind === 5 || kind === 6) return "variable" // Field, Variable
+  if (kind === 7 || kind === 8) return "class" // Class, Interface
+  if (kind === 9) return "namespace" // Module
+  if (kind === 10) return "property" // Property
+  if (kind === 12) return "keyword" // Keyword
+  if (kind === 14) return "keyword" // Keyword (Snippet)
+  if (kind === 15) return "text" // Color
+  if (kind === 17) return "variable" // EnumMember
+  if (kind === 21) return "variable" // Constant
+  if (kind === 22 || kind === 23) return "class" // Struct, Event
+  return "text"
+}
+
+function buildLspCompletionSource(path: string, callbacks: LspCallbacks) {
+  return async (context: CompletionContext): Promise<CompletionResult | null> => {
+    // Only trigger on explicit Ctrl+Space or after trigger chars — avoid every keystroke
+    const word = context.matchBefore(/\w*/)
+    if (!context.explicit && (!word || word.from === word.to)) return null
+
+    const pos = context.pos
+    const line = context.state.doc.lineAt(pos)
+    const lspLine = line.number - 1
+    const lspChar = pos - line.from
+
+    let items: LspCompletionItem[]
+    try {
+      items = await callbacks.complete(path, lspLine, lspChar)
+    } catch {
+      return null
+    }
+
+    if (!items.length) return null
+
+    return {
+      from: word?.from ?? pos,
+      options: items.map((item): Completion => ({
+        label: item.label,
+        type: lspKindToType(item.kind),
+        detail: item.detail,
+        info: item.documentation ? extractHoverText(item.documentation) : undefined,
+        apply: item.insertText ?? item.label,
+        boost: item.sortText ? undefined : 0,
+      })),
+      validFor: /^\w*$/,
+    }
+  }
+}
+
 // ─── Extension builder ───────────────────────────────────────────────────────
 
 /**
@@ -90,6 +156,7 @@ function uriToPath(uri: string): string {
  *  - Hover tooltip (300 ms delay)
  *  - F12 → go-to-definition (calls `onNavigate` when found)
  *  - Shift+F12 → find all references (calls `onReferences` when found)
+ *  - Autocomplete (Ctrl+Space / typing triggers via LSP textDocument/completion)
  */
 export function buildLspExtensions(
   path: string,
@@ -98,6 +165,14 @@ export function buildLspExtensions(
   onReferences?: (refs: LspLocation[]) => void,
 ): Extension[] {
   const extensions: Extension[] = []
+
+  // ── Autocomplete (LSP textDocument/completion) ────────────────────────────
+  extensions.push(
+    autocompletion({
+      override: [buildLspCompletionSource(path, callbacks)],
+      activateOnTyping: false,
+    }),
+  )
 
   // ── Diagnostics ──────────────────────────────────────────────────────────
   extensions.push(

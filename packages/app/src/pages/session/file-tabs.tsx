@@ -223,6 +223,18 @@ export function FileTabContent(props: { tab: string }) {
       const res = await sdk.client.lsp.references({ file: f, line, character })
       return (res.data ?? []) as LspLocation[]
     },
+    complete: async (f: string, line: number, character: number, triggerChar?: string) => {
+      // POST /lsp/completion — not yet in SDK gen, use direct fetch.
+      const url = sdk.url
+      const body = JSON.stringify({ file: f, line, character, ...(triggerChar ? { triggerCharacter: triggerChar } : {}) })
+      const res = await fetch(`${url}/lsp/completion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      })
+      if (!res.ok) return []
+      return res.json() as Promise<import("@opencode-ai/ui/code-mirror-lsp").LspCompletionItem[]>
+    },
   }
 
   // Phase 2: go-to-definition — opens the target file in a new tab.

@@ -151,6 +151,7 @@ export namespace LSP {
     readonly hover: (input: LocInput) => Effect.Effect<any>
     readonly definition: (input: LocInput) => Effect.Effect<any[]>
     readonly references: (input: LocInput) => Effect.Effect<any[]>
+    readonly completion: (input: LocInput & { triggerCharacter?: string }) => Effect.Effect<any[]>
     readonly implementation: (input: LocInput) => Effect.Effect<any[]>
     readonly documentSymbol: (uri: string) => Effect.Effect<(LSP.DocumentSymbol | LSP.Symbol)[]>
     readonly workspaceSymbol: (query: string) => Effect.Effect<LSP.Symbol[]>
@@ -445,6 +446,24 @@ export namespace LSP {
         return results.flat().filter(Boolean)
       })
 
+      const completion = Effect.fn("LSP.completion")(function* (input: LocInput & { triggerCharacter?: string }) {
+        const results = yield* run(input.file, (client) =>
+          client.connection
+            .sendRequest("textDocument/completion", {
+              textDocument: { uri: pathToFileURL(input.file).href },
+              position: { line: input.line, character: input.character },
+              context: input.triggerCharacter
+                ? { triggerKind: 2, triggerCharacter: input.triggerCharacter }
+                : { triggerKind: 1 },
+            })
+            .catch(() => null),
+        )
+        // LSP servers return CompletionList | CompletionItem[] | null
+        return results
+          .flatMap((r: any) => (r && typeof r === "object" && Array.isArray(r.items) ? r.items : Array.isArray(r) ? r : []))
+          .filter(Boolean)
+      })
+
       const implementation = Effect.fn("LSP.implementation")(function* (input: LocInput) {
         const results = yield* run(input.file, (client) =>
           client.connection
@@ -522,6 +541,7 @@ export namespace LSP {
         hover,
         definition,
         references,
+        completion,
         implementation,
         documentSymbol,
         workspaceSymbol,
@@ -552,6 +572,9 @@ export namespace LSP {
   export const definition = async (input: LocInput) => runPromise((svc) => svc.definition(input))
 
   export const references = async (input: LocInput) => runPromise((svc) => svc.references(input))
+
+  export const completion = async (input: LocInput & { triggerCharacter?: string }) =>
+    runPromise((svc) => svc.completion(input))
 
   export const implementation = async (input: LocInput) => runPromise((svc) => svc.implementation(input))
 
