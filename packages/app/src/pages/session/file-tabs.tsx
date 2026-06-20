@@ -24,7 +24,7 @@ import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
-import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry, LspWorkspaceEdit, LspTextEdit } from "@opencode-ai/ui/code-mirror-lsp"
+import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry, LspWorkspaceEdit, LspTextEdit, LspCodeAction } from "@opencode-ai/ui/code-mirror-lsp"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -235,8 +235,10 @@ export function FileTabContent(props: { tab: string }) {
       if (!res.ok) return []
       return res.json() as Promise<import("@opencode-ai/ui/code-mirror-lsp").LspCompletionItem[]>
     },
-    // Indirect closure — handlePrepareRename is defined later in the component body
+    // Indirect closures — handlers defined later in the component body
     prepareRename: (word, line, character) => handlePrepareRename(word, line, character),
+    triggerCodeAction: (line, character, endLine, endCharacter) =>
+      void handleTriggerCodeAction(line, character, endLine, endCharacter),
   }
 
   // Phase 2: go-to-definition — opens the target file in a new tab.
@@ -326,6 +328,66 @@ export function FileTabContent(props: { tab: string }) {
     } finally {
       setRenameLoading(false)
       setRenameState(null)
+    }
+  }
+
+  // Stretch Phase 2: code actions (Ctrl+.)
+  type CodeActionPos = { line: number; character: number; endLine: number; endCharacter: number }
+  const [codeActions, setCodeActions] = createSignal<LspCodeAction[]>([])
+  const [codeActionsLoading, setCodeActionsLoading] = createSignal(false)
+  const [codeActionPos, setCodeActionPos] = createSignal<CodeActionPos | null>(null)
+
+  const handleTriggerCodeAction = async (line: number, character: number, endLine: number, endCharacter: number) => {
+    const p = path()
+    if (!p) return
+    setCodeActionPos({ line, character, endLine, endCharacter })
+    setCodeActionsLoading(true)
+    setCodeActions([])
+    try {
+      const url = sdk.url
+      const body = JSON.stringify({ file: p, line, character, endLine, endCharacter })
+      const res = await fetch(`${url}/lsp/code-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body })
+      if (!res.ok) return
+      const actions = (await res.json()) as LspCodeAction[]
+      setCodeActions(actions)
+    } catch {
+      // silent — no actions is valid
+    } finally {
+      setCodeActionsLoading(false)
+    }
+  }
+
+  async function applyCodeAction(action: LspCodeAction) {
+    const p = path()
+    const pos = codeActionPos()
+    if (!p || !pos) return
+
+    setCodeActions([])
+
+    // 1. Apply WorkspaceEdit if present
+    if (action.edit?.changes) {
+      const currentUri = `file://${p.replace(/\\/g, "/")}`
+      const currentEdits = action.edit.changes[currentUri] ?? action.edit.changes[p]
+      if (currentEdits?.length && editorHandle) {
+        editorHandle.setContent(applyTextEdits(editorHandle.getContent(), currentEdits))
+      }
+      const fileCount = Object.keys(action.edit.changes).length
+      if (fileCount > 1) {
+        showToast({ variant: "success", title: action.title, description: `${fileCount} fichiers modifiés` })
+      }
+    }
+
+    // 2. Execute command if present (after edit, per LSP spec)
+    if (action.command?.command) {
+      const url = sdk.url
+      const body = JSON.stringify({
+        file: p,
+        line: pos.line,
+        character: pos.character,
+        command: action.command.command,
+        commandArgs: action.command.arguments ?? [],
+      })
+      await fetch(`${url}/lsp/execute-command`, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => null)
     }
   }
 
@@ -753,6 +815,38 @@ export function FileTabContent(props: { tab: string }) {
       {/* Loading spinner while store.open() is in flight after entering edit mode */}
       <Show when={editing() && !showEditor() && !editorEntry()?.missing}>
         <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+      </Show>
+
+      {/* Stretch Phase 2: Code actions panel (Ctrl+.) */}
+      <Show when={codeActionsLoading() || codeActions().length > 0}>
+        <div class="border-t border-border-weak-base bg-background-stronger shrink-0">
+          <div class="flex items-center gap-2 px-3 py-1 sticky top-0 bg-background-stronger border-b border-border-weak-base">
+            <span class="text-11-regular text-text-weaker flex-1">Actions ({codeActionsLoading() ? "…" : codeActions().length})</span>
+            <button type="button" onClick={() => setCodeActions([])} class="text-10-regular text-text-weaker hover:text-text-base px-1">✕</button>
+          </div>
+          <div class="max-h-48 overflow-y-auto">
+            <Show when={codeActionsLoading()}>
+              <p class="text-11-regular text-text-weaker px-3 py-2">Chargement…</p>
+            </Show>
+            <For each={codeActions()}>
+              {(action) => (
+                <button
+                  type="button"
+                  onClick={() => void applyCodeAction(action)}
+                  class="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-hover"
+                >
+                  <Show when={action.isPreferred}>
+                    <span class="text-accent-primary text-10-regular shrink-0">✦</span>
+                  </Show>
+                  <span class="text-12-regular text-text-base flex-1 truncate">{action.title}</span>
+                  <Show when={action.kind}>
+                    <span class="text-10-regular text-text-weakest shrink-0">{action.kind}</span>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
       </Show>
 
       {/* Stretch Phase 2: Rename dialog (F2) */}

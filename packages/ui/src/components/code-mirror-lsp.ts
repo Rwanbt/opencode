@@ -46,6 +46,8 @@ export interface LspCallbacks {
   complete(file: string, line: number, character: number, triggerChar?: string): Promise<LspCompletionItem[]>
   /** Called when the user presses F2; parent shows a rename dialog. */
   prepareRename?(word: string, line: number, character: number): void
+  /** Called when the user presses Ctrl+.; parent fetches and shows code actions. */
+  triggerCodeAction?(line: number, character: number, endLine: number, endCharacter: number): void
 }
 
 export interface LspCompletionItem {
@@ -65,6 +67,20 @@ export interface LspTextEdit {
 
 export interface LspWorkspaceEdit {
   changes?: Record<string, LspTextEdit[]>
+}
+
+export interface LspCommand {
+  command: string
+  title: string
+  arguments?: unknown[]
+}
+
+export interface LspCodeAction {
+  title: string
+  kind?: string
+  isPreferred?: boolean
+  edit?: LspWorkspaceEdit
+  command?: LspCommand
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -293,6 +309,30 @@ export function buildLspExtensions(
             const wordMatch = view.state.wordAt(pos)
             const word = wordMatch ? view.state.sliceDoc(wordMatch.from, wordMatch.to) : ""
             onPrepareRename(word, lspLine, lspChar)
+            return true
+          },
+        },
+      ]),
+    )
+  }
+
+  // ── Code actions (Ctrl+.) ────────────────────────────────────────────────
+  if (callbacks.triggerCodeAction) {
+    const onTrigger = callbacks.triggerCodeAction
+    extensions.push(
+      keymap.of([
+        {
+          key: "Mod-.",
+          run: (view) => {
+            const sel = view.state.selection.main
+            const startLine = view.state.doc.lineAt(sel.from)
+            const endLine = view.state.doc.lineAt(sel.to)
+            onTrigger(
+              startLine.number - 1,
+              sel.from - startLine.from,
+              endLine.number - 1,
+              sel.to - endLine.from,
+            )
             return true
           },
         },

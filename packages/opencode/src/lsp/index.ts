@@ -153,6 +153,8 @@ export namespace LSP {
     readonly references: (input: LocInput) => Effect.Effect<any[]>
     readonly completion: (input: LocInput & { triggerCharacter?: string }) => Effect.Effect<any[]>
     readonly rename: (input: LocInput & { newName: string }) => Effect.Effect<any>
+    readonly codeAction: (input: LocInput & { endLine: number; endCharacter: number }) => Effect.Effect<any[]>
+    readonly executeCommand: (input: LocInput & { command: string; commandArgs?: unknown[] }) => Effect.Effect<unknown>
     readonly implementation: (input: LocInput) => Effect.Effect<any[]>
     readonly documentSymbol: (uri: string) => Effect.Effect<(LSP.DocumentSymbol | LSP.Symbol)[]>
     readonly workspaceSymbol: (query: string) => Effect.Effect<LSP.Symbol[]>
@@ -488,6 +490,38 @@ export namespace LSP {
         return { changes: merged }
       })
 
+      const codeAction = Effect.fn("LSP.codeAction")(function* (
+        input: LocInput & { endLine: number; endCharacter: number },
+      ) {
+        const results = yield* run(input.file, (client) =>
+          client.connection
+            .sendRequest("textDocument/codeAction", {
+              textDocument: { uri: pathToFileURL(input.file).href },
+              range: {
+                start: { line: input.line, character: input.character },
+                end: { line: input.endLine, character: input.endCharacter },
+              },
+              context: { diagnostics: [] },
+            })
+            .catch(() => null),
+        )
+        return results.flatMap((r) => (Array.isArray(r) ? r : []))
+      })
+
+      const executeCommand = Effect.fn("LSP.executeCommand")(function* (
+        input: LocInput & { command: string; commandArgs?: unknown[] },
+      ) {
+        const results = yield* run(input.file, (client) =>
+          client.connection
+            .sendRequest("workspace/executeCommand", {
+              command: input.command,
+              arguments: input.commandArgs ?? [],
+            })
+            .catch(() => null),
+        )
+        return results.find((r) => r !== null && r !== undefined) ?? null
+      })
+
       const implementation = Effect.fn("LSP.implementation")(function* (input: LocInput) {
         const results = yield* run(input.file, (client) =>
           client.connection
@@ -567,6 +601,8 @@ export namespace LSP {
         references,
         completion,
         rename,
+        codeAction,
+        executeCommand,
         implementation,
         documentSymbol,
         workspaceSymbol,
@@ -603,6 +639,12 @@ export namespace LSP {
 
   export const rename = async (input: LocInput & { newName: string }) =>
     runPromise((svc) => svc.rename(input))
+
+  export const codeAction = async (input: LocInput & { endLine: number; endCharacter: number }) =>
+    runPromise((svc) => svc.codeAction(input))
+
+  export const executeCommand = async (input: LocInput & { command: string; commandArgs?: unknown[] }) =>
+    runPromise((svc) => svc.executeCommand(input))
 
   export const implementation = async (input: LocInput) => runPromise((svc) => svc.implementation(input))
 

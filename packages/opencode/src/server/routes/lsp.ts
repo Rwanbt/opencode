@@ -214,6 +214,68 @@ export function LspRoutes() {
         return c.json(result ?? { changes: {} })
       },
     )
+    // FORK: Stretch Phase 2 — LSP code actions (Ctrl+.)
+    .post(
+      "/code-action",
+      describeRoute({
+        summary: "LSP code actions",
+        description: "Return code actions (quick fixes, refactors, source actions) available at the given range.",
+        operationId: "lsp.codeAction",
+        responses: {
+          200: {
+            description: "List of CodeAction objects (may include WorkspaceEdit and/or Command)",
+            content: { "application/json": { schema: resolver(z.array(z.any()).meta({ ref: "LspCodeActions" })) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        LocInputSchema.extend({
+          endLine: z.number().int().min(0),
+          endCharacter: z.number().int().min(0),
+        }),
+      ),
+      async (c) => {
+        const input = c.req.valid("json")
+        const result = await withTimeout(LSP.codeAction(input), 5_000).catch((err) => {
+          log.warn("lsp.codeAction failed", { error: err instanceof Error ? err.message : String(err) })
+          return [] as unknown[]
+        })
+        return c.json(result ?? [])
+      },
+    )
+    // FORK: Stretch Phase 2 — LSP execute command (companion to code actions)
+    .post(
+      "/execute-command",
+      describeRoute({
+        summary: "LSP execute command",
+        description: "Execute a workspace command returned by a code action that has no WorkspaceEdit.",
+        operationId: "lsp.executeCommand",
+        responses: {
+          200: {
+            description: "Command result (opaque — varies per LSP server)",
+            content: { "application/json": { schema: resolver(z.any()) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        LocInputSchema.extend({
+          command: z.string().min(1),
+          commandArgs: z.array(z.unknown()).optional(),
+        }),
+      ),
+      async (c) => {
+        const input = c.req.valid("json")
+        const result = await withTimeout(LSP.executeCommand(input), 8_000).catch((err) => {
+          log.warn("lsp.executeCommand failed", { error: err instanceof Error ? err.message : String(err) })
+          return null
+        })
+        return c.json(result ?? null)
+      },
+    )
     // FORK: Stretch Phase 2 — LSP completion (autocomplete)
     .post(
       "/completion",
