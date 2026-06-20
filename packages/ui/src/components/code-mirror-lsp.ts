@@ -44,6 +44,8 @@ export interface LspCallbacks {
   definition(file: string, line: number, character: number): Promise<LspLocation[]>
   references(file: string, line: number, character: number): Promise<LspLocation[]>
   complete(file: string, line: number, character: number, triggerChar?: string): Promise<LspCompletionItem[]>
+  /** Called when the user presses F2; parent shows a rename dialog. */
+  prepareRename?(word: string, line: number, character: number): void
 }
 
 export interface LspCompletionItem {
@@ -54,6 +56,15 @@ export interface LspCompletionItem {
   insertText?: string
   sortText?: string
   filterText?: string
+}
+
+export interface LspTextEdit {
+  range: LspRange
+  newText: string
+}
+
+export interface LspWorkspaceEdit {
+  changes?: Record<string, LspTextEdit[]>
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -259,6 +270,29 @@ export function buildLspExtensions(
                 onNavigate(uriToPath(loc.uri), loc.range.start.line, loc.range.start.character)
               })
               .catch(() => {})
+            return true
+          },
+        },
+      ]),
+    )
+  }
+
+  // ── Rename symbol (F2) ───────────────────────────────────────────────────
+  if (callbacks.prepareRename) {
+    const onPrepareRename = callbacks.prepareRename
+    extensions.push(
+      keymap.of([
+        {
+          key: "F2",
+          run: (view) => {
+            const pos = view.state.selection.main.head
+            const line = view.state.doc.lineAt(pos)
+            const lspLine = line.number - 1
+            const lspChar = pos - line.from
+            // Extract the word under cursor to pre-fill the rename input
+            const wordMatch = view.state.wordAt(pos)
+            const word = wordMatch ? view.state.sliceDoc(wordMatch.from, wordMatch.to) : ""
+            onPrepareRename(word, lspLine, lspChar)
             return true
           },
         },

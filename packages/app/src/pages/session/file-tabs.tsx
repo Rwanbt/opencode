@@ -24,7 +24,7 @@ import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
-import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry } from "@opencode-ai/ui/code-mirror-lsp"
+import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry, LspWorkspaceEdit, LspTextEdit } from "@opencode-ai/ui/code-mirror-lsp"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -235,6 +235,8 @@ export function FileTabContent(props: { tab: string }) {
       if (!res.ok) return []
       return res.json() as Promise<import("@opencode-ai/ui/code-mirror-lsp").LspCompletionItem[]>
     },
+    // Indirect closure — handlePrepareRename is defined later in the component body
+    prepareRename: (word, line, character) => handlePrepareRename(word, line, character),
   }
 
   // Phase 2: go-to-definition — opens the target file in a new tab.
@@ -253,6 +255,78 @@ export function FileTabContent(props: { tab: string }) {
   function uriToDisplayPath(uri: string): string {
     const p = uri.startsWith("file://") ? decodeURIComponent(uri.slice(7).replace(/^\/([A-Z]:)/, "$1")) : uri
     return p.replace(/\\/g, "/")
+  }
+
+  // Stretch Phase 2: rename symbol (F2 → dialog → POST /lsp/rename → apply edits)
+  type RenameState = { word: string; line: number; character: number }
+  const [renameState, setRenameState] = createSignal<RenameState | null>(null)
+  const [renameInput, setRenameInput] = createSignal("")
+  const [renameLoading, setRenameLoading] = createSignal(false)
+
+  const handlePrepareRename = (word: string, line: number, character: number) => {
+    setRenameState({ word, line, character })
+    setRenameInput(word)
+  }
+
+  function applyTextEdits(content: string, edits: LspTextEdit[]): string {
+    const lines = content.split("\n")
+    const sorted = [...edits].sort((a, b) => {
+      const ld = b.range.start.line - a.range.start.line
+      return ld !== 0 ? ld : b.range.start.character - a.range.start.character
+    })
+    for (const edit of sorted) {
+      const { start, end } = edit.range
+      if (start.line === end.line) {
+        const l = lines[start.line] ?? ""
+        lines[start.line] = l.slice(0, start.character) + edit.newText + l.slice(end.character)
+      } else {
+        const first = lines[start.line] ?? ""
+        const last = lines[end.line] ?? ""
+        const replacement = (first.slice(0, start.character) + edit.newText + last.slice(end.character)).split("\n")
+        lines.splice(start.line, end.line - start.line + 1, ...replacement)
+      }
+    }
+    return lines.join("\n")
+  }
+
+  async function confirmRename() {
+    const state = renameState()
+    const newName = renameInput().trim()
+    const p = path()
+    if (!state || !newName || !p || newName === state.word) {
+      setRenameState(null)
+      return
+    }
+    setRenameLoading(true)
+    try {
+      const url = sdk.url
+      const body = JSON.stringify({ file: p, line: state.line, character: state.character, newName })
+      const res = await fetch(`${url}/lsp/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body })
+      if (!res.ok) throw new Error(`${res.status}`)
+      const edit = (await res.json()) as LspWorkspaceEdit
+      const changes = edit.changes ?? {}
+
+      // Apply edits to current file if present
+      const currentUri = `file://${p.replace(/\\/g, "/")}`
+      const currentEdits = changes[currentUri] ?? changes[p]
+      if (currentEdits?.length && editorHandle) {
+        const updated = applyTextEdits(editorHandle.getContent(), currentEdits)
+        editorHandle.setContent(updated)
+      }
+
+      // Count affected files for toast
+      const fileCount = Object.keys(changes).length
+      showToast({
+        variant: "success",
+        title: `Renommé en "${newName}"`,
+        description: fileCount > 1 ? `${fileCount} fichiers modifiés` : "Fichier courant mis à jour",
+      })
+    } catch (e) {
+      showToast({ variant: "error", title: "Rename échoué", description: String(e) })
+    } finally {
+      setRenameLoading(false)
+      setRenameState(null)
+    }
   }
 
   // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
@@ -679,6 +753,40 @@ export function FileTabContent(props: { tab: string }) {
       {/* Loading spinner while store.open() is in flight after entering edit mode */}
       <Show when={editing() && !showEditor() && !editorEntry()?.missing}>
         <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+      </Show>
+
+      {/* Stretch Phase 2: Rename dialog (F2) */}
+      <Show when={renameState()}>
+        <div class="border-t border-border-weak-base bg-background-stronger px-3 py-2 flex items-center gap-2 shrink-0">
+          <span class="text-11-regular text-text-weaker shrink-0">Renommer en :</span>
+          <input
+            class="flex-1 bg-surface-base border border-border-weak-base rounded px-2 py-1 text-12-regular text-text-base outline-none focus:border-accent-primary"
+            value={renameInput()}
+            onInput={(e) => setRenameInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void confirmRename()
+              if (e.key === "Escape") setRenameState(null)
+            }}
+            ref={(el) => { setTimeout(() => { el.focus(); el.select() }, 0) }}
+            disabled={renameLoading()}
+            placeholder="nouveau nom"
+          />
+          <button
+            type="button"
+            disabled={renameLoading() || !renameInput().trim()}
+            onClick={() => void confirmRename()}
+            class="text-10-regular px-2 py-1 rounded bg-accent-primary text-white disabled:opacity-40 shrink-0"
+          >
+            {renameLoading() ? "…" : "OK"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRenameState(null)}
+            class="text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0"
+          >
+            ✕
+          </button>
+        </div>
       </Show>
 
       {/* Stretch Phase 2: References panel (Shift+F12) */}

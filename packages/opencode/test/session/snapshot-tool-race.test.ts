@@ -90,6 +90,7 @@ const lsp = Layer.succeed(
     definition: () => Effect.succeed([]),
     references: () => Effect.succeed([]),
     completion: () => Effect.succeed([]),
+    rename: () => Effect.succeed({ changes: {} }),
     implementation: () => Effect.succeed([]),
     documentSymbol: () => Effect.succeed([]),
     workspaceSymbol: () => Effect.succeed([]),

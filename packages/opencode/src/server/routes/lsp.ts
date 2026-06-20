@@ -182,6 +182,38 @@ export function LspRoutes() {
         return c.json(result ?? [])
       },
     )
+    // FORK: Stretch Phase 2 — LSP rename symbol
+    .post(
+      "/rename",
+      describeRoute({
+        summary: "LSP rename symbol",
+        description: "Rename a symbol at the given position across the workspace. Returns a WorkspaceEdit.",
+        operationId: "lsp.rename",
+        responses: {
+          200: {
+            description: "WorkspaceEdit — map of file URI → TextEdit[]",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({ changes: z.record(z.string(), z.array(z.object({ range: RangeSchema, newText: z.string() }))) })
+                    .meta({ ref: "LspWorkspaceEdit" }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", LocInputSchema.extend({ newName: z.string().min(1) })),
+      async (c) => {
+        const input = c.req.valid("json")
+        const result = await withTimeout(LSP.rename(input), 5_000).catch((err) => {
+          log.warn("lsp.rename failed", { error: err instanceof Error ? err.message : String(err) })
+          return { changes: {} }
+        })
+        return c.json(result ?? { changes: {} })
+      },
+    )
     // FORK: Stretch Phase 2 — LSP completion (autocomplete)
     .post(
       "/completion",

@@ -152,6 +152,7 @@ export namespace LSP {
     readonly definition: (input: LocInput) => Effect.Effect<any[]>
     readonly references: (input: LocInput) => Effect.Effect<any[]>
     readonly completion: (input: LocInput & { triggerCharacter?: string }) => Effect.Effect<any[]>
+    readonly rename: (input: LocInput & { newName: string }) => Effect.Effect<any>
     readonly implementation: (input: LocInput) => Effect.Effect<any[]>
     readonly documentSymbol: (uri: string) => Effect.Effect<(LSP.DocumentSymbol | LSP.Symbol)[]>
     readonly workspaceSymbol: (query: string) => Effect.Effect<LSP.Symbol[]>
@@ -464,6 +465,29 @@ export namespace LSP {
           .filter(Boolean)
       })
 
+      const rename = Effect.fn("LSP.rename")(function* (input: LocInput & { newName: string }) {
+        const results = yield* run(input.file, (client) =>
+          client.connection
+            .sendRequest("textDocument/rename", {
+              textDocument: { uri: pathToFileURL(input.file).href },
+              position: { line: input.line, character: input.character },
+              newName: input.newName,
+            })
+            .catch(() => null),
+        )
+        // Merge WorkspaceEdits from all clients (typically only one handles the file)
+        const merged: Record<string, any[]> = {}
+        for (const r of results) {
+          if (!r || typeof r !== "object") continue
+          const changes = (r as any).changes ?? {}
+          for (const [uri, edits] of Object.entries(changes)) {
+            if (!merged[uri]) merged[uri] = []
+            merged[uri].push(...(edits as any[]))
+          }
+        }
+        return { changes: merged }
+      })
+
       const implementation = Effect.fn("LSP.implementation")(function* (input: LocInput) {
         const results = yield* run(input.file, (client) =>
           client.connection
@@ -542,6 +566,7 @@ export namespace LSP {
         definition,
         references,
         completion,
+        rename,
         implementation,
         documentSymbol,
         workspaceSymbol,
@@ -575,6 +600,9 @@ export namespace LSP {
 
   export const completion = async (input: LocInput & { triggerCharacter?: string }) =>
     runPromise((svc) => svc.completion(input))
+
+  export const rename = async (input: LocInput & { newName: string }) =>
+    runPromise((svc) => svc.rename(input))
 
   export const implementation = async (input: LocInput) => runPromise((svc) => svc.implementation(input))
 
