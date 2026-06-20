@@ -87,76 +87,105 @@ Les Xiaomi bloquent `adb shell input` par défaut. Activer :
 
 ---
 
-## 5. Permissions runtime (à implémenter)
+## 5. Permissions runtime
 
-Le manifeste déclare correctement `MANAGE_EXTERNAL_STORAGE`, `POST_NOTIFICATIONS`, etc. (voir [../ANDROID_AUDIT.md §1](../ANDROID_AUDIT.md)).
+**Implémenté.** Le manifeste déclare `MANAGE_EXTERNAL_STORAGE`, `POST_NOTIFICATIONS`, etc.
+Les demandes runtime sont gérées nativement en Kotlin, sans commande Tauri :
 
-**Mais** : sur Android 13+, ces permissions nécessitent une demande runtime. Flow recommandé :
+| Permission | Implémentation | Référence code |
+|---|---|---|
+| `POST_NOTIFICATIONS` (Android 13+) | `ActivityCompat.requestPermissions()` au démarrage | `MainActivity.kt:51-61` |
+| `MANAGE_EXTERNAL_STORAGE` | `ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` via Intent | `MainActivity.kt:174-214` |
+| `READ_MEDIA_*` (Android 13+) | Idem, batch avec storage perms | `MainActivity.kt:174-214` |
 
+Côté TypeScript, les **notifications** passent par `platform.notify()` (`packages/mobile/src/platform.ts:226-238`),
+qui vérifie `isPermissionGranted()` / `requestPermission()` avant l'envoi. Il n'y a pas de commande
+Tauri `request_permissions` — les dialogs système sont ouverts directement par l'Activity.
+
+**UX — diagnostics** : l'onglet "Android" dans Settings (`components/settings-android.tsx`) affiche
+l'état de stockage, mémoire RAM, thermique et batterie. Pour ouvrir manuellement les permissions :
 ```ts
-import { invoke } from "@tauri-apps/api/core"
-
-async function ensurePermissions() {
-  const result = await invoke<string[]>("request_permissions", {
-    names: ["POST_NOTIFICATIONS", "MANAGE_EXTERNAL_STORAGE"],
-  })
-  const missing = result.filter(p => p !== "granted")
-  if (missing.length > 0) {
-    // UI fallback : bannière "Certaines fonctions sont désactivées"
-    showPermissionsWarning(missing)
-  }
-}
+// settings-android.tsx — bouton "Ouvrir Paramètres"
+await open("content://com.android.settings.application.APP_STORAGE_SETTINGS")
+// fallback si intent échoue : ouvre support.google.com
 ```
 
-Côté Rust, exposer une commande qui ouvre le dialog via JNI :
-
-```rust
-// packages/mobile/src-tauri/src/permissions.rs
-#[tauri::command]
-pub async fn request_permissions(app: AppHandle, names: Vec<String>) -> Result<Vec<String>, String> {
-  // JNI call to Activity.requestPermissions()
-  ...
-}
-```
+> **Note** : `MANAGE_EXTERNAL_STORAGE` déclenche un avertissement Play Store (politique de
+> données sensibles). Pour une publication publique, préférer SAF (`Intent.ACTION_OPEN_DOCUMENT_TREE`)
+> et ne demander `MANAGE_EXTERNAL_STORAGE` que si le modèle GGUF réside hors du dossier scoped.
 
 ---
 
-## 6. Lifecycle Android — pattern recommandé
+## 6. Lifecycle Android
 
-Voir [../ANDROID_AUDIT.md §2](../ANDROID_AUDIT.md) pour le détail. Implémentation à prévoir :
+**Implémenté.** Le cycle de vie est géré à deux niveaux.
+
+### 6.1 Niveau TypeScript — `entry.tsx`
+
+| Événement | Handler | Référence code |
+|---|---|---|
+| App passe en arrière-plan | `invoke("llm_idle_tick")` — signal Rust pour baisser la priorité LLM | `entry.tsx:197-218` |
+| App revient au premier plan | `invoke("check_llm_health", { port: null })` — si faux, dispatch `llm-needs-reload` | `entry.tsx:197-218` |
+| Keyboard IME ouverte | `visualViewport.resize` → `--vvh` CSS var → évite le layout sous le clavier | `entry.tsx:220-249` |
+| Deep-link reçu (cold-start) | `getCurrentDeepLink()` → `handleDeepLink()` | `entry.tsx:288-307` |
+| Deep-link reçu (warm-start) | `onOpenUrl()` listener → `handleDeepLink()` | `entry.tsx:288-307` |
 
 ```ts
-// packages/mobile/src/lifecycle.ts
-import { invoke } from "@tauri-apps/api/core"
-
+// Extrait simplifié — voir entry.tsx pour le code complet
 let wasHidden = false
-
 document.addEventListener("visibilitychange", async () => {
   if (document.hidden) {
     wasHidden = true
-    await invoke("llm_idle_tick")  // garde FG service, baisse priorité
+    try { await invoke("llm_idle_tick") } catch {}
   } else if (wasHidden) {
     wasHidden = false
-    const healthy = await invoke<boolean>("check_llm_health", { port: null })
-    if (!healthy) {
-      // recharger le modèle
-      await reloadCurrentModel()
-    }
+    const ok = await invoke<boolean>("check_llm_health", { port: null })
+    if (!ok) window.dispatchEvent(new CustomEvent("llm-needs-reload"))
   }
 })
 ```
 
-Côté Rust, écouter `tauri::RunEvent` :
+### 6.2 Niveau Kotlin — `MainActivity.kt`
 
-```rust
-builder.build(tauri::generate_context!())?.run(|_app, event| match event {
-  tauri::RunEvent::Exit => graceful_cleanup(),
-  tauri::RunEvent::ExitRequested { .. } => prepare_shutdown(),
-  _ => {}
-});
+| Callback | Action | Référence code |
+|---|---|---|
+| `onCreate` | Démarre `LlamaService` (FG), demande permissions, init PTY, charge dernier modèle | `MainActivity.kt:23-172` |
+| `onStart` | Re-promeut `LlamaService` en foreground | `MainActivity.kt:216-221` |
+| `onStop` | Dégrade `LlamaService` si pas d'inférence en cours (économie batterie) | `MainActivity.kt:223-233` |
+| `onResume` | Détecte All-Files-Access OFF→ON et re-spawn PTY pour rafraîchir FUSE | `MainActivity.kt:235-276` |
+
+### 6.3 Notifications — `NotificationBridge`
+
+`NotificationBridge` (`packages/mobile/src/notifications.ts`) s'abonne au stream SSE du serveur
+et envoie des notifications natives quand l'app est en arrière-plan. Il est instancié dans `FullApp`
+(`entry.tsx`) dès que la connexion est établie.
+
+```
+SSE /event ──▶ NotificationBridge.handleMessage()
+                    │
+                    ├─ session.updated {completed} ──▶ sendNotification("Task Complete")
+                    ├─ session.updated {failed}    ──▶ sendNotification("Task Failed")
+                    └─ llm.status {loaded}         ──▶ sendNotification("Model Ready")
 ```
 
-Pour `onPause`/`onResume` spécifiquement, utiliser les plugin hooks Tauri mobile (à vérifier dans la version Tauri courante — 2.4.x expose `on_app_event` pour Android).
+La permission `POST_NOTIFICATIONS` est demandée au démarrage par `MainActivity.kt:51-61`
+(Android 13+) et vérifiée par le plugin JS avant tout envoi.
+
+### 6.4 Deep-link étendu
+
+Trois commandes reconnues par `handleDeepLink()` dans `entry.tsx` :
+
+| URL | Action |
+|---|---|
+| `opencode://connect?url=...&user=...&pwd=...&fp=...` | Pré-remplit le formulaire Remote mode (QR code desktop) |
+| `opencode://open?file=<path>&project=<dir>` | Dispatch `ide-open-file` CustomEvent → IDE panel |
+| `opencode://session?id=<sessionId>` | Dispatch `navigate-to-session` CustomEvent → navigation session |
+
+Les deep-links `open` et `session` sont gérés quand l'app est déjà en mode `ready` (warm-start
+via `onOpenUrl`) ou dès le démarrage (cold-start via `getCurrentDeepLink`).
+
+> **Intent filter** : le schéma `opencode://` est déclaré dans `tauri.conf.json`
+> (plugin `deep-link`, section `mobile`) et généré dans `AndroidManifest.xml` par Tauri.
 
 ---
 

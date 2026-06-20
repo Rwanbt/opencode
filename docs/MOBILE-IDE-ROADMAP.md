@@ -141,11 +141,21 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
   gonfler session.tsx/layout.tsx (budgets : session ≤ +80, layout ≤ +30).
 - **Tests** (dette ui 0%) : tests d'intégration file-tabs + editor-store **avant merge**.
 
-### Phase 2 — LSP exposé à l'humain
-Réactiver `/find/symbol` (file.ts:109-114) — **avec `Effect.timeout` + fallback `[]`** (le LSP peut
-timeout/crasher si le serveur est indisponible ; ne pas juste décommenter). Brancher dans l'éditeur :
-diagnostics gutter, hover, go-to-definition, references, document symbols (outline), workspace symbols.
-Ensuite : autocomplete, rename, code actions. Chaque nouvelle route → `describeRoute()` + régén SDK.
+### Phase 2 — LSP exposé à l'humain ✅
+
+**Implémenté** (commit `e174a0bb9a`).
+
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| `/find/symbol` réactivé (withTimeout 5 s + fallback `[]`) | `routes/file.ts:150` | ✅ |
+| Routes LSP humain : `/lsp/diagnostics`, `/lsp/hover`, `/lsp/definition`, `/lsp/references`, `/lsp/document-symbol` | `routes/lsp.ts` | ✅ |
+| SDK v2 régénéré — `sdk.client.lsp.{diagnostics,hover,definition,references}` | `packages/sdk/js/src/v2/gen/sdk.gen.ts` | ✅ |
+| Extensions CM6 : diagnostics gutter + linter (750 ms debounce) | `packages/ui/src/components/code-mirror-lsp.ts` | ✅ |
+| Extensions CM6 : hover tooltip (300 ms, MarkupContent aware) | idem | ✅ |
+| Extensions CM6 : F12 go-to-definition → ouvre fichier cible | idem | ✅ |
+| LSP callbacks câblés dans l'éditeur | `packages/app/src/pages/session/file-tabs.tsx:208-226` | ✅ |
+
+**Stretch (Phase 3+)** : Shift+F12 references panel, autocomplete (`completionProvider`), rename, code actions, line-level scroll post navigation (`EditorHandle.scrollToLine`).
 
 ### Phase 3 — Workspace + Git (backend ET UI)
 Créer d'abord la couche **backend git d'écriture** sur le wrapper `run()` existant (effort 3-4h)
@@ -185,6 +195,45 @@ Git/Workspace (P3) s'appuie sur les opérations fichiers. Le dual-mode se pose d
 - **P4** : lancer un script détecté (`cargo test`), logs + problem matcher ; breakpoint + variable.
 - **P5** : installer/désactiver un plugin et un skill SKILL.md, logs et permissions.
 - **P6** : tablette + clavier hardware, flux permissions complet.
+
+### Phase 7 — Notifications système + Deep-link étendu
+
+**Pré-requis : Phase 6 terminée.** Compléter les deux couches d'intégration système
+manquantes après le chantier IDE, puis nettoyer la documentation stale produite en Phase 6.
+
+**1. NotificationBridge — câblage (code mort → actif)**
+
+La classe `NotificationBridge` (`packages/mobile/src/notifications.ts`) existe depuis la Phase 5
+mais n'est jamais instanciée. La brancher dans `FullApp` (`entry.tsx`) pour que les événements
+SSE déclenchent des notifications natives quand l'app est en arrière-plan :
+- `session.updated` status=`completed`/`failed` → notification agent terminé/échoué
+- `llm.status` event=`loaded` → notification modèle prêt
+- Notification "Model Ready" au chargement LLM (via `llm-loading-progress` window event)
+- Cleanup `disconnect()` dans `onCleanup`
+
+**2. Deep-link étendu — au-delà du connect**
+
+Actuellement seul `opencode://connect?...` est géré (`applyPairingDeepLink`). Ajouter :
+- `opencode://open?file=<path>&project=<dir>` → dispatch `ide-open-file` CustomEvent
+  (pour ouvrir un fichier depuis un autre app ou une URL partagée)
+- `opencode://session?id=<sessionId>` → dispatch `navigate-to-session` CustomEvent
+  (pour reprendre une session depuis une notification ou un raccourci)
+- Factoriser la résolution via `handleDeepLink(url)` qui essaie les 3 handlers en cascade
+
+**3. Mise à jour docs stale (chantier obligatoire en sortie de Phase 6)**
+- `ANDROID_DEVELOPMENT.md §5 « Permissions runtime »` : remplacer le bloc "à implémenter"
+  par l'état réel (Kotlin implémenté dans `MainActivity.kt:51-61 + 174-214`, TS via `platform.notify`)
+- `ANDROID_DEVELOPMENT.md §6 « Lifecycle »` : remplacer le pseudo-code par les références
+  à l'implémentation réelle (`entry.tsx:197-218`, `MainActivity.kt:216-276`) + ajouter §6.1
+  deep-link et §6.2 notifications
+
+**Vérification (end-to-end, Phase 7)**
+- Mettre l'app en arrière-plan → finir une session agent → notification native reçue
+- Ouvrir `opencode://connect?...` depuis navigateur → form pré-rempli (régression)
+- Ouvrir `opencode://session?id=xyz` → event `navigate-to-session` dispatchée dans la console
+- Ouvrir `opencode://open?file=/path/to/file.ts` → event `ide-open-file` dispatchée
+
+---
 
 ## Tâche suivante (chantier séparé) : refonte `docs/ANDROID_DEVELOPMENT.md`
 
