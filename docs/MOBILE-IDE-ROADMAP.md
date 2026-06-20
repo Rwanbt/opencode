@@ -157,7 +157,11 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 | Extensions CM6 : F12 go-to-definition → ouvre fichier cible | idem | ✅ |
 | LSP callbacks câblés dans l'éditeur | `packages/app/src/pages/session/file-tabs.tsx:208-226` | ✅ |
 
-**Stretch (Phase 3+)** : Shift+F12 references panel, autocomplete (`completionProvider`), rename, code actions, line-level scroll post navigation (`EditorHandle.scrollToLine`).
+**Stretch (partiellement implémenté)** :
+- **Shift+F12 références panel** ✅ (commit `6dd63051b7`) — keybinding CM6 → `callbacks.references()` → panneau inline liste cliquable, bouton ✕, navigation vers fichier cible.
+- **Autocomplete** ✅ (commit `d949e89e4d`) — `POST /lsp/completion` + `buildLspCompletionSource()` CM6, `activateOnTyping: false`, mapping kinds LSP→CM6, `@codemirror/autocomplete 6.20.3`.
+- **Rename symbol** — non implémenté (`textDocument/rename`).
+- **Code actions** — non implémenté (`textDocument/codeAction`).
 
 ### Phase 3 — Workspace + Git (backend ET UI) ✅
 
@@ -221,7 +225,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 
 **Toutes les phases principales sont ✅.** Reste :
 - **Phase 0** — Device QA matrix (Xiaomi/Pixel × Android 12-15) : non bloquante, tests manuels à planifier.
-- **Stretch Phase 2** : Shift+F12 références panel, autocomplete CM6, rename symbol.
+- **Stretch Phase 2** : Shift+F12 ✅ + autocomplete ✅ (commits `6dd63051b7` / `d949e89e4d`) ; rename symbol + code actions restants.
 - **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer (parser `cargo test`/`npm test`).
 - **Stretch Phase 5** : SKILL.md liste ✅ (commit `a7f40d58f1`) ; install/manage via URL.
 - **Stretch Phase 6** : split panes, mode tablette dédié.
