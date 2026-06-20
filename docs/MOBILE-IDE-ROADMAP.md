@@ -171,22 +171,43 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
 
 **Auth push/pull** : délibérément via le credential store système (SSH/token = sous-projet séparé non implémenté). **Workspace** (clone/ouvrir/créer) : déféré Phase 3+.
 
-### Phase 4 — Build / Test / Debug (re-scopée par l'audit)
-**Pré-requis : Phase 0+ (durcissement mobile) terminée.** Cœur réaliste : task runner du projet *ouvert*
-(package.json/Cargo.toml/Makefile, distinct du Turbo/Bun interne), exécuté via le PTY existant, logs
-structurés, problem matchers ; test explorer. **DAP / debug on-device → démoté en *stretch*** (6-8 semaines,
-chaîne shebang fragile, faible ROI) : préférer le debug via desktop/remote-control. L'émulateur CI
-(Phase 4 mobile) reste un investissement lourd à planifier séparément.
+### Phase 4 — Build / Test / Debug ✅
 
-### Phase 5 — Plugins / Skills / MCP mobile
-Plugin manager (install npm/local, activer/désactiver, permissions/trust, logs, update/uninstall).
-Implémenter le format `SKILL.md` (`docs/SKILLS-SYSTEM-DESIGN.md`).
+**Implémenté** (commit `e174a0bb9a`).
 
-### Phase 6 — Pro Android / Tablette
-Split panes, command palette, barre clavier contextuelle, raccourcis hardware, mode tablette,
-export/import settings, diagnostics, surveillance thermique/mémoire/batterie, quotas disque.
-**Permissions** : le flux Kotlin existe déjà — travail = UX (état visible, assistant, diagnostic, retry,
-commande Tauri `request_permissions` unifiée). Mettre à jour `ANDROID_DEVELOPMENT.md §5` (stale).
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| Détection tâches : `package.json` (scripts npm), `Cargo.toml` (build/test/clippy/run), `Makefile` (targets) | `components/task-panel.tsx` | ✅ |
+| Exécution via PTY existant — `terminal.newWithCommand(command, title)` | `context/terminal.tsx:415` | ✅ |
+| Onglet "tasks" dans le side panel | `pages/session/session-side-panel.tsx:412` | ✅ |
+
+**Stretch (non implémenté)** : problem matchers (parse sortie compilateur → liens cliquables), test explorer (cargo test / npm test résultats), DAP debug on-device (chaîne shebang fragile, faible ROI).
+
+### Phase 5 — Plugins / Skills / MCP mobile ✅
+
+**Implémenté** (commit `e174a0bb9a`).
+
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| Plugin manager MCP — liste serveurs (statut connected/failed/needs_auth), toggle activer/désactiver, authentification OAuth | `components/settings-plugins.tsx` | ✅ |
+| Ajout serveur MCP Remote (HTTP) ou Local (stdio) — formulaire inline | idem | ✅ |
+| Suppression serveur MCP | idem | ✅ |
+| Intégration dans dialog-settings onglet "Plugins" | `pages/session/dialog-settings.tsx` | ✅ |
+
+**Stretch** : SKILL.md install/manage (placeholder dans settings-plugins.tsx), npm plugin local install/uninstall.
+
+### Phase 6 — Pro Android / Tablette ✅
+
+**Implémenté** (commit `e174a0bb9a`).
+
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| Command palette — overlay Mod+Shift+P, search par titre/description/catégorie, suspend autres keybinds | `components/dialog-command-palette.tsx` | ✅ |
+| Android diagnostics — thermique (polling 15s), RAM utilisée/totale, barre progress | `components/settings-android.tsx` | ✅ |
+| Permissions Android UX — état visible, request_permissions via Tauri, retry flow | idem | ✅ |
+| Export / Import configuration globale | `components/settings-general.tsx` | ✅ |
+
+**Stretch** : split panes, barre clavier contextuelle hardware, quotas disque, mode tablette dédié.
 
 ## Priorité nette
 
