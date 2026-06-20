@@ -183,9 +183,9 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 | Exécution via PTY existant — `terminal.newWithCommand(command, title)` | `context/terminal.tsx:415` | ✅ |
 | Onglet "tasks" dans le side panel | `pages/session/session-side-panel.tsx:412` | ✅ |
 
-**Stretch (non implémenté)** :
-- **Problem matchers** — nécessite : (1) `terminal.newWithCommand` retourne l'ID PTY créé, (2) backend `GET /pty/:id/buffer` retournant le buffer dépouillé d'ANSI, (3) parseurs regex Rust/TS/Make, (4) UI "Problems" dans le task panel. Effort estimé : 1-2j.
-- **Test explorer** — parser la sortie `cargo test` / `npm test` (patterns `test … ok` / `FAILED`) dans une vue séparée. Partage l'infra buffer du point précédent.
+**Stretch (partiellement implémenté)** :
+- **Problem matchers** ✅ (commit `a7f40d58f1`) — `Pty.tail(id, maxChars)` + `GET /pty/:id/tail` (ANSI strippé) ; parseurs Rust (`--> file:line:col`) / TS (`file(line,col): error TSxxxx`) / GCC (`:line:col: error:`) ; bouton "Analyser" + panneau erreurs/avertissements dans le task panel. `terminal.newWithCommand()` retourne l'ID PTY. | `packages/opencode/src/pty/index.ts`, `routes/pty.ts`, `components/task-panel.tsx`
+- **Test explorer** — parser la sortie `cargo test` / `npm test` (patterns `test … ok` / `FAILED`) dans une vue séparée. Partage l'infra `Pty.tail()` déjà implémentée.
 - **DAP debug on-device** — démoté (chaîne shebang fragile, faible ROI vs desktop remote-control).
 
 ### Phase 5 — Plugins / Skills / MCP mobile ✅
@@ -200,7 +200,8 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 | Intégration dans dialog-settings onglet "Plugins" | `pages/session/dialog-settings.tsx` | ✅ |
 
 **Stretch (partiellement implémenté)** :
-- **SKILL.md UI** — `SkillsSection` dans `settings-plugins.tsx` affiche le format et les catégories (text-only/js/native). Manque : backend scan du répertoire `~/.opencode/skills/`, routes `GET/POST/DELETE /skills`, liste+installation depuis URL. Effort estimé : 1j.
+- **SKILL.md liste** ✅ (commit `a7f40d58f1`) — `SkillsSection` affiche les skills installés via `sdk.client.app.skills()` (SolidJS `createResource`), avec nom, description et chemin relatif. Format doc replié dans `<details>`. Le backend `GET /skill` + `Skill.all()` existait déjà.
+- **SKILL.md install/manage** — installation depuis URL et suppression (routes `POST/DELETE /skill`) non implémentées.
 - **npm plugin local install/uninstall** — non implémenté.
 
 ### Phase 6 — Pro Android / Tablette ✅
@@ -220,9 +221,9 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 
 **Toutes les phases principales sont ✅.** Reste :
 - **Phase 0** — Device QA matrix (Xiaomi/Pixel × Android 12-15) : non bloquante, tests manuels à planifier.
-- **Stretch Phase 2** : Shift+F12 références panel, autocomplete, rename symbol.
-- **Stretch Phase 4** : problem matchers (parse sortie compilateur → liens cliquables), test explorer.
-- **Stretch Phase 5** : SKILL.md install/manage UI.
+- **Stretch Phase 2** : Shift+F12 références panel, autocomplete CM6, rename symbol.
+- **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer (parser `cargo test`/`npm test`).
+- **Stretch Phase 5** : SKILL.md liste ✅ (commit `a7f40d58f1`) ; install/manage via URL.
 - **Stretch Phase 6** : split panes, mode tablette dédié.
 - **Sous-projet auth push/pull** : SSH key / token, stockage sécurisé Tauri Store.
 
