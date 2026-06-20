@@ -114,6 +114,83 @@ function basename(path: string): string {
   return path.replace(/\\/g, "/").split("/").pop() ?? path
 }
 
+// ─── Test explorer ────────────────────────────────────────────────────────────
+
+export type TestResult = { name: string; status: "pass" | "fail" | "ignore" }
+export type TestSummary = { total: number; passed: number; failed: number; ignored: number }
+
+// cargo test: "test module::name ... ok|FAILED|ignored"
+const CARGO_TEST_RE = /^test\s+(.+?)\s+\.\.\.\s+(ok|FAILED|ignored)\s*$/gm
+// cargo summary: "test result: ok. 5 passed; 1 failed; 0 ignored"
+const CARGO_SUMMARY_RE = /^test result:\s+(?:ok|FAILED)\.\s+(\d+) passed;\s+(\d+) failed;\s+(\d+) ignored/m
+// Jest/Vitest summary: "Tests: 1 failed, 4 passed, 5 total" or "Tests  3 passed | 1 failed (4)"
+const JEST_SUMMARY_RE = /^Tests?(?:\s*:|\s{2,})(.+)/m
+// Jest PASS/FAIL file line: "PASS src/foo.test.ts" / "FAIL src/bar.test.ts"
+const JEST_FILE_RE = /^(PASS|FAIL)\s+(.+\.(?:test|spec)\.[jt]sx?)/gm
+// Vitest ✓/× individual: "  ✓ test name" / "  × failing"
+const VITEST_TEST_RE = /^\s+([✓×✗])\s+(.+)/gm
+// Bun test: "(pass) name" / "(fail) name"
+const BUN_TEST_RE = /^\((pass|fail)\)\s+(.+)/gm
+
+function parseTests(text: string): { results: TestResult[]; summary: TestSummary | null } {
+  const results: TestResult[] = []
+
+  // cargo test — most explicit format
+  let m: RegExpExecArray | null
+  CARGO_TEST_RE.lastIndex = 0
+  while ((m = CARGO_TEST_RE.exec(text)) !== null) {
+    const status = m[2] === "ok" ? "pass" : m[2] === "ignored" ? "ignore" : "fail"
+    results.push({ name: m[1]!, status })
+  }
+
+  // Vitest / Jest individual lines
+  if (results.length === 0) {
+    VITEST_TEST_RE.lastIndex = 0
+    while ((m = VITEST_TEST_RE.exec(text)) !== null) {
+      const status = m[1] === "✓" ? "pass" : "fail"
+      results.push({ name: m[2]!.trim(), status })
+    }
+  }
+
+  // Bun
+  if (results.length === 0) {
+    BUN_TEST_RE.lastIndex = 0
+    while ((m = BUN_TEST_RE.exec(text)) !== null) {
+      results.push({ name: m[2]!.trim(), status: m[1] === "pass" ? "pass" : "fail" })
+    }
+  }
+
+  // Jest PASS/FAIL file-level fallback
+  if (results.length === 0) {
+    JEST_FILE_RE.lastIndex = 0
+    while ((m = JEST_FILE_RE.exec(text)) !== null) {
+      results.push({ name: basename(m[2]!), status: m[1] === "PASS" ? "pass" : "fail" })
+    }
+  }
+
+  // Build summary
+  let summary: TestSummary | null = null
+
+  const cargoM = CARGO_SUMMARY_RE.exec(text)
+  if (cargoM) {
+    const passed = parseInt(cargoM[1]!, 10)
+    const failed = parseInt(cargoM[2]!, 10)
+    const ignored = parseInt(cargoM[3]!, 10)
+    summary = { total: passed + failed + ignored, passed, failed, ignored }
+  } else {
+    const jestM = JEST_SUMMARY_RE.exec(text)
+    if (jestM) {
+      const line = jestM[1]!
+      const passed = parseInt(line.match(/(\d+)\s+passed/)?.[1] ?? "0", 10)
+      const failed = parseInt(line.match(/(\d+)\s+failed/)?.[1] ?? "0", 10)
+      const skipped = parseInt(line.match(/(\d+)\s+(?:skipped|pending)/)?.[1] ?? "0", 10)
+      if (passed + failed > 0) summary = { total: passed + failed + skipped, passed, failed, ignored: skipped }
+    }
+  }
+
+  return { results: results.slice(0, 500), summary }
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function TaskPanel(props: {
@@ -123,7 +200,10 @@ export function TaskPanel(props: {
   const sdk = useSDK()
   const [lastPtyId, setLastPtyId] = createSignal<string | null>(null)
   const [problems, setProblems] = createSignal<Problem[]>([])
+  const [testResults, setTestResults] = createSignal<TestResult[]>([])
+  const [testSummary, setTestSummary] = createSignal<TestSummary | null>(null)
   const [analysing, setAnalysing] = createSignal(false)
+  const [showAllTests, setShowAllTests] = createSignal(false)
 
   async function analyseProblems() {
     const id = lastPtyId()
@@ -134,6 +214,9 @@ export function TaskPanel(props: {
       if (res.ok) {
         const body = (await res.json()) as { text: string }
         setProblems(parseProblems(body.text))
+        const { results, summary } = parseTests(body.text)
+        setTestResults(results)
+        setTestSummary(summary)
       }
     } catch {
       // network error — silently ignore
@@ -215,10 +298,12 @@ export function TaskPanel(props: {
         )}
       </For>
 
-      {/* Problem matcher toolbar */}
+      {/* Analyse toolbar + results */}
       <Show when={lastPtyId()}>
         <div class="border-t border-border-weak-base mt-1 pt-1">
-          <div class="flex items-center gap-2 px-3 py-1.5">
+
+          {/* Toolbar row */}
+          <div class="flex items-center gap-2 px-3 py-1.5 flex-wrap">
             <button
               type="button"
               disabled={analysing()}
@@ -227,19 +312,40 @@ export function TaskPanel(props: {
             >
               {analysing() ? "…" : "Analyser"}
             </button>
+
+            {/* Problem badges */}
             <Show when={problems().length > 0}>
               <span class="text-11-regular text-[#ef4444]">{errCount()} erreur{errCount() !== 1 ? "s" : ""}</span>
               <Show when={warnCount() > 0}>
                 <span class="text-11-regular text-[#f59e0b]">{warnCount()} avert.</span>
               </Show>
             </Show>
-            <Show when={!analysing() && problems().length === 0 && lastPtyId()}>
-              <span class="text-11-regular text-text-weaker">Aucun problème détecté</span>
+
+            {/* Test summary badge */}
+            <Show when={testSummary()}>
+              <span class="text-11-regular text-text-weaker">·</span>
+              <Show
+                when={(testSummary()?.failed ?? 0) === 0}
+                fallback={
+                  <span class="text-11-regular text-[#ef4444]">
+                    {testSummary()!.failed} échec{testSummary()!.failed !== 1 ? "s" : ""} / {testSummary()!.total}
+                  </span>
+                }
+              >
+                <span class="text-11-regular text-[#22c55e]">
+                  {testSummary()!.passed}/{testSummary()!.total} tests ok
+                </span>
+              </Show>
+            </Show>
+
+            <Show when={!analysing() && problems().length === 0 && testResults().length === 0 && lastPtyId()}>
+              <span class="text-11-regular text-text-weaker">Aucun résultat</span>
             </Show>
           </div>
 
+          {/* Problems list */}
           <Show when={problems().length > 0}>
-            <div class="flex flex-col pb-2">
+            <div class="flex flex-col pb-1">
               <For each={problems()}>
                 {(p) => (
                   <div class="flex items-start gap-2 px-3 py-1 hover:bg-surface-base">
@@ -257,6 +363,43 @@ export function TaskPanel(props: {
                   </div>
                 )}
               </For>
+            </div>
+          </Show>
+
+          {/* Tests list */}
+          <Show when={testResults().length > 0}>
+            <div class="flex flex-col pb-2">
+              {/* Show failed first, then optionally all */}
+              <For each={showAllTests() ? testResults() : testResults().filter((t) => t.status === "fail")}>
+                {(t) => (
+                  <div class="flex items-center gap-2 px-3 py-0.5 hover:bg-surface-base">
+                    <span
+                      class={`text-10-regular font-mono shrink-0 ${
+                        t.status === "pass"
+                          ? "text-[#22c55e]"
+                          : t.status === "ignore"
+                            ? "text-text-weaker"
+                            : "text-[#ef4444]"
+                      }`}
+                    >
+                      {t.status === "pass" ? "✓" : t.status === "ignore" ? "–" : "✗"}
+                    </span>
+                    <span class="text-11-regular text-text-base truncate font-mono">{t.name}</span>
+                  </div>
+                )}
+              </For>
+
+              <Show when={testResults().filter((t) => t.status !== "fail").length > 0}>
+                <button
+                  type="button"
+                  onClick={() => setShowAllTests((v) => !v)}
+                  class="text-10-regular text-text-weaker hover:text-text-base px-3 py-0.5 text-left"
+                >
+                  {showAllTests()
+                    ? "Masquer les succès"
+                    : `Voir tous (${testResults().length})`}
+                </button>
+              </Show>
             </div>
           </Show>
         </div>
