@@ -1,6 +1,6 @@
 // FORK: ADR-0005 Phase 5 — Plugin manager (MCP Servers full CRUD + Skills placeholder).
 // Integrates as the "Plugins" tab in dialog-settings.tsx.
-import { createMemo, createSignal, For, Show, type Component } from "solid-js"
+import { createMemo, createResource, createSignal, For, Show, type Component } from "solid-js"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -299,16 +299,73 @@ const McpSection: Component = () => {
 
 // ─── Skills section ─────────────────────────────────────────────────────────
 
+type SkillInfo = { name: string; description: string; location: string; content: string }
+
+function skillFileName(location: string): string {
+  return location.replace(/\\/g, "/").split("/").slice(-2).join("/")
+}
+
 const SkillsSection: Component = () => {
+  const sdk = useSDK()
+
+  const [skills] = createResource(
+    () => sdk.directory,
+    async (dir) => {
+      try {
+        const res = await sdk.client.app.skills({ directory: dir })
+        return (res.data ?? []) as SkillInfo[]
+      } catch {
+        return [] as SkillInfo[]
+      }
+    },
+  )
+
   return (
     <div class="flex flex-col gap-3">
-      <div class="bg-surface-base rounded-lg p-4 text-12-regular text-text-weak leading-relaxed">
-        <p class="text-13-medium text-text-strong mb-2">Format SKILL.md</p>
-        <p class="mb-3">
-          Les skills sont des fichiers Markdown avec un frontmatter YAML. Ils étendent les capacités de l'agent
-          sans modifier le code.
-        </p>
-        <pre class="bg-background-stronger rounded p-3 text-11-regular font-mono overflow-x-auto whitespace-pre text-text-base mb-3">{`---
+      {/* Installed skills list */}
+      <Show when={skills.loading}>
+        <div class="text-text-weak text-12-regular px-3 py-2">Chargement…</div>
+      </Show>
+
+      <Show when={!skills.loading && (skills()?.length ?? 0) > 0}>
+        <div class="flex flex-col">
+          <p class="text-11-regular text-text-weaker px-1 mb-1 uppercase tracking-wide">
+            Skills installés ({skills()!.length})
+          </p>
+          <For each={skills()}>
+            {(skill) => (
+              <div class="flex flex-col px-3 py-2 hover:bg-surface-base rounded gap-0.5">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-12-medium text-text-strong">{skill.name}</span>
+                  <span class="text-11-regular text-text-weaker font-mono truncate max-w-[180px]" title={skill.location}>
+                    {skillFileName(skill.location)}
+                  </span>
+                </div>
+                <span class="text-11-regular text-text-weak leading-snug">{skill.description}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={!skills.loading && (skills()?.length ?? 0) === 0}>
+        <div class="text-12-regular text-text-weaker text-center py-4 border border-dashed border-border-weak-base rounded-lg">
+          Aucun skill installé
+        </div>
+      </Show>
+
+      {/* Format documentation */}
+      <details class="bg-surface-base rounded-lg text-12-regular text-text-weak">
+        <summary class="px-4 py-3 cursor-pointer select-none text-13-medium text-text-strong">
+          Format SKILL.md
+        </summary>
+        <div class="px-4 pb-4 leading-relaxed">
+          <p class="mb-3 mt-1">
+            Fichier Markdown avec frontmatter YAML, déposé dans{" "}
+            <span class="font-mono text-text-base">~/.config/opencode/skills/</span> ou{" "}
+            <span class="font-mono text-text-base">.opencode/skills/</span> (projet).
+          </p>
+          <pre class="bg-background-stronger rounded p-3 text-11-regular font-mono overflow-x-auto whitespace-pre text-text-base mb-3">{`---
 name: mon-skill
 description: Description courte
 metadata:
@@ -318,16 +375,13 @@ metadata:
 # Instructions
 
 Texte ajouté au prompt système...`}</pre>
-        <p class="text-11-regular opacity-70">
-          Catégories : <span class="font-mono">text-only</span> (prompt système),{" "}
-          <span class="font-mono">js</span> (sandbox WebView),{" "}
-          <span class="font-mono">native</span> (intents Android).
-        </p>
-      </div>
-
-      <div class="text-12-regular text-text-weaker text-center py-4 border border-dashed border-border-weak-base rounded-lg">
-        Installation des skills via URL — à venir
-      </div>
+          <p class="text-11-regular opacity-70">
+            Catégories : <span class="font-mono">text-only</span> (prompt système),{" "}
+            <span class="font-mono">js</span> (sandbox WebView),{" "}
+            <span class="font-mono">native</span> (intents Android).
+          </p>
+        </div>
+      </details>
     </div>
   )
 }

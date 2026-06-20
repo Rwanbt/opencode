@@ -412,7 +412,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     // FORK: ADR-0005 task runner — create a pending PTY pre-wired to run a
     // specific command. The Terminal component passes the command to
     // pty.create() when it lazy-creates the backend session.
-    newWithCommand(command: string, title?: string) {
+    // Returns the PTY ID so callers can poll /pty/:id/tail for problem matchers.
+    newWithCommand(command: string, title?: string): string {
       const nextNumber = pickNextTerminalNumber()
       const id = generateClientPtyId()
       const pending: LocalPTY = {
@@ -426,6 +427,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         setStore("all", store.all.length, pending)
         setStore("active", id)
       })
+      return id
     },
     finalizePending(id: string) {
       const index = store.all.findIndex((x) => x.id === id)

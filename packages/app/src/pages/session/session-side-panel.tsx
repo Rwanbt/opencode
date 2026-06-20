@@ -468,8 +468,9 @@ export function SessionSidePanel(props: {
                     <TaskPanel
                       directory={sdk.directory}
                       onRunTask={(command, title) => {
-                        terminal.newWithCommand(command, title)
+                        const id = terminal.newWithCommand(command, title)
                         view().terminal.open()
+                        return id
                       }}
                     />
                   </Show>

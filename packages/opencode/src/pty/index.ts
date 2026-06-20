@@ -157,6 +157,16 @@ export namespace Pty {
       ws: Socket,
       cursor?: number,
     ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
+    // FORK: Phase 4 stretch — problem matchers
+    readonly tail: (id: PtyID, maxChars?: number) => Effect.Effect<string>
+  }
+
+  // Strip ANSI escape codes for problem matcher analysis
+  const ANSI_RE =
+    /\x1B(?:\[[0-9;]*[mGKHFJABCDsuMPX@AHIJORSTLZ]|\][^\x07]*(?:\x07|\x1B\\)|[()][AB012]|[M78])/g
+
+  export function stripAnsi(raw: string): string {
+    return raw.replace(ANSI_RE, "").replace(/\r/g, "")
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Pty") {}
@@ -220,6 +230,14 @@ export namespace Pty {
       const get = Effect.fn("Pty.get")(function* (id: PtyID) {
         const s = yield* InstanceState.get(state)
         return s.sessions.get(id)?.info
+      })
+
+      // FORK: Phase 4 stretch — problem matchers
+      const tail = Effect.fn("Pty.tail")(function* (id: PtyID, maxChars = 60_000) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return ""
+        return stripAnsi(session.buffer.slice(-maxChars))
       })
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
@@ -500,7 +518,7 @@ export namespace Pty {
         }
       })
 
-      return Service.of({ list, get, create, update, remove, resize, write, connect })
+      return Service.of({ list, get, create, update, remove, resize, write, connect, tail })
     }),
   )
 
@@ -538,5 +556,10 @@ export namespace Pty {
 
   export async function remove(id: PtyID) {
     return runPromise((svc) => svc.remove(id))
+  }
+
+  // FORK: Phase 4 stretch — problem matchers
+  export async function tail(id: PtyID, maxChars?: number) {
+    return runPromise((svc) => svc.tail(id, maxChars))
   }
 }
