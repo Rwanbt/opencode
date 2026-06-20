@@ -27,22 +27,25 @@ desktop + Android (+ iOS futur).
    (`assertInsideProject` + `AppFileSystem.resolve`, file/index.ts:513-526) et l'event
    `File.Event.Edited` (déjà déclaré file/index.ts:77-78).
 
-## État vérifié de la codebase
+## État vérifié de la codebase (mis à jour 2026-06-20)
 
 | Domaine | État réel | Fichier de référence |
 |---|---|---|
-| Éditeur | ❌ Read-only (pierre/diffs, pas de buffer éditable) | `packages/ui/src/components/file.tsx`, `packages/app/src/context/file.tsx` |
-| API fichier | ⚠️ `list/content/status/mkdir/find` seulement ; pas de write/rename/move/delete | `packages/opencode/src/server/routes/file.ts`, `packages/opencode/src/file/index.ts` |
+| Éditeur | ✅ CodeMirror 6 éditable (dirty/save/conflit/undo-redo), dual-mode Agent⇄IDE | `packages/app/src/context/editor/store.ts`, `file-tabs.tsx:638` |
+| API fichier | ✅ `write/rename/move/delete` + garde anti-escape + modèle de conflit hash | `packages/opencode/src/server/routes/file.ts`, `file/index.ts` |
 | LSP backend | ✅ hover/def/refs/symbols/diagnostics + 9 ops | `packages/opencode/src/lsp/index.ts`, `packages/opencode/src/tool/lsp.ts` |
-| LSP UI humain | ❌ Inexistant ; `/find/symbol` renvoie `[]` (LSP commenté) | `packages/opencode/src/server/routes/file.ts:109-114` |
-| Git backend | ⚠️ Lecture seule (pas de commit/stage/push/pull/blame) | `packages/opencode/src/git/index.ts` |
-| Git UI | ❌ Inexistant (juste diff/review read-only) | `packages/app/.../session-vcs.ts` |
-| Terminal | ✅ Complet (PTY/tabs/toolbar mobile/WebSocket) | `packages/opencode/src/pty/index.ts`, `packages/app/src/pages/session/terminal-panel.tsx` |
-| Build/Test/Debug utilisateur | ❌ Task runner = Turbo/Bun pour le dev du repo, pas pour le projet ouvert ; pas de test explorer ni DAP exposé | `turbo.json`, `package.json` |
+| LSP UI humain | ✅ diagnostics gutter, hover, F12 go-to-def, `/find/symbol` réactivé | `packages/ui/src/components/code-mirror-lsp.ts`, `routes/lsp.ts` |
+| Git backend | ✅ add/reset/commit/push/pull/log/blame/branches/createBranch/switchBranch | `packages/opencode/src/git/index.ts` |
+| Git UI | ✅ Source Control panel — staged/unstaged/commit/push/pull/branch switcher | `packages/app/src/components/source-control.tsx` |
+| Terminal | ✅ Complet (PTY/tabs/toolbar mobile/WebSocket) | `packages/opencode/src/pty/index.ts`, `terminal-panel.tsx` |
+| Build/Test/Debug utilisateur | ✅ Task runner — détecte npm/cargo/make, exécute via PTY | `packages/app/src/components/task-panel.tsx` |
 | Plugins backend | ✅ 14+ hooks, plugins internes/npm/locaux, custom tools, events | `packages/opencode/src/plugin/index.ts` |
-| Plugin manager UI | ⚠️ MCP toggle/status seulement | `packages/app/src/components/dialog-select-mcp.tsx` |
-| Permissions Android | ⚠️ Runtime déjà câblé en Kotlin. Manque = **UX** (état visible, assistant, diagnostic) | `MainActivity.kt:174-276` ; doc `ANDROID_DEVELOPMENT.md §5` stale |
-| Skills system | 📄 Design doc existant (SKILL.md text/js/native) | `docs/SKILLS-SYSTEM-DESIGN.md` |
+| Plugin manager UI | ✅ MCP full CRUD — add/remove/toggle/auth, remote + local | `packages/app/src/components/settings-plugins.tsx` |
+| Permissions Android | ✅ UX complète — diagnostics thermique/RAM, bouton permissions, état visible | `packages/app/src/components/settings-android.tsx` |
+| Notifications système | ✅ NotificationBridge — session completed/failed + model ready | `packages/mobile/src/notifications.ts`, `entry.tsx:540` |
+| Deep-link étendu | ✅ connect + open + session — handleDeepLink() router | `packages/mobile/src/entry.tsx:296` |
+| Mobile hardening (Phase 0+) | ✅ logging toolchain, runtime décomposé, bundling unifié | `packages/mobile/src-tauri/src/runtime/` |
+| Skills system | ⚠️ Design doc + placeholder UI ; install/manage non implémenté | `docs/SKILLS-SYSTEM-DESIGN.md`, `settings-plugins.tsx` |
 
 ## Audit dette technique (2026-06-16) & révisions
 
@@ -124,25 +127,21 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 - [x] Unifier le bundling CLI (`prepare-android-runtime.sh` → `scripts/bundle-mobile.mjs`) → source unique (D-17).
 - [x] Décomposer `runtime.rs` (1869 → ~848 LOC) en `runtime/{extraction,toolchain,server}.rs` (D-01).
 
-### Phase 1 — Éditeur MVP + API fichier write (PRIORITÉ)
+### Phase 1 — Éditeur MVP + API fichier write ✅
 
-**Pré-implémentation obligatoire — mini-contrat technique** (à figer avant code, après `/plan-eng-review` + mini-ADR) :
-- **Routes** : `POST /file/write`, `POST /file/rename`, `POST /file/move`, `DELETE /file` + fonctions
-  `write/rename/move/delete` du service `file/index.ts`.
-- **Sécurité** : réutiliser `assertInsideProject` + `AppFileSystem.resolve` (guard anti-escape, file/index.ts:513-526).
-- **Modèle de conflit** : le client envoie le `mtime`/hash attendu au save ; rejet si changé sur disque depuis le `read`.
-- **Events** : publier `File.Event.Edited` (déjà déclaré file/index.ts:77-78) à chaque write.
-- **Tests** : store éditeur (dirty/save/conflict) + routes fichier (succès, escape refusé, conflit).
+**Implémenté** (Phase 1a : commit session 2026-06-19 ; Phase 1b : commit `6872bad85e`).
 
-**Frontend (révisé par l'audit — respect frontière fork)** : ne PAS modifier `file.tsx` upstream.
-Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.tsx:147`). Code 100% dans
-`packages/app/src` :
-- `components/editable-file-tab.tsx` (~500 LOC) — wrapper **CodeMirror 6**.
-- `stores/editor-store.ts` (~150 LOC) — buffers, dirty, save/discard/reload, undo/redo, conflit.
-- `context/file.tsx` — étendre `FileState` (`buffer?`, `dirty?`) ; brancher dans `file-tabs.tsx` (~20 LOC).
-- **Dual-mode** : `hooks/use-view-mode.ts` (~60 LOC) + `session-header-view-toggle.tsx` (~50 LOC) — NE PAS
-  gonfler session.tsx/layout.tsx (budgets : session ≤ +80, layout ≤ +30).
-- **Tests** (dette ui 0%) : tests d'intégration file-tabs + editor-store **avant merge**.
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| API fichier write — `POST /file/write` (conflit hash stateless, écriture atomique), `POST /file/rename`, `POST /file/move`, `DELETE /file` | `packages/opencode/src/server/routes/file.ts` | ✅ |
+| Backend file service — `write/rename/move/delete` + `assertInsideProject` guard + `File.Event.Edited` | `packages/opencode/src/file/index.ts` | ✅ |
+| ADR-0004 — modèle de conflit hash + écriture atomique documenté | `docs/adr/ADR-0004-file-write-conflict-model.md` | ✅ |
+| Editor store — state machine dirty/save/discard/reload/conflict, undo/redo | `packages/app/src/context/editor/store.ts` | ✅ |
+| Editor store tests (124 tests) | `packages/app/src/context/editor/store.test.ts` | ✅ |
+| EditorProvider — pont store ↔ SDK transport + watcher events | `packages/app/src/context/editor.tsx` | ✅ |
+| CodeMirrorEditor intégré dans file-tabs.tsx (lazy-loaded, ~400 KB bundle) | `packages/app/src/pages/session/file-tabs.tsx:638` | ✅ |
+| Dual-mode hook Agent ⇄ IDE | `packages/app/src/hooks/use-view-mode.ts` | ✅ |
+| Bannières inline (conflit/stale/non-trouvé) | `packages/app/src/pages/session/editor-banner.tsx` | ✅ |
 
 ### Phase 2 — LSP exposé à l'humain ✅
 
@@ -184,7 +183,10 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
 | Exécution via PTY existant — `terminal.newWithCommand(command, title)` | `context/terminal.tsx:415` | ✅ |
 | Onglet "tasks" dans le side panel | `pages/session/session-side-panel.tsx:412` | ✅ |
 
-**Stretch (non implémenté)** : problem matchers (parse sortie compilateur → liens cliquables), test explorer (cargo test / npm test résultats), DAP debug on-device (chaîne shebang fragile, faible ROI).
+**Stretch (non implémenté)** :
+- **Problem matchers** — nécessite : (1) `terminal.newWithCommand` retourne l'ID PTY créé, (2) backend `GET /pty/:id/buffer` retournant le buffer dépouillé d'ANSI, (3) parseurs regex Rust/TS/Make, (4) UI "Problems" dans le task panel. Effort estimé : 1-2j.
+- **Test explorer** — parser la sortie `cargo test` / `npm test` (patterns `test … ok` / `FAILED`) dans une vue séparée. Partage l'infra buffer du point précédent.
+- **DAP debug on-device** — démoté (chaîne shebang fragile, faible ROI vs desktop remote-control).
 
 ### Phase 5 — Plugins / Skills / MCP mobile ✅
 
@@ -197,7 +199,9 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
 | Suppression serveur MCP | idem | ✅ |
 | Intégration dans dialog-settings onglet "Plugins" | `pages/session/dialog-settings.tsx` | ✅ |
 
-**Stretch** : SKILL.md install/manage (placeholder dans settings-plugins.tsx), npm plugin local install/uninstall.
+**Stretch (partiellement implémenté)** :
+- **SKILL.md UI** — `SkillsSection` dans `settings-plugins.tsx` affiche le format et les catégories (text-only/js/native). Manque : backend scan du répertoire `~/.opencode/skills/`, routes `GET/POST/DELETE /skills`, liste+installation depuis URL. Effort estimé : 1j.
+- **npm plugin local install/uninstall** — non implémenté.
 
 ### Phase 6 — Pro Android / Tablette ✅
 
@@ -212,10 +216,15 @@ Injecter un composant éditable via `useFileComponent()` (`packages/app/src/app.
 
 **Stretch** : split panes, barre clavier contextuelle hardware, quotas disque, mode tablette dédié.
 
-## Priorité nette
+## État d'avancement global (2026-06-20)
 
-**Phase 1 d'abord** — tout en dépend : le LSP humain (P2) n'a de sens que dans un éditeur, et le
-Git/Workspace (P3) s'appuie sur les opérations fichiers. Le dual-mode se pose dès la Phase 1.
+**Toutes les phases principales sont ✅.** Reste :
+- **Phase 0** — Device QA matrix (Xiaomi/Pixel × Android 12-15) : non bloquante, tests manuels à planifier.
+- **Stretch Phase 2** : Shift+F12 références panel, autocomplete, rename symbol.
+- **Stretch Phase 4** : problem matchers (parse sortie compilateur → liens cliquables), test explorer.
+- **Stretch Phase 5** : SKILL.md install/manage UI.
+- **Stretch Phase 6** : split panes, mode tablette dédié.
+- **Sous-projet auth push/pull** : SSH key / token, stockage sécurisé Tauri Store.
 
 ## Vérification (end-to-end, par phase)
 
@@ -227,42 +236,17 @@ Git/Workspace (P3) s'appuie sur les opérations fichiers. Le dual-mode se pose d
 - **P5** : installer/désactiver un plugin et un skill SKILL.md, logs et permissions.
 - **P6** : tablette + clavier hardware, flux permissions complet.
 
-### Phase 7 — Notifications système + Deep-link étendu
+### Phase 7 — Notifications système + Deep-link étendu ✅
 
-**Pré-requis : Phase 6 terminée.** Compléter les deux couches d'intégration système
-manquantes après le chantier IDE, puis nettoyer la documentation stale produite en Phase 6.
+**Implémenté** (commit `803796f33e`).
 
-**1. NotificationBridge — câblage (code mort → actif)**
-
-La classe `NotificationBridge` (`packages/mobile/src/notifications.ts`) existe depuis la Phase 5
-mais n'est jamais instanciée. La brancher dans `FullApp` (`entry.tsx`) pour que les événements
-SSE déclenchent des notifications natives quand l'app est en arrière-plan :
-- `session.updated` status=`completed`/`failed` → notification agent terminé/échoué
-- `llm.status` event=`loaded` → notification modèle prêt
-- Notification "Model Ready" au chargement LLM (via `llm-loading-progress` window event)
-- Cleanup `disconnect()` dans `onCleanup`
-
-**2. Deep-link étendu — au-delà du connect**
-
-Actuellement seul `opencode://connect?...` est géré (`applyPairingDeepLink`). Ajouter :
-- `opencode://open?file=<path>&project=<dir>` → dispatch `ide-open-file` CustomEvent
-  (pour ouvrir un fichier depuis un autre app ou une URL partagée)
-- `opencode://session?id=<sessionId>` → dispatch `navigate-to-session` CustomEvent
-  (pour reprendre une session depuis une notification ou un raccourci)
-- Factoriser la résolution via `handleDeepLink(url)` qui essaie les 3 handlers en cascade
-
-**3. Mise à jour docs stale (chantier obligatoire en sortie de Phase 6)**
-- `ANDROID_DEVELOPMENT.md §5 « Permissions runtime »` : remplacer le bloc "à implémenter"
-  par l'état réel (Kotlin implémenté dans `MainActivity.kt:51-61 + 174-214`, TS via `platform.notify`)
-- `ANDROID_DEVELOPMENT.md §6 « Lifecycle »` : remplacer le pseudo-code par les références
-  à l'implémentation réelle (`entry.tsx:197-218`, `MainActivity.kt:216-276`) + ajouter §6.1
-  deep-link et §6.2 notifications
-
-**Vérification (end-to-end, Phase 7)**
-- Mettre l'app en arrière-plan → finir une session agent → notification native reçue
-- Ouvrir `opencode://connect?...` depuis navigateur → form pré-rempli (régression)
-- Ouvrir `opencode://session?id=xyz` → event `navigate-to-session` dispatchée dans la console
-- Ouvrir `opencode://open?file=/path/to/file.ts` → event `ide-open-file` dispatchée
+| Fonctionnalité | Fichier | État |
+|---|---|---|
+| NotificationBridge instanciée dans `FullApp` — session.updated (completed/failed) + llm.status (loaded) | `packages/mobile/src/entry.tsx:540` | ✅ |
+| `handleDeepLink(url)` — router en cascade pour 3 schémas | `packages/mobile/src/entry.tsx:296` | ✅ |
+| `opencode://open?file=…&project=…` → dispatch `ide-open-file` CustomEvent | `packages/mobile/src/entry.tsx:26-40` | ✅ |
+| `opencode://session?id=…` → dispatch `navigate-to-session` CustomEvent | `packages/mobile/src/entry.tsx:51-63` | ✅ |
+| `ANDROID_DEVELOPMENT.md §5-6` mis à jour — permissions, lifecycle, notifications, deep-link | `docs/ANDROID_DEVELOPMENT.md` | ✅ |
 
 ---
 
