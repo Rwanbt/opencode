@@ -224,11 +224,20 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
     repair_rootfs_hardlinks(&rootfs_dir);
 
     // Seed /etc/resolv.conf so git-http, wget, pip etc. can resolve DNS.
-    let _ = fs::create_dir_all(rootfs_dir.join("etc"));
-    let _ = fs::write(
+    // A silent failure here surfaces much later as a confusing "could not
+    // resolve host" deep inside git/pip — log it so it's greppable in logcat.
+    if let Err(e) = fs::create_dir_all(rootfs_dir.join("etc")) {
+        log::warn!("[install_ext] failed to create rootfs /etc dir: {}", e);
+    }
+    if let Err(e) = fs::write(
         rootfs_dir.join("etc/resolv.conf"),
         "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\n",
-    );
+    ) {
+        log::warn!(
+            "[install_ext] failed to seed /etc/resolv.conf: {} — on-device DNS (git/pip/wget) will fail",
+            e
+        );
+    }
 
     let _ = app.emit(
         "extraction-progress",

@@ -113,13 +113,16 @@ Ce track court **en parallèle** de toutes les phases.
 Matrice réelle : Xiaomi/Pixel/tablette × Android 12-15, stockage externe, terminal, modèle local,
 STT/TTS, deep-link remote, permissions. Corriger les docs stale (en priorité permissions runtime).
 
-### Phase 0+ — Durcissement mobile (PRÉ-REQUIS de la Phase 4)
+### Phase 0+ — Durcissement mobile (PRÉ-REQUIS de la Phase 4) ✅
 Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/test on-device :
-- Documenter la chaîne shebang + LD_PRELOAD dans `KNOWN_FAILURE_PATTERNS.md` (diagramme) + tests
-  d'idempotence de `prepare_toolchain_wrappers()`.
-- Supprimer le swallow d'erreurs silencieux (`let _ =` sur symlink/fs dans `runtime.rs`) → logging.
-- Unifier le bundling CLI (`prepare-android-runtime.sh` vs `bundle-mobile.mjs`) → source unique.
-- (Optionnel) décomposer `runtime.rs` (1869 LOC) en {extraction, toolchain, server_lifecycle}.
+- [x] Documenter la chaîne shebang + LD_PRELOAD dans `KNOWN_FAILURE_PATTERNS.md` (diagramme) + tests
+  d'idempotence de `prepare_toolchain_wrappers()` (`runtime.rs::prepare_toolchain_wrappers_is_idempotent`).
+- [x] Supprimer le swallow d'erreurs silencieux (`let _ =` sur symlink/fs) → logging. D-12/D-13 ont
+  couvert `force_symlink`/`repair_rootfs_hardlinks` ; le durcissement final couvre le chemin `wrap_one`
+  (cc1/collect2/binutils/rustlib), la réécriture de wrapper, la restauration `liblto_plugin.so` et le
+  seed `/etc/resolv.conf` — tous loggés (`[OpenCode] … failed to …`), best-effort par binaire conservé.
+- [x] Unifier le bundling CLI (`prepare-android-runtime.sh` → `scripts/bundle-mobile.mjs`) → source unique (D-17).
+- [x] Décomposer `runtime.rs` (1869 → ~848 LOC) en `runtime/{extraction,toolchain,server}.rs` (D-01).
 
 ### Phase 1 — Éditeur MVP + API fichier write (PRIORITÉ)
 

@@ -222,10 +222,22 @@ pub(super) fn prepare_toolchain_wrappers(
                 linker = musl_linker.display(),
                 backup = backup.display(),
             );
-            let _ = fs::write(file, script);
+            if let Err(e) = fs::write(file, script) {
+                log::warn!(
+                    "[OpenCode] prepare_toolchain_wrappers: failed to refresh wrapper {}: {} — stale shebang may point at a dead libbash_exec.so (cc: cannot execute)",
+                    file.display(),
+                    e
+                );
+            }
             if let Ok(mut perm) = fs::metadata(file).map(|m| m.permissions()) {
                 perm.set_mode(0o755);
-                let _ = fs::set_permissions(file, perm);
+                if let Err(e) = fs::set_permissions(file, perm) {
+                    log::warn!(
+                        "[OpenCode] prepare_toolchain_wrappers: failed to chmod refreshed wrapper {}: {}",
+                        file.display(),
+                        e
+                    );
+                }
             }
             return Ok(());
         }
@@ -274,7 +286,13 @@ pub(super) fn prepare_toolchain_wrappers(
                             if p.extension().and_then(|e| e.to_str()) == Some("so") {
                                 continue;
                             }
-                            let _ = wrap_one(&p);
+                            if let Err(e) = wrap_one(&p) {
+                                log::warn!(
+                                    "[OpenCode] prepare_toolchain_wrappers: failed to wrap gcc libexec {}: {} — linking may fail later with a misleading error",
+                                    p.display(),
+                                    e
+                                );
+                            }
                         }
                     }
                 }
@@ -297,8 +315,20 @@ pub(super) fn prepare_toolchain_wrappers(
                             .map(|b| b.starts_with(b"#!"))
                             .unwrap_or(false);
                         if is_script {
-                            let _ = fs::remove_file(&lto);
-                            let _ = fs::rename(&lto_backup, &lto);
+                            if let Err(e) = fs::remove_file(&lto) {
+                                log::warn!(
+                                    "[OpenCode] prepare_toolchain_wrappers: failed to remove wrapped lto script {}: {}",
+                                    lto.display(),
+                                    e
+                                );
+                            }
+                            if let Err(e) = fs::rename(&lto_backup, &lto) {
+                                log::warn!(
+                                    "[OpenCode] prepare_toolchain_wrappers: failed to restore liblto_plugin.so at {}: {} — LTO builds will break",
+                                    lto.display(),
+                                    e
+                                );
+                            }
                         }
                     }
                 }
@@ -314,7 +344,13 @@ pub(super) fn prepare_toolchain_wrappers(
     for name in &binutils_targets {
         let p = rootfs_dir.join("usr/bin").join(name);
         if p.exists() {
-            let _ = wrap_one(&p);
+            if let Err(e) = wrap_one(&p) {
+                log::warn!(
+                    "[OpenCode] prepare_toolchain_wrappers: failed to wrap binutils {}: {}",
+                    p.display(),
+                    e
+                );
+            }
         }
     }
     if let Ok(entries) = fs::read_dir(rootfs_dir.join("usr/bin")) {
@@ -324,7 +360,14 @@ pub(super) fn prepare_toolchain_wrappers(
                 if s.starts_with("aarch64-alpine-linux-musl-")
                     && !s.ends_with(".elf64")
                 {
-                    let _ = wrap_one(&entry.path());
+                    let p = entry.path();
+                    if let Err(e) = wrap_one(&p) {
+                        log::warn!(
+                            "[OpenCode] prepare_toolchain_wrappers: failed to wrap prefixed binutils {}: {}",
+                            p.display(),
+                            e
+                        );
+                    }
                 }
             }
         }
@@ -332,7 +375,14 @@ pub(super) fn prepare_toolchain_wrappers(
     let rustlib_bin = rootfs_dir.join("usr/lib/rustlib/aarch64-alpine-linux-musl/bin");
     if let Ok(entries) = fs::read_dir(&rustlib_bin) {
         for entry in entries.flatten() {
-            let _ = wrap_one(&entry.path());
+            let p = entry.path();
+            if let Err(e) = wrap_one(&p) {
+                log::warn!(
+                    "[OpenCode] prepare_toolchain_wrappers: failed to wrap rustlib tool {}: {}",
+                    p.display(),
+                    e
+                );
+            }
         }
     }
 
