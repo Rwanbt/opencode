@@ -1,7 +1,10 @@
+import fs from "node:fs/promises"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { makeRuntime } from "@/effect/run-service"
+// FORK: Stretch — git auth credentials (HTTPS token / SSH key)
+import { buildAuthEnv, readCredentials } from "./credentials"
 
 export namespace Git {
   const cfg = [
@@ -356,25 +359,49 @@ export namespace Git {
         return { ok: true, hash: out(hashResult) || "" } satisfies CommitResult
       })
 
-      // Push the current branch to remote. Uses system credential helpers.
-      // Phase 3 does not add SSH/token UI — that is a dedicated sub-project.
+      // Build auth env vars for network git operations (push/pull/fetch).
+      // Never throws — falls back to no auth on any error.
+      const getAuthEnv = () =>
+        Effect.promise(readCredentials)
+          .pipe(Effect.orElseSucceed(() => ({ type: "none" as const })))
+          .pipe(
+            Effect.flatMap((creds) =>
+              Effect.promise(() => buildAuthEnv(creds)).pipe(
+                Effect.orElseSucceed(() => ({ env: {} as Record<string, string>, tempKeyPath: undefined })),
+              ),
+            ),
+          )
+
+      // Push the current branch to remote. Injects auth credentials if configured.
       const push = Effect.fn("Git.push")(function* (cwd: string, remote = "origin", branch?: string) {
         const args = branch ? ["push", remote, branch] : ["push", remote]
-        const result = yield* run(args, { cwd })
-        return {
-          ok: result.exitCode === 0,
-          error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
-        } satisfies PushResult
+        const { env, tempKeyPath } = yield* getAuthEnv()
+        try {
+          const result = yield* run(args, { cwd, env })
+          return {
+            ok: result.exitCode === 0,
+            error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
+          } satisfies PushResult
+        } finally {
+          if (tempKeyPath)
+            yield* Effect.promise(() => fs.rm(tempKeyPath, { force: true })).pipe(Effect.orElseSucceed(() => undefined))
+        }
       })
 
       // Pull from remote. Uses --rebase to keep history linear.
       const pull = Effect.fn("Git.pull")(function* (cwd: string, remote = "origin", branch?: string) {
         const args = branch ? ["pull", "--rebase", remote, branch] : ["pull", "--rebase", remote]
-        const result = yield* run(args, { cwd })
-        return {
-          ok: result.exitCode === 0,
-          error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
-        } satisfies PullResult
+        const { env, tempKeyPath } = yield* getAuthEnv()
+        try {
+          const result = yield* run(args, { cwd, env })
+          return {
+            ok: result.exitCode === 0,
+            error: result.exitCode !== 0 ? result.stderr.toString("utf8").trim() : undefined,
+          } satisfies PullResult
+        } finally {
+          if (tempKeyPath)
+            yield* Effect.promise(() => fs.rm(tempKeyPath, { force: true })).pipe(Effect.orElseSucceed(() => undefined))
+        }
       })
 
       // Return the commit log. Uses unit-separator (0x1F) as field delimiter

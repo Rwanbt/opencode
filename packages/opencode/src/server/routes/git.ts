@@ -11,6 +11,8 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Git } from "../../git"
+import { maskCredentials, readCredentials, writeCredentials } from "../../git/credentials"
+import type { GitCredentials } from "../../git/credentials"
 import { Instance } from "../../project/instance"
 import { withTimeout } from "../../util/timeout"
 import { Log } from "../../util/log"
@@ -384,6 +386,58 @@ export function GitRoutes() {
           log.warn("git.branch failed", { error: err instanceof Error ? err.message : String(err) })
         }
         return c.json({ ok })
+      },
+    )
+    // FORK: Stretch — git credentials endpoints (HTTPS token / SSH key)
+    .get(
+      "/credentials",
+      describeRoute({
+        summary: "Get git credentials (masked)",
+        description: "Returns current git auth configuration with sensitive values masked.",
+        operationId: "git.getCredentials",
+        responses: {
+          200: {
+            description: "Masked credentials",
+            content: { "application/json": { schema: resolver(z.record(z.string(), z.unknown())) } },
+          },
+        },
+      }),
+      async (c) => {
+        const creds = await readCredentials()
+        return c.json(maskCredentials(creds))
+      },
+    )
+    .put(
+      "/credentials",
+      describeRoute({
+        summary: "Set git credentials",
+        description: "Saves git auth configuration. Accepts none, https-token, or ssh-key.",
+        operationId: "git.setCredentials",
+        responses: {
+          200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+          400: { description: "Invalid payload" },
+        },
+      }),
+      validator(
+        "json",
+        z.discriminatedUnion("type", [
+          z.object({ type: z.literal("none") }),
+          z.object({
+            type: z.literal("https-token"),
+            token: z.string().min(1),
+            username: z.string().optional(),
+          }),
+          z.object({
+            type: z.literal("ssh-key"),
+            privateKey: z.string().min(1),
+            passphrase: z.string().optional(),
+          }),
+        ]),
+      ),
+      async (c) => {
+        const body = c.req.valid("json") as GitCredentials
+        await writeCredentials(body)
+        return c.json({ ok: true })
       },
     )
 }

@@ -25,6 +25,7 @@ import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
 import { SettingsRemoteAccess } from "./settings-remote-access"
+import { SettingsGitAuth } from "./settings-git-auth"
 
 // FORK: ADR-0005 Phase 6 — Export / Import global configuration.
 const ConfigExportImport: Component = () => {
@@ -620,6 +621,9 @@ export const SettingsGeneral: Component = () => {
         </Show>*/}
 
         <SettingsRemoteAccess />
+
+        {/* FORK: Stretch — git push/pull auth */}
+        <SettingsGitAuth />
 
         <ConfigExportImport />
 
