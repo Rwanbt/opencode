@@ -17,7 +17,7 @@ export function SettingsDiskQuota() {
   const sdk = useSDK()
   const [disk] = createResource<{ available: number; total: number } | null>(async () => {
     try {
-      const res = await fetch(`${sdk.url}/disk`)
+      const res = await fetch(`${sdk.url}/disk?directory=${encodeURIComponent(sdk.directory)}`)
       if (!res.ok) return null
       const d = (await res.json()) as { available: number; total: number }
       // Sentinel -1 returned on platforms where statfs is unavailable (Windows)

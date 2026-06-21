@@ -4,6 +4,7 @@ import { proxy } from "hono/proxy"
 import z from "zod"
 import { createHash } from "node:crypto"
 import fs_native from "node:fs/promises"
+import os from "node:os"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -149,10 +150,13 @@ export const InstanceRoutes = (app?: Hono) =>
       }),
       async (c) => {
         try {
-          const stats = await (fs_native as any).statfs(Instance.directory)
+          // On Android, Instance.directory may be "/" (rootfs, read-only → 0 available).
+          // Fall back to HOME so the quota reflects the actual data partition.
+          const dir = Instance.directory === "/" ? os.homedir() : Instance.directory
+          const stats = await (fs_native as any).statfs(dir)
           const available = stats.bsize * stats.bavail
           const total = stats.bsize * stats.blocks
-          return c.json({ available, total, path: Instance.directory })
+          return c.json({ available, total, path: dir })
         } catch {
           // statfs not available (Windows, old Node) — return sentinel values
           return c.json({ available: -1, total: -1, path: Instance.directory })

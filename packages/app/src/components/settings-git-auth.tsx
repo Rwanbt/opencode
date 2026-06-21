@@ -18,7 +18,7 @@ export function SettingsGitAuth() {
 
   const [masked, { refetch }] = createResource<MaskedCredentials>(async () => {
     try {
-      const res = await fetch(`${sdk.url}/git/credentials`)
+      const res = await fetch(`${sdk.url}/git/credentials?directory=${encodeURIComponent(sdk.directory)}`)
       if (!res.ok) return { type: "none" }
       return (await res.json()) as MaskedCredentials
     } catch {
@@ -51,7 +51,7 @@ export function SettingsGitAuth() {
         if (!privateKey()) { setSaveError("Clé SSH requise"); return }
         body = { type: "ssh-key", privateKey: privateKey(), passphrase: passphrase() || undefined }
       }
-      const res = await fetch(`${sdk.url}/git/credentials`, {
+      const res = await fetch(`${sdk.url}/git/credentials?directory=${encodeURIComponent(sdk.directory)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -130,7 +130,7 @@ export function SettingsGitAuth() {
               size="small"
               variant="ghost"
               onClick={async () => {
-                await fetch(`${sdk.url}/git/credentials`, {
+                await fetch(`${sdk.url}/git/credentials?directory=${encodeURIComponent(sdk.directory)}`, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ type: "none" }),
