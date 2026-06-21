@@ -479,6 +479,31 @@ export function SessionHeader() {
                       </div>
                     </Button>
                   </TooltipKeybind>
+
+                  {/* FORK: Stretch Phase 6 — editor focus mode (tablet mode) */}
+                  <Show when={layout.fileTree.opened() || view().reviewPanel.opened()}>
+                    <TooltipKeybind
+                      title={layout.editorFocus.enabled() ? "Restaurer le chat" : "Mode focus éditeur"}
+                      keybind=""
+                    >
+                      <Button
+                        variant="ghost"
+                        class="titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => layout.editorFocus.toggle()}
+                        aria-label={layout.editorFocus.enabled() ? "Restaurer le chat" : "Mode focus éditeur"}
+                        aria-pressed={layout.editorFocus.enabled()}
+                      >
+                        <Icon
+                          size="small"
+                          name={layout.editorFocus.enabled() ? "collapse" : "expand"}
+                          classList={{
+                            "text-icon-strong": layout.editorFocus.enabled(),
+                            "text-icon-weak": !layout.editorFocus.enabled(),
+                          }}
+                        />
+                      </Button>
+                    </TooltipKeybind>
+                  </Show>
                 </div>
 
                 {/* Mobile-only: more actions menu */}

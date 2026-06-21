@@ -152,6 +152,8 @@ export default function Page() {
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
+    // FORK: Stretch Phase 6 — editor focus mode collapses the chat panel
+    if (isDesktop() && layout.editorFocus.enabled() && desktopSidePanelOpen()) return "0px"
     if (!desktopSidePanelOpen()) return "100%"
     if (isMobileDevice()) return "50%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`

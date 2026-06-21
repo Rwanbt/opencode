@@ -184,7 +184,9 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 }
 
-export function FileTabContent(props: { tab: string }) {
+// FORK: Stretch Phase 6 — `override` bypasses the Tabs.Content visibility
+// system so the component can be shown in the split-pane right panel.
+export function FileTabContent(props: { tab: string; override?: boolean }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
@@ -651,7 +653,7 @@ export function FileTabContent(props: { tab: string }) {
     if (typeof window === "undefined") return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (activeFileTab() !== props.tab) return
+      if (!props.override && activeFileTab() !== props.tab) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
       // FORK: in edit mode CM's searchKeymap handles Ctrl+F itself — let the
@@ -664,6 +666,25 @@ export function FileTabContent(props: { tab: string }) {
     }
 
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
+  })
+
+  // FORK: Stretch Phase 6 — Ctrl+\ toggles split pane for the active tab
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const onSplitKey = (event: KeyboardEvent) => {
+      if (!props.override && activeFileTab() !== props.tab) return
+      if (!(event.ctrlKey || event.metaKey) || event.key !== "\\") return
+      event.preventDefault()
+      event.stopPropagation()
+      const splitView = view().editorSplit
+      if (splitView.tab()) {
+        splitView.close()
+      } else {
+        const p = path()
+        if (p) splitView.open(props.tab)
+      }
+    }
+    makeEventListener(window, "keydown", onSplitKey, { capture: true })
   })
 
   createEffect(
@@ -681,7 +702,7 @@ export function FileTabContent(props: { tab: string }) {
     const p = path()
     if (!focus || !p) return
     if (focus.file !== p) return
-    if (activeFileTab() !== props.tab) return
+    if (!props.override && activeFileTab() !== props.tab) return
 
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
@@ -705,7 +726,7 @@ export function FileTabContent(props: { tab: string }) {
   createEffect(() => {
     const loaded = !!state()?.loaded
     const ready = file.ready()
-    const active = activeFileTab() === props.tab
+    const active = props.override ? true : activeFileTab() === props.tab
     const restore = (loaded && !prev.loaded) || (ready && !prev.ready) || (active && loaded && !prev.active)
     prev = { loaded, ready, active }
     if (!restore) return
@@ -758,8 +779,16 @@ export function FileTabContent(props: { tab: string }) {
     </div>
   )
 
+  // FORK: Stretch Phase 6 — When override=true (split-pane right panel) we
+  // bypass Tabs.Content so the content is always visible. We use Dynamic to
+  // avoid defining a component inside the function body (causes remounts).
+  const tabsContentProps = () =>
+    props.override
+      ? { component: "div" as const, class: "mt-3 relative h-full overflow-auto" }
+      : { component: Tabs.Content as any, value: props.tab, class: "mt-3 relative h-full" }
+
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Dynamic {...tabsContentProps()}>
       {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10) */}
       <Show when={!editing() && canEdit() && path()}>
         <div class="absolute top-2 right-4 z-10">
@@ -931,6 +960,6 @@ export function FileTabContent(props: { tab: string }) {
           </Switch>
         </ScrollView>
       </Show>
-    </Tabs.Content>
+    </Dynamic>
   )
 }

@@ -43,6 +43,9 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
+  // FORK: Stretch Phase 6 — split pane editor
+  editorSplitTab?: string   // File tab URI for the right pane; undefined = no split
+  editorSplitRatio?: number // Left pane width ratio [0.25, 0.75], default 0.5
 }
 
 type TabHandoff = {
@@ -252,6 +255,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         session: {
           width: DEFAULT_SESSION_WIDTH,
         },
+        // FORK: Stretch Phase 6 — editor focus mode (tablet mode)
+        // When enabled, the session chat panel is hidden to maximize editor space.
+        editorFocusMode: false,
         mobileSidebar: {
           opened: false,
         },
@@ -690,6 +696,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("session", "width", width)
         },
       },
+      // FORK: Stretch Phase 6 — editor focus mode (hides session chat panel)
+      editorFocus: {
+        enabled: createMemo(() => store.editorFocusMode ?? false),
+        toggle() {
+          setStore("editorFocusMode", (x) => !x)
+        },
+        enable() {
+          setStore("editorFocusMode", true)
+        },
+        disable() {
+          setStore("editorFocusMode", false)
+        },
+      },
       mobileSidebar: {
         opened: createMemo(() => store.mobileSidebar?.opened ?? false),
         show() {
@@ -806,6 +825,42 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               setReviewPanelOpened(!reviewPanelOpened())
             },
           },
+          // FORK: Stretch Phase 6 — split pane editor
+          editorSplit: (() => {
+            const tab = createMemo(() => store.sessionView[key()]?.editorSplitTab)
+            const ratio = createMemo(() => store.sessionView[key()]?.editorSplitRatio ?? 0.5)
+
+            function update(patch: Partial<Pick<SessionView, "editorSplitTab" | "editorSplitRatio">>) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, ...patch })
+              } else {
+                setStore(
+                  "sessionView",
+                  session,
+                  produce((draft) => {
+                    if ("editorSplitTab" in patch) draft.editorSplitTab = patch.editorSplitTab
+                    if ("editorSplitRatio" in patch) draft.editorSplitRatio = patch.editorSplitRatio
+                  }),
+                )
+              }
+            }
+
+            return {
+              tab,
+              ratio,
+              open(splitTab: string) {
+                update({ editorSplitTab: splitTab })
+              },
+              close() {
+                update({ editorSplitTab: undefined })
+              },
+              setRatio(r: number) {
+                update({ editorSplitRatio: Math.max(0.25, Math.min(0.75, r)) })
+              },
+            }
+          })(),
           review: {
             open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {

@@ -353,8 +353,76 @@ export function SessionSidePanel(props: {
                     </Tabs.Content>
                   </Show>
 
+                  {/* FORK: Stretch Phase 6 — split pane (Ctrl+\) */}
                   <Show when={activeFileTab()} keyed>
-                    {(tab) => <FileTabContent tab={tab} />}
+                    {(tab) => (
+                      <Show
+                        when={view().editorSplit.tab()}
+                        fallback={<FileTabContent tab={tab} />}
+                      >
+                        {(splitTab) => {
+                          // Drag state for the split divider
+                          let splitRatio = view().editorSplit.ratio()
+                          let dragging = false
+                          let containerRef: HTMLDivElement | undefined
+
+                          const startDrag = (e: PointerEvent) => {
+                            dragging = true
+                            ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                          }
+                          const onDrag = (e: PointerEvent) => {
+                            if (!dragging || !containerRef) return
+                            const rect = containerRef.getBoundingClientRect()
+                            splitRatio = Math.max(0.25, Math.min(0.75, (e.clientX - rect.left) / rect.width))
+                            containerRef.style.setProperty("--split-ratio", String(splitRatio))
+                          }
+                          const endDrag = (e: PointerEvent) => {
+                            if (!dragging) return
+                            dragging = false
+                            ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+                            view().editorSplit.setRatio(splitRatio)
+                          }
+
+                          return (
+                            <div
+                              ref={containerRef}
+                              class="flex h-full w-full"
+                              style={{ "--split-ratio": String(view().editorSplit.ratio()) }}
+                            >
+                              {/* Left pane */}
+                              <div
+                                class="relative min-w-0 overflow-hidden"
+                                style={{ width: `calc(var(--split-ratio) * 100%)` }}
+                              >
+                                <FileTabContent tab={tab} />
+                              </div>
+
+                              {/* Drag divider */}
+                              <div
+                                class="w-[3px] shrink-0 bg-border-weak-base hover:bg-accent-primary/60 active:bg-accent-primary cursor-col-resize relative z-10 transition-colors"
+                                onPointerDown={startDrag}
+                                onPointerMove={onDrag}
+                                onPointerUp={endDrag}
+                              />
+
+                              {/* Right pane */}
+                              <div class="flex-1 relative min-w-0 overflow-hidden border-l border-border-weak-base">
+                                {/* Close split button */}
+                                <button
+                                  type="button"
+                                  class="absolute top-2 right-2 z-20 text-text-weaker hover:text-text-base text-10-regular bg-background-stronger/80 rounded px-1.5 py-0.5 backdrop-blur"
+                                  onClick={() => view().editorSplit.close()}
+                                  title="Fermer le volet (Ctrl+\)"
+                                >
+                                  ✕ volet
+                                </button>
+                                <FileTabContent tab={splitTab()} override />
+                              </div>
+                            </div>
+                          )
+                        }}
+                      </Show>
+                    )}
                   </Show>
                 </Tabs>
                 <DragOverlay>
