@@ -3,7 +3,8 @@
 // project directory. Each "Run" button creates a new PTY pre-wired to the
 // selected command (via terminal.newWithCommand) and opens the terminal panel.
 // FORK: Phase 4 stretch — problem matchers: Analyse button polls /pty/:id/tail.
-import { createResource, createSignal, For, Show } from "solid-js"
+// FORK: Stretch Phase 4b — test explorer: module grouping + re-run per test.
+import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 
 type TaskKind = "npm" | "cargo" | "make"
@@ -191,6 +192,51 @@ function parseTests(text: string): { results: TestResult[]; summary: TestSummary
   return { results: results.slice(0, 500), summary }
 }
 
+// Build the shell command to re-run a single test, based on the parent command.
+// Returns undefined if the runner cannot be determined.
+function buildTestRerunCommand(testName: string, baseCommand: string): string | undefined {
+  const cmd = baseCommand.trim()
+  if (cmd.includes("cargo")) {
+    // cargo test module::name -- --exact (--nocapture for output)
+    return `cargo test "${testName}" -- --exact --nocapture`
+  }
+  if (cmd.includes("vitest")) {
+    return `npx vitest run --reporter=verbose -t "${testName}"`
+  }
+  if (cmd.includes("jest")) {
+    return `npx jest -t "${testName}"`
+  }
+  if (cmd.includes("bun test")) {
+    return `bun test --test-name-pattern "${testName}"`
+  }
+  return undefined
+}
+
+// Build a command to re-run all tests in a module (cargo prefix match).
+function buildModuleRerunCommand(module: string, baseCommand: string): string | undefined {
+  const cmd = baseCommand.trim()
+  if (cmd.includes("cargo")) {
+    return `cargo test "${module}" -- --nocapture`
+  }
+  return undefined
+}
+
+// Group cargo test results by top-level module (first :: segment).
+// Returns null if not applicable (jest/vitest don't use :: notation).
+function groupByModule(results: TestResult[]): Map<string, TestResult[]> | null {
+  const hasModules = results.some((r) => r.name.includes("::"))
+  if (!hasModules) return null
+  const map = new Map<string, TestResult[]>()
+  for (const r of results) {
+    const sep = r.name.indexOf("::")
+    const key = sep === -1 ? "(root)" : r.name.slice(0, sep)
+    const group = map.get(key) ?? []
+    group.push(r)
+    map.set(key, group)
+  }
+  return map
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function TaskPanel(props: {
@@ -199,11 +245,16 @@ export function TaskPanel(props: {
 }) {
   const sdk = useSDK()
   const [lastPtyId, setLastPtyId] = createSignal<string | null>(null)
+  const [lastCommand, setLastCommand] = createSignal<string | null>(null)
   const [problems, setProblems] = createSignal<Problem[]>([])
   const [testResults, setTestResults] = createSignal<TestResult[]>([])
   const [testSummary, setTestSummary] = createSignal<TestSummary | null>(null)
   const [analysing, setAnalysing] = createSignal(false)
   const [showAllTests, setShowAllTests] = createSignal(false)
+  const [collapsedModules, setCollapsedModules] = createSignal<Set<string>>(new Set())
+
+  const failedTests = createMemo(() => testResults().filter((t) => t.status === "fail"))
+  const testGroups = createMemo(() => groupByModule(testResults()))
 
   async function analyseProblems() {
     const id = lastPtyId()
@@ -287,7 +338,11 @@ export function TaskPanel(props: {
               onClick={() => {
                 const id = props.onRunTask(task.command, `${kindLabel(task.kind)}: ${task.name}`)
                 setLastPtyId(id)
+                setLastCommand(task.command)
                 setProblems([])
+                setTestResults([])
+                setTestSummary(null)
+                setShowAllTests(false)
               }}
               class="text-10-regular text-text-weak hover:text-text-base opacity-0 group-hover:opacity-100 transition-opacity px-1.5 py-0.5 rounded border border-transparent hover:border-border-weak-base shrink-0"
               title={task.command}
@@ -366,28 +421,149 @@ export function TaskPanel(props: {
             </div>
           </Show>
 
-          {/* Tests list */}
+          {/* Tests list — grouped by module when applicable */}
           <Show when={testResults().length > 0}>
             <div class="flex flex-col pb-2">
-              {/* Show failed first, then optionally all */}
-              <For each={showAllTests() ? testResults() : testResults().filter((t) => t.status === "fail")}>
-                {(t) => (
-                  <div class="flex items-center gap-2 px-3 py-0.5 hover:bg-surface-base">
-                    <span
-                      class={`text-10-regular font-mono shrink-0 ${
-                        t.status === "pass"
-                          ? "text-[#22c55e]"
-                          : t.status === "ignore"
-                            ? "text-text-weaker"
-                            : "text-[#ef4444]"
-                      }`}
+
+              {/* Re-run failed button */}
+              <Show when={failedTests().length > 0 && lastCommand()}>
+                {(_) => {
+                  const rerunAllFailed = () => {
+                    const cmd = lastCommand()!
+                    const names = failedTests().map((t) => t.name)
+                    let command: string
+                    if (cmd.includes("cargo")) {
+                      // Run each failed test by exact match — join as space-separated filters
+                      command = names.length === 1
+                        ? `cargo test "${names[0]}" -- --exact --nocapture`
+                        : `cargo test -- --exact --nocapture ${names.map((n) => `"${n}"`).join(" ")}`
+                    } else {
+                      // Jest/Vitest: use pipe-joined pattern
+                      const pattern = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+                      command = buildTestRerunCommand(pattern, cmd) ?? cmd
+                    }
+                    const id = props.onRunTask(command, `Re-run ${failedTests().length} échec(s)`)
+                    setLastPtyId(id)
+                    setLastCommand(command)
+                    setTestResults([])
+                    setTestSummary(null)
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={rerunAllFailed}
+                      class="text-10-regular text-[#ef4444] hover:text-text-base px-3 py-0.5 text-left self-start"
                     >
-                      {t.status === "pass" ? "✓" : t.status === "ignore" ? "–" : "✗"}
-                    </span>
-                    <span class="text-11-regular text-text-base truncate font-mono">{t.name}</span>
-                  </div>
+                      ▶ Re-run {failedTests().length} échec{failedTests().length !== 1 ? "s" : ""}
+                    </button>
+                  )
+                }}
+              </Show>
+
+              {/* Grouped view (cargo :: modules) */}
+              <Show
+                when={testGroups()}
+                fallback={
+                  /* Flat view (jest/vitest/bun) */
+                  <For each={showAllTests() ? testResults() : failedTests()}>
+                    {(t) => (
+                      <div class="group/test flex items-center gap-2 px-3 py-0.5 hover:bg-surface-base">
+                        <span
+                          class={`text-10-regular font-mono shrink-0 ${t.status === "pass" ? "text-[#22c55e]" : t.status === "ignore" ? "text-text-weaker" : "text-[#ef4444]"}`}
+                        >
+                          {t.status === "pass" ? "✓" : t.status === "ignore" ? "–" : "✗"}
+                        </span>
+                        <span class="text-11-regular text-text-base truncate font-mono flex-1">{t.name}</span>
+                        <Show when={t.status === "fail" && lastCommand() && buildTestRerunCommand(t.name, lastCommand()!)}>
+                          {(cmd) => (
+                            <button
+                              type="button"
+                              class="opacity-0 group-hover/test:opacity-100 text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0 transition-opacity"
+                              onClick={() => {
+                                const id = props.onRunTask(cmd(), t.name)
+                                setLastPtyId(id); setLastCommand(cmd()); setTestResults([]); setTestSummary(null)
+                              }}
+                              title={cmd()}
+                            >▶</button>
+                          )}
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                }
+              >
+                {(groups) => (
+                  <For each={[...groups().entries()]}>
+                    {([module, tests]) => {
+                      const collapsed = () => collapsedModules().has(module)
+                      const failCount = tests.filter((t) => t.status === "fail").length
+                      const passCount = tests.filter((t) => t.status === "pass").length
+                      const moduleCmd = lastCommand() ? buildModuleRerunCommand(module, lastCommand()!) : undefined
+                      return (
+                        <div class="flex flex-col">
+                          {/* Module header */}
+                          <div class="group/module flex items-center gap-1 px-3 py-0.5 hover:bg-surface-base cursor-pointer"
+                            onClick={() => setCollapsedModules((s) => {
+                              const n = new Set(s)
+                              n.has(module) ? n.delete(module) : n.add(module)
+                              return n
+                            })}>
+                            <span class="text-10-regular text-text-weaker shrink-0 w-3">{collapsed() ? "▶" : "▼"}</span>
+                            <span class="text-11-regular text-text-weak font-mono flex-1 truncate">{module}</span>
+                            <span class="text-10-regular text-text-weaker shrink-0">
+                              {failCount > 0
+                                ? <span class="text-[#ef4444]">{failCount} ✗</span>
+                                : <span class="text-[#22c55e]">{passCount} ✓</span>
+                              }
+                            </span>
+                            <Show when={moduleCmd}>
+                              <button
+                                type="button"
+                                class="opacity-0 group-hover/module:opacity-100 text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const id = props.onRunTask(moduleCmd!, `Re-run ${module}`)
+                                  setLastPtyId(id); setLastCommand(moduleCmd!); setTestResults([]); setTestSummary(null)
+                                }}
+                                title={moduleCmd}
+                              >▶</button>
+                            </Show>
+                          </div>
+                          {/* Test rows */}
+                          <Show when={!collapsed()}>
+                            <For each={showAllTests() ? tests : tests.filter((t) => t.status === "fail")}>
+                              {(t) => {
+                                const rerunCmd = lastCommand() ? buildTestRerunCommand(t.name, lastCommand()!) : undefined
+                                return (
+                                  <div class="group/test flex items-center gap-2 pl-7 pr-3 py-0.5 hover:bg-surface-base">
+                                    <span class={`text-10-regular font-mono shrink-0 ${t.status === "pass" ? "text-[#22c55e]" : t.status === "ignore" ? "text-text-weaker" : "text-[#ef4444]"}`}>
+                                      {t.status === "pass" ? "✓" : t.status === "ignore" ? "–" : "✗"}
+                                    </span>
+                                    <span class="text-11-regular text-text-base truncate font-mono flex-1">
+                                      {t.name.includes("::") ? t.name.slice(t.name.indexOf("::") + 2) : t.name}
+                                    </span>
+                                    <Show when={rerunCmd}>
+                                      <button
+                                        type="button"
+                                        class="opacity-0 group-hover/test:opacity-100 text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0 transition-opacity"
+                                        onClick={() => {
+                                          const id = props.onRunTask(rerunCmd!, t.name)
+                                          setLastPtyId(id); setLastCommand(rerunCmd!); setTestResults([]); setTestSummary(null)
+                                        }}
+                                        title={rerunCmd}
+                                      >▶</button>
+                                    </Show>
+                                  </div>
+                                )
+                              }}
+                            </For>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
                 )}
-              </For>
+              </Show>
 
               <Show when={testResults().filter((t) => t.status !== "fail").length > 0}>
                 <button
@@ -395,9 +571,7 @@ export function TaskPanel(props: {
                   onClick={() => setShowAllTests((v) => !v)}
                   class="text-10-regular text-text-weaker hover:text-text-base px-3 py-0.5 text-left"
                 >
-                  {showAllTests()
-                    ? "Masquer les succès"
-                    : `Voir tous (${testResults().length})`}
+                  {showAllTests() ? "Masquer les succès" : `Voir tous (${testResults().length})`}
                 </button>
               </Show>
             </div>
