@@ -26,6 +26,7 @@ import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
 import { SettingsRemoteAccess } from "./settings-remote-access"
 import { SettingsGitAuth } from "./settings-git-auth"
+import { SettingsDiskQuota } from "./settings-disk-quota"
 
 // FORK: ADR-0005 Phase 6 — Export / Import global configuration.
 const ConfigExportImport: Component = () => {
@@ -624,6 +625,11 @@ export const SettingsGeneral: Component = () => {
 
         {/* FORK: Stretch — git push/pull auth */}
         <SettingsGitAuth />
+
+        {/* FORK: Stretch — disk quota warning (hidden on Windows where statfs is unavailable) */}
+        <SettingsList>
+          <SettingsDiskQuota />
+        </SettingsList>
 
         <ConfigExportImport />
 

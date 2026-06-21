@@ -3,6 +3,7 @@ import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import z from "zod"
 import { createHash } from "node:crypto"
+import fs_native from "node:fs/promises"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -120,6 +121,42 @@ export const InstanceRoutes = (app?: Hono) =>
       async (c) => {
         await Instance.dispose()
         return c.json(true)
+      },
+    )
+    // FORK: Stretch — disk space quota check (warns when < 500 MB)
+    .get(
+      "/disk",
+      describeRoute({
+        summary: "Get disk space",
+        description: "Returns available and total disk space for the working directory.",
+        operationId: "disk.get",
+        responses: {
+          200: {
+            description: "Disk space info",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    available: z.number().describe("Available bytes"),
+                    total: z.number().describe("Total bytes"),
+                    path: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        try {
+          const stats = await (fs_native as any).statfs(Instance.directory)
+          const available = stats.bsize * stats.bavail
+          const total = stats.bsize * stats.blocks
+          return c.json({ available, total, path: Instance.directory })
+        } catch {
+          // statfs not available (Windows, old Node) — return sentinel values
+          return c.json({ available: -1, total: -1, path: Instance.directory })
+        }
       },
     )
     .get(

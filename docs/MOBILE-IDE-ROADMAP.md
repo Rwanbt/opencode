@@ -220,17 +220,17 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 | Permissions Android UX — état visible, request_permissions via Tauri, retry flow | idem | ✅ |
 | Export / Import configuration globale | `components/settings-general.tsx` | ✅ |
 
-**Stretch** : split panes, barre clavier contextuelle hardware, quotas disque, mode tablette dédié.
+**Stretch** : split panes ✅, barre clavier contextuelle hardware ✅, quotas disque ✅, mode tablette dédié ✅.
 
-## État d'avancement global (2026-06-20)
+## État d'avancement global (2026-06-21)
 
-**Toutes les phases principales sont ✅.** Reste :
+**Toutes les phases principales et tous les stretch items sont ✅.**
 - **Phase 0** — Device QA matrix (Xiaomi/Pixel × Android 12-15) : non bloquante, tests manuels à planifier.
 - **Stretch Phase 2** : Shift+F12 ✅ + autocomplete ✅ + rename symbol ✅ + code actions ✅ (commits `6dd63051b7` / `d949e89e4d` / `8f534ac755` / `fe9b924722`) — **LSP triad complet**.
-- **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer (parser `cargo test`/`npm test`).
-- **Stretch Phase 5** : SKILL.md liste ✅ + install/uninstall via URL ✅ (commits `a7f40d58f1` / `02c99c485b`) — **skills complets** ; npm plugin local reste hors scope.
-- **Stretch Phase 6** : split panes ✅ + mode tablette dédié ✅ (commit `c700aaa097`) — **split panes complet** ; Ctrl+\ toggle volet droit, drag pour redimensionner, bouton focus éditeur dans l'en-tête.
-- **Sous-projet auth push/pull** : SSH key / token, stockage sécurisé Tauri Store.
+- **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer ✅ (groupes cargo par module + re-run par test).
+- **Stretch Phase 5** : SKILL.md liste ✅ + install/uninstall via URL ✅ (commits `a7f40d58f1` / `02c99c485b`) — **skills complets**.
+- **Stretch Phase 6** : split panes ✅ + mode tablette ✅ + barre clavier hardware ✅ + quotas disque ✅ (commit `c700aaa097` + ce commit) — **Phase 6 complète**.
+- **Sous-projet auth push/pull** : SSH key / token ✅ (commit `eb383a0466`) — `GET/PUT /git/credentials`, `GIT_CONFIG_COUNT` HTTPS, `GIT_SSH_COMMAND` SSH.
 
 ## Vérification (end-to-end, par phase)
 

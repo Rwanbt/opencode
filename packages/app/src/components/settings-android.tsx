@@ -3,6 +3,7 @@
 import { createResource, createSignal, onCleanup, Show, type Component } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
 
@@ -188,6 +189,51 @@ function BatteryRow() {
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
+// ─── Disk quota widget ───────────────────────────────────────────────────────
+
+const WARN_BYTES = 500 * 1024 * 1024 // 500 MB
+
+function fmtBytes(n: number) {
+  if (n < 0) return "—"
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} Go`
+  return `${(n / 1e6).toFixed(0)} Mo`
+}
+
+function DiskRow() {
+  const sdk = useSDK()
+  const [disk] = createResource<{ available: number; total: number } | null>(async () => {
+    try {
+      const res = await fetch(`${sdk.url}/disk`)
+      if (!res.ok) return null
+      return await res.json()
+    } catch {
+      return null
+    }
+  })
+
+  return (
+    <Show when={disk()}>
+      {(d) => (
+        <SettingsRow
+          title="Espace disque"
+          description={`${fmtBytes(d().available)} disponibles / ${fmtBytes(d().total)}`}
+        >
+          <Show
+            when={d().available >= 0 && d().available < WARN_BYTES}
+            fallback={
+              <span class="text-11-regular text-[#22c55e]">{fmtBytes(d().available)} libres</span>
+            }
+          >
+            <span class="text-11-regular text-[#ef4444] font-medium">
+              ⚠ {fmtBytes(d().available)} — espace faible
+            </span>
+          </Show>
+        </SettingsRow>
+      )}
+    </Show>
+  )
+}
+
 export const SettingsAndroid: Component = () => {
   const platform = usePlatform()
 
@@ -212,6 +258,7 @@ export const SettingsAndroid: Component = () => {
         <SettingsList>
           <ThermalRow />
           <MemoryRow />
+          <DiskRow />
           <BatteryRow />
           <SettingsRow title="Plateforme" description="Version du système">
             <span class="text-13-regular text-text-base font-mono">

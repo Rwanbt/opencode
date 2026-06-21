@@ -42,6 +42,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { KeyboardHintsBar } from "@/components/keyboard-hints-bar"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { createCommentActions } from "@/pages/session/session-comment-actions"
@@ -1020,6 +1021,9 @@ export default function Page() {
           size={size}
         />
       </div>
+
+      {/* FORK: Stretch Phase 6 — keyboard hints bar (tablet + hardware keyboard) */}
+      <KeyboardHintsBar />
 
       <TerminalPanel />
     </div>
