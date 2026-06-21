@@ -45,7 +45,8 @@ desktop + Android (+ iOS futur).
 | Notifications système | ✅ NotificationBridge — session completed/failed + model ready | `packages/mobile/src/notifications.ts`, `entry.tsx:540` |
 | Deep-link étendu | ✅ connect + open + session — handleDeepLink() router | `packages/mobile/src/entry.tsx:296` |
 | Mobile hardening (Phase 0+) | ✅ logging toolchain, runtime décomposé, bundling unifié | `packages/mobile/src-tauri/src/runtime/` |
-| Skills system | ⚠️ Design doc + placeholder UI ; install/manage non implémenté | `docs/SKILLS-SYSTEM-DESIGN.md`, `settings-plugins.tsx` |
+| Skills system | ✅ Liste + install via URL + uninstall (global skills) | `packages/opencode/src/skill/index.ts`, `settings-plugins.tsx` |
+| Split panes | ✅ Ctrl+\ volet droit, drag resize, focus mode tablette | `file-tabs.tsx`, `session-side-panel.tsx`, `layout.tsx` |
 
 ## Audit dette technique (2026-06-16) & révisions
 
@@ -228,7 +229,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 - **Stretch Phase 2** : Shift+F12 ✅ + autocomplete ✅ + rename symbol ✅ + code actions ✅ (commits `6dd63051b7` / `d949e89e4d` / `8f534ac755` / `fe9b924722`) — **LSP triad complet**.
 - **Stretch Phase 4** : problem matchers ✅ (commit `a7f40d58f1`) ; test explorer (parser `cargo test`/`npm test`).
 - **Stretch Phase 5** : SKILL.md liste ✅ + install/uninstall via URL ✅ (commits `a7f40d58f1` / `02c99c485b`) — **skills complets** ; npm plugin local reste hors scope.
-- **Stretch Phase 6** : split panes, mode tablette dédié.
+- **Stretch Phase 6** : split panes ✅ + mode tablette dédié ✅ (commit `c700aaa097`) — **split panes complet** ; Ctrl+\ toggle volet droit, drag pour redimensionner, bouton focus éditeur dans l'en-tête.
 - **Sous-projet auth push/pull** : SSH key / token, stockage sécurisé Tauri Store.
 
 ## Vérification (end-to-end, par phase)
