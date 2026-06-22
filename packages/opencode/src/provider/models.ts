@@ -14,6 +14,14 @@ import { Hash } from "@/util/hash"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
+  const refreshCallbacks: Array<() => void> = []
+  export function onRefresh(cb: () => void) {
+    refreshCallbacks.push(cb)
+    return () => {
+      const idx = refreshCallbacks.indexOf(cb)
+      if (idx >= 0) refreshCallbacks.splice(idx, 1)
+    }
+  }
   const source = url()
   const filepath = path.join(
     Global.Path.cache,
@@ -115,17 +123,24 @@ export namespace ModelsDev {
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    return Flock.withLock(`models-dev:${filepath}`, async () => {
-      const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
-      if (result) return result
-      const result2 = await fetchApi()
-      if (result2.ok) {
-        await Filesystem.write(filepath, result2.text).catch((e) => {
-          log.error("Failed to write models cache", { error: e })
-        })
-      }
-      return JSON.parse(result2.text)
-    })
+    try {
+      return await Flock.withLock(`models-dev:${filepath}`, async () => {
+        const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+        if (result) return result
+        const result2 = await fetchApi()
+        if (result2.ok) {
+          await Filesystem.write(filepath, result2.text).catch((e) => {
+            log.error("Failed to write models cache", { error: e })
+          })
+          return JSON.parse(result2.text)
+        }
+        log.warn("models.dev fetch failed", { status: result2.ok })
+        return {}
+      })
+    } catch (e) {
+      log.error("ModelsDev.Data failed to load from any source", { error: e })
+      return {}
+    }
   })
 
   export async function get() {
@@ -141,6 +156,13 @@ export namespace ModelsDev {
       if (!result.ok) return
       await Filesystem.write(filepath, result.text)
       ModelsDev.Data.reset()
+      for (const cb of refreshCallbacks) {
+        try {
+          cb()
+        } catch (e) {
+          log.error("onRefresh callback failed", { error: e })
+        }
+      }
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,

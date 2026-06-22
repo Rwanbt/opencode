@@ -954,7 +954,10 @@ export namespace Provider {
               return
             }
             const match = database[providerID]
-            if (!match) return
+            if (!match) {
+              log.warn("mergeProvider: provider not in database, skipping", { providerID })
+              return
+            }
             // @ts-expect-error
             providers[providerID] = mergeDeep(match, provider)
           }
@@ -1069,7 +1072,10 @@ export namespace Provider {
             const providerID = ProviderID.make(id)
             if (disabled.has(providerID)) continue
             const apiKey = provider.env.map((item) => env[item]).find(Boolean)
-            if (!apiKey) continue
+            if (!apiKey) {
+              log.debug("provider skipped: no env key found", { providerID, envKeys: provider.env })
+              continue
+            }
             mergeProvider(providerID, {
               source: "env",
               key: provider.env.length === 1 ? apiKey : undefined,
@@ -1221,6 +1227,7 @@ export namespace Provider {
             }
 
             if (Object.keys(provider.models).length === 0) {
+              log.warn("provider removed: zero models after filtering", { providerID })
               delete providers[providerID]
               continue
             }
@@ -1237,6 +1244,17 @@ export namespace Provider {
           }
         }),
       )
+
+      // When models.dev refreshes in the background (fire-and-forget timer,
+      // no instance context), the provider state cached per-directory is stale.
+      // Invalidate all entries so the next access rebuilds with fresh models —
+      // this is what makes a provider that was missing at boot (empty fetch)
+      // appear once the network fetch completes.
+      ModelsDev.onRefresh(() => {
+        Effect.runPromise(InstanceState.invalidateAll(state)).catch((e) => {
+          log.error("Failed to invalidate provider state after models refresh", { error: e })
+        })
+      })
 
       const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 

@@ -75,6 +75,13 @@ export namespace InstanceState {
     })
 
   /**
+   * Invalidate every cached directory entry. Used by background refreshers
+   * (e.g. models.dev) that have no instance context, so the next access
+   * rebuilds state with fresh upstream data across all directories.
+   */
+  export const invalidateAll = <A, E, R>(self: InstanceState<A, E, R>) => ScopedCache.invalidateAll(self.cache)
+
+  /**
    * Effect finalizers run on the fiber scheduler after the original async
    * boundary, so ALS reads like Instance.directory can be gone by then.
    */
