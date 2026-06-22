@@ -64,14 +64,16 @@ export async function buildAuthEnv(
   const keyPath = path.join(os.tmpdir(), `oc-git-key-${process.pid}`)
   await fs.writeFile(keyPath, creds.privateKey, { mode: 0o600, encoding: "utf8" })
 
-  const sshCmd = creds.passphrase
-    ? // SSH_ASKPASS is not available cross-platform; we only support unencrypted keys for now.
-      // The passphrase field is stored but not yet acted on — future improvement.
-      `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o BatchMode=yes`
-    : `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o BatchMode=yes`
+  // SSH_ASKPASS is not available cross-platform; passphrase-protected keys
+  // are not yet supported — buildAuthEnv will throw so callers get a clear error.
+  if (creds.passphrase) {
+    throw new Error("SSH keys with a passphrase are not yet supported. Please use an unencrypted key or HTTPS token auth.")
+  }
+
+  const sshCmd = `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o BatchMode=yes`
 
   return {
-    env: { GIT_SSH_COMMAND: sshCmd, GIT_SSH: sshCmd },
+    env: { GIT_SSH_COMMAND: sshCmd },
     tempKeyPath: keyPath,
   }
 }

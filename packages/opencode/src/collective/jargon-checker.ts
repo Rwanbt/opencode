@@ -92,11 +92,22 @@ export namespace JargonChecker {
   ): Effect.Effect<JargonResult> {
     return Effect.tryPromise({
       try: async () => {
-        const { execSync } = await import("node:child_process")
+        const { execFileSync } = await import("node:child_process")
         const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         try {
-          const result = execSync(
-            `grep -rl --include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs" --include="*.cpp" --include="*.h" "${escaped}" .`,
+          const result = execFileSync(
+            "grep",
+            [
+              "-rl",
+              "--include=*.ts",
+              "--include=*.tsx",
+              "--include=*.js",
+              "--include=*.rs",
+              "--include=*.cpp",
+              "--include=*.h",
+              escaped,
+              ".",
+            ],
             {
               cwd: workingDirectory,
               encoding: "utf-8",

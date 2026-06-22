@@ -37,7 +37,7 @@ export namespace ShadowDaemon {
     severity: "info" | "warning" | "critical"
   }
 
-  let running = false
+  let runningAbort: AbortController | null = null
 
   export function isOllamaAvailable(host?: string): Effect.Effect<boolean> {
     return Effect.tryPromise({
@@ -69,7 +69,7 @@ export namespace ShadowDaemon {
     primaryResponse: string
     config: ShadowConfig
   }) {
-    if (!input.config.enabled || running) return
+    if (!input.config.enabled || runningAbort) return
 
     const available = yield* isOllamaAvailable(input.config.ollamaHost)
     if (!available) {
@@ -77,7 +77,8 @@ export namespace ShadowDaemon {
       return
     }
 
-    running = true
+    const abort = new AbortController()
+    runningAbort = abort
     try {
       const result = yield* runShadowAnalysis(input)
       if (result.hasDivergence) {
@@ -96,7 +97,7 @@ export namespace ShadowDaemon {
         })
       }
     } finally {
-      running = false
+      if (runningAbort === abort) runningAbort = null
     }
   })
 

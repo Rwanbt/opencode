@@ -949,10 +949,10 @@ export namespace File {
     return { content, stamp: stampOf(content, Filesystem.stat(full)) }
   }
 
-  // rename and move share this; locks source+dest in canonical order (deadlock-safe).
   async function relocate(from: string, to: string, expectedHash?: string): Promise<Stamp> {
     const fromFull = path.join(Instance.directory, from)
     const toFull = path.join(Instance.directory, to)
+    if (fromFull === toFull) throw new Error("Source and destination are the same path")
     assertInsideProject(fromFull)
     assertWritableTarget(toFull)
     const [first, second] = [fromFull, toFull].sort()

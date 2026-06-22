@@ -275,8 +275,8 @@ export namespace ProviderDiscovery {
   function tryCliAuth(binary: string, args: string[]): Effect.Effect<boolean> {
     return Effect.tryPromise({
       try: async () => {
-        const { execSync } = await import("node:child_process")
-        execSync(`${binary} ${args.join(" ")}`, {
+        const { execFileSync } = await import("node:child_process")
+        execFileSync(binary, args, {
           timeout: 5000,
           stdio: ["pipe", "pipe", "pipe"],
         })

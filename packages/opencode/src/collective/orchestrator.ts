@@ -264,7 +264,7 @@ export namespace Orchestrator {
             )
             log.info("phase 3: converge", { targetClaimCount: targetClaims.length })
 
-            let prevClaimCount = claims.length
+            let prevCritiqueCount = 0
             for (let round = 0; round < tierCfg.maxConvergenceRounds; round++) {
               yield* bus.publish(Events.ConvergenceRound, {
                 debateID,
@@ -298,9 +298,13 @@ export namespace Orchestrator {
               yield* budget.check()
               yield* emitCostUpdate(bus, debateID, budget, budgetCfg)
 
-              // Adaptive halting
-              const newClaims = claims.length - prevClaimCount
-              const marginalGain = claims.length > 0 ? newClaims / claims.length : 0
+              // Adaptive halting — measure new critiques per round, not claims
+              const totalCritiques = convergenceResults.reduce(
+                (sum, cr) => sum + cr.critiques.length,
+                0,
+              )
+              const newCritiques = totalCritiques - prevCritiqueCount
+              const marginalGain = prevCritiqueCount > 0 ? newCritiques / prevCritiqueCount : 1
               const snap = budget.snapshot()
               const marginalCost =
                 budgetCfg.maxCostUsd > 0 ? snap.costUsd / budgetCfg.maxCostUsd : 0
@@ -315,7 +319,7 @@ export namespace Orchestrator {
                 log.info("adaptive halt", { round: round + 1, marginalGain, marginalCost })
                 break
               }
-              prevClaimCount = claims.length
+              prevCritiqueCount = totalCritiques
             }
 
             initialDisagreements = convergenceResults.reduce(
@@ -581,11 +585,13 @@ export namespace Orchestrator {
           }),
         catch: (e) => {
           const err = new Error(`Model ${participant.anonymousHash} failed: ${e}`)
-          bus.publish(Events.ProviderFailed, {
-            debateID,
-            provider: `${participant.providerID}/${participant.modelID}`,
-            error: String(e),
-          })
+          Effect.runFork(
+            bus.publish(Events.ProviderFailed, {
+              debateID,
+              provider: `${participant.providerID}/${participant.modelID}`,
+              error: String(e),
+            }),
+          )
           return err
         },
       })
