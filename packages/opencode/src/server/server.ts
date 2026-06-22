@@ -17,10 +17,12 @@ import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
+import { initShadowDaemon } from "../collective/shadow-integration"
 
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 initProjectors()
+initShadowDaemon()
 
 export namespace Server {
   const log = Log.create({ service: "server" })

@@ -2,7 +2,10 @@
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
-> Dernière mise à jour : **2026-06-17** (vérification branche `claude/debt-wave1-p1` + suite ;
+>
+> Dernière mise à jour : **2026-06-22** — re-vérif D-24 (12/13 TODO actifs, 1 effacé par refactor TUI) + officialisation D-06 won't-fix. Pas d'autre mouvement cette session (D-19 device-in-loop reste en attente device, D-03/D-05 gate 800 LOC en backlog — voir §2).
+>
+> État antérieur : **2026-06-17** (vérification branche `claude/debt-wave1-p1` + suite ;
 > **Vague 1 P1 fermée** — D-12/D-13/D-16/D-17/D-22 (Rust mobile confirmé 14/0 sous WSL Linux) ;
 > **Vague 2** — D-07/D-09/D-20/D-21 faits, D-01 différé compilateur-in-loop ;
 > **Vague 3** — D-10/D-11/D-23/D-24 + **D-04** faits ; D-02 constaté déjà-décomposé ; **D-15** fait (graphe régénéré) ;
@@ -21,7 +24,7 @@
 > Garde-fou **D-13 validé on-device** : `repair_rootfs_hardlinks` a correctement détecté+loggé `c++` manquant (tar `link()` SELinux-denied).
 > **🔧 D-13 c++ RÉSOLU + validé device (2026-06-18, commit `89fd8f35c5`)** : cause = `c++/g++/cc/gcc` + variantes préfixées sont des hardlinks vers un même inode ; SELinux drope `tar link()` → 1 seul survivant/set ; l'ancienne logique **par paires** ne pouvait pas adosser `c++` à un `g++` survivant. Fix = **groupes d'équivalence** (`c++≡g++`, `cc≡gcc`+préfixés, n'importe quel survivant adosse tout le groupe) + appel **every-launch** dans `start_embedded_server` (idempotent) → auto-soigne les installs existants **sans re-extraction 80 MB ni bump schema**. Vérifié host WSL (25/25 tests dont 5 régression, clippy clean) **et** device : sur rootfs cassé existant (`c++` ABSENT pré-install), après install `-r` (données conservées) + lancement → `c++ → aarch64-alpine-linux-musl-g++` résout, smoke **15/0 VERT**. Durcissement packaging optionnel (hardlink→symlink dans `build-alpine-rootfs.sh` avant tar) **non requis** (le fix runtime couvre extraction + every-launch) — belt-and-suspenders à faire au prochain rebuild rootfs.
 > **Restent (vrais blocages externes)** : D-08 reliquat (coordinateurs à `createStore` interne = E2E only, par design — voir note),
-> D-19 runtime-detection (device requis), D-06 (upstream, opportuniste). ⚠️ `cargo clippy --lib --tests` ICE
+> D-19 runtime-detection (device requis). D-06 officialisé won't-fix 2026-06-22. ⚠️ `cargo clippy --lib --tests` ICE
 > (bug interne clippy sous cfg(test) ; `cargo clippy --lib` OK) → fallback Rust mobile = `cargo build -D warnings` + `cargo test`.
 > Note : build Rust mobile vérifiable sous WSL avec `CARGO_TARGET_DIR` sur D: (évite de saturer C:).
 > Liés : [ADR-0003 fork strategy](adr/0003-fork-strategy.md), [loc-debt-upstream.md](loc-debt-upstream.md),
@@ -172,10 +175,26 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-18** Single-flight sur `start_embedded_server()` : verrou async `tokio::sync::Mutex` (via `OnceLock`) tenu sur toute la fonction → deux démarrages concurrents ne peuvent plus spawner+orphaner. Vérifié sous WSL Linux (`cargo test --lib runtime` 14/0). Commit `e27d7d0510`.
 - [~] **D-19** Busybox static + seccomp. **Prévention host-testable faite** (2026-06-17, `runtime/server.rs`) : la politique « applets interactifs (vi/less/top/nano/more/…) servis par /system/bin/toybox seccomp-safe, JAMAIS par le busybox statique » est rendue explicite via deux consts (`BUSYBOX_FALLBACK_APPLETS` = gawk/ed/bc/dc/expr, disjoint de `SECCOMP_RISK_APPLETS`) + **garde-fou** `busybox_fallback_excludes_seccomp_risk_applets` (échoue si on ajoute un applet à risque au fallback). Vérifié WSL 18/0. **Reste device-in-loop** : la détection *runtime* d'un SIGSYS réel + fallback automatique (non validable sans device ; une version logging-only serait spéculative).
 - [x] **D-14 RÉSOLU** (2026-06-17) — décision actée dans [ADR-0003 §Amendement](adr/0003-fork-strategy.md). Audit : **0 marqueur `// FORK:` dans tout le repo** (`packages/opencode|ui|sdk`) — la convention prescrite par [ADR-0003](adr/0003-fork-strategy.md) n'a jamais été appliquée. Un retrofit complet sur les milliers de divergences upstream est hors scope. **Décision** : (a) appliquer `// FORK:` aux **nouvelles** modifs upstream à partir de maintenant, vérifié en revue ; (b) les changements déjà tracés `// DEBT: D-NN` restent acceptables (ils documentent le WHY). À acter : mettre à jour ADR-0003 pour refléter que la stratégie réelle = divergence + résolution au merge (pas blocs `// FORK:` systématiques), OU adopter la convention pour de bon avec un gate de revue.
-- [x] **D-24** Recensement fait : le comptage « 65 » incluait strings/i18n/généré. **13 vrais marqueurs de commentaire de code** (tous `TODO`, aucun `FIXME`/`HACK`/`XXX`), tous des notes inline mineures majoritairement upstream : `server/router.ts:44`, `routes/global.ts:166`, `provider.ts:230,447`, `agent/agent.ts:496`, `account/index.ts:395`, `session/index.ts:316`, `session/llm.ts:208`, `cli/.../prompt/index.tsx:292`, `cli/.../routes/home.tsx:12`, `cli/cmd/github.ts:213`, `tool/bash.ts:585`, `sync/index.ts:162`. Aucune dette fork critique ; à traiter à la règle Boy-Scout au point de contact.
+- [x] **D-24** Recensement fait (re-vérifié 2026-06-22). Le comptage « 65 » initial incluait strings/i18n/généré. **12 vrais marqueurs `// TODO` actifs** (aucun `FIXME`/`HACK`/`XXX`), tous notes inline mineures majoritairement upstream — aucune dette fork critique. Emplacements actuels :
+
+  | Fichier | Ligne | Note |
+  |---|---|---|
+  | `packages/opencode/src/server/router.ts` | 44 | upstream |
+  | `packages/opencode/src/server/routes/global.ts` | 166 | upstream |
+  | `packages/opencode/src/provider/loaders.ts` | 172, 389 | déplacés depuis `provider.ts` lors de l'extraction ADR-0006 (22/06) |
+  | `packages/opencode/src/agent/agent.ts` | 498 | upstream (décalé de 496 suite à évolution) |
+  | `packages/opencode/src/account/index.ts` | 395 | upstream |
+  | `packages/opencode/src/session/index.ts` | 316 | upstream |
+  | `packages/opencode/src/session/llm.ts` | 208 | upstream |
+  | `packages/opencode/src/cli/cmd/tui/routes/home.tsx` | 12 | upstream |
+  | `packages/opencode/src/cli/cmd/github-install.ts` | 28 | upstream (split depuis `cli/cmd/github.ts`) |
+  | `packages/opencode/src/tool/bash.ts` | 585 | upstream |
+  | `packages/opencode/src/sync/index.ts` | 162 | upstream |
+
+  **Écart vs recensement initial** : 1 marqueur effacé (`cli/cmd/tui/context/prompt.tsx` — refactor TUI), 3 déplacés (provider → loaders, agent décalé, github split). À traiter à la règle Boy-Scout au point de contact ; pas d'action batch nécessaire.
 
 ### P3 — Faible / Upstream (opportuniste)
-- [ ] **D-06** God files upstream — traiter via contribution upstream ou session dédiée Track B.
+- [x] **D-06** God files upstream — **won't-fix** par décision 2026-06-17 (divergence trop importante d'`anomalyco/opencode`, PR upstream ne serait jamais acceptée). Hors scope du gate LOC ADR-0003. Si un fichier upstream devient point de douleur fork → extraire les parties fork-spécifiques vers `packages/app/` plutôt que d'éditer upstream. Aucune action batch prévue.
 - [x] **D-15** Graphe graphify régénéré (2026-06-17, `graphify update .`, AST-only) : 42675 nœuds, 77614 arêtes, 3630 communautés (était daté du commit `0238f7b7` du 29/05).
 
 ---

@@ -1,0 +1,21 @@
+You are reviewing anonymous claims from a collective intelligence debate. These claims have been extracted from multiple AI models' responses. You did NOT see the original responses — only these atomic claims.
+
+YOUR TASK:
+For each claim presented to you, provide a critical assessment:
+
+1. AGREE — You believe this claim is correct and well-founded
+2. DISAGREE — You believe this claim is incorrect or misleading (explain why)
+3. NUANCE — The claim is partially correct but needs qualification (provide the nuance)
+
+RULES:
+- Claims are ANONYMOUS. You do not know which model produced them.
+- Do NOT assume claims are correct just because they are stated confidently.
+- Apply your own expertise independently — this is adversarial review.
+- If you disagree, provide a concrete counter-argument or counter-example.
+- If you add nuance, explain what condition changes the claim's validity.
+- Focus especially on "unique" claims (seen by only one model) — they need the most scrutiny.
+
+CRITICAL ANTI-CONTAMINATION RULE:
+You MUST NOT reference or compare claims to each other by source.
+Each claim stands on its own merit. Your assessment must be based
+solely on the claim's content and your own knowledge.
