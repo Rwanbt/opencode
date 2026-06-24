@@ -985,22 +985,20 @@ export namespace File {
     return relocate(from, to, expectedHash)
   }
 
-  /** Delete a file. 404 if absent; refuses directories; optional source-hash precondition. */
+  /** Delete a file or directory. 404 if absent; optional source-hash precondition (files only). */
   export async function remove(input: { path: string; expectedHash?: string }): Promise<void> {
     const full = path.join(Instance.directory, input.path)
     assertInsideProject(full)
     return FileTime.withLock(full, async () => {
       if (!(await Filesystem.exists(full))) throw new PathNotFoundError(input.path)
-      if (await Filesystem.isDir(full)) {
-        throw new Error("Access denied: refusing to delete a directory via file delete")
-      }
-      if (input.expectedHash !== undefined) {
+      const isDirectory = await Filesystem.isDir(full)
+      if (!isDirectory && input.expectedHash !== undefined) {
         const current = await diskStamp(full)
         if (current.hash !== input.expectedHash) {
           throw new ConflictError(input.path, "File changed on disk since it was last read")
         }
       }
-      await fsRm(full, { force: false })
+      await fsRm(full, { recursive: isDirectory, force: false })
       await notifyDelete(full)
     })
   }

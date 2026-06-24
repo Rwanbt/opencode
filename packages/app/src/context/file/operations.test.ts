@@ -15,10 +15,8 @@ import { createFile, createFolder, renameNode, deleteNode, moveNode, type FileOp
 // generic mock patterns. Tests pass under `bun test` (14/14), so the runtime
 // behavior is correct. Re-evaluate when bun/tsgo stabilize this corner.
 
-function errWith(status: number): Error & { status: number } {
-  const e = new Error("status " + status) as Error & { status: number }
-  e.status = status
-  return e
+function sdkError(message: string): { message: string } {
+  return { message }
 }
 
 describe("createFile", () => {
@@ -64,7 +62,7 @@ describe("createFile", () => {
     const refreshed: string[] = []
     const deps = {
       write: async (_: { path: string; content: string }) => {
-        throw errWith(409)
+        throw sdkError("File already exists")
       },
       mkdir: async (_: { path: string }) => {},
       rename: async (_: { from: string; to: string }) => {},
@@ -75,7 +73,7 @@ describe("createFile", () => {
       },
     } satisfies FileOpDeps
     const res = await createFile(deps, "src", "dup.ts")
-    expect(res).toEqual({ ok: false, code: "exists", message: "status 409" })
+    expect(res).toEqual({ ok: false, code: "exists", message: "File already exists" })
     expect(refreshed).toEqual([])
   })
 
@@ -126,7 +124,7 @@ describe("createFolder", () => {
     const deps = {
       write: async (_: { path: string; content: string }) => {},
       mkdir: async (_: { path: string }) => {
-        throw errWith(403)
+        throw sdkError("Access denied: path escapes project")
       },
       rename: async (_: { from: string; to: string }) => {},
       move: async (_: { from: string; to: string }) => {},
@@ -182,7 +180,7 @@ describe("renameNode", () => {
       write: async (_: { path: string; content: string }) => {},
       mkdir: async (_: { path: string }) => {},
       rename: async (_: { from: string; to: string }) => {
-        throw errWith(404)
+        throw sdkError("File not found: ghost.ts")
       },
       move: async (_: { from: string; to: string }) => {},
       del: async (_: { path: string }) => {},
@@ -223,7 +221,7 @@ describe("deleteNode", () => {
       rename: async (_: { from: string; to: string }) => {},
       move: async (_: { from: string; to: string }) => {},
       del: async (_: { path: string }) => {
-        throw errWith(404)
+        throw sdkError("File not found: ghost.ts")
       },
       refreshDir: (_: string) => {},
     } satisfies FileOpDeps
@@ -279,7 +277,7 @@ describe("moveNode", () => {
       mkdir: async (_: { path: string }) => {},
       rename: async (_: { from: string; to: string }) => {},
       move: async (_: { from: string; to: string }) => {
-        throw errWith(409)
+        throw sdkError("File already exists")
       },
       del: async (_: { path: string }) => {},
       refreshDir: (dir: string) => {

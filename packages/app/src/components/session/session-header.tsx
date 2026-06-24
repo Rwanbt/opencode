@@ -24,7 +24,6 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
-import { SessionHeaderViewToggle } from "./session-header-view-toggle"
 
 const OPEN_APPS = [
   "vscode",
@@ -417,8 +416,6 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
-                {/* FORK: ADR-0005 dual-mode toggle */}
-                <SessionHeaderViewToggle />
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>

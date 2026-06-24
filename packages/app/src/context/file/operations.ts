@@ -25,11 +25,18 @@ function join(dir: string, name: string): string {
 }
 
 function mapError(e: unknown): FileOpResult {
-  const status = typeof e === "object" && e !== null && "status" in e ? (e as { status: number }).status : undefined
-  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error"
-  if (status === 409) return { ok: false, code: "exists", message: msg }
-  if (status === 404) return { ok: false, code: "not-found", message: msg }
-  if (status === 403) return { ok: false, code: "denied", message: msg }
+  const msg = typeof e === "object" && e !== null && "message" in e
+    ? String((e as { message: unknown }).message)
+    : e instanceof Error ? e.message
+    : typeof e === "string" ? e
+    : "Unknown error"
+  const lower = msg.toLowerCase()
+  if (lower.includes("already exists") || lower.includes("expectedhash") || lower.includes("changed on disk"))
+    return { ok: false, code: "exists", message: msg }
+  if (lower.includes("not found") || lower.includes("no longer exists"))
+    return { ok: false, code: "not-found", message: msg }
+  if (lower.includes("access denied") || lower.includes("permission"))
+    return { ok: false, code: "denied", message: msg }
   return { ok: false, code: "error", message: msg }
 }
 
