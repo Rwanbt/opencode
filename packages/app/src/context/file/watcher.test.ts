@@ -103,7 +103,7 @@ describe("file watcher invalidation", () => {
       },
     )
 
-    expect(refresh).toEqual(["src"])
+    expect(refresh).toEqual(["src", "src"])
   })
 
   test("ignores invalid or git watcher updates", () => {

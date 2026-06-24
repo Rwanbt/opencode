@@ -6,7 +6,7 @@ export interface FileOpDeps {
   rename: (input: { from: string; to: string }) => Promise<unknown>
   move: (input: { from: string; to: string }) => Promise<unknown>
   del: (input: { path: string }) => Promise<unknown>
-  refreshDir: (dir: string) => void
+  refreshDir: (dir: string) => Promise<void> | void
 }
 
 function parentDir(filePath: string): string {
@@ -36,7 +36,7 @@ function mapError(e: unknown): FileOpResult {
 export async function createFile(deps: FileOpDeps, dir: string, name: string): Promise<FileOpResult> {
   try {
     await deps.write({ path: join(dir, name), content: "" })
-    deps.refreshDir(dir)
+    await deps.refreshDir(dir)
     return { ok: true }
   } catch (e) {
     return mapError(e)
@@ -46,7 +46,7 @@ export async function createFile(deps: FileOpDeps, dir: string, name: string): P
 export async function createFolder(deps: FileOpDeps, dir: string, name: string): Promise<FileOpResult> {
   try {
     await deps.mkdir({ path: join(dir, name) })
-    deps.refreshDir(dir)
+    await deps.refreshDir(dir)
     return { ok: true }
   } catch (e) {
     return mapError(e)
@@ -57,7 +57,7 @@ export async function renameNode(deps: FileOpDeps, fromPath: string, newName: st
   const dir = parentDir(fromPath)
   try {
     await deps.rename({ from: fromPath, to: join(dir, newName) })
-    deps.refreshDir(dir)
+    await deps.refreshDir(dir)
     return { ok: true }
   } catch (e) {
     return mapError(e)
@@ -68,7 +68,7 @@ export async function deleteNode(deps: FileOpDeps, path: string): Promise<FileOp
   const dir = parentDir(path)
   try {
     await deps.del({ path })
-    deps.refreshDir(dir)
+    await deps.refreshDir(dir)
     return { ok: true }
   } catch (e) {
     return mapError(e)
@@ -80,8 +80,8 @@ export async function moveNode(deps: FileOpDeps, fromPath: string, toDir: string
   const name = basename(fromPath)
   try {
     await deps.move({ from: fromPath, to: join(toDir, name) })
-    deps.refreshDir(srcDir)
-    if (toDir !== srcDir) deps.refreshDir(toDir)
+    await deps.refreshDir(srcDir)
+    if (toDir !== srcDir) await deps.refreshDir(toDir)
     return { ok: true }
   } catch (e) {
     return mapError(e)

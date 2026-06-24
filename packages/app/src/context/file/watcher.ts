@@ -33,21 +33,17 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   }
 
   if (kind === "change") {
-    const dir = (() => {
-      if (path === "") return ""
-      const node = ops.node(path)
-      if (node?.type !== "directory") return
-      return path
-    })()
-    if (dir === undefined) return
-    if (!ops.isDirLoaded(dir)) return
-    ops.refreshDir(dir)
+    const node = ops.node(path)
+    if (node?.type === "directory") {
+      if (ops.isDirLoaded(path)) ops.refreshDir(path)
+    } else {
+      const parent = path.split("/").slice(0, -1).join("/")
+      if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
+    }
     return
   }
   if (kind !== "add" && kind !== "unlink") return
 
   const parent = path.split("/").slice(0, -1).join("/")
-  if (!ops.isDirLoaded(parent)) return
-
-  ops.refreshDir(parent)
+  if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
 }

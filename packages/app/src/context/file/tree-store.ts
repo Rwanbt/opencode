@@ -39,7 +39,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     setTree("dir", path, { expanded: false })
   }
 
-  const listDir = (input: string, opts?: { force?: boolean }) => {
+  const listDir = (input: string, opts?: { force?: boolean }): Promise<void> => {
     const dir = options.normalizeDir(input)
     ensureDir(dir)
 
@@ -47,7 +47,11 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     if (!opts?.force && current?.loaded) return Promise.resolve()
 
     const pending = inflight.get(dir)
-    if (pending) return pending
+    if (pending) {
+      if (!opts?.force) return pending
+      // force: chain after the in-flight request completes
+      return pending.then(() => listDir(dir, { force: true }))
+    }
 
     setTree(
       "dir",
