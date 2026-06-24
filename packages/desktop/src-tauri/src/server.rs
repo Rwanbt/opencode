@@ -498,7 +498,7 @@ pub fn spawn_local_server(
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
-                if check_health(&url, Some(&password)).await {
+                if check_health(&url, Some(&username), Some(&password)).await {
                     tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready");
                     return Ok(());
                 }
@@ -526,7 +526,7 @@ pub fn spawn_local_server(
 
 pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
 
-async fn check_health(url: &str, password: Option<&str>) -> bool {
+async fn check_health(url: &str, username: Option<&str>, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
@@ -563,7 +563,13 @@ async fn check_health(url: &str, password: Option<&str>) -> bool {
     let mut req = client.get(health_url);
 
     if let Some(password) = password {
-        req = req.basic_auth("opencode", Some(password));
+        // Use the configured username (custom usernames are persisted in RemoteConfig
+        // and validated server-side). Hardcoding "opencode" here made any custom
+        // username fail auth on every health poll → the readiness gate timed out (30s)
+        // and flooded the log with "Invalid credentials". Fall back to the default only
+        // when no username is provided.
+        let user = username.filter(|u| !u.is_empty()).unwrap_or("opencode");
+        req = req.basic_auth(user, Some(password));
     }
 
     req.send()
