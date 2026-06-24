@@ -12,6 +12,9 @@ import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { showToast } from "@opencode-ai/ui/toast"
+import type { FileNode } from "@opencode-ai/sdk/v2"
 import FileTree from "@/components/file-tree"
 import { SourceControl } from "@/components/source-control"
 import { TaskPanel } from "@/components/task-panel"
@@ -157,6 +160,69 @@ export function SessionSidePanel(props: {
   const activeFileTab = tabState.activeFileTab
 
   const fileTreeTab = () => layout.fileTree.tab()
+
+  const handleNewFile = (parentDir: string) => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileCreate
+          mode="file"
+          parentDir={parentDir}
+          onCreated={(path) => openTab(file.tab(path))}
+        />
+      ))
+    })
+  }
+
+  const handleNewFolder = (parentDir: string) => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir={parentDir} />)
+    })
+  }
+
+  const handleRename = (node: FileNode) => {
+    void import("@/components/dialog-file-rename").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileRename
+          node={node}
+          onRenamed={(oldPath, newPath) => {
+            tabs().close(file.tab(oldPath))
+            openTab(file.tab(newPath))
+          }}
+        />
+      ))
+    })
+  }
+
+  const handleDelete = (node: FileNode) => {
+    void import("@/components/dialog-file-delete").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileDelete
+          node={node}
+          onDeleted={(path) => tabs().close(file.tab(path))}
+        />
+      ))
+    })
+  }
+
+  const handleMove = (node: FileNode) => {
+    void import("@/components/dialog-file-move").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileMove
+          node={node}
+          onMoved={(oldPath, newPath) => {
+            tabs().close(file.tab(oldPath))
+            openTab(file.tab(newPath))
+          }}
+        />
+      ))
+    })
+  }
+
+  const handleCopyPath = (path: string) => {
+    void navigator.clipboard.writeText(path).then(() => {
+      showToast({ title: language.t("toast.file.pathCopied") })
+    })
+  }
 
   const setFileTreeTabValue = (value: string) => {
     if (value !== "changes" && value !== "all" && value !== "git" && value !== "tasks") return
@@ -509,15 +575,40 @@ export function SessionSidePanel(props: {
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                  <div class="flex items-center justify-between px-1 pt-2 pb-1">
+                    <span class="text-11-medium text-text-weaker uppercase tracking-wide">
+                      {language.t("session.files.all")}
+                    </span>
+                    <DropdownMenu gutter={4} placement="bottom-end">
+                      <DropdownMenu.Trigger as={IconButton} icon="plus-small" variant="ghost" size="small" />
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content>
+                          <DropdownMenu.Item onSelect={() => handleNewFile("")}>
+                            <DropdownMenu.ItemLabel>{language.t("fileOps.newFile")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => handleNewFolder("")}>
+                            <DropdownMenu.ItemLabel>{language.t("fileOps.newFolder")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
+                  </div>
                   <Switch>
                     <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                     <Match when={true}>
                       <FileTree
                         path=""
-                        class="pt-3"
+                        class="pt-1"
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
+                        onNewFile={handleNewFile}
+                        onNewFolder={handleNewFolder}
+                        onRename={handleRename}
+                        onDelete={handleDelete}
+                        onMove={handleMove}
+                        onCopyPath={handleCopyPath}
+                        onCopyRelativePath={handleCopyPath}
                       />
                     </Match>
                   </Switch>

@@ -88,13 +88,18 @@ export function createEditorStore(deps: EditorDeps) {
   async function open(path: string): Promise<DocEffect> {
     const existing = state.entries[path]
     if (existing && !existing.missing) return { type: "set", content: existing.baseline.content }
-    const res = await deps.readRaw(path)
-    if (res.type === "not-found") {
+    try {
+      const res = await deps.readRaw(path)
+      if (res.type === "not-found") {
+        setState("entries", path, { ...freshEntry("", ""), missing: true })
+        return { type: "missing" }
+      }
+      setState("entries", path, freshEntry(res.content, res.stamp.hash))
+      return { type: "set", content: res.content }
+    } catch {
       setState("entries", path, { ...freshEntry("", ""), missing: true })
       return { type: "missing" }
     }
-    setState("entries", path, freshEntry(res.content, res.stamp.hash))
-    return { type: "set", content: res.content }
   }
 
   /** CM reports whether its doc differs from the baseline. */
@@ -108,25 +113,29 @@ export function createEditorStore(deps: EditorDeps) {
     const entry = state.entries[path]
     if (!entry || entry.saving) return { type: "none" }
     set(path, { saving: true })
-    const res = await deps.write({ path, content, expectedHash: entry.baseline.hash || undefined, format })
-    if (res.type === "conflict") {
-      set(path, { saving: false, conflict: true })
-      return { type: "conflict" }
+    try {
+      const res = await deps.write({ path, content, expectedHash: entry.baseline.hash || undefined, format })
+      if (res.type === "conflict") {
+        set(path, { saving: false, conflict: true })
+        return { type: "conflict" }
+      }
+      if (res.type === "not-found") {
+        set(path, { saving: false, missing: true })
+        return { type: "missing" }
+      }
+      set(path, {
+        baseline: { content: res.content, hash: res.stamp.hash },
+        dirty: false,
+        stale: false,
+        conflict: false,
+        missing: false,
+        saving: false,
+      })
+      return res.formatted ? { type: "set", content: res.content } : { type: "none" }
+    } catch {
+      set(path, { saving: false })
+      return { type: "none" }
     }
-    if (res.type === "not-found") {
-      set(path, { saving: false, missing: true })
-      return { type: "missing" }
-    }
-    set(path, {
-      baseline: { content: res.content, hash: res.stamp.hash },
-      dirty: false,
-      stale: false,
-      conflict: false,
-      missing: false,
-      saving: false,
-    })
-    // Reconcile the buffer only when the formatter changed the content on disk.
-    return res.formatted ? { type: "set", content: res.content } : { type: "none" }
   }
 
   /** Throw away local edits; reset CM to the baseline. */
@@ -139,26 +148,35 @@ export function createEditorStore(deps: EditorDeps) {
 
   /** Re-read from disk; replace baseline + CM doc. Discards local edits. */
   async function reload(path: string): Promise<DocEffect> {
-    const res = await deps.readRaw(path)
-    if (res.type === "not-found") {
+    try {
+      const res = await deps.readRaw(path)
+      if (res.type === "not-found") {
+        set(path, { missing: true })
+        return { type: "missing" }
+      }
+      setState("entries", path, freshEntry(res.content, res.stamp.hash))
+      return { type: "set", content: res.content }
+    } catch {
       set(path, { missing: true })
       return { type: "missing" }
     }
-    setState("entries", path, freshEntry(res.content, res.stamp.hash))
-    return { type: "set", content: res.content }
   }
 
   /** Resolve a 409 conflict: keep disk (reload) or force mine (overwrite). */
   async function resolveConflict(path: string, content: string, action: "reload" | "overwrite"): Promise<DocEffect> {
     if (action === "reload") return reload(path)
-    // overwrite: re-read to get the CURRENT disk hash, then force the write.
-    const disk = await deps.readRaw(path)
-    if (disk.type === "not-found") {
+    try {
+      const disk = await deps.readRaw(path)
+      if (disk.type === "not-found") {
+        set(path, { missing: true, conflict: false })
+        return { type: "missing" }
+      }
+      set(path, { baseline: { content: disk.content, hash: disk.stamp.hash }, conflict: false })
+      return save(path, content)
+    } catch {
       set(path, { missing: true, conflict: false })
       return { type: "missing" }
     }
-    set(path, { baseline: { content: disk.content, hash: disk.stamp.hash }, conflict: false })
-    return save(path, content)
   }
 
   /**
@@ -202,27 +220,29 @@ export function createEditorStore(deps: EditorDeps) {
     const entry = state.entries[path]
     if (!entry || entry.saving) return { type: "none" }
     set(path, { saving: true })
-    // No expectedHash → backend creates unconditionally.
-    const res = await deps.write({ path, content, format })
-    if (res.type === "conflict") {
-      // Defensive: backend should not return 409 without a precondition.
-      set(path, { saving: false, conflict: true })
-      return { type: "conflict" }
+    try {
+      const res = await deps.write({ path, content, format })
+      if (res.type === "conflict") {
+        set(path, { saving: false, conflict: true })
+        return { type: "conflict" }
+      }
+      if (res.type === "not-found") {
+        set(path, { saving: false, missing: true })
+        return { type: "missing" }
+      }
+      set(path, {
+        baseline: { content: res.content, hash: res.stamp.hash },
+        dirty: false,
+        stale: false,
+        conflict: false,
+        missing: false,
+        saving: false,
+      })
+      return res.formatted ? { type: "set", content: res.content } : { type: "none" }
+    } catch {
+      set(path, { saving: false })
+      return { type: "none" }
     }
-    if (res.type === "not-found") {
-      // Permissions error or parent directory missing.
-      set(path, { saving: false, missing: true })
-      return { type: "missing" }
-    }
-    set(path, {
-      baseline: { content: res.content, hash: res.stamp.hash },
-      dirty: false,
-      stale: false,
-      conflict: false,
-      missing: false,
-      saving: false,
-    })
-    return res.formatted ? { type: "set", content: res.content } : { type: "none" }
   }
 
   return {

@@ -16,23 +16,29 @@ export function EditorProvider(props: { children: JSX.Element }) {
 
   const store = createEditorStore({
     async readRaw(filePath) {
-      const res = await sdk.client.file.readRaw({ path: filePath })
-      if (!res.data) return { type: "not-found" }
-      return { type: "ok", content: res.data.content, stamp: res.data.stamp }
+      try {
+        const res = await sdk.client.file.readRaw({ path: filePath })
+        if (!res.data) return { type: "not-found" }
+        return { type: "ok", content: res.data.content, stamp: res.data.stamp }
+      } catch {
+        return { type: "not-found" }
+      }
     },
 
     async write({ path: filePath, content, expectedHash, format }) {
-      const res = await sdk.client.file.write({ path: filePath, content, expectedHash, format })
-      // Non-2xx responses surface as HTTP errors via the SDK; check status
-      // directly so the store gets the precise discriminant it needs.
-      if (res.response.status === 409) return { type: "conflict" }
-      if (res.response.status === 404) return { type: "not-found" }
-      if (!res.data) return { type: "not-found" }
-      return {
-        type: "ok",
-        content: res.data.content,
-        stamp: res.data.stamp,
-        formatted: res.data.formatted,
+      try {
+        const res = await sdk.client.file.write({ path: filePath, content, expectedHash, format })
+        if (res.response.status === 409) return { type: "conflict" }
+        if (res.response.status === 404) return { type: "not-found" }
+        if (!res.data) return { type: "not-found" }
+        return {
+          type: "ok",
+          content: res.data.content,
+          stamp: res.data.stamp,
+          formatted: res.data.formatted,
+        }
+      } catch {
+        return { type: "not-found" }
       }
     },
   })

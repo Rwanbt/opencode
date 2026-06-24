@@ -414,6 +414,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const newFile = () => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="file" parentDir="" />)
+    })
+  }
+
+  const newFolder = () => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir="" />)
+    })
+  }
+
   const fileCmds = () => [
     fileCommand({
       id: "file.open",
@@ -422,6 +434,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+k,mod+p",
       slash: "open",
       onSelect: openFile,
+    }),
+    fileCommand({
+      id: "file.new",
+      title: language.t("command.file.new"),
+      description: language.t("command.file.new.description"),
+      keybind: "mod+n",
+      onSelect: newFile,
+    }),
+    fileCommand({
+      id: "file.newFolder",
+      title: language.t("command.file.newFolder"),
+      description: language.t("command.file.newFolder.description"),
+      keybind: "mod+shift+n",
+      onSelect: newFolder,
     }),
     fileCommand({
       id: "tab.close",

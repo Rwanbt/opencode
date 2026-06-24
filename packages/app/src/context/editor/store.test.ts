@@ -299,3 +299,88 @@ describe("editor store — recreate", () => {
     await first
   })
 })
+
+describe("editor store — error resilience (network/SDK exceptions)", () => {
+  const throwingReadRaw: EditorDeps = {
+    async readRaw() {
+      throw new Error("network error")
+    },
+    async write() {
+      return { type: "ok", content: "", stamp: { hash: "h" }, formatted: false }
+    },
+  }
+
+  const throwingWrite: EditorDeps = {
+    async readRaw() {
+      return { type: "ok", content: "v1", stamp: { hash: hash("v1") } }
+    },
+    async write() {
+      throw new Error("network error")
+    },
+  }
+
+  test("open() with throwing readRaw sets missing and returns missing", async () => {
+    const store = createEditorStore(throwingReadRaw)
+    const eff = await store.open("a.ts")
+    expect(eff.type).toBe("missing")
+    expect(store.get("a.ts")!.missing).toBe(true)
+  })
+
+  test("save() with throwing write clears saving flag", async () => {
+    const store = createEditorStore(throwingWrite)
+    await store.open("a.ts")
+    const eff = await store.save("a.ts", "new content")
+    expect(eff).toEqual({ type: "none" })
+    expect(store.get("a.ts")!.saving).toBe(false)
+  })
+
+  test("reload() with throwing readRaw returns missing", async () => {
+    let shouldThrow = false
+    const store = createEditorStore({
+      async readRaw() {
+        if (shouldThrow) throw new Error("network error")
+        return { type: "ok", content: "v1", stamp: { hash: hash("v1") } }
+      },
+      async write() {
+        return { type: "ok", content: "", stamp: { hash: "h" }, formatted: false }
+      },
+    })
+    await store.open("a.ts")
+    shouldThrow = true
+    const eff = await store.reload("a.ts")
+    expect(eff.type).toBe("missing")
+    expect(store.get("a.ts")!.missing).toBe(true)
+  })
+
+  test("resolveConflict() with throwing readRaw clears conflict", async () => {
+    const store = createEditorStore({
+      async readRaw(path) {
+        if (path === "a.ts" && store.get("a.ts")) throw new Error("network error")
+        return { type: "ok", content: "v1", stamp: { hash: hash("v1") } }
+      },
+      async write() {
+        return { type: "ok", content: "v1", stamp: { hash: hash("v1") }, formatted: false }
+      },
+    })
+    await store.open("a.ts")
+    const eff = await store.resolveConflict("a.ts", "mine", "overwrite")
+    expect(eff.type).toBe("missing")
+    expect(store.get("a.ts")!.conflict).toBe(false)
+    expect(store.get("a.ts")!.missing).toBe(true)
+  })
+
+  test("recreate() with throwing write clears saving flag", async () => {
+    const store = createEditorStore({
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write() {
+        throw new Error("network error")
+      },
+    })
+    await store.open("a.ts")
+    const eff = await store.recreate("a.ts", "content")
+    expect(eff).toEqual({ type: "none" })
+    expect(store.get("a.ts")!.saving).toBe(false)
+  })
+})

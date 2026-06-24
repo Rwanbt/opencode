@@ -393,6 +393,21 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     }
   }
 
+  const path = createMemo(() => file.pathFromTab(props.tab))
+  const state = createMemo(() => {
+    const p = path()
+    if (!p) return
+    return file.get(p)
+  })
+  const contents = createMemo(() => state()?.content?.content ?? "")
+  const cacheKey = createMemo(() => sampledChecksum(contents()))
+  const selectedLines = createMemo<SelectedLineRange | null>(() => {
+    const p = path()
+    if (!p) return null
+    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
+    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
+  })
+
   // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
   // property changes like `conflict`, `stale`, `missing` in JSX).
   const editorEntry = createMemo(() => {
@@ -420,11 +435,16 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     return entry !== undefined && !entry.missing
   })
 
-  const handleEnterEdit = () => {
+  const handleEnterEdit = async () => {
     const p = path()
     if (!p) return
     setEditing(true)
-    void editorStore.open(p)
+    try {
+      await editorStore.open(p)
+    } catch {
+      setEditing(false)
+      showToast({ variant: "error", title: language.t("toast.file.openFailed") })
+    }
   }
 
   // Called by CM on every user keystroke: update dirty state.
@@ -448,22 +468,32 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (!p) return
     const content = editorHandle?.getContent() ?? ""
     const format = settings.general.autoSave()
-    // On conflict/missing the store sets the flag and the banner appears
-    // reactively — no toast needed here.
-    applyDocEffect(await editorStore.save(p, content, format))
+    try {
+      applyDocEffect(await editorStore.save(p, content, format))
+    } catch {
+      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+    }
   }
 
   const handleReload = async () => {
     const p = path()
     if (!p) return
-    applyDocEffect(await editorStore.reload(p))
+    try {
+      applyDocEffect(await editorStore.reload(p))
+    } catch {
+      showToast({ variant: "error", title: language.t("toast.file.reloadFailed") })
+    }
   }
 
   const handleOverwrite = async () => {
     const p = path()
     if (!p) return
     const content = editorHandle?.getContent() ?? ""
-    applyDocEffect(await editorStore.resolveConflict(p, content, "overwrite"))
+    try {
+      applyDocEffect(await editorStore.resolveConflict(p, content, "overwrite"))
+    } catch {
+      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+    }
   }
 
   const handleDiscard = () => {
@@ -478,7 +508,11 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (!p) return
     const content = editorHandle?.getContent() ?? ""
     const format = settings.general.autoSave()
-    applyDocEffect(await editorStore.recreate(p, content, format))
+    try {
+      applyDocEffect(await editorStore.recreate(p, content, format))
+    } catch {
+      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+    }
   }
 
   // Auto-apply external reloads to the CM buffer when the watcher triggers
@@ -503,20 +537,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     },
   }
 
-  const path = createMemo(() => file.pathFromTab(props.tab))
-  const state = createMemo(() => {
-    const p = path()
-    if (!p) return
-    return file.get(p)
-  })
-  const contents = createMemo(() => state()?.content?.content ?? "")
-  const cacheKey = createMemo(() => sampledChecksum(contents()))
-  const selectedLines = createMemo<SelectedLineRange | null>(() => {
-    const p = path()
-    if (!p) return null
-    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
-    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
-  })
   const scrollSync = createScrollSync({
     tab: () => props.tab,
     view,
