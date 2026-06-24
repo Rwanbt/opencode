@@ -33,6 +33,12 @@ const CodeMirrorEditor = lazy(() =>
   import("@opencode-ai/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
 )
 
+// Paths that should auto-enter edit mode when their tab mounts (double-click).
+const autoEditPaths = new Set<string>()
+export function requestAutoEdit(path: string) {
+  autoEditPaths.add(path)
+}
+
 function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
@@ -440,7 +446,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (!p) return
     setEditing(true)
     try {
-      await editorStore.open(p)
+      await editorStore.open(p, contents() || undefined)
     } catch {
       setEditing(false)
       showToast({ variant: "error", title: language.t("toast.file.openFailed") })
@@ -514,6 +520,17 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
   }
+
+  // Auto-enter edit mode when the file was opened via double-click.
+  createEffect(() => {
+    const p = path()
+    if (!p || editing()) return
+    if (!canEdit()) return
+    if (autoEditPaths.has(p)) {
+      autoEditPaths.delete(p)
+      void handleEnterEdit()
+    }
+  })
 
   // Auto-apply external reloads to the CM buffer when the watcher triggers
   // store.reload() on a clean entry (onExternalChange → clean → reload).

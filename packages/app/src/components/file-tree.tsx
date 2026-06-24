@@ -206,6 +206,7 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  onFileDblClick?: (file: FileNode) => void
   onNewFile?: (parentDir: string) => void
   onNewFolder?: (parentDir: string) => void
   onRename?: (node: FileNode) => void
@@ -406,6 +407,19 @@ export default function FileTree(props: {
 
           const hasActions = () => !!(props.onRename || props.onDelete || props.onMove || props.onNewFile || props.onNewFolder)
 
+          // F2 = rename, Delete = delete. Plan §4.2: local to the file tree
+          // (not a global command — would conflict with the editor and the
+          // terminal which both consume those keys).
+          const handleNodeKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "F2") {
+              e.preventDefault()
+              props.onRename?.(node)
+            } else if (e.key === "Delete") {
+              e.preventDefault()
+              props.onDelete?.(node)
+            }
+          }
+
           const wrapActions = (content: JSX.Element) => {
             if (!hasActions()) return content
             return (
@@ -435,7 +449,7 @@ export default function FileTree(props: {
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
-                  <Collapsible.Trigger>
+                  <Collapsible.Trigger onKeyDown={handleNodeKeyDown}>
                     {wrapActions(
                       <FileTreeNode
                         node={node}
@@ -474,6 +488,7 @@ export default function FileTree(props: {
                         active={props.active}
                         draggable={props.draggable}
                         onFileClick={props.onFileClick}
+                        onFileDblClick={props.onFileDblClick}
                         onNewFile={props.onNewFile}
                         onNewFolder={props.onNewFolder}
                         onRename={props.onRename}
@@ -504,6 +519,8 @@ export default function FileTree(props: {
                     as="button"
                     type="button"
                     onClick={() => props.onFileClick?.(node)}
+                    onDblClick={() => props.onFileDblClick?.(node)}
+                    onKeyDown={handleNodeKeyDown}
                   >
                     <div class="w-4 shrink-0" />
                     <Switch>

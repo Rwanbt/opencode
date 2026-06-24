@@ -84,19 +84,31 @@ export function createEditorStore(deps: EditorDeps) {
       }),
     )
 
-  /** Load baseline for a file. Returns the content to seed the CM doc. */
-  async function open(path: string): Promise<DocEffect> {
+  /**
+   * Load baseline for a file. Returns the content to seed the CM doc.
+   * When fallbackContent is provided (e.g. from the read-mode view), the editor
+   * opens even if readRaw fails — avoids a false "file deleted" banner.
+   */
+  async function open(path: string, fallbackContent?: string): Promise<DocEffect> {
     const existing = state.entries[path]
     if (existing && !existing.missing) return { type: "set", content: existing.baseline.content }
     try {
       const res = await deps.readRaw(path)
       if (res.type === "not-found") {
+        if (fallbackContent !== undefined) {
+          setState("entries", path, freshEntry(fallbackContent, ""))
+          return { type: "set", content: fallbackContent }
+        }
         setState("entries", path, { ...freshEntry("", ""), missing: true })
         return { type: "missing" }
       }
       setState("entries", path, freshEntry(res.content, res.stamp.hash))
       return { type: "set", content: res.content }
     } catch {
+      if (fallbackContent !== undefined) {
+        setState("entries", path, freshEntry(fallbackContent, ""))
+        return { type: "set", content: fallbackContent }
+      }
       setState("entries", path, { ...freshEntry("", ""), missing: true })
       return { type: "missing" }
     }

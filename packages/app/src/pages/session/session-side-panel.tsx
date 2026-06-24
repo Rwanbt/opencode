@@ -16,6 +16,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import FileTree from "@/components/file-tree"
+import { requestAutoEdit } from "@/pages/session/file-tabs"
 import { SourceControl } from "@/components/source-control"
 import { TaskPanel } from "@/components/task-panel"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -222,6 +223,11 @@ export function SessionSidePanel(props: {
     void navigator.clipboard.writeText(path).then(() => {
       showToast({ title: language.t("toast.file.pathCopied") })
     })
+  }
+
+  const handleFileDblClick = (node: FileNode) => {
+    requestAutoEdit(node.path)
+    openTab(file.tab(node.path))
   }
 
   const setFileTreeTabValue = (value: string) => {
@@ -602,6 +608,7 @@ export function SessionSidePanel(props: {
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
+                        onFileDblClick={handleFileDblClick}
                         onNewFile={handleNewFile}
                         onNewFolder={handleNewFolder}
                         onRename={handleRename}
