@@ -992,7 +992,8 @@ export namespace File {
     return FileTime.withLock(full, async () => {
       if (!(await Filesystem.exists(full))) throw new PathNotFoundError(input.path)
       const isDirectory = await Filesystem.isDir(full)
-      if (!isDirectory && input.expectedHash !== undefined) {
+      if (isDirectory) throw new Error("Access denied: cannot remove a directory")
+      if (input.expectedHash !== undefined) {
         const current = await diskStamp(full)
         if (current.hash !== input.expectedHash) {
           throw new ConflictError(input.path, "File changed on disk since it was last read")

@@ -482,8 +482,14 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     try {
       const eff = await editorStore.save(p, content, format)
       applyDocEffect(eff)
-      // UX: silent success feedback (toast stays 2-3s). Without this the user
-      // has no way to know the save actually went through (review 2026-06-24).
+      // WHY: save() never throws (catches internally). A conflict/missing
+      // result is already surfaced by the EditorBanner via the reactive
+      // editorEntry — don't claim success here.
+      if (eff.type === "conflict" || eff.type === "missing") return
+      // Refresh the read-only cache so a close+reopen shows the saved
+      // content (otherwise `load()` skips refetch because `loaded: true`,
+      // see file.tsx:167).
+      await file.load(p, { force: true })
       showToast({ variant: "success", title: language.t("toast.file.saved") })
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
@@ -516,6 +522,10 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (!p) return
     editorStore.close(p)
     setEditing(false)
+    // Refresh the read-only cache so the user sees the actual on-disk
+    // content (in case the file was changed externally during the edit
+    // session). Defense-in-depth vs. the handleCtrlS refresh.
+    void file.load(p, { force: true })
   }
 
   const handleRecreate = async () => {
