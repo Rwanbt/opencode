@@ -9,8 +9,13 @@ import { getFilename } from "@opencode-ai/util/path"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
+import { useEditor } from "@/context/editor"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
+  // UX (consensus 4-IA review 2026-06-24): a dirty file is shown with an amber
+  // dot prefix on the tab. Same on desktop + mobile — VS Code convention.
+  const editor = useEditor()
+  const dirty = createMemo(() => editor.get(props.path)?.dirty === true)
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
       <Show
@@ -21,6 +26,13 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
           <FileIcon node={{ path: props.path, type: "file" }} class="absolute inset-0 size-4 tab-fileicon-color" />
           <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
         </span>
+      </Show>
+      <Show when={dirty()}>
+        <span
+          class="size-1.5 md:size-1.5 rounded-full bg-amber-500 shrink-0"
+          aria-label="Unsaved changes"
+          data-dirty-dot
+        />
       </Show>
       <span class="text-14-medium truncate">{getFilename(props.path)}</span>
     </div>

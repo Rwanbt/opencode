@@ -106,7 +106,7 @@ export function FileTreeActions(props: FileTreeActionsProps) {
             variant="ghost"
             size="small"
             data-slot="node-actions"
-            class="shrink-0 transition-opacity"
+            class="shrink-0 transition-opacity min-h-11 min-w-11 md:min-h-0 md:min-w-0"
             classList={{
               "opacity-0 group-hover/node:opacity-100 focus-visible:opacity-100": !isTouch(),
               "opacity-60": isTouch(),

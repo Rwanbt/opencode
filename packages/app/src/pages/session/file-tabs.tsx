@@ -446,7 +446,12 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (!p) return
     setEditing(true)
     try {
-      await editorStore.open(p, contents() || undefined)
+      // Use ?? not ||: a brand-new empty file has contents() === "" which is
+      // falsy but a valid fallback. The store's readRaw() will succeed on the
+      // empty file; if it fails (race with the filesystem watcher) the "" seed
+      // lets the editor open immediately instead of showing a false
+      // "this file was deleted" banner.
+      await editorStore.open(p, contents() ?? undefined)
     } catch {
       setEditing(false)
       showToast({ variant: "error", title: language.t("toast.file.openFailed") })
@@ -826,14 +831,17 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
   return (
     <Dynamic {...tabsContentProps()}>
-      {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10) */}
+      {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10).
+          UX (review 2026-06-24): always fully visible on touch devices so users
+          don't have to discover a hover-only control. Desktop keeps the subtle
+          fade-in so it doesn't dominate the read view. */}
       <Show when={!editing() && canEdit() && path()}>
         <div class="absolute top-2 right-4 z-10">
           <IconButton
             icon="edit-small-2"
             variant="ghost"
             size="small"
-            class="size-6 opacity-50 hover:opacity-100 transition-opacity"
+            class="size-8 md:size-6 opacity-100 md:opacity-50 md:hover:opacity-100 transition-opacity touch:opacity-100"
             onClick={handleEnterEdit}
             aria-label="Edit file"
           />

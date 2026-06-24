@@ -368,6 +368,7 @@ export const dict = {
   "dialog.file.create.placeholder.file": "filename.ts",
   "dialog.file.create.placeholder.folder": "folder-name",
   "dialog.file.create.label": "Name",
+  "dialog.file.create.action": "Create",
   "dialog.file.rename.title": "Rename",
   "dialog.file.rename.label": "New name",
   "dialog.file.delete.title": "Delete",

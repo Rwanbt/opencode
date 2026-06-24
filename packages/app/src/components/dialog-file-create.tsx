@@ -82,7 +82,7 @@ export function DialogFileCreate(props: {
             {language.t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={!valid() || mutation.isPending}>
-            {mutation.isPending ? language.t("common.loading") : language.t("common.save")}
+            {mutation.isPending ? language.t("common.loading") : language.t("dialog.file.create.action")}
           </Button>
         </div>
       </form>
