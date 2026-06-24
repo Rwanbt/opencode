@@ -466,6 +466,8 @@ export const dict = {
   "toast.file.listFailed.title": "Failed to list files",
   "toast.file.openFailed": "Failed to open file",
   "toast.file.saveFailed": "Failed to save file",
+  "toast.file.saved": "Saved",
+  "toast.file.saving": "Saving…",
   "toast.file.reloadFailed": "Failed to reload file",
   "toast.file.created": "File created",
   "toast.file.folderCreated": "Folder created",

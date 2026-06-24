@@ -868,4 +868,6 @@ export const dict = {
   "error.childStore.storeCreateFailed": "Échec de la création du stockage",
   "terminal.connectionLost.abnormalClose": "WebSocket fermé anormalement : {{code}}",
   "dialog.file.create.action": "Créer",
+  "toast.file.saved": "Enregistré",
+  "toast.file.saving": "Enregistrement…",
 }

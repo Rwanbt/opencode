@@ -480,7 +480,11 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     const content = editorHandle?.getContent() ?? ""
     const format = settings.general.autoSave()
     try {
-      applyDocEffect(await editorStore.save(p, content, format))
+      const eff = await editorStore.save(p, content, format)
+      applyDocEffect(eff)
+      // UX: silent success feedback (toast stays 2-3s). Without this the user
+      // has no way to know the save actually went through (review 2026-06-24).
+      showToast({ variant: "success", title: language.t("toast.file.saved") })
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
@@ -832,19 +836,49 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   return (
     <Dynamic {...tabsContentProps()}>
       {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10).
-          UX (review 2026-06-24): always fully visible on touch devices so users
-          don't have to discover a hover-only control. Desktop keeps the subtle
-          fade-in so it doesn't dominate the read view. */}
+          UX (review 2026-06-24 Sprint 3.1): always fully visible so users
+          don't have to discover a hover-only control. The Save button appears
+          next to it once the editor is mounted and there are unsaved changes. */}
       <Show when={!editing() && canEdit() && path()}>
         <div class="absolute top-2 right-4 z-10">
           <IconButton
             icon="edit-small-2"
             variant="ghost"
             size="small"
-            class="size-8 md:size-6 opacity-100 md:opacity-50 md:hover:opacity-100 transition-opacity touch:opacity-100"
+            class="size-8 opacity-100 transition-opacity"
             onClick={handleEnterEdit}
             aria-label="Edit file"
           />
+        </div>
+      </Show>
+
+      {/* FORK: Sprint 3.1 — explicit Save button while editing (visible on
+          every platform, including mobile/tablet where Ctrl+S is unavailable).
+          Primary colour when dirty (actionable), ghost when clean (still
+          allows force-save / autosave-toggle). */}
+      <Show when={editing() && path()}>
+        <div class="absolute top-2 right-4 z-10 flex items-center gap-2">
+          <Show when={editorEntry()?.saving}>
+            <span class="text-12-regular text-text-weak">{language.t("toast.file.saving")}</span>
+          </Show>
+          <button
+            type="button"
+            onClick={() => void handleCtrlS()}
+            disabled={editorEntry()?.saving}
+            data-testid="editor-save-button"
+            aria-label={language.t("common.save")}
+            classList={{
+              "h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-12-medium border transition-colors": true,
+              "border-accent bg-accent text-background": editorEntry()?.dirty,
+              "border-border-base text-text-weak hover:text-text-base hover:bg-surface-base-hover": !editorEntry()?.dirty,
+              "opacity-50 pointer-events-none": !!editorEntry()?.saving,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M3 7.5L5.5 10L11 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" />
+            </svg>
+            <span>{language.t("common.save")}</span>
+          </button>
         </div>
       </Show>
 
