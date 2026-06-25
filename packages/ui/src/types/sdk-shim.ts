@@ -60,7 +60,27 @@ export type FileContent = FileReadResponses[200]
 export type FileNode = FileListResponses[200][number]
 export type FileDiff = SessionDiffResponses[200][number]
 
-export type SessionStatus = SessionStatusResponses[200]
+// SessionStatusResponses[200] is the full status payload (Record from
+// sessionID to variant). The shim historically exposed this Record as
+// `SessionStatus`, but consumers always treat `state.session_status[sessionID]`
+// as a single variant. Re-exposing the full Record through the index
+// signature `[key: string]: VariantUnion` broke TS2367 discrimination on
+// `status.type === "retry"`.
+//
+// Fix: expose SessionStatus as the discriminated union of single variants.
+// Full response shape available as `SessionStatusResponse` for the rare
+// cases where the consumer needs the whole Record.
+export type SessionStatusResponse = SessionStatusResponses[200]
+export type SessionStatus =
+  | { type: "idle" }
+  | { type: "retry"; attempt: number; message: string; next: number }
+  | { type: "busy" }
+  | { type: "queued" }
+  | { type: "blocked"; reason?: string }
+  | { type: "awaiting_input"; question?: string }
+  | { type: "completed"; result?: string }
+  | { type: "failed"; error?: string }
+  | { type: "cancelled" }
 export type Todo = SessionTodoResponses[200][number]
 
 export type PermissionRequest = { [key: string]: any; id?: string; permission?: string; pattern?: string; metadata?: any; always?: string[] }

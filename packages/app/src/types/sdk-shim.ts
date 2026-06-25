@@ -84,8 +84,33 @@ export type FileNode = FileListResponses[200][number]
 export type FileDiff = SessionDiffResponses[200][number]
 
 // ----- Session status -----
-// SessionStatusResponses[200] is the full status payload.
-export type SessionStatus = SessionStatusResponses[200]
+// SessionStatusResponses[200] is the full status payload (a Record from
+// sessionID to variant). The shim historically exposed this full payload as
+// `SessionStatus`, but consumers always treat `state.session_status[sessionID]`
+// as a single variant (e.g. `sessionStatus().type !== "idle"`). Re-exposing
+// the full Record through the index signature `[key: string]: VariantUnion`
+// broke TS2367 discrimination on `status.type === "retry"` because the index
+// signature widened `.type` from the literal union to the whole VariantUnion.
+//
+// Fix: expose SessionStatus as the discriminated union of single variants.
+// Consumers can now narrow via `if (status.type === "retry")` and read
+// variant-specific fields like `.attempt` / `.message` / `.next` without
+// the index signature swallowing the narrowing.
+//
+// The full response shape is still available as `SessionStatusResponse`
+// for the rare cases where the consumer needs the whole Record (e.g. when
+// initializing the store from the SDK response).
+export type SessionStatusResponse = SessionStatusResponses[200]
+export type SessionStatus =
+  | { type: "idle" }
+  | { type: "retry"; attempt: number; message: string; next: number }
+  | { type: "busy" }
+  | { type: "queued" }
+  | { type: "blocked"; reason?: string }
+  | { type: "awaiting_input"; question?: string }
+  | { type: "completed"; result?: string }
+  | { type: "failed"; error?: string }
+  | { type: "cancelled" }
 
 // ----- Todo -----
 // SessionTodoResponses[200] is Array<Todo>.
