@@ -165,8 +165,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const key = `${directory}\n${file}`
       ensure(file)
 
-      const current = store.file[file]
-      if (!options?.force && current?.loaded) return Promise.resolve()
+      // Phase 2.4e: skip-when-clean gate now consults FileStore, not the local
+      // viewer cache. Reason: editor.save() / editor.reload() update FileStore
+      // atomically (markClean), so a freshly-cleaned FileDoc is proof we just
+      // saw the bytes — no need to re-read. `force: true` still bypasses this
+      // for callers that genuinely need a fresh fetch (tab activation, agent
+      // finish, watcher hot path). The viewer cache's `loaded` flag is no
+      // longer the source of truth; it stays as a render hint for the spinner.
+      if (!options?.force && fileStore.get(file)?.status === "clean") return Promise.resolve()
 
       const pending = inflight.get(key)
       if (pending) return pending
