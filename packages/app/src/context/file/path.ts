@@ -1,84 +1,13 @@
-export function stripFileProtocol(input: string) {
-  if (!input.startsWith("file://")) return input
-  return input.slice("file://".length)
-}
+// path.ts — URL helpers + closure-bound path helpers.
+//
+// This file re-exports the canonical helpers from `./canonical` for
+// back-compat with existing imports (`createPathHelpers` and the strip
+// helpers are still widely used). New code should prefer importing directly
+// from `./canonical` — it is the single source of truth for key generation.
 
-export function stripQueryAndHash(input: string) {
-  const hashIndex = input.indexOf("#")
-  const queryIndex = input.indexOf("?")
+import { canonical, decodeFilePath, stripFileProtocol, stripQueryAndHash, unquoteGitPath } from "./canonical"
 
-  if (hashIndex !== -1 && queryIndex !== -1) {
-    return input.slice(0, Math.min(hashIndex, queryIndex))
-  }
-
-  if (hashIndex !== -1) return input.slice(0, hashIndex)
-  if (queryIndex !== -1) return input.slice(0, queryIndex)
-  return input
-}
-
-export function unquoteGitPath(input: string) {
-  if (!input.startsWith('"')) return input
-  if (!input.endsWith('"')) return input
-  const body = input.slice(1, -1)
-  const bytes: number[] = []
-
-  for (let i = 0; i < body.length; i++) {
-    const char = body[i]!
-    if (char !== "\\") {
-      bytes.push(char.charCodeAt(0))
-      continue
-    }
-
-    const next = body[i + 1]
-    if (!next) {
-      bytes.push("\\".charCodeAt(0))
-      continue
-    }
-
-    if (next >= "0" && next <= "7") {
-      const chunk = body.slice(i + 1, i + 4)
-      const match = chunk.match(/^[0-7]{1,3}/)
-      if (!match) {
-        bytes.push(next.charCodeAt(0))
-        i++
-        continue
-      }
-      bytes.push(parseInt(match[0], 8))
-      i += match[0].length
-      continue
-    }
-
-    const escaped =
-      next === "n"
-        ? "\n"
-        : next === "r"
-          ? "\r"
-          : next === "t"
-            ? "\t"
-            : next === "b"
-              ? "\b"
-              : next === "f"
-                ? "\f"
-                : next === "v"
-                  ? "\v"
-                  : next === "\\" || next === '"'
-                    ? next
-                    : undefined
-
-    bytes.push((escaped ?? next).charCodeAt(0))
-    i++
-  }
-
-  return new TextDecoder().decode(new Uint8Array(bytes))
-}
-
-export function decodeFilePath(input: string) {
-  try {
-    return decodeURIComponent(input)
-  } catch {
-    return input
-  }
-}
+export { canonical, decodeFilePath, stripFileProtocol, stripQueryAndHash, unquoteGitPath }
 
 export function encodeFilePath(filepath: string): string {
   // Normalize Windows paths: convert backslashes to forward slashes
@@ -102,33 +31,7 @@ export function encodeFilePath(filepath: string): string {
 }
 
 export function createPathHelpers(scope: () => string) {
-  const normalize = (input: string) => {
-    const root = scope()
-
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
-
-    // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
-    // Only case-insensitive on Windows (drive letter or UNC paths)
-    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
-    const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
-    const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
-    if (
-      canonPath.startsWith(canonRoot) &&
-      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath[canonRoot.length] === "/")
-    ) {
-      // Slice from original path to preserve native separators
-      path = path.slice(root.length)
-    }
-
-    if (path.startsWith("./") || path.startsWith(".\\")) {
-      path = path.slice(2)
-    }
-
-    if (path.startsWith("/") || path.startsWith("\\")) {
-      path = path.slice(1)
-    }
-    return path
-  }
+  const normalize = (input: string) => canonical(input, scope())
 
   const tab = (input: string) => {
     const path = normalize(input)
