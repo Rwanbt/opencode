@@ -28,6 +28,7 @@ import type { LspCallbacks, LspLocation, LspCodeAction, LspWorkspaceEdit } from 
 import { applyTextEdits, createLspCallbacks, editsForFile } from "@/pages/session/lsp-handlers"
 import { RenameDialog, type RenameState } from "@/pages/session/rename-dialog"
 import { CodeActionsPanel, type CodeActionPos } from "@/pages/session/code-actions-panel"
+import { ReferencesPanel, uriToDisplayPath } from "@/pages/session/references-panel"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -233,11 +234,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
   const handleReferences = (refs: LspLocation[]) => {
     setRefLocations(refs)
-  }
-
-  function uriToDisplayPath(uri: string): string {
-    const p = uri.startsWith("file://") ? decodeURIComponent(uri.slice(7).replace(/^\/([A-Z]:)/, "$1")) : uri
-    return p.replace(/\\/g, "/")
   }
 
   // Stretch Phase 2: rename symbol (F2 → dialog → POST /lsp/rename → apply edits)
@@ -920,40 +916,11 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       />
 
       {/* Stretch Phase 2: References panel (Shift+F12) */}
-      <Show when={refLocations().length > 0}>
-        <div class="border-t border-border-weak-base bg-background-stronger flex flex-col max-h-48 overflow-y-auto shrink-0">
-          <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-weak-base sticky top-0 bg-background-stronger z-10">
-            <span class="text-11-regular text-text-weaker uppercase tracking-wide">
-              Références ({refLocations().length})
-            </span>
-            <button
-              type="button"
-              onClick={() => setRefLocations([])}
-              class="text-10-regular text-text-weaker hover:text-text-base px-1"
-            >
-              ✕
-            </button>
-          </div>
-          <For each={refLocations()}>
-            {(loc) => {
-              const displayPath = uriToDisplayPath(loc.uri)
-              const short = displayPath.split("/").slice(-2).join("/")
-              return (
-                <button
-                  type="button"
-                  class="flex items-center gap-2 px-3 py-1 hover:bg-surface-base text-left w-full"
-                  onClick={() => handleNavigate(displayPath)}
-                >
-                  <span class="text-11-regular text-text-base truncate flex-1 font-mono">{short}</span>
-                  <span class="text-10-regular text-text-weaker shrink-0">
-                    :{loc.range.start.line + 1}:{loc.range.start.character + 1}
-                  </span>
-                </button>
-              )
-            }}
-          </For>
-        </div>
-      </Show>
+      <ReferencesPanel
+        locations={refLocations}
+        onSelect={(loc) => handleNavigate(uriToDisplayPath(loc.uri))}
+        onClose={() => setRefLocations([])}
+      />
       {/* END FORK */}
 
       <Show when={!editing()}>
