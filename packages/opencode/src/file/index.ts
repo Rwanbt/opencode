@@ -630,7 +630,6 @@ export namespace File {
         }
 
         const content = yield* appFs.readFileString(full).pipe(
-          Effect.map((s) => s.trim()),
           Effect.catch(() => Effect.succeed("")),
         )
 
