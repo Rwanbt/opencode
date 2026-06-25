@@ -185,18 +185,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         batch(() => {
+          const model = item.model as ModelKey | null
+          const variant = item.variant as string | null
           setStore("current", item.name)
           setStore("last", {
             type: "agent",
             agent: item.name,
-            model: item.model,
-            variant: item.variant ?? null,
+            model,
+            variant,
           })
           const prev = scope()
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
-            variant: item.variant ?? prev?.variant,
+            model: model ?? prev?.model,
+            variant: variant ?? prev?.variant,
           } satisfies State
           const session = id()
           if (session) {
