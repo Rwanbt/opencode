@@ -74,7 +74,17 @@ export function createFileStore() {
   // left over with status:"clean" would let edit-mode render stale bytes after
   // a successful save/reload. Centralizing the invariant here is cheaper than
   // auditing every caller.
-  const markClean = (path: string, content: string, stamp: Stamp, vcs?: FileVcs) =>
+  //
+  // WHY an upsert fallback when the doc is absent: every entry point that
+  // introduces a file into the store (viewer load, editor open, editor
+  // resolveConflict-overwrite) goes through markClean. Requiring each caller
+  // to first upsert would scatter the seed-shape across the codebase and
+  // duplicate it in every branch.
+  const markClean = (path: string, content: string, stamp: Stamp, vcs?: FileVcs) => {
+    if (!state.docs[path]) {
+      upsert(path, { content, stamp, status: "clean", vcs })
+      return
+    }
     setState(
       "docs",
       path,
@@ -87,6 +97,7 @@ export function createFileStore() {
         else delete doc.vcs
       }),
     )
+  }
 
   const markDirty = (path: string, draft: string) =>
     setState(
