@@ -26,7 +26,8 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   const path = ops.normalize(rawPath)
   if (!path) return
-  if (path.startsWith(".git/")) return
+  // WHY: backend paths can use native separators ("\\" on win32); match either.
+  if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
   if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)
@@ -37,13 +38,16 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
     if (node?.type === "directory") {
       if (ops.isDirLoaded(path)) ops.refreshDir(path)
     } else {
-      const parent = path.split("/").slice(0, -1).join("/")
+      // WHY: backend paths can use native separators ("\\" on win32); split on
+      // either so the parent path is computed correctly instead of "" (which
+      // would trigger a full root refresh).
+      const parent = path.split(/[/\\]/).slice(0, -1).join("/")
       if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
     }
     return
   }
   if (kind !== "add" && kind !== "unlink") return
 
-  const parent = path.split("/").slice(0, -1).join("/")
+  const parent = path.split(/[/\\]/).slice(0, -1).join("/")
   if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
 }
