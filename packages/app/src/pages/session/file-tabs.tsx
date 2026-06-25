@@ -24,7 +24,8 @@ import { useEditor } from "@/context/editor"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
-import type { LspCallbacks, LspLocation, LspHoverResult, LspDiagnosticEntry, LspWorkspaceEdit, LspTextEdit, LspCodeAction } from "@opencode-ai/ui/code-mirror-lsp"
+import type { LspCallbacks, LspLocation, LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
+import { applyTextEdits, createLspCallbacks, editsForFile } from "@/pages/session/lsp-handlers"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -212,42 +213,12 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   const [editing, setEditing] = createSignal(false)
   let editorHandle: CodeMirrorHandle | undefined
 
-  // LSP callbacks — stable reference, file path is passed per-call.
-  const lspCallbacks: LspCallbacks = {
-    getDiagnostics: async (f: string) => {
-      const res = await sdk.client.lsp.diagnostics({ file: f })
-      const map = (res.data ?? {}) as unknown as Record<string, LspDiagnosticEntry[]>
-      return map[f] ?? []
-    },
-    hover: async (f: string, line: number, character: number) => {
-      const res = await sdk.client.lsp.hover({ file: f, line, character })
-      return (res.data ?? null) as LspHoverResult | null
-    },
-    definition: async (f: string, line: number, character: number) => {
-      const res = await sdk.client.lsp.definition({ file: f, line, character })
-      return (res.data ?? []) as LspLocation[]
-    },
-    references: async (f: string, line: number, character: number) => {
-      const res = await sdk.client.lsp.references({ file: f, line, character })
-      return (res.data ?? []) as LspLocation[]
-    },
-    complete: async (f: string, line: number, character: number, triggerChar?: string) => {
-      // POST /lsp/completion — not yet in SDK gen, use direct fetch.
-      const url = sdk.url
-      const body = JSON.stringify({ file: f, line, character, ...(triggerChar ? { triggerCharacter: triggerChar } : {}) })
-      const res = await fetch(`${url}/lsp/completion`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      })
-      if (!res.ok) return []
-      return res.json() as Promise<import("@opencode-ai/ui/code-mirror-lsp").LspCompletionItem[]>
-    },
-    // Indirect closures — handlers defined later in the component body
+// LSP callbacks — stable reference, file path is passed per-call.
+  const lspCallbacks: LspCallbacks = createLspCallbacks(sdk, {
     prepareRename: (word, line, character) => handlePrepareRename(word, line, character),
     triggerCodeAction: (line, character, endLine, endCharacter) =>
       void handleTriggerCodeAction(line, character, endLine, endCharacter),
-  }
+  })
 
   // Phase 2: go-to-definition — opens the target file in a new tab.
   // Line-level scroll is deferred to Phase 3 (requires EditorHandle.scrollToLine).
@@ -278,27 +249,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     setRenameInput(word)
   }
 
-  function applyTextEdits(content: string, edits: LspTextEdit[]): string {
-    const lines = content.split("\n")
-    const sorted = [...edits].sort((a, b) => {
-      const ld = b.range.start.line - a.range.start.line
-      return ld !== 0 ? ld : b.range.start.character - a.range.start.character
-    })
-    for (const edit of sorted) {
-      const { start, end } = edit.range
-      if (start.line === end.line) {
-        const l = lines[start.line] ?? ""
-        lines[start.line] = l.slice(0, start.character) + edit.newText + l.slice(end.character)
-      } else {
-        const first = lines[start.line] ?? ""
-        const last = lines[end.line] ?? ""
-        const replacement = (first.slice(0, start.character) + edit.newText + last.slice(end.character)).split("\n")
-        lines.splice(start.line, end.line - start.line + 1, ...replacement)
-      }
-    }
-    return lines.join("\n")
-  }
-
   async function confirmRename() {
     const state = renameState()
     const newName = renameInput().trim()
@@ -317,8 +267,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       const changes = edit.changes ?? {}
 
       // Apply edits to current file if present
-      const currentUri = `file://${p.replace(/\\/g, "/")}`
-      const currentEdits = changes[currentUri] ?? changes[p]
+      const currentEdits = editsForFile(edit, p)
       if (currentEdits?.length && editorHandle) {
         const updated = applyTextEdits(editorHandle.getContent(), currentEdits)
         editorHandle.setContent(updated)
@@ -374,8 +323,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
     // 1. Apply WorkspaceEdit if present
     if (action.edit?.changes) {
-      const currentUri = `file://${p.replace(/\\/g, "/")}`
-      const currentEdits = action.edit.changes[currentUri] ?? action.edit.changes[p]
+      const currentEdits = editsForFile(action.edit, p)
       if (currentEdits?.length && editorHandle) {
         editorHandle.setContent(applyTextEdits(editorHandle.getContent(), currentEdits))
       }
