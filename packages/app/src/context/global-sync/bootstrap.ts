@@ -259,10 +259,8 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.permission.list().then((x) => {
-          const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession(
-            (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
-          )
+          const ids = (x.data ?? []).map((perm) => perm.sessionID)
+          const grouped = groupBySession(x.data ?? [])
           return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
             batch(() => {
               for (const sessionID of Object.keys(input.store.permission)) {
@@ -286,8 +284,8 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.question.list().then((x) => {
-          const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+          const ids = (x.data ?? []).map((question) => question.sessionID)
+          const grouped = groupBySession(x.data ?? [])
           return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
             batch(() => {
               for (const sessionID of Object.keys(input.store.question)) {

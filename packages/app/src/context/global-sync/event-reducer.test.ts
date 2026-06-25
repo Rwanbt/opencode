@@ -480,7 +480,7 @@ describe("applyDirectoryEvent", () => {
       directory: "/tmp",
       loadLsp() {},
     })
-    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions[0]?.header).toBe("updated")
+    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions?.[0]?.header).toBe("updated")
 
     applyDirectoryEvent({
       event: { type: "question.rejected", properties: { sessionID, requestID: "q_2" } },

@@ -8,7 +8,7 @@ const agent = (name = "build") =>
     mode: "primary",
     permission: {},
     options: {},
-  }) as Agent
+  }) as unknown as Agent
 
 describe("normalizeAgentList", () => {
   test("keeps array payloads", () => {

@@ -43,7 +43,7 @@ describe("trimSessions", () => {
     const result = trimSessions(list, {
       limit: 2,
       permission: {
-        "child-kept-by-permission": [{ id: "perm-1" } as PermissionRequest],
+        "child-kept-by-permission": [{ id: "perm-1", sessionID: "ses_keep" } as PermissionRequest],
       },
       now,
     })

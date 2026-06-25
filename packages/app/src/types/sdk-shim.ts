@@ -125,7 +125,8 @@ export type Todo = SessionTodoResponses[200][number]
 // exposes the typed shapes.
 export type PermissionRequest = {
   [key: string]: any
-  id?: string
+  id: string
+  sessionID: string
   permission?: string
   pattern?: string
   metadata?: any
@@ -133,7 +134,8 @@ export type PermissionRequest = {
 }
 export type QuestionRequest = {
   [key: string]: any
-  id?: string
+  id: string
+  sessionID: string
   questions?: any[]
 }
 
@@ -155,6 +157,10 @@ export type QuestionAnswer = {
 // `event.type` against the literal strings documented in the EventSubscribe
 // route response.
 export type Event = EventSubscribeResponses[200]
+// EventSessionError was a top-level alias pre-regen. Re-export the extracted
+// discriminated variant so consumers like notification.tsx can index the
+// error field without an inline Extract at every callsite.
+export type EventSessionError = Extract<Event, { type: "session.error" }>
 
 // ----- Config -----
 // ConfigGetResponses[200] is the global config snapshot.

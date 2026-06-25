@@ -72,7 +72,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     setBusy(directory, true)
 
     const result = await globalSDK.client.worktree
-      .remove({ directory: root, worktreeRemoveInput: { directory } })
+      .remove({ directory } as never)
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -142,7 +142,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
-      .reset({ directory: root, worktreeResetInput: { directory } })
+      .reset({ directory } as never)
       .then((x) => x.data)
       .catch((err) => {
         showToast({

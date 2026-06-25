@@ -320,7 +320,7 @@ export const SourceControl: Component<{
                     class="w-full px-3 py-1.5 text-left text-11-regular hover:bg-bg-hover transition-colors flex items-center gap-2"
                     classList={{ "text-accent-primary font-medium": b.current }}
                     onClick={() => {
-                      if (!b.current) void switchBranch(b.name)
+                      if (!b.current) void switchBranch(b.name ?? "")
                       else setShowBranchDropdown(false)
                     }}
                   >

@@ -287,7 +287,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("permission", permission.sessionID, [permission])
         break
       }
-      const result = Binary.search(permissions, permission.id, (p) => p.id)
+      const result = Binary.search(permissions, permission.id, (p) => p.id ?? "")
       if (result.found) {
         input.setStore("permission", permission.sessionID, result.index, reconcile(permission))
         break
@@ -323,7 +323,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("question", question.sessionID, [question])
         break
       }
-      const result = Binary.search(questions, question.id, (q) => q.id)
+      const result = Binary.search(questions, question.id, (q) => q.id ?? "")
       if (result.found) {
         input.setStore("question", question.sessionID, result.index, reconcile(question))
         break
