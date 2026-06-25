@@ -1,5 +1,11 @@
 [install]
 exact = true
+# WHY: Phase 6.3 dedupe @codemirror/view regression was hidden because
+# `.github/actions/setup-bun` only forces `--linker hoisted` on Windows CI.
+# A local `bun install` (Linux/macOS dev or fresh checkout) re-duplicates
+# codemirror packages and re-introduces the 9 UI typecheck errors. Mandate
+# hoisted at the root config so every dev install produces the same layout.
+linker = "hoisted"
 
 [test]
 root = "./do-not-run-tests-from-root"
