@@ -14,31 +14,30 @@ export function EditorProvider(props: { children: JSX.Element }) {
   const sdk = useSDK()
   const path = createPathHelpers(() => sdk.directory)
 
+  // WHY: the global client uses throwOnError:true, so on any non-2xx the SDK
+  // throws the parsed body BEFORE returning res — making res.response.status
+  // unreachable and collapsing every error (409 conflict included) to
+  // "not-found". A non-throwing client returns {data, response} where
+  // response is the real Response on HTTP errors (undefined on network drop).
+  const api = sdk.createClient({ throwOnError: false })
+
   const store = createEditorStore({
     async readRaw(filePath) {
-      try {
-        const res = await sdk.client.file.readRaw({ path: filePath })
-        if (!res.data) return { type: "not-found" }
-        return { type: "ok", content: res.data.content, stamp: res.data.stamp }
-      } catch {
-        return { type: "not-found" }
-      }
+      const res = await api.file.readRaw({ path: filePath })
+      if (!res.data) return { type: "not-found" }
+      return { type: "ok", content: res.data.content, stamp: res.data.stamp }
     },
 
     async write({ path: filePath, content, expectedHash, format }) {
-      try {
-        const res = await sdk.client.file.write({ path: filePath, content, expectedHash, format })
-        if (res.response.status === 409) return { type: "conflict" }
-        if (res.response.status === 404) return { type: "not-found" }
-        if (!res.data) return { type: "not-found" }
-        return {
-          type: "ok",
-          content: res.data.content,
-          stamp: res.data.stamp,
-          formatted: res.data.formatted,
-        }
-      } catch {
-        return { type: "not-found" }
+      const res = await api.file.write({ path: filePath, content, expectedHash, format })
+      if (res.response?.status === 409) return { type: "conflict" }
+      if (res.response?.status === 404) return { type: "not-found" }
+      if (!res.data) return { type: "not-found" }
+      return {
+        type: "ok",
+        content: res.data.content,
+        stamp: res.data.stamp,
+        formatted: res.data.formatted,
       }
     },
   })
