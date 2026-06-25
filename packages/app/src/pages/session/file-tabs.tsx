@@ -407,6 +407,18 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  // WHY: <Match when={state()?.loaded}>{renderFile(contents())}</Match> only
+  // calls renderFile ONCE (when `loaded` flips false→true). When the
+  // store's .content is mutated via produce() (e.g. on force-refetch),
+  // the JSX is not re-rendered because the call to contents() inside
+  // renderFile was captured at first render. viewerSource wraps the
+  // content in a fresh object on every change, and the `keyed` prop
+  // re-mounts the child whenever the object identity differs.
+  const viewerSource = createMemo(() => {
+    const s = state()
+    if (!s?.loaded) return null
+    return { content: s.content?.content ?? "" }
+  })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -1041,7 +1053,9 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       <Show when={!editing()}>
         <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
           <Switch>
-            <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+            <Match when={viewerSource()} keyed>
+              {(source) => renderFile(source.content)}
+            </Match>
             <Match when={state()?.loading}>
               <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
             </Match>
