@@ -14,7 +14,8 @@
 | Phase 2.1 (FileDoc contrat) | **✅ FAIT 2026-06-25** | `a93d6c6199` | Stamp gardé dans editor/store.ts. Stale absorbé dans `conflict`. Content = string + vcs séparé. 14 tests. 488/488 packages/app + 129/129 backend verts. |
 | Phase 2.2 (trim backend retiré) | **✅ FAIT 2026-06-25** | `76efa186a7` | `.trim()` retiré à `file/index.ts:633`. Pas de `readText()` créé (audit : aucun consumer ne veut le trim). 3 tests backend patchés (ils asservaient le bug R1). 129/129 backend + 488/488 packages/app verts. |
 | Phase 2.3 (unifier read/readRaw) | **✅ FAIT 2026-06-25** | `d8f8c1e998` | `read()` appelle `readRaw()` interne (via `Effect.promise` + `Effect.catch`). VCS mémo paresseux sera dans `FileDoc.vcs` côté frontend (2.4). 488/488 packages/app + 129/129 backend verts. |
-| Phase 2.4 (brancher FileStore) | ⏸ à faire | — | Le gros morceau — `file.tsx` + `editor/store.ts` délèguent à `FileStore`. En plusieurs PRs chacune <400 LOC. |
+| Phase 2.4a (context wrapper) | **✅ FAIT 2026-06-25** | `21de28e84e` | `createFileStore()` exposé via `createSimpleContext` → `useFileStore()` + `<FileStoreProvider>`. Aucun consommateur branché (fondation pure, 17 LOC). 488/488 packages/app verts. |
+| Phase 2.4b-g + 2.5 + 2.6 | ⏸ reporté | — | Migration editor/viewer/watcher/save + découpage file-tabs.tsx. Reporter à session dédiée (beaucoup trop pour une session, risque runtime élevé). |
 | Phase 2.5 (découper file-tabs.tsx) | ⏸ à faire | — | 1072 → 6 fichiers <300 LOC (editor-panel, viewer-panel, lsp-handlers, references-panel, rename-dialog, code-actions-panel). |
 | Phase 2.6 (editorStore.close tab close) | ⏸ à faire | — | `layout.tsx close(tab)` → `editorStore.close(path)`. Sans garde dirty pour l'instant (Phase 3). |
 | Phase 3 (R5, R6 save/dirty) | ⏸ à faire | — | |
