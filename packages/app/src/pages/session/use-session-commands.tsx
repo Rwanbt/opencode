@@ -216,9 +216,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       )
   }
 
+  // Quick Open (Ctrl+P) — files-only mode. Opens a fuzzy file picker with
+  // recent tabs pinned at the top. The same dialog in `mode="all"` is the
+  // command palette (Mod+Shift+P), reachable via `command.palette`.
   const openFile = () => {
     void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+      dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
     })
   }
 
@@ -452,7 +455,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "file.open",
       title: language.t("command.file.open"),
       description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
+      // Quick Open (VS Code convention): plain Mod+P. The chord `mod+k,mod+p`
+      // is kept discoverable via the command palette for muscle memory.
+      keybind: "mod+p",
       slash: "open",
       onSelect: openFile,
     }),
