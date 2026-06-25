@@ -121,10 +121,10 @@ describe("File.write", () => {
         const u2 = Bus.subscribe(FileWatcher.Event.Updated, (e) => updated.push(e.properties))
         try {
           await File.write({ path: "evt.txt", content: "x" })
-          const full = path.join(tmp.path, "evt.txt")
-          await waitFor(() => edited.includes(full) && updated.some((u) => u.file === full))
-          expect(edited).toContain(full)
-          expect(updated.find((u) => u.file === full)?.event).toBe("add")
+          const key = "evt.txt"
+          await waitFor(() => edited.includes(key) && updated.some((u) => u.file === key))
+          expect(edited).toContain(key)
+          expect(updated.find((u) => u.file === key)?.event).toBe("add")
         } finally {
           u1()
           u2()
@@ -207,9 +207,9 @@ describe("File.rename / File.move", () => {
           const newFull = path.join(tmp.path, "b.txt")
           expect(await Bun.file(newFull).text()).toBe("data")
           expect(await Bun.file(oldFull).exists()).toBe(false)
-          await waitFor(() => updated.some((e) => e.file === newFull && e.event === "add"))
-          expect(updated.find((e) => e.file === oldFull)?.event).toBe("unlink")
-          expect(updated.find((e) => e.file === newFull)?.event).toBe("add")
+          await waitFor(() => updated.some((e) => e.file === "b.txt" && e.event === "add"))
+          expect(updated.find((e) => e.file === "a.txt")?.event).toBe("unlink")
+          expect(updated.find((e) => e.file === "b.txt")?.event).toBe("add")
         } finally {
           u()
         }
@@ -278,8 +278,8 @@ describe("File.remove", () => {
           await File.remove({ path: "a.txt" })
           const full = path.join(tmp.path, "a.txt")
           expect(await Bun.file(full).exists()).toBe(false)
-          await waitFor(() => updated.some((e) => e.file === full && e.event === "unlink"))
-          expect(updated.find((e) => e.file === full)?.event).toBe("unlink")
+          await waitFor(() => updated.some((e) => e.file === "a.txt" && e.event === "unlink"))
+          expect(updated.find((e) => e.file === "a.txt")?.event).toBe("unlink")
         } finally {
           u()
         }

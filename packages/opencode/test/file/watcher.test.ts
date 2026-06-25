@@ -6,6 +6,7 @@ import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from 
 import { tmpdir } from "../fixture/fixture"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
+import { File } from "../../src/file"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 
@@ -112,9 +113,15 @@ function ready(directory: string) {
   const head = path.join(directory, ".git", "HEAD")
 
   return Effect.gen(function* () {
+    // WHY (R2): the watcher publishes canonical relative keys, not absolute
+    // paths. Compute the expected key here (under the active Instance ALS
+    // context provided by withWatcher) instead of comparing to the raw path.
+    const fileKey = yield* Effect.sync(() => File.toCanonicalRelative(file))
+    const headKey = yield* Effect.sync(() => File.toCanonicalRelative(head))
+
     yield* nextUpdate(
       directory,
-      (evt) => evt.file === file && evt.event === "add",
+      (evt) => evt.file === fileKey && evt.event === "add",
       Effect.promise(() => fs.writeFile(file, "ready")),
     ).pipe(Effect.ensuring(Effect.promise(() => fs.rm(file, { force: true }).catch(() => undefined))), Effect.asVoid)
 
@@ -130,7 +137,7 @@ function ready(directory: string) {
     const hash = yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).quiet().text())
     yield* nextUpdate(
       directory,
-      (evt) => evt.file === head && evt.event !== "unlink",
+      (evt) => evt.file === headKey && evt.event !== "unlink",
       Effect.promise(async () => {
         await fs.writeFile(path.join(directory, ".git", "refs", "heads", branch), hash.trim() + "\n")
         await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
@@ -151,6 +158,7 @@ describeWatcher("FileWatcher", () => {
   test("publishes root create, update, and delete events", async () => {
     await using tmp = await tmpdir({ git: true })
     const file = path.join(tmp.path, "watch.txt")
+    const fileKey = await Instance.provide({ directory: tmp.path, fn: () => File.toCanonicalRelative(file) })
     const dir = tmp.path
     const cases = [
       { event: "add" as const, trigger: Effect.promise(() => fs.writeFile(file, "a")) },
@@ -161,8 +169,8 @@ describeWatcher("FileWatcher", () => {
     await withWatcher(
       dir,
       Effect.forEach(cases, ({ event, trigger }) =>
-        nextUpdate(dir, (evt) => evt.file === file && evt.event === event, trigger).pipe(
-          Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event }))),
+        nextUpdate(dir, (evt) => evt.file === fileKey && evt.event === event, trigger).pipe(
+          Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file: fileKey, event }))),
         ),
       ),
     )
@@ -171,21 +179,23 @@ describeWatcher("FileWatcher", () => {
   test("watches non-git roots", async () => {
     await using tmp = await tmpdir()
     const file = path.join(tmp.path, "plain.txt")
+    const fileKey = await Instance.provide({ directory: tmp.path, fn: () => File.toCanonicalRelative(file) })
     const dir = tmp.path
 
     await withWatcher(
       dir,
       nextUpdate(
         dir,
-        (e) => e.file === file && e.event === "add",
+        (e) => e.file === fileKey && e.event === "add",
         Effect.promise(() => fs.writeFile(file, "plain")),
-      ).pipe(Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event: "add" })))),
+      ).pipe(Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file: fileKey, event: "add" })))),
     )
   })
 
   test("cleanup stops publishing events", async () => {
     await using tmp = await tmpdir({ git: true })
     const file = path.join(tmp.path, "after-dispose.txt")
+    const fileKey = await Instance.provide({ directory: tmp.path, fn: () => File.toCanonicalRelative(file) })
 
     // Start and immediately stop the watcher (withWatcher disposes on exit)
     await withWatcher(tmp.path, Effect.void)
@@ -197,7 +207,7 @@ describeWatcher("FileWatcher", () => {
         Effect.runPromise(
           noUpdate(
             tmp.path,
-            (e) => e.file === file,
+            (e) => e.file === fileKey,
             Effect.promise(() => fs.writeFile(file, "gone")),
           ),
         ),
@@ -207,13 +217,14 @@ describeWatcher("FileWatcher", () => {
   test("ignores .git/index changes", async () => {
     await using tmp = await tmpdir({ git: true })
     const gitIndex = path.join(tmp.path, ".git", "index")
+    const gitIndexKey = await Instance.provide({ directory: tmp.path, fn: () => File.toCanonicalRelative(gitIndex) })
     const edit = path.join(tmp.path, "tracked.txt")
 
     await withWatcher(
       tmp.path,
       noUpdate(
         tmp.path,
-        (e) => e.file === gitIndex,
+        (e) => e.file === gitIndexKey,
         Effect.promise(async () => {
           await fs.writeFile(edit, "a")
           await $`git add .`.cwd(tmp.path).quiet().nothrow()
@@ -225,6 +236,7 @@ describeWatcher("FileWatcher", () => {
   test("publishes .git/HEAD events", async () => {
     await using tmp = await tmpdir({ git: true })
     const head = path.join(tmp.path, ".git", "HEAD")
+    const headKey = await Instance.provide({ directory: tmp.path, fn: () => File.toCanonicalRelative(head) })
     const branch = `watch-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
 
@@ -232,12 +244,12 @@ describeWatcher("FileWatcher", () => {
       tmp.path,
       nextUpdate(
         tmp.path,
-        (evt) => evt.file === head && evt.event !== "unlink",
+        (evt) => evt.file === headKey && evt.event !== "unlink",
         Effect.promise(() => fs.writeFile(head, `ref: refs/heads/${branch}\n`)),
       ).pipe(
         Effect.tap((evt) =>
           Effect.sync(() => {
-            expect(evt.file).toBe(head)
+            expect(evt.file).toBe(headKey)
             expect(["add", "change"]).toContain(evt.event)
           }),
         ),

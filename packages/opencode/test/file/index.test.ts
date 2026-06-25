@@ -943,4 +943,60 @@ describe("file/index Filesystem patterns", () => {
       })
     })
   })
+
+  // WHY (R2 in PLAN-EDITEUR-IDE-DEFINITIF): the backend must publish the same
+  // canonical key the frontend store uses. toCanonicalRelative is the single
+  // conversion point — tested here so the contract is locked.
+  describe("File.toCanonicalRelative", () => {
+    test("absolute native path → relative forward-slash key", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const filePath = path.join(dir, "src", "app.ts")
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          expect(File.toCanonicalRelative(filePath)).toBe(
+            path.join("src", "app.ts").split(path.sep).join("/"),
+          )
+        },
+      })
+    })
+
+    test("key never contains the platform separator (R2 regression)", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const filePath = path.join(dir, "src", "deep", "file.ts")
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const key = File.toCanonicalRelative(filePath)
+          expect(key).not.toContain(path.sep)
+        },
+      })
+    })
+
+    test("key is identical regardless of the input's separator style", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const real = path.join(dir, "src", "app.ts")
+      await fs.mkdir(path.dirname(real), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const fromNative = File.toCanonicalRelative(real)
+          // Simulate the same file referenced with the OPPOSITE separator
+          // (mimics what parcel/watcher does cross-platform: native on win32,
+          // forward on posix). The key must be identical.
+          const opposite = real.split(path.sep).join(path.sep === "/" ? "\\" : "/")
+          const fromOpposite = File.toCanonicalRelative(opposite)
+          expect(fromNative).toBe(fromOpposite)
+        },
+      })
+    })
+  })
 })

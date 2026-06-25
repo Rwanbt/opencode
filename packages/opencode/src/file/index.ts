@@ -874,16 +874,34 @@ export namespace File {
   }
 
   async function notifyWrite(full: string, kind: "add" | "change") {
-    Bus.publish(Event.Edited, { file: full })
-    await Bus.publish(FileWatcher.Event.Updated, { file: full, event: kind })
+    const key = toCanonicalRelative(full)
+    Bus.publish(Event.Edited, { file: key })
+    await Bus.publish(FileWatcher.Event.Updated, { file: key, event: kind })
     // LSP refresh is best-effort in 1a; the editor consumes diagnostics in Phase 2.
+    // LSP.touchFile still takes the absolute path — its own internal contract.
     await LSP.touchFile(full, false).catch(() => {})
   }
 
   async function notifyDelete(full: string) {
-    Bus.publish(Event.Edited, { file: full })
-    await Bus.publish(FileWatcher.Event.Updated, { file: full, event: "unlink" })
+    const key = toCanonicalRelative(full)
+    Bus.publish(Event.Edited, { file: key })
+    await Bus.publish(FileWatcher.Event.Updated, { file: key, event: "unlink" })
     await LSP.touchFile(full, false).catch(() => {})
+  }
+
+  // WHY (R2 in PLAN-EDITEUR-IDE-DEFINITIF): the frontend FileStore keys file
+  // content by the canonical key produced by
+  // packages/app/src/context/file/canonical.ts — forward-slash, no `file://`,
+  // no query/hash, no git quoting, relative to the project root. Publishing
+  // that exact shape from the backend makes the contract structural: the
+  // client never has to defensively re-normalize. Native parcel/watcher
+  // callbacks and our own writes produce absolute native paths
+  // ("D:\\repo\\src\\app.ts" on win32). This function is the ONE place that
+  // converts absolute → relative-canonical for event payloads.
+  // LSP and other consumers that need an absolute path must keep using `full`.
+  export function toCanonicalRelative(full: string): string {
+    const rel = path.relative(Instance.directory, full)
+    return rel.split(path.sep).join("/")
   }
 
   // Result of a write: the FINAL on-disk content (may differ from the sent
