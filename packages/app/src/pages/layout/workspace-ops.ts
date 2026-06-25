@@ -10,7 +10,7 @@
 import { produce } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { showToast, toaster } from "@opencode-ai/ui/toast"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 import type { useGlobalSDK } from "@/context/global-sdk"
 import type { useGlobalSync } from "@/context/global-sync"

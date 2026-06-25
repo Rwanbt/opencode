@@ -6,7 +6,7 @@ import type {
   ProviderAuthResponse,
   ProviderListResponse,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "../types/sdk-shim"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
@@ -180,7 +180,6 @@ function createGlobalSync() {
     if (cached) return cached
     const sdk = globalSDK.createClient({
       directory,
-      throwOnError: true,
     })
     sdkCache.set(directory, sdk)
     return sdk

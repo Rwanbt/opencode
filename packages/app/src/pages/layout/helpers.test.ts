@@ -8,7 +8,7 @@ import {
   parseNewSessionDeepLink,
   parseOAuthCallbackDeepLink,
 } from "./deep-links"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../../types/sdk-shim"
 import {
   displayName,
   effectiveWorkspaceOrder,

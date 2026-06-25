@@ -63,7 +63,7 @@ beforeAll(async () => {
     useParams: () => params,
   }))
 
-  mock.module("@opencode-ai/sdk/v2/client", () => ({
+  mock.module("../../types/sdk-shim", () => ({
     createOpencodeClient: (input: { directory: string }) => {
       createdClients.push(input.directory)
       return clientFor(input.directory)

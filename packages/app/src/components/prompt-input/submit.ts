@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "../../types/sdk-shim"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
@@ -352,7 +352,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (sessionDirectory !== projectDirectory) {
         client = sdk.createClient({
           directory: sessionDirectory,
-          throwOnError: true,
         })
         globalSync.child(sessionDirectory)
       }

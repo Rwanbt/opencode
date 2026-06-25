@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test"
-import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { FileContent } from "../../types/sdk-shim"
 import {
   approxBytes,
   evictContentLru,

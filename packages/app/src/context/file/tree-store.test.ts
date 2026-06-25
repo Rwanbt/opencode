@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "../../types/sdk-shim"
 import { createFileTreeStore } from "./tree-store"
 
 // D-08: pure-logic coverage for the file-explorer tree state. createFileTreeStore

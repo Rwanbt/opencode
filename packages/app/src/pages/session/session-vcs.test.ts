@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiff } from "../../types/sdk-shim"
 import { createVcsHelpers } from "./session-vcs"
 
 // D-08: createVcsHelpers is a factory-with-deps (ADR-0001) whose internal state

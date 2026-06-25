@@ -6,7 +6,7 @@
  * `wantsReview` (defined later in the component).  Only the pure I/O
  * helpers — which have no forward dependencies — move here.
  */
-import type { FileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiff } from "../../types/sdk-shim"
 import type { SetStoreFunction } from "solid-js/store"
 
 export type VcsMode = "git" | "branch"

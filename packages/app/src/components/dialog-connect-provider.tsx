@@ -1,4 +1,4 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "../types/sdk-shim"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -168,7 +168,6 @@ export function DialogConnectProvider(props: { provider: string }) {
             method: index,
             inputs,
           },
-          { throwOnError: true },
         )
         .then((x) => {
           if (!alive.value) return

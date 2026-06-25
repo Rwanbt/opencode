@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { FileDiff, Project, UserMessage } from "../types/sdk-shim"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {

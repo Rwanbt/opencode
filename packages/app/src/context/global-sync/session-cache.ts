@@ -6,7 +6,7 @@ import type {
   QuestionRequest,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "../../types/sdk-shim"
 
 export const SESSION_CACHE_LIMIT = 40
 

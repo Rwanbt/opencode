@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useFile } from "@/context/file"
 import { moveNode, type FileOpDeps } from "@/context/file/operations"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "../types/sdk-shim"
 
 export function DialogFileMove(props: {
   node: FileNode

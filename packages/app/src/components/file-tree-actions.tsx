@@ -4,7 +4,7 @@ import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "../types/sdk-shim"
 
 export interface FileTreeActionsProps {
   node: FileNode

@@ -1,7 +1,7 @@
 import { createMemo, onMount, type Accessor } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../../types/sdk-shim"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"

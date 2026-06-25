@@ -9,7 +9,7 @@
  */
 import { batch, createEffect, untrack, type Accessor } from "solid-js"
 import { produce, reconcile } from "solid-js/store"
-import type { Session, Message } from "@opencode-ai/sdk/v2/client"
+import type { Session, Message } from "../../types/sdk-shim"
 import type { useGlobalSDK } from "@/context/global-sdk"
 import type { useGlobalSync } from "@/context/global-sync"
 import { retry } from "@opencode-ai/util/retry"

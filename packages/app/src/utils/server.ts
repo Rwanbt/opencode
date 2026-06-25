@@ -1,4 +1,4 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { createOpencodeClient } from "../types/sdk-shim"
 import type { ServerConnection } from "@/context/server"
 
 export function createSdkForServer({

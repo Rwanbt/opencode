@@ -5,7 +5,7 @@
  * window bounded to recent turns, reveals cached turns in small batches while
  * scrolling upward, and prefetches older history near the top.
  */
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "../../types/sdk-shim"
 import { createMemo, createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { same } from "@/utils/same"

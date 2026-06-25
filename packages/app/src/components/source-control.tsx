@@ -22,7 +22,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@/context/sdk"
-import type { GitBranchEntry, GitCommitEntry, GitOpResult, GitWorkingStatusEntry } from "@opencode-ai/sdk/v2"
+import type { GitBranchEntry, GitCommitEntry, GitOpResult, GitWorkingStatusEntry } from "../types/sdk-shim"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

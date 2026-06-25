@@ -17,7 +17,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "../../types/sdk-shim"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
