@@ -88,7 +88,9 @@ export function createFileTreeStore(options: TreeStoreOptions) {
               const keys = Object.keys(draft)
               for (const key of keys) {
                 for (const removed of removedDirs) {
-                  if (!key.startsWith(removed + "/")) continue
+                  // WHY: nested keys use the platform separator ("\\" on win32
+                  // via path.relative) — match either, not just "/".
+                  if (!key.startsWith(removed + "/") && !key.startsWith(removed + "\\")) continue
                   delete draft[key]
                   break
                 }

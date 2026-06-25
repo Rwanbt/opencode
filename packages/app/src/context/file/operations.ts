@@ -9,13 +9,16 @@ export interface FileOpDeps {
   refreshDir: (dir: string) => Promise<void> | void
 }
 
+// WHY: backend list() builds paths via node:path.relative, which yields "\"
+// on win32 — so FileNode.path is backslash-delimited for nested entries.
+// Split on whichever separator is present (last wins).
 function parentDir(filePath: string): string {
-  const idx = filePath.lastIndexOf("/")
+  const idx = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"))
   return idx === -1 ? "" : filePath.slice(0, idx)
 }
 
 function basename(filePath: string): string {
-  const idx = filePath.lastIndexOf("/")
+  const idx = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"))
   return idx === -1 ? filePath : filePath.slice(idx + 1)
 }
 
