@@ -10,6 +10,12 @@
 // `extras` instead of being read off a closure. This keeps the LSP layer
 // decoupled from the rename/code-action UI state, which lives in
 // rename-dialog.tsx and code-actions-panel.tsx respectively.
+//
+// Phase 4.3: all five routes (diagnostics, hover, definition, references,
+// completion) now flow through the typed SDK client. Phase 4.3 also moved
+// the four WRITE-side LSP calls (rename / codeAction / executeCommand /
+// completion) from raw fetch into lsp-actions.tsx so the read/write split
+// matches the lsp-handlers.ts vs lsp-actions.tsx boundary.
 
 import type {
   LspCallbacks,
@@ -19,6 +25,7 @@ import type {
   LspLocation,
   LspTextEdit,
   LspWorkspaceEdit,
+  LspCompletionItem,
 } from "@opencode-ai/ui/code-mirror-lsp"
 
 export interface LspHandlerExtras {
@@ -26,7 +33,11 @@ export interface LspHandlerExtras {
   triggerCodeAction: (line: number, character: number, endLine: number, endCharacter: number) => void
 }
 
-/** Minimal SDK surface needed by the LSP wrappers. */
+/**
+ * Minimal SDK surface needed by the LSP wrappers. The `url` field is kept
+ * for back-compat (callers may still inspect it for logging) but every
+ * transport decision is delegated to `client.lsp.*`.
+ */
 export interface LspSdk {
   url: string
   client: {
@@ -35,6 +46,12 @@ export interface LspSdk {
       hover: (input: { file: string; line: number; character: number }) => Promise<{ data?: unknown }>
       definition: (input: { file: string; line: number; character: number }) => Promise<{ data?: unknown }>
       references: (input: { file: string; line: number; character: number }) => Promise<{ data?: unknown }>
+      completion: (input: {
+        file: string
+        line: number
+        character: number
+        triggerCharacter?: string
+      }) => Promise<{ data?: unknown }>
     }
   }
 }
@@ -59,22 +76,13 @@ export function createLspCallbacks(sdk: LspSdk, extras: LspHandlerExtras): LspCa
       return (res.data ?? []) as LspLocation[]
     },
     complete: async (file: string, line: number, character: number, triggerChar?: string) => {
-      // WHY direct fetch: /lsp/completion is not yet in the generated SDK.
-      // Tracked in PLAN-EDITEUR-IDE-DEFINITIF §2 (R-code&conv, fetch → SDK migration).
-      const url = sdk.url
-      const body = JSON.stringify({
+      const res = await sdk.client.lsp.completion({
         file,
         line,
         character,
         ...(triggerChar ? { triggerCharacter: triggerChar } : {}),
       })
-      const res = await fetch(`${url}/lsp/completion`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      })
-      if (!res.ok) return []
-      return res.json() as Promise<import("@opencode-ai/ui/code-mirror-lsp").LspCompletionItem[]>
+      return (res.data ?? []) as LspCompletionItem[]
     },
     prepareRename: (word, line, character) => extras.prepareRename(word, line, character),
     triggerCodeAction: (line, character, endLine, endCharacter) =>

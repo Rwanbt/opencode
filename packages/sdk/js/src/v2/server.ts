@@ -1,13 +1,25 @@
 import launch from "cross-spawn"
-import type { Config } from "./gen/types.gen.js"
 import { stop, bindAbort } from "../process.js"
+
+/**
+ * Minimal subset of the opencode server config the spawn wrapper actually
+ * reads (currently only `logLevel`). The full schema used to live at
+ * `gen/types.gen.ts:Config` but was split into `GlobalConfigGetResponse` /
+ * `GlobalConfigUpdateData` after the OpenAPI surface refactor (commit
+ * 61c5d7e6b0) — we only forward logLevel to the CLI flag, so an inline
+ * shape keeps the SDK package self-contained and avoids pulling the entire
+ * global-config response tree.
+ */
+export interface SpawnConfig {
+  logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
+}
 
 export type ServerOptions = {
   hostname?: string
   port?: number
   signal?: AbortSignal
   timeout?: number
-  config?: Config
+  config?: SpawnConfig
 }
 
 export type TuiOptions = {
@@ -16,7 +28,7 @@ export type TuiOptions = {
   session?: string
   agent?: string
   signal?: AbortSignal
-  config?: Config
+  config?: SpawnConfig
 }
 
 export async function createOpencodeServer(options?: ServerOptions) {

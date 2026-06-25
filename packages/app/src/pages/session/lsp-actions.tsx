@@ -2,18 +2,17 @@
 //
 // WHY extracted: the rename (F2) and code-action (Ctrl+.) flows are
 // self-contained UI controllers — they own their own signals (rename state,
-// loading, code-actions list) and their handlers. The handlers call the
-// server with `fetch` directly today; Phase 4.3 will swap the four fetch
-// calls for the typed SDK client once the OpenAPI routes are regenerated.
+// loading, code-actions list) and their handlers. Phase 4.3 swapped the
+// direct fetch calls for the typed SDK client (`sdk.client.lsp.rename`,
+// `codeAction`, `executeCommand`) — the OpenAPI regen in
+// `packages/sdk/js/script/build.ts` now exposes these routes on the
+// generated Lsp client.
 //
 // Decoupled from createLspCallbacks (in lsp-handlers.ts) which only defines
 // the read-only LSP operations consumed by CodeMirror. The actions here are
 // the WRITE side of LSP — they trigger `prepareRename` / `triggerCodeAction`
 // via the callbacks registered by the parent, then drive rename-dialog and
 // code-actions-panel state.
-//
-// Direct fetch kept verbatim from Phase 2.5 so behavior is preserved 1:1
-// during the mechanical extraction. Phase 4.3 replaces these calls.
 
 import { createSignal } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -24,12 +23,44 @@ import { useLanguage } from "@/context/language"
 import type { RenameState } from "@/pages/session/rename-dialog"
 import type { CodeActionPos } from "@/pages/session/code-actions-panel"
 
-interface LspSdk {
-  url: string
+/**
+ * Loose structural view of the LSP client surface. The actual SDK returns a
+ * generic response tagged by `ThrowOnError` whose `.data` field is either
+ * the typed payload OR undefined (on non-2xx). We cast to the local
+ * `LspCodeAction` / `LspWorkspaceEdit` types at the boundary — the shapes
+ * match the OpenAPI Zod schemas (see `packages/opencode/src/server/routes/lsp.ts`).
+ *
+ * Using `any` for the response shape is intentional: the SDK generic depends
+ * on a `ThrowOnError` flag we never pass, and tightening the interface here
+ * would require either casting every call site or re-exporting the SDK's
+ * internal response types. The cast at the call site (`as LspCodeAction[]`
+ * below) is the safer boundary to maintain.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: SDK generic — see comment above
+interface LspSdkLike {
+  client: {
+    lsp: {
+      rename: (input: { file: string; line: number; character: number; newName: string }) => Promise<any>
+      codeAction: (input: {
+        file: string
+        line: number
+        character: number
+        endLine: number
+        endCharacter: number
+      }) => Promise<any>
+      executeCommand: (input: {
+        file: string
+        line: number
+        character: number
+        command: string
+        commandArgs?: Array<unknown>
+      }) => Promise<any>
+    }
+  }
 }
 
 interface LspActionsInput {
-  sdk: LspSdk
+  sdk: LspSdkLike
   path: () => string | undefined
   editorHandle: () => CodeMirrorHandle | undefined
 }
@@ -76,11 +107,15 @@ export function createLspActions(input: LspActionsInput): LspActionsHandle {
     }
     setRenameLoading(true)
     try {
-      const url = input.sdk.url
-      const body = JSON.stringify({ file: p, line: state.line, character: state.character, newName })
-      const res = await fetch(`${url}/lsp/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body })
-      if (!res.ok) throw new Error(`${res.status}`)
-      const edit = (await res.json()) as LspWorkspaceEdit
+      const res = await input.sdk.client.lsp.rename({
+        file: p,
+        line: state.line,
+        character: state.character,
+        newName,
+      })
+      // SDK default is non-throwing; data is the parsed body, response is the raw Response
+      if (res.error || !res.data) throw new Error(`rename failed: ${res.response?.status ?? "no response"}`)
+      const edit = res.data as LspWorkspaceEdit
       const changes = edit.changes ?? {}
 
       const currentEdits = editsForFile(edit, p)
@@ -131,12 +166,15 @@ export function createLspActions(input: LspActionsInput): LspActionsHandle {
     setCodeActionsLoading(true)
     setCodeActions([])
     try {
-      const url = input.sdk.url
-      const body = JSON.stringify({ file: p, line, character, endLine, endCharacter })
-      const res = await fetch(`${url}/lsp/code-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body })
-      if (!res.ok) return
-      const actions = (await res.json()) as LspCodeAction[]
-      setCodeActions(actions)
+      const res = await input.sdk.client.lsp.codeAction({
+        file: p,
+        line,
+        character,
+        endLine,
+        endCharacter,
+      })
+      // silent — empty actions list is a valid response (no quick fix available)
+      setCodeActions(((res.data ?? []) as unknown) as LspCodeAction[])
     } catch {
       // silent — no actions is valid
     } finally {
@@ -168,15 +206,17 @@ export function createLspActions(input: LspActionsInput): LspActionsHandle {
     }
 
     if (action.command?.command) {
-      const url = input.sdk.url
-      const body = JSON.stringify({
-        file: p,
-        line: pos.line,
-        character: pos.character,
-        command: action.command.command,
-        commandArgs: action.command.arguments ?? [],
-      })
-      await fetch(`${url}/lsp/execute-command`, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => null)
+      // Fire-and-forget per LSP spec: the server-side command emits its
+      // own effects (open file, format, etc.) and we don't surface a result.
+      await input.sdk.client.lsp
+        .executeCommand({
+          file: p,
+          line: pos.line,
+          character: pos.character,
+          command: action.command.command,
+          commandArgs: action.command.arguments ?? [],
+        })
+        .catch(() => null)
     }
   }
 
