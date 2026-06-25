@@ -247,7 +247,11 @@ export default function Page() {
     if (!tab) return
 
     const path = file.pathFromTab(tab)
-    if (path) file.load(path)
+    // Force: between two activations of the same tab the file may have
+    // changed (external edit, another session, save-then-close-then-reopen).
+    // Without force, the cache hit at file.tsx:166 returns the stale
+    // pre-change content. Cost: one file.read per tab activation.
+    if (path) file.load(path, { force: true })
   })
 
   createEffect(
