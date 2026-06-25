@@ -26,6 +26,7 @@ import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type { LspCallbacks, LspLocation, LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
 import { applyTextEdits, createLspCallbacks, editsForFile } from "@/pages/session/lsp-handlers"
+import { RenameDialog, type RenameState } from "@/pages/session/rename-dialog"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -239,7 +240,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   }
 
   // Stretch Phase 2: rename symbol (F2 → dialog → POST /lsp/rename → apply edits)
-  type RenameState = { word: string; line: number; character: number }
   const [renameState, setRenameState] = createSignal<RenameState | null>(null)
   const [renameInput, setRenameInput] = createSignal("")
   const [renameLoading, setRenameLoading] = createSignal(false)
@@ -934,38 +934,14 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       </Show>
 
       {/* Stretch Phase 2: Rename dialog (F2) */}
-      <Show when={renameState()}>
-        <div class="border-t border-border-weak-base bg-background-stronger px-3 py-2 flex items-center gap-2 shrink-0">
-          <span class="text-11-regular text-text-weaker shrink-0">Renommer en :</span>
-          <input
-            class="flex-1 bg-surface-base border border-border-weak-base rounded px-2 py-1 text-12-regular text-text-base outline-none focus:border-accent-primary"
-            value={renameInput()}
-            onInput={(e) => setRenameInput(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void confirmRename()
-              if (e.key === "Escape") setRenameState(null)
-            }}
-            ref={(el) => { setTimeout(() => { el.focus(); el.select() }, 0) }}
-            disabled={renameLoading()}
-            placeholder="nouveau nom"
-          />
-          <button
-            type="button"
-            disabled={renameLoading() || !renameInput().trim()}
-            onClick={() => void confirmRename()}
-            class="text-10-regular px-2 py-1 rounded bg-accent-primary text-white disabled:opacity-40 shrink-0"
-          >
-            {renameLoading() ? "…" : "OK"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setRenameState(null)}
-            class="text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0"
-          >
-            ✕
-          </button>
-        </div>
-      </Show>
+      <RenameDialog
+        state={renameState}
+        input={renameInput}
+        loading={renameLoading}
+        onInput={setRenameInput}
+        onConfirm={() => void confirmRename()}
+        onCancel={() => setRenameState(null)}
+      />
 
       {/* Stretch Phase 2: References panel (Shift+F12) */}
       <Show when={refLocations().length > 0}>
