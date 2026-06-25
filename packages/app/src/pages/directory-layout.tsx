@@ -10,6 +10,9 @@ import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 // FORK: editor context (ADR-0005)
 import { EditorProvider, EditorTabCleanup } from "@/context/editor"
+// Phase 5.5: LSP diagnostics store (lives alongside SyncProvider so the listener
+// auto-tears-down on directory change).
+import { LspDiagnosticsProvider } from "@/context/lsp-diagnostics"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -83,7 +86,9 @@ export default function Layout(props: ParentProps) {
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
           <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            <LspDiagnosticsProvider>
+              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            </LspDiagnosticsProvider>
           </SyncProvider>
         </SDKProvider>
       )}

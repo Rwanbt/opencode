@@ -14,6 +14,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { useLspDiagnostics } from "@/context/lsp-diagnostics"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
@@ -163,6 +164,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const sdk = useSDK()
+  const diagnostics = useLspDiagnostics()
 
   const [load, setLoad] = createStore({
     lspDone: false,
@@ -239,6 +241,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
+  // LSP diagnostics counts — pulled from the diagnostics store which subscribes
+  // to `lsp.updated` events. Used to badge the LSP tab trigger and group the
+  // tab body by file when the user opens the popover.
+  const diagTotal = createMemo(() => diagnostics.total())
+  const diagFiles = createMemo(() => diagnostics.files())
   const plugins = createMemo(() =>
     (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
   )
@@ -267,6 +274,9 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
             {lspCount() > 0 ? `${lspCount()} ` : ""}
             {language.t("status.popover.tab.lsp")}
+            <Show when={diagTotal() > 0}>
+              <span class="ml-1 text-icon-critical-base font-medium">{diagTotal()}</span>
+            </Show>
           </Tabs.Trigger>
           <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
             {pluginCount() > 0 ? `${pluginCount()} ` : ""}
@@ -396,7 +406,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           <div class="flex flex-col px-2 pb-2">
             <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
               <Show
-                when={lspItems().length > 0}
+                when={lspItems().length > 0 || diagFiles().length > 0}
                 fallback={
                   <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.lsp.empty")}</div>
                 }
@@ -415,6 +425,34 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     </div>
                   )}
                 </For>
+                <Show when={diagFiles().length > 0}>
+                  <div class="mt-2 pt-2 border-t border-border-weak-base">
+                    <div class="text-11-regular text-text-weak px-2 pb-1">
+                      {language.t("status.popover.lsp.diagnostics")}
+                    </div>
+                    <For each={diagFiles()}>
+                      {(file) => {
+                        const list = diagnostics.for(file)
+                        const err = list.filter((d) => d.severity === 1).length
+                        const warn = list.filter((d) => d.severity === 2).length
+                        return (
+                          <div
+                            class="flex items-center gap-2 w-full px-2 py-1"
+                            title={list.map((d) => `${d.severity === 1 ? "E" : "W"} L${d.range.start.line + 1}: ${d.message}`).join("\n")}
+                          >
+                            <span class="text-14-regular text-text-base truncate flex-1">{file}</span>
+                            <Show when={err > 0}>
+                              <span class="text-12-regular text-icon-critical-base">{err}</span>
+                            </Show>
+                            <Show when={warn > 0}>
+                              <span class="text-12-regular text-icon-warning-base">{warn}</span>
+                            </Show>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
+                </Show>
               </Show>
             </div>
           </div>

@@ -511,6 +511,7 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Gérer les serveurs",
+  "status.popover.lsp.diagnostics": "Diagnostics",
   "session.share.popover.title": "Publier sur le web",
   "session.share.popover.description.shared":
     "Cette session est publique sur le web. Elle est accessible à toute personne disposant du lien.",
