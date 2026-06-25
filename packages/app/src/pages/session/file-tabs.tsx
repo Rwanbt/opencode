@@ -30,6 +30,7 @@ import { RenameDialog, type RenameState } from "@/pages/session/rename-dialog"
 import { CodeActionsPanel, type CodeActionPos } from "@/pages/session/code-actions-panel"
 import { ReferencesPanel, uriToDisplayPath } from "@/pages/session/references-panel"
 import { EditorPanel } from "@/pages/session/editor-panel"
+import { ViewerPanel } from "@/pages/session/viewer-panel"
 import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
@@ -625,51 +626,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   // expression in the Dynamic's file prop, which triggers a re-render of
   // the file component. A plain string value would be captured at first
   // render and never refresh.
-  const renderFile = (source: () => string) => (
-    <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source(),
-          cacheKey: source().length,
-        }}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
-        onRendered={() => {
-          scrollSync.queueRestore()
-        }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
-    </div>
-  )
 
   // FORK: Stretch Phase 6 — When override=true (split-pane right panel) we
   // bypass Tabs.Content so the content is always visible. We use Dynamic to
@@ -734,15 +690,16 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       {/* END FORK */}
 
       <Show when={!editing()}>
-        <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
-          <Switch>
-            <Match when={state()?.loaded}>{renderFile(() => contents())}</Match>
-            <Match when={state()?.loading}>
-              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-            </Match>
-            <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-          </Switch>
-        </ScrollView>
+        <ViewerPanel
+          path={path}
+          state={state}
+          contents={contents}
+          scrollSync={scrollSync}
+          commentsUi={commentsUi}
+          search={search}
+          activeSelection={activeSelection}
+          commentedLines={commentedLines}
+        />
       </Show>
     </Dynamic>
   )
