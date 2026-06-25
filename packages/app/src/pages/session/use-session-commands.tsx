@@ -234,6 +234,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
+  // Global search (Mod+Shift+F) — project-wide ripgrep palette. Always
+  // enabled (no file scope needed). Reachable from the command palette too.
+  const openSearch = () => {
+    void import("@/components/dialog-select-search").then((x) => {
+      dialog.show(() => <x.DialogSelectSearch />)
+    })
+  }
+
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
@@ -509,6 +517,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+o",
       disabled: !activeFileTab(),
       onSelect: openSymbols,
+    }),
+    fileCommand({
+      id: "editor.search",
+      title: language.t("command.editor.search"),
+      description: language.t("command.editor.search.description"),
+      // Global search — VS Code convention.
+      keybind: "mod+shift+f",
+      onSelect: openSearch,
     }),
   ]
 
