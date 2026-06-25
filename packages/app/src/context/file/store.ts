@@ -14,6 +14,7 @@
 // exists yet — wire-up comes later.
 
 import { createStore, produce } from "solid-js/store"
+import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { Stamp } from "../editor/store"
 
 export type FileStatus = "clean" | "dirty" | "saving" | "conflict" | "missing"
@@ -143,3 +144,18 @@ export function createFileStore() {
 }
 
 export type FileStore = ReturnType<typeof createFileStore>
+
+// WHY: `createFileStore` is a pure factory (tested without context in
+// store.test.ts) but consumers grab it via Solid's context to avoid prop
+// drilling. This wraps the factory in `createSimpleContext` — the same
+// pattern used by `useFile` (context/file.tsx) and `useLayout`.
+//
+// No I/O, no SDK client, no watcher wiring here. The store starts empty;
+// callers populate entries (2.4b wires context/file.tsx, 2.4c wires
+// context/editor.tsx). No watcher yet — that lands in 2.4d.
+//
+// The Provider is exposed via `FileStoreProvider`; the read hook is `useFileStore`.
+export const { use: useFileStore, provider: FileStoreProvider } = createSimpleContext({
+  name: "FileStore",
+  init: createFileStore,
+})
