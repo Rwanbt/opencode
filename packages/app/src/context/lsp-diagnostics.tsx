@@ -58,8 +58,11 @@ export const { use: useLspDiagnostics, provider: LspDiagnosticsProvider } = crea
     // `lsp.updated` is the SDK event the server emits after re-publishing
     // diagnostics. Coalesced upstream by `global-sdk.tsx` (same key per
     // directory), so a flurry of publishes triggers exactly one re-fetch.
-    const stop = sdk.event.listen((event) => {
-      if (event.type === "lsp.updated") void refresh()
+    // Note: the per-directory emitter wraps the SSE envelope, so the typed
+    // event payload is at `e.details` (see editor.tsx:60 for the same pattern).
+    const stop = sdk.event.listen((e) => {
+      if (e.details.type !== "lsp.updated") return
+      void refresh()
     })
     onCleanup(stop)
 
