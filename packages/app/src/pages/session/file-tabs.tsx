@@ -1,27 +1,16 @@
-import { createEffect, createMemo, createSignal, For, lazy, Match, on, onCleanup, Show, Suspense, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
-import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
 import { sampledChecksum } from "@opencode-ai/util/encode"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
-import { useComments } from "@/context/comments"
-import { useLanguage } from "@/context/language"
-import { usePrompt } from "@/context/prompt"
+import { useFile, type SelectedLineRange } from "@/context/file"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 // FORK: editor (ADR-0005)
 import { useEditor } from "@/context/editor"
-import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type { LspCallbacks, LspLocation, LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
@@ -31,8 +20,9 @@ import { CodeActionsPanel, type CodeActionPos } from "@/pages/session/code-actio
 import { ReferencesPanel, uriToDisplayPath } from "@/pages/session/references-panel"
 import { EditorPanel } from "@/pages/session/editor-panel"
 import { ViewerPanel } from "@/pages/session/viewer-panel"
+import { createCommentsOverlay } from "@/pages/session/comments-overlay"
+import { installFileKeybindings } from "@/pages/session/file-keybindings"
 import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
-import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
 // chunk — only fetched when the user first enters edit mode.
@@ -43,39 +33,6 @@ const CodeMirrorEditor = lazy(() =>
 // Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
 // (session-side-panel.tsx) keep their import path stable.
 export const requestAutoEdit = _requestAutoEdit
-
-function FileCommentMenu(props: {
-  moreLabel: string
-  editLabel: string
-  deleteLabel: string
-  onEdit: VoidFunction
-  onDelete: VoidFunction
-}) {
-  return (
-    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <DropdownMenu gutter={4} placement="bottom-end">
-        <DropdownMenu.Trigger
-          as={IconButton}
-          icon="dot-grid"
-          variant="ghost"
-          size="small"
-          class="size-6 rounded-md"
-          aria-label={props.moreLabel}
-        />
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={props.onEdit}>
-              <DropdownMenu.ItemLabel>{props.editLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={props.onDelete}>
-              <DropdownMenu.ItemLabel>{props.deleteLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu>
-    </div>
-  )
-}
 
 type ScrollPos = { x: number; y: number }
 
@@ -199,10 +156,6 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 // system so the component can be shown in the split-pane right panel.
 export function FileTabContent(props: { tab: string; override?: boolean }) {
   const file = useFile()
-  const comments = useComments()
-  const language = useLanguage()
-  const prompt = usePrompt()
-  const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
@@ -213,7 +166,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   // FORK: editor state (ADR-0005) + Phase 2 LSP callbacks
   const sdk = useSDK()
   const editorStore = useEditor()
-  const settings = useSettings()
   const [editing, setEditing] = createSignal(false)
   const [editorHandle, setEditorHandle] = createSignal<CodeMirrorHandle | undefined>(undefined)
 
@@ -409,200 +361,32 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     view,
   })
 
-  const selectionPreview = (source: string, selection: FileSelection) => {
-    return previewSelectedLines(source, {
-      start: selection.startLine,
-      end: selection.endLine,
-    })
-  }
-
-  const buildPreview = (filePath: string, selection: FileSelection) => {
-    const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
-    if (!source) return undefined
-    return selectionPreview(source, selection)
-  }
-
-  const addCommentToContext = (input: {
-    file: string
-    selection: SelectedLineRange
-    comment: string
-    preview?: string
-    origin?: "review" | "file"
-  }) => {
-    const selection = selectionFromLines(input.selection)
-    const preview = input.preview ?? buildPreview(input.file, selection)
-
-    const saved = comments.add({
-      file: input.file,
-      selection: input.selection,
-      comment: input.comment,
-    })
-    prompt.context.add({
-      type: "file",
-      path: input.file,
-      selection,
-      comment: input.comment,
-      commentID: saved.id,
-      commentOrigin: input.origin,
-      preview,
-    })
-  }
-
-  const updateCommentInContext = (input: {
-    id: string
-    file: string
-    selection: SelectedLineRange
-    comment: string
-  }) => {
-    comments.update(input.file, input.id, input.comment)
-    const preview = input.file === path() ? buildPreview(input.file, selectionFromLines(input.selection)) : undefined
-    prompt.context.updateComment(input.file, input.id, {
-      comment: input.comment,
-      ...(preview ? { preview } : {}),
-    })
-  }
-
-  const removeCommentFromContext = (input: { id: string; file: string }) => {
-    comments.remove(input.file, input.id)
-    prompt.context.removeComment(input.file, input.id)
-  }
-
-  const fileComments = createMemo(() => {
-    const p = path()
-    if (!p) return []
-    return comments.list(p)
+  // Comments overlay (Phase 2.5): line-comment controller + selection preview +
+  // cross-file previews + path-reset effect + focus-open effect — all moved to
+  // comments-overlay.tsx. Exposes the same surface (commentsUi, fileComments,
+  // commentedLines, activeSelection) that ViewerPanel consumes.
+  const commentsOverlay = createCommentsOverlay({
+    path,
+    contents,
+    tab: props.tab,
+    getFileSource: (p) => file.get(p)?.content?.content,
+    setSelectedLines: (p, range) => file.setSelectedLines(p, range),
+    editing,
+    isActiveTab: () => props.override ? true : activeFileTab() === props.tab,
   })
 
-  const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
-
-  const [note, setNote] = createStore({
-    openedComment: null as string | null,
-    commenting: null as SelectedLineRange | null,
-    selected: null as SelectedLineRange | null,
+  // Tab keybindings (Phase 2.5): Ctrl+F focuses the search box, Ctrl+\ toggles
+  // the split pane. Moved to file-keybindings.ts. Both handlers gate on the
+  // active tab unless `override` (split-pane right panel).
+  installFileKeybindings({
+    tab: props.tab,
+    override: props.override,
+    editing,
+    isActiveTab: () => props.override ? true : activeFileTab() === props.tab,
+    path,
+    find: () => find,
+    view,
   })
-
-  const syncSelected = (range: SelectedLineRange | null) => {
-    const p = path()
-    if (!p) return
-    file.setSelectedLines(p, range ? cloneSelectedLineRange(range) : null)
-  }
-
-  const activeSelection = () => note.selected ?? selectedLines()
-
-  const commentsUi = createLineCommentController({
-    comments: fileComments,
-    label: language.t("ui.lineComment.submit"),
-    draftKey: () => path() ?? props.tab,
-    mention: {
-      items: file.searchFilesAndDirectories,
-    },
-    state: {
-      opened: () => note.openedComment,
-      setOpened: (id) => setNote("openedComment", id),
-      selected: () => note.selected,
-      setSelected: (range) => setNote("selected", range),
-      commenting: () => note.commenting,
-      setCommenting: (range) => setNote("commenting", range),
-      syncSelected,
-      hoverSelected: syncSelected,
-    },
-    getHoverSelectedRange: activeSelection,
-    cancelDraftOnCommentToggle: true,
-    clearSelectionOnSelectionEndNull: true,
-    onSubmit: ({ comment, selection }) => {
-      const p = path()
-      if (!p) return
-      addCommentToContext({ file: p, selection, comment, origin: "file" })
-    },
-    onUpdate: ({ id, comment, selection }) => {
-      const p = path()
-      if (!p) return
-      updateCommentInContext({ id, file: p, selection, comment })
-    },
-    onDelete: (comment) => {
-      const p = path()
-      if (!p) return
-      removeCommentFromContext({ id: comment.id, file: p })
-    },
-    editSubmitLabel: language.t("common.save"),
-    renderCommentActions: (_, controls) => (
-      <FileCommentMenu
-        moreLabel={language.t("common.moreOptions")}
-        editLabel={language.t("common.edit")}
-        deleteLabel={language.t("common.delete")}
-        onEdit={controls.edit}
-        onDelete={controls.remove}
-      />
-    ),
-  })
-
-  createEffect(() => {
-    if (typeof window === "undefined") return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!props.override && activeFileTab() !== props.tab) return
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
-      if (event.key.toLowerCase() !== "f") return
-      // FORK: in edit mode CM's searchKeymap handles Ctrl+F itself — let the
-      // event propagate down to the CM editor element instead of intercepting.
-      if (editing()) return
-      // END FORK
-      event.preventDefault()
-      event.stopPropagation()
-      find?.focus()
-    }
-
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
-  })
-
-  // FORK: Stretch Phase 6 — Ctrl+\ toggles split pane for the active tab
-  createEffect(() => {
-    if (typeof window === "undefined") return
-    const onSplitKey = (event: KeyboardEvent) => {
-      if (!props.override && activeFileTab() !== props.tab) return
-      if (!(event.ctrlKey || event.metaKey) || event.key !== "\\") return
-      event.preventDefault()
-      event.stopPropagation()
-      const splitView = view().editorSplit
-      if (splitView.tab()) {
-        splitView.close()
-      } else {
-        const p = path()
-        if (p) splitView.open(props.tab)
-      }
-    }
-    makeEventListener(window, "keydown", onSplitKey, { capture: true })
-  })
-
-  createEffect(
-    on(
-      path,
-      () => {
-        commentsUi.note.reset()
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(() => {
-    const focus = comments.focus()
-    const p = path()
-    if (!focus || !p) return
-    if (focus.file !== p) return
-    if (!props.override && activeFileTab() !== props.tab) return
-
-    const target = fileComments().find((comment) => comment.id === focus.id)
-    if (!target) return
-
-    commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
-    requestAnimationFrame(() => comments.clearFocus())
-  })
-
-  const _cancelCommenting = () => {
-    const p = path()
-    if (p) file.setSelectedLines(p, null)
-    setNote("commenting", null)
-  }
 
   let prev = {
     loaded: false,
@@ -695,10 +479,10 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
           state={state}
           contents={contents}
           scrollSync={scrollSync}
-          commentsUi={commentsUi}
+          commentsUi={commentsOverlay.commentsUi}
           search={search}
-          activeSelection={activeSelection}
-          commentedLines={commentedLines}
+          activeSelection={commentsOverlay.activeSelection}
+          commentedLines={commentsOverlay.commentedLines}
         />
       </Show>
     </Dynamic>
