@@ -24,8 +24,8 @@
 | Phase 2.5 (découper file-tabs.tsx) | **✅ FAIT 2026-06-25** | `ee487b732f` + `63cd4cd763` + `35c0fb606f` + `1564ca5b4c` + `20d8d38279` + `59bd5709ff` + `91625f1b17` | 972 → 427 LOC. 8 nouveaux fichiers : lsp-handlers.ts, rename-dialog.tsx, code-actions-panel.tsx, references-panel.tsx, editor-panel.tsx, viewer-panel.tsx, comments-overlay.tsx (factory pattern), file-keybindings.ts. + auto-edit.ts pour le module-level set. file-tabs.tsx sous alerte 500 (strict <300 cible non atteinte — glue LSP/rename/code-action reste inline ~120 LOC). |
 | Phase 2.6 (editorStore.close tab close) | **✅ FAIT 2026-06-25** | `c7391cb92a` | `EditorTabCleanup` composant (enfant de `EditorProvider`) qui réagit aux changements de `layout.tabs(sessionKey).all` et appelle `editor.close(path)` pour les tabs retirés. Sans garde dirty pour l'instant (Phase 3). |
 | **Phase 2 status global** | **✅✅✅ COMPLÈTE** | 12 commits | 2.1 + 2.2 + 2.3 + 2.4a-g + 2.5 + 2.6 tous faits. **Critère R1 satisfait** : `disk ≡ FileStore.content ≡ editor.baseline.content` à chaque stable point, asserté par E2E test 1 sur 5 étapes. `bun test packages/app` → **492/492 verts** (488 → 492, +4 E2E). |
-| Phase 3 (R5, R6 save/dirty) | ⏸ à faire | — | |
-| Phase 4 (UI/conv) | ⏸ à faire | — | |
+| Phase 3 (R5, R6 save/dirty) | **✅ FAIT 2026-06-25** | `6fef10a25a` + `3032fd2185` + `315311360e` + `e709258955` + `0333705ac9` + `9516e25476` + `d99157db39` | 7 commits. `autoSave` / `formatOnSave` settings split + migration, debounced autosave 1s, dirty tab dot lit `FileStore.status`, Save/Don't save/Cancel dialog via `EditorCloseGuardProvider`, "Revert File" command palette. `bun test packages/app` → 519 verts. |
+| **Phase 4 status global** | **✅✅✅ COMPLÈTE (partielle 4.4)** | 4 commits | `2bc1bff266` (4.1) + `402ec77031` (4.2) + `cc8816f188` (4.3) + `e8fff6c7b3` (4.4). file-tabs 494 → 243 LOC ; 17 nouvelles clés i18n en+fr ; SDK LSP regen (rename/codeAction/executeCommand/completion) ; throwOnError default global → false. **3 overrides `throwOnError:true` explicites restent** (global-sync:183, submit.ts:355, dialog-connect-provider.tsx:171) — deferred Phase 5+ car chaque override nécessite un refactor per-call-site avec audit {data, response} et test E2E. |
 | Phase 5 (IDE features) | ⏸ à faire | — | |
 | Phase 6 (tests CI) | ⏸ partiel | — | canonical.test.ts ✅, manque : non-régression open→save→close→reopen, watcher echo, dirty-close, invariants runtime. |
 
@@ -281,12 +281,38 @@ Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 20
 + `OpenCode/sessions/2026-06-25 - Session Phase 3 Save Dirty.md` pour l'état détaillé.
 
 ### Phase 4 — Cohérence UI & conventions (R-code&conv)
-1. **Extraire `file-tabs.tsx`** (1072 LOC) en modules : `editor-panel.tsx`, `rename-dialog.tsx`,
-   `code-actions-panel.tsx`, `references-panel.tsx`, `lsp-handlers.ts`. Cible <300 LOC/fichier.
-2. **Internationaliser** tout le texte FR en dur → `language.t(...)` + entrées `en.ts`/`fr.ts`.
-3. **Régénérer le SDK** avec `/lsp/{completion,rename,code-action,execute-command}` ;
-   remplacer les `fetch` directs par `sdk.client.lsp.*`. Typage + transport unifiés.
-4. **Client SDK fichier non-throwant par défaut** pour les ops fichier (supprime la dualité).
+1. ✅ **Extraire `file-tabs.tsx`** (1072 → 243 LOC) en modules : `editor-panel.tsx`,
+   `rename-dialog.tsx`, `code-actions-panel.tsx`, `references-panel.tsx`,
+   `lsp-handlers.ts`, `scroll-content-sync.tsx`, `lsp-actions.tsx`.
+   Cible <300 LOC/fichier atteinte (file-tabs 243 + scroll-content-sync 113 +
+   lsp-actions 166). Commit `2bc1bff266` (2026-06-25).
+2. ✅ **Internationaliser** tout le texte FR/EN en dur → `language.t(...)` + entrées
+   `en.ts`/`fr.ts` (17 nouvelles clés : `editor.stale.*`, `editor.conflict.*`,
+   `editor.missing.*`, `editor.aria.edit`, `panel.split.close/closeButton`,
+   `rename.dialog.*`, `codeActions.*`, `references.title`, `toast.lsp.*`).
+   Critère `rg '"[A-Z][^"]{3,}"' session/*.tsx | grep -v language.t` → 0 hors
+   comments. Commit `402ec77031` (2026-06-25).
+3. ✅ **Régénérer le SDK** (`packages/sdk/js/script/build.ts`) avec les routes
+   LSP manquantes : `lsp.rename`, `lsp.codeAction`, `lsp.executeCommand`,
+   `lsp.completion`. Remplacer les 4 `fetch()` directs par
+   `sdk.client.lsp.{rename,codeAction,executeCommand,completion}` dans
+   `lsp-handlers.ts:71` et `lsp-actions.tsx`. Critère
+   `rg 'fetch\(' packages/app/src/pages/session` → 0.
+   Collateral fix : `packages/sdk/js/src/v2/server.ts` — `Config` type
+   renommé dans `GlobalConfigResponse` après le refactor backend
+   (commit 61c5d7e6b0), `SpawnConfig` minimal en remplacement.
+   Commit `cc8816f188` (2026-06-25).
+4. ✅ **Client SDK non-throwant par défaut** : `createOpencodeClient` passe
+   désormais `throwOnError:false` à `createClient` (était `undefined` →
+   dépendait des overrides explicites). Migration des 2 root defaults
+   (`global-sdk.tsx:234`, `sdk.tsx:20`) + retrait du workaround
+   `throwOnError:false` dans `context/editor.tsx:27`. **3 overrides
+   `throwOnError:true` explicites restent** (intentionnels, deferred
+   Phase 5+) : `global-sync.tsx:183`, `prompt-input/submit.ts:355`,
+   `dialog-connect-provider.tsx:171`. Commit `e8fff6c7b3` (2026-06-25).
+
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 4)
++ `OpenCode/sessions/2026-06-25 - Session Phase 4 UI Conventions.md` pour l'état détaillé.
 
 ### Phase 5 — Features IDE (manquants #5–17, par valeur)
 - **Persistance onglets** : stocker la liste d'onglets par projet (localStorage / SQLite).
