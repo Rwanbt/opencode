@@ -9,7 +9,7 @@ import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 // FORK: editor context (ADR-0005)
-import { EditorProvider } from "@/context/editor"
+import { EditorProvider, EditorTabCleanup } from "@/context/editor"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -40,7 +40,11 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     >
       <LocalProvider>
         {/* FORK: editor store scoped to the current directory (ADR-0005) */}
-        <EditorProvider>{props.children}</EditorProvider>
+        <EditorProvider>
+          {/* Phase 2.6: drop editor entries when their file tab closes. */}
+          <EditorTabCleanup />
+          {props.children}
+        </EditorProvider>
       </LocalProvider>
     </DataProvider>
   )

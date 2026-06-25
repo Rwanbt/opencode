@@ -3,10 +3,12 @@
 // transport and the file watcher event stream. Lives inside SDKProvider so
 // the store is scoped to the current directory — it resets when the directory
 // changes because the whole SDKProvider subtree remounts.
-import { createContext, onCleanup, useContext, type JSX } from "solid-js"
+import { createContext, createEffect, onCleanup, useContext, type JSX } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { createPathHelpers } from "./file/path"
 import { useSDK } from "./sdk"
 import { useFileStore } from "./file/store"
+import { useLayout } from "./layout"
 import { createEditorStore, type EditorStore } from "./editor/store"
 
 const EditorContext = createContext<EditorStore>()
@@ -80,4 +82,45 @@ export function useEditor(): EditorStore {
   const ctx = useContext(EditorContext)
   if (!ctx) throw new Error("useEditor() must be called within <EditorProvider>")
   return ctx
+}
+
+/**
+ * Reactive glue between the layout tabs and the editor store (Phase 2.6).
+ *
+ * When a file tab disappears from `layout.tabs(sessionKey).all()`, drop the
+ * matching entry from the editor store and (transitively, via the mirror
+ * added in Phase 2.4c) from the shared FileStore. Without this, closing a
+ * tab leaves a stale baseline hanging in the editor's in-memory state —
+ * a later reopen of the same path would NOT re-read from disk because
+ * `existing && !existing.missing` short-circuits in editor.open().
+ *
+ * Mounted INSIDE <EditorProvider> so it can grab `useEditor()`, but kept as
+ * a separate component so it can also call `useLayout()` and `useParams()`
+ * (the parent <EditorProvider> is intentionally unaware of router/layout).
+ */
+export function EditorTabCleanup() {
+  const editor = useEditor()
+  const layout = useLayout()
+  const params = useParams()
+  const sdk = useSDK()
+  const path = createPathHelpers(() => sdk.directory)
+
+  // sessionKey mirrors the same shape file.tsx uses (params.dir + optional
+  // params.id). If the schema drifts, both contexts must drift together —
+  // they index the SAME layout.sessionTabs[] entry.
+  const sessionKey = () => `${params.dir}${params.id ? "/" + params.id : ""}`
+  const all = layout.tabs(sessionKey).all
+
+  let prev = new Set<string>()
+  createEffect(() => {
+    const next = new Set(all())
+    for (const tab of prev) {
+      if (next.has(tab)) continue
+      const filePath = path.pathFromTab(tab)
+      if (filePath) editor.close(filePath)
+    }
+    prev = next
+  })
+
+  return null
 }
