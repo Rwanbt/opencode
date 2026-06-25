@@ -5,7 +5,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
-import type { QuestionAnswer, QuestionRequest } from "../../../types/sdk-shim"
+import type { QuestionAnswer, QuestionInfo, QuestionRequest } from "../../../types/sdk-shim"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -62,7 +62,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const sdk = useSDK()
   const language = useLanguage()
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() => props.request.questions ?? [])
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(props.request.id)
@@ -147,7 +147,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (store.customOn[tab] === true) return list.length
     return Math.max(
       0,
-      list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
+      list.findIndex((item: QuestionInfo) => store.answers[tab]?.includes(item.label) ?? false),
     )
   }
 
