@@ -99,7 +99,7 @@ export function createFileStore() {
     )
   }
 
-  const markDirty = (path: string, draft: string) =>
+  const markDirty = (path: string, draft?: string) =>
     setState(
       "docs",
       path,

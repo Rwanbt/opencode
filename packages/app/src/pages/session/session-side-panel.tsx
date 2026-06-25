@@ -23,6 +23,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
+import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -48,6 +49,7 @@ export function SessionSidePanel(props: {
   size: Sizing
 }) {
   const layout = useLayout()
+  const guard = useEditorCloseGuard()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -371,7 +373,7 @@ export function SessionSidePanel(props: {
                         </Tabs.Trigger>
                       </Show>
                       <SortableProvider ids={openedTabs()}>
-                        <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
+                        <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={guard.close} />}</For>
                       </SortableProvider>
                       <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                         <TooltipKeybind

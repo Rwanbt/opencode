@@ -1,6 +1,7 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -46,6 +47,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const layout = useLayout()
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
+  const guard = useEditorCloseGuard()
 
   const info = () => {
     const id = params.id
@@ -221,7 +223,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
-    tabs().close(tab)
+    // FORK (Phase 3.4): route through the dirty-close guard so a dirty
+    // file tab pauses for Save/Don't save/Cancel before closing.
+    void guard.close(tab)
   }
 
   const addSelection = () => {

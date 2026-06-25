@@ -377,6 +377,12 @@ export const dict = {
   "dialog.file.move.title": "Move to...",
   "dialog.file.move.label": "Destination folder",
   "dialog.file.move.placeholder": "path/to/folder",
+  // FORK (Phase 3.4, PLAN-EDITEUR-IDE-DEFINITIF) — dirty close guard
+  "dialog.dirtyClose.title": "Unsaved changes",
+  "dialog.dirtyClose.description": '"{{name}}" has unsaved changes. Save before closing?',
+  "dialog.dirtyClose.save": "Save",
+  "dialog.dirtyClose.discard": "Don't save",
+  "dialog.dirtyClose.cancel": "Cancel",
 
   "fileOps.newFile": "New File",
   "fileOps.newFolder": "New Folder",

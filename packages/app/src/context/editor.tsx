@@ -10,6 +10,7 @@ import { useSDK } from "./sdk"
 import { useFileStore } from "./file/store"
 import { useLayout } from "./layout"
 import { createEditorStore, type EditorStore } from "./editor/store"
+import { EditorCloseGuardProvider } from "./editor/close-guard"
 
 const EditorContext = createContext<EditorStore>()
 
@@ -75,7 +76,15 @@ export function EditorProvider(props: { children: JSX.Element }) {
 
   onCleanup(stop)
 
-  return <EditorContext.Provider value={store}>{props.children}</EditorContext.Provider>
+  // FORK (Phase 3.4): wrap children in EditorCloseGuardProvider so file
+  // tabs gain the Save/Don't save/Cancel dialog on close. The guard reads
+  // FileStore.status (set by this same store via mirror()) to decide
+  // whether to pause and prompt.
+  return (
+    <EditorContext.Provider value={store}>
+      <EditorCloseGuardProvider>{props.children}</EditorCloseGuardProvider>
+    </EditorContext.Provider>
+  )
 }
 
 export function useEditor(): EditorStore {
