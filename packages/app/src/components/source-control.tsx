@@ -112,16 +112,18 @@ export const SourceControl: Component<{
 
       const rawFiles = (statusRes.data ?? []) as GitWorkingStatusEntry[]
 
-      const files: FileStatus[] = rawFiles.map((f) => {
-        // XY code: X = index (staged), Y = worktree (unstaged)
-        const x = f.code?.[0] ?? "?"
-        const isStaged = x !== " " && x !== "?"
-        return {
-          path: f.file,
-          kind: statusKind(f.code ?? "??"),
-          staged: isStaged,
-        }
-      })
+      const files: FileStatus[] = rawFiles
+        .filter((f): f is typeof f & { file: string } => f.file !== undefined)
+        .map((f) => {
+          // XY code: X = index (staged), Y = worktree (unstaged)
+          const x = f.code?.[0] ?? "?"
+          const isStaged = x !== " " && x !== "?"
+          return {
+            path: f.file,
+            kind: statusKind(f.code ?? "??"),
+            staged: isStaged,
+          }
+        })
 
       setState("files", files)
       setState("branches", (branchRes.data ?? []) as GitBranchEntry[])
