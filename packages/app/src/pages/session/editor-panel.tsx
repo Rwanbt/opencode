@@ -11,10 +11,12 @@
 // code-actions-panel apply edits through it), and the save/reload/overwrite/
 // discard/recreate callbacks (they own the SDK + toast coordination).
 
-import { createEffect, createMemo, lazy, Match, Show, Suspense, Switch } from "solid-js"
+import { createEffect, createMemo, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js"
 import { useEditor } from "@/context/editor"
+import { useFileStore } from "@/context/file/store"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { createAutosave } from "@/context/editor/autosave"
 import { showToast } from "@opencode-ai/ui/toast"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
@@ -58,8 +60,22 @@ export interface EditorPanelProps {
 
 export function EditorPanel(props: EditorPanelProps) {
   const editorStore = useEditor()
+  const fileStore = useFileStore()
   const language = useLanguage()
   const settings = useSettings()
+
+  // FORK (Phase 3.2): debounced autosave factory, scoped to this editor
+  // instance. The CM handle is in scope here (not at EditorProvider level),
+  // so this is the right place to wire `contentFor`. Per-keystroke
+  // scheduling happens in handleEditorChange; the factory's own status
+  // gating handles saving/conflict/missing re-checks at fire time.
+  const autosave = createAutosave({
+    fileStore,
+    editor: editorStore,
+    contentFor: () => props.editorHandle?.getContent() ?? "",
+    enabled: () => settings.general.autoSave(),
+  })
+  onCleanup(() => autosave.cancelAll())
 
   // Guard: hide the pencil for binary files (NUL bytes) and files over 1 MB.
   const canEdit = createMemo(() => {
@@ -104,7 +120,12 @@ export function EditorPanel(props: EditorPanelProps) {
     if (!p) return
     const entry = editorStore.get(p)
     if (!entry) return
-    editorStore.setDirty(p, content !== entry.baseline.content)
+    const dirty = content !== entry.baseline.content
+    editorStore.setDirty(p, dirty)
+    // FORK (Phase 3.2): arm the debounce on every keystroke. The factory
+    // re-checks FileStore status at fire time, so a manual save mid-debounce
+    // (status → saving) automatically aborts the scheduled save.
+    if (dirty) autosave.schedule(p)
   }
 
   const applyDocEffect = (eff: { type: string; content?: string }) => {
@@ -194,6 +215,18 @@ export function EditorPanel(props: EditorPanelProps) {
     if (!entry) return
     if (entry.dirty || entry.stale || entry.saving || entry.conflict || entry.missing) return
     props.editorHandle?.setContent(entry.baseline.content)
+  })
+
+  // FORK (Phase 3.2): when status leaves "dirty" (manual save completed,
+  // conflict surfaced, file went missing, or the tab is closing), cancel
+  // any in-flight autosave timer — otherwise a save would fire 1s after
+  // a conflict is on screen, masking the user-visible banner.
+  createEffect(() => {
+    const p = props.path()
+    if (!p) return
+    const entry = editorStore.get(p)
+    if (!entry) return
+    if (!entry.dirty) autosave.cancel(p)
   })
 
   return (
