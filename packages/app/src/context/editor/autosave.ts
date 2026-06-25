@@ -57,8 +57,11 @@ export function createAutosave(deps: AutosaveDeps): AutosaveHandle {
       timers.delete(path)
       const doc = deps.fileStore.get(path)
       if (!doc) return
-      if (doc.status !== "dirty") return
-      if (doc.status === "conflict" || doc.status === "missing" || doc.status === "saving") return
+      // Re-check status at fire time (race-safe): the user may have hit
+      // Ctrl+S, an external write may have flipped to conflict, or the
+      // file may have been deleted. Any non-dirty state cancels the save.
+      const status: string = doc.status
+      if (status !== "dirty") return
       void deps.editor.save(path, content)
     }, delay)
     timers.set(path, t)
