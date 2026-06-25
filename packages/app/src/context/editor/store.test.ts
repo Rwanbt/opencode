@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { createEditorStore, type EditorDeps, type WriteResult } from "./store"
+import { createFileStore } from "../file/store"
 
 // Pure state-machine tests for the editor store (ADR-0005, 1b-core). No
 // CodeMirror, no SDK — deps are an in-memory "disk". Runs under the app
@@ -165,6 +166,38 @@ describe("editor store — discard / reload", () => {
     disk.set("a.ts", "v2-disk")
     const eff = await store.reload("a.ts")
     expect(eff).toEqual({ type: "set", content: "v2-disk" })
+    expect(store.get("a.ts")!.baseline.content).toBe("v2-disk")
+  })
+
+  // FORK (Phase 3.5, PLAN-EDITEUR-IDE-DEFINITIF): revert is the public
+  // alias for reload used by the "Revert File" command palette entry.
+  // The contract: dirty edits are dropped, disk content becomes the new
+  // baseline, FileStore mirrors to status="clean" + new stamp.
+  test("revert discards dirty edits and re-reads disk (idempotent)", async () => {
+    const { deps, disk } = fakeDeps({ "a.ts": "v1" })
+    const fileStore = createFileStore()
+    const store = createEditorStore({ ...deps, fileStore })
+
+    fileStore.markClean("a.ts", "v1", { hash: hash("v1") })
+    await store.open("a.ts")
+    store.setDirty("a.ts", true)
+    expect(store.get("a.ts")!.dirty).toBe(true)
+    expect(fileStore.get("a.ts")!.status).toBe("dirty")
+
+    // External write happens between edit and revert.
+    disk.set("a.ts", "v2-disk")
+
+    const eff = await store.revert("a.ts")
+    expect(eff).toEqual({ type: "set", content: "v2-disk" })
+    expect(store.get("a.ts")!.dirty).toBe(false)
+    expect(store.get("a.ts")!.baseline.content).toBe("v2-disk")
+    expect(fileStore.get("a.ts")!.status).toBe("clean")
+    expect(fileStore.get("a.ts")!.content).toBe("v2-disk")
+
+    // Idempotent: a second revert with no new disk changes returns the
+    // same baseline (the CM setContent guard makes this a no-op visually).
+    const eff2 = await store.revert("a.ts")
+    expect(eff2).toEqual({ type: "set", content: "v2-disk" })
     expect(store.get("a.ts")!.baseline.content).toBe("v2-disk")
   })
 })

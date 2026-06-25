@@ -50,6 +50,10 @@ export const dict = {
   "command.file.new.description": "Create a new file in the project",
   "command.file.newFolder": "New folder",
   "command.file.newFolder.description": "Create a new folder in the project",
+  // FORK (Phase 3.5) — palette entry to discard local edits and reload
+  // the file from disk. Mirrors VS Code's "Revert File" command.
+  "command.file.revert": "Revert File",
+  "command.file.revert.description": "Discard local changes and reload from disk",
   "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",

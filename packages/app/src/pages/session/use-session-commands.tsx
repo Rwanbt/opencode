@@ -1,6 +1,7 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useEditor } from "@/context/editor"
 import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
@@ -48,6 +49,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
   const guard = useEditorCloseGuard()
+  const editor = useEditor()
 
   const info = () => {
     const id = params.id
@@ -226,6 +228,21 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     // FORK (Phase 3.4): route through the dirty-close guard so a dirty
     // file tab pauses for Save/Don't save/Cancel before closing.
     void guard.close(tab)
+  }
+
+  // FORK (Phase 3.5): discard local edits for the active file tab and
+  // reload from disk. EditorPanel's reactive effect watches the entry
+  // and applies the new baseline content to CM (setContent is idempotent
+  // on equal bytes). No keybind — palette only — because mod+shift+r is
+  // already taken by review.toggle.
+  const revertFile = () => {
+    const tab = activeFileTab()
+    if (!tab) return
+    const p = file.pathFromTab(tab)
+    if (!p) return
+    const entry = editor.get(p)
+    if (!entry) return
+    void editor.revert(p)
   }
 
   const addSelection = () => {
@@ -459,6 +476,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+w",
       disabled: !closableTab(),
       onSelect: closeTab,
+    }),
+    fileCommand({
+      id: "file.revert",
+      title: language.t("command.file.revert"),
+      description: language.t("command.file.revert.description"),
+      // No keybind: mod+shift+r is taken by review.toggle. Reachable via
+      // command palette only. VS Code convention is the same — palette,
+      // no default chord.
+      disabled: !activeFileTab(),
+      onSelect: revertFile,
     }),
   ]
 

@@ -221,6 +221,14 @@ export function createEditorStore(deps: EditorDeps) {
     }
   }
 
+  // FORK (Phase 3.5, PLAN-EDITEUR-IDE-DEFINITIF): public alias for
+  // `reload()` exposed to the command palette as "Revert File". Same
+  // semantics — discard local edits, fetch disk bytes, reseed the
+  // baseline and the FileStore. Renamed so the command palette title
+  // matches user vocabulary (VS Code convention: "Revert File" reads
+  // better than "Reload"). Idempotent.
+  const revert = reload
+
   /** Resolve a 409 conflict: keep disk (reload) or force mine (overwrite). */
   async function resolveConflict(path: string, content: string, action: "reload" | "overwrite"): Promise<DocEffect> {
     if (action === "reload") return reload(path)
@@ -321,6 +329,7 @@ export function createEditorStore(deps: EditorDeps) {
     save,
     discard,
     reload,
+    revert,
     resolveConflict,
     recreate,
     onExternalChange,
