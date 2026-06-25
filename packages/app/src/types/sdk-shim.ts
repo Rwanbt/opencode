@@ -149,7 +149,11 @@ export type Project = ProjectListResponses[200][number] & {
   description?: string
   source?: { value: string; start: number; end: number }
 }
-export type Agent = ProjectListResponses[200][number] & { [key: string]: unknown }
+export type Agent = ProjectListResponses[200][number] & {
+  [key: string]: unknown
+  name: string
+  color?: string
+}
 export type Command = ProjectListResponses[200][number] & {
   [key: string]: unknown
   description?: string
