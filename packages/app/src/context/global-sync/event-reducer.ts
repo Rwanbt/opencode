@@ -305,7 +305,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; requestID: string }
       const permissions = input.store.permission[props.sessionID]
       if (!permissions) break
-      const result = Binary.search(permissions, props.requestID, (p) => p.id)
+      const result = Binary.search(permissions, props.requestID, (p) => p.id ?? "")
       if (!result.found) break
       input.setStore(
         "permission",
@@ -342,7 +342,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; requestID: string }
       const questions = input.store.question[props.sessionID]
       if (!questions) break
-      const result = Binary.search(questions, props.requestID, (q) => q.id)
+      const result = Binary.search(questions, props.requestID, (q) => q.id ?? "")
       if (!result.found) break
       input.setStore(
         "question",

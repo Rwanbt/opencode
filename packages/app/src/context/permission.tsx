@@ -124,6 +124,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function respondOnce(permission: PermissionRequest, directory?: string) {
+      if (!permission.id) return
       const now = Date.now()
       const hit = responded.has(permission.id)
       responded.delete(permission.id)

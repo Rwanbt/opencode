@@ -547,8 +547,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const agentList = createMemo(() =>
     sync.data.agent
-      .filter((agent) => !agent.hidden && agent.mode !== "primary")
-      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
+      .filter((agent) => !agent.hidden && agent.mode !== "primary" && agent.name !== undefined)
+      .map((agent): AtOption => ({ type: "agent", name: agent.name!, display: agent.name! })),
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
 
