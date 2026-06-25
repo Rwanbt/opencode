@@ -86,6 +86,11 @@ packages/mobile/src-tauri/assets/runtime/rootfs.tgz
 packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime/rootfs.tgz
 packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime/rootfs_version.txt
 
+# Desktop sidecar binary cache (non-canonical path — canonical sidecar lives in
+# packages/desktop/src-tauri/sidecars/opencode-cli-<rust-target>, populated by
+# scripts/predev.ts). The 195 MB exe cached here is a build artefact, not a source.
+packages/desktop/sidecars/
+
 # gstack local reports and analytics
 .gstack/
 
