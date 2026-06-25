@@ -61,7 +61,7 @@ const ConfigExportImport: Component = () => {
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      const result = await globalSDK.client.config.update({ config: data })
+      const result = await globalSDK.client.config.update(data)
       if (result.error) throw new Error(JSON.stringify(result.error))
       showToast({ variant: "error", title: "Configuration importée — rechargement en cours…" })
       setTimeout(() => window.location.reload(), 1500)
