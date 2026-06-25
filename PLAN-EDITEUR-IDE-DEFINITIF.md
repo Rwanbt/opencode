@@ -269,14 +269,16 @@ C'est le cœur du plan. On fusionne cache lecture + baseline édition.
 6. **Backend `read`** : supprimer le `.trim()` (index.ts:633). Si du nettoyage d'affichage est
    voulu, le faire **dans le composant de rendu**, jamais dans la couche données.
 
-### Phase 3 — Sauvegarde & intégrité (R5, R6, manquants #1–3)
-1. **Split settings** : `autoSave` (bool temporisé) + `formatOnSave` (bool). Migration du store
-   settings (clé existante `autoSave` → `formatOnSave`, nouveau `autoSave:false` par défaut).
-2. **Autosave temporisé** : debounce 1s après dernière frappe (si `autoSave`), stoppé pendant
-   save en cours, jamais si `conflict`/`missing`.
-3. **Indicateur dirty sur l'onglet** : `SortableTab` lit `FileDoc.status==="dirty"` et affiche un point.
-4. **Garde fermeture onglet sale** : `layout.tsx close(tab)` → si dirty, dialog « Save / Don't save / Cancel ».
-5. **« Revert File »** : action commande remettant `draft=undefined` + reload.
+### Phase 3 — Sauvegarde & intégrité (R5, R6, manquants #1–3) ✅ COMPLÈTE 2026-06-25
+1. ✅ **Split settings** : commit `6fef10a25a`. `migrateAutoSave()` pure, idempotente. 7 tests.
+2. ✅ **Autosave temporisé** : commit `3032fd2185`. Factory pure `createAutosave({clock?})`, 4 status gates au fire time. 10 tests.
+3. ✅ **Indicateur dirty sur l'onglet** : commit `315311360e`. `FileVisual` lit `fileStore.status`.
+4. ✅ **Garde fermeture onglet sale** : commit `e709258955`. `EditorCloseGuardProvider` + hook + dialog Save/Don't save/Cancel. 9 tests.
+5. ✅ **« Revert File »** : commit `0333705ac9`. `editor.revert(path)` alias de `reload()` + palette entry. 1 test.
+
+**Bilan Phase 3** : 5 commits atomiques, +27 tests, **519/519 packages/app tests verts**.
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 3)
++ `OpenCode/sessions/2026-06-25 - Session Phase 3 Save Dirty.md` pour l'état détaillé.
 
 ### Phase 4 — Cohérence UI & conventions (R-code&conv)
 1. **Extraire `file-tabs.tsx`** (1072 LOC) en modules : `editor-panel.tsx`, `rename-dialog.tsx`,
