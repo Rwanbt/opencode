@@ -6,11 +6,12 @@
 // they depend on the file-tree context; this component only renders and
 // emits selection events.
 //
-// Translation note: hardcoded "Références" preserved verbatim for behavior
-// parity. i18n tracked in PLAN-EDITEUR-IDE-DEFINITIF §2 (R-code&conv).
+// i18n: Phase 4.2 — title label resolves through language.t() (was hardcoded
+// "Références" for behavior parity).
 
 import { For, Show } from "solid-js"
 import type { LspLocation } from "@opencode-ai/ui/code-mirror-lsp"
+import { useLanguage } from "@/context/language"
 
 export interface ReferencesPanelProps {
   locations: () => LspLocation[]
@@ -19,17 +20,19 @@ export interface ReferencesPanelProps {
 }
 
 export function ReferencesPanel(props: ReferencesPanelProps) {
+  const language = useLanguage()
   return (
     <Show when={props.locations().length > 0}>
       <div class="border-t border-border-weak-base bg-background-stronger flex flex-col max-h-48 overflow-y-auto shrink-0">
         <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-weak-base sticky top-0 bg-background-stronger z-10">
           <span class="text-11-regular text-text-weaker uppercase tracking-wide">
-            Références ({props.locations().length})
+            {language.t("references.title", { count: props.locations().length })}
           </span>
           <button
             type="button"
             onClick={() => props.onClose()}
             class="text-10-regular text-text-weaker hover:text-text-base px-1"
+            aria-label={language.t("common.close")}
           >
             ✕
           </button>

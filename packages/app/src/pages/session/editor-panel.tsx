@@ -242,7 +242,7 @@ export function EditorPanel(props: EditorPanelProps) {
             size="small"
             class="size-8 opacity-100 transition-opacity"
             onClick={handleEnterEdit}
-            aria-label="Edit file"
+            aria-label={language.t("editor.aria.edit")}
           />
         </div>
       </Show>

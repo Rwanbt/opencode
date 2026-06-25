@@ -2,14 +2,16 @@
 //
 // WHY extracted: the panel triggered by Ctrl+. is a self-contained UI fed by
 // `codeActions` + `codeActionsLoading`. The fetch + apply logic stays in
-// file-tabs.tsx (it needs the SDK URL + editor handle + showToast); this
-// component only renders the list and exposes selection events.
+// lsp-actions.tsx (Phase 4.1 — it needs the SDK URL + editor handle +
+// showToast); this component only renders the list and exposes selection
+// events.
 //
-// Translation note: hardcoded French labels preserved verbatim for behavior
-// parity. i18n migration tracked in PLAN-EDITEUR-IDE-DEFINITIF §2 (R-code&conv).
+// i18n: Phase 4.2 — labels resolve through language.t() with keys in
+// en.ts/fr.ts (formerly hardcoded FR for behavior parity).
 
 import { For, Show } from "solid-js"
 import type { LspCodeAction } from "@opencode-ai/ui/code-mirror-lsp"
+import { useLanguage } from "@/context/language"
 
 export interface CodeActionPos {
   line: number
@@ -26,24 +28,26 @@ export interface CodeActionsPanelProps {
 }
 
 export function CodeActionsPanel(props: CodeActionsPanelProps) {
+  const language = useLanguage()
   return (
     <Show when={props.loading() || props.actions().length > 0}>
       <div class="border-t border-border-weak-base bg-background-stronger shrink-0">
         <div class="flex items-center gap-2 px-3 py-1 sticky top-0 bg-background-stronger border-b border-border-weak-base">
           <span class="text-11-regular text-text-weaker flex-1">
-            Actions ({props.loading() ? "…" : props.actions().length})
+            {language.t("codeActions.title", { count: props.loading() ? "…" : props.actions().length })}
           </span>
           <button
             type="button"
             onClick={() => props.onClose()}
             class="text-10-regular text-text-weaker hover:text-text-base px-1"
+            aria-label={language.t("common.close")}
           >
             ✕
           </button>
         </div>
         <div class="max-h-48 overflow-y-auto">
           <Show when={props.loading()}>
-            <p class="text-11-regular text-text-weaker px-3 py-2">Chargement…</p>
+            <p class="text-11-regular text-text-weaker px-3 py-2">{language.t("codeActions.loading")}</p>
           </Show>
           <For each={props.actions()}>
             {(action) => (

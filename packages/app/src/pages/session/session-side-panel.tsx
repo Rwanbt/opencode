@@ -481,15 +481,15 @@ export function SessionSidePanel(props: {
 
                               {/* Right pane */}
                               <div class="flex-1 relative min-w-0 overflow-hidden border-l border-border-weak-base">
-                                {/* Close split button */}
-                                <button
-                                  type="button"
-                                  class="absolute top-2 right-2 z-20 text-text-weaker hover:text-text-base text-10-regular bg-background-stronger/80 rounded px-1.5 py-0.5 backdrop-blur"
-                                  onClick={() => view().editorSplit.close()}
-                                  title="Fermer le volet (Ctrl+\)"
-                                >
-                                  ✕ volet
-                                </button>
+{/* Close split button */}
+                              <button
+                                type="button"
+                                class="absolute top-2 right-2 z-20 text-text-weaker hover:text-text-base text-10-regular bg-background-stronger/80 rounded px-1.5 py-0.5 backdrop-blur"
+                                onClick={() => view().editorSplit.close()}
+                                title={language.t("panel.split.close", { keybind: "Ctrl+\\" })}
+                              >
+                                {language.t("panel.split.closeButton")}
+                              </button>
                                 <FileTabContent tab={splitTab()} override />
                               </div>
                             </div>

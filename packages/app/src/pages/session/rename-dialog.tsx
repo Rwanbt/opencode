@@ -5,12 +5,11 @@
 // and handlers live in file-tabs.tsx (the LSP callbacks reach `prepareRename`
 // via closure), so this component is purely controlled.
 //
-// Translation note: the labels are still hardcoded in French ("Renommer en
-// :", "nouveau nom"). Tracked in PLAN-EDITEUR-IDE-DEFINITIF §2 (R-code&conv,
-// hardcoded UI text → language.t). Kept here verbatim so the extraction
-// preserves behavior 1:1.
+// i18n: Phase 4.2 — all literal labels (previously hardcoded FR) resolve
+// through language.t() with keys in en.ts/fr.ts. Behavior preserved 1:1.
 
 import { Show } from "solid-js"
+import { useLanguage } from "@/context/language"
 
 export interface RenameState {
   word: string
@@ -28,10 +27,11 @@ export interface RenameDialogProps {
 }
 
 export function RenameDialog(props: RenameDialogProps) {
+  const language = useLanguage()
   return (
     <Show when={props.state()}>
       <div class="border-t border-border-weak-base bg-background-stronger px-3 py-2 flex items-center gap-2 shrink-0">
-        <span class="text-11-regular text-text-weaker shrink-0">Renommer en :</span>
+        <span class="text-11-regular text-text-weaker shrink-0">{language.t("rename.dialog.prompt")}</span>
         <input
           class="flex-1 bg-surface-base border border-border-weak-base rounded px-2 py-1 text-12-regular text-text-base outline-none focus:border-accent-primary"
           value={props.input()}
@@ -47,7 +47,7 @@ export function RenameDialog(props: RenameDialogProps) {
             }, 0)
           }}
           disabled={props.loading()}
-          placeholder="nouveau nom"
+          placeholder={language.t("rename.dialog.placeholder")}
         />
         <button
           type="button"
@@ -55,12 +55,13 @@ export function RenameDialog(props: RenameDialogProps) {
           onClick={() => props.onConfirm()}
           class="text-10-regular px-2 py-1 rounded bg-accent-primary text-white disabled:opacity-40 shrink-0"
         >
-          {props.loading() ? "…" : "OK"}
+          {props.loading() ? "…" : language.t("rename.dialog.confirm")}
         </button>
         <button
           type="button"
           onClick={() => props.onCancel()}
           class="text-10-regular text-text-weaker hover:text-text-base px-1 shrink-0"
+          aria-label={language.t("common.cancel")}
         >
           ✕
         </button>

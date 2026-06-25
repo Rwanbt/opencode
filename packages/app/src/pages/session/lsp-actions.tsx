@@ -20,6 +20,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type { LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
 import { applyTextEdits, editsForFile } from "@/pages/session/lsp-handlers"
+import { useLanguage } from "@/context/language"
 import type { RenameState } from "@/pages/session/rename-dialog"
 import type { CodeActionPos } from "@/pages/session/code-actions-panel"
 
@@ -51,6 +52,7 @@ export interface LspActionsHandle {
 }
 
 export function createLspActions(input: LspActionsInput): LspActionsHandle {
+  const language = useLanguage()
   const [renameState, setRenameState] = createSignal<RenameState | null>(null)
   const [renameInput, setRenameInput] = createSignal("")
   const [renameLoading, setRenameLoading] = createSignal(false)
@@ -91,11 +93,18 @@ export function createLspActions(input: LspActionsInput): LspActionsHandle {
       const fileCount = Object.keys(changes).length
       showToast({
         variant: "success",
-        title: `Renommé en "${newName}"`,
-        description: fileCount > 1 ? `${fileCount} fichiers modifiés` : "Fichier courant mis à jour",
+        title: language.t("toast.lsp.rename.success.title", { name: newName }),
+        description:
+          fileCount > 1
+            ? language.t("toast.lsp.rename.success.description.many", { count: fileCount })
+            : language.t("toast.lsp.rename.success.description.one"),
       })
     } catch (e) {
-      showToast({ variant: "error", title: "Rename échoué", description: String(e) })
+      showToast({
+        variant: "error",
+        title: language.t("toast.lsp.rename.failed"),
+        description: String(e),
+      })
     } finally {
       setRenameLoading(false)
       setRenameState(null)
@@ -150,7 +159,11 @@ export function createLspActions(input: LspActionsInput): LspActionsHandle {
       }
       const fileCount = Object.keys(action.edit.changes).length
       if (fileCount > 1) {
-        showToast({ variant: "success", title: action.title, description: `${fileCount} fichiers modifiés` })
+        showToast({
+          variant: "success",
+          title: action.title,
+          description: language.t("toast.lsp.codeAction.success.description.many", { count: fileCount }),
+        })
       }
     }
 

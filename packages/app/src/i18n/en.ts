@@ -1029,4 +1029,32 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  // FORK (Phase 4.2) — editor status banners (ADR-0005 ⑥) and LSP-action
+  // panel strings. Previously hardcoded English fallbacks (banner) or French
+  // literals (dialog/panel) — kept verbatim here so existing components
+  // resolve through language.t() with no behavior change.
+  "editor.stale.message": "File changed on disk while you were editing.",
+  "editor.stale.reload": "Reload",
+  "editor.stale.overwrite": "Overwrite disk",
+  "editor.conflict.banner": "Save blocked: file changed on disk since you opened it.",
+  "editor.conflict.reload": "Reload",
+  "editor.conflict.overwrite": "Overwrite disk",
+  "editor.missing.banner": "This file was deleted on disk.",
+  "editor.missing.discard": "Discard",
+  "editor.missing.recreate": "Recreate",
+  "editor.aria.edit": "Edit file",
+  "panel.split.close": "Close split pane ({{keybind}})",
+  "panel.split.closeButton": "✕ split",
+  "rename.dialog.prompt": "Rename to:",
+  "rename.dialog.placeholder": "new name",
+  "rename.dialog.confirm": "OK",
+  "codeActions.title": "Actions ({{count}})",
+  "codeActions.loading": "Loading…",
+  "references.title": "References ({{count}})",
+  "toast.lsp.rename.success.title": 'Renamed to "{{name}}"',
+  "toast.lsp.rename.success.description.one": "Current file updated",
+  "toast.lsp.rename.success.description.many": "{{count}} files modified",
+  "toast.lsp.rename.failed": "Rename failed",
+  "toast.lsp.codeAction.success.description.many": "{{count}} files modified",
 }
