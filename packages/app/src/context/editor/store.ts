@@ -1,4 +1,5 @@
 import { createStore, produce } from "solid-js/store"
+import type { FileStore } from "../file/store"
 
 /**
  * Editor store (ADR-0005, 1b-core). State machine for editable file tabs.
@@ -57,6 +58,11 @@ export interface EditorDeps {
     expectedHash?: string
     format?: boolean
   }) => Promise<WriteResult>
+  // Optional FileStore mirror (PLAN-EDITEUR-IDE-DEFINITIF Phase 2, R1).
+  // When provided, every state transition here also updates the shared
+  // FileStore so viewer and editor cannot drift on the same canonical path.
+  // Undefined ⇒ no-op (used by store.test.ts which has no provider tree).
+  fileStore?: FileStore
 }
 
 /** What the caller (CM component) should do with the document after an action. */
@@ -72,6 +78,22 @@ function freshEntry(content: string, hash: string): EditorEntry {
 
 export function createEditorStore(deps: EditorDeps) {
   const [state, setState] = createStore<{ entries: Record<string, EditorEntry> }>({ entries: {} })
+
+  // WHY: the editor store is the authoritative source for the dirty/saving/
+  // conflict/missing state machine, but the FileStore is the single source of
+  // truth for raw content + stamp + status that BOTH the viewer (read-mode)
+  // and the editor (edit-mode via CM) need to agree on. Without this mirror,
+  // a successful save updates the editor's baseline while the viewer keeps
+  // showing stale bytes until the next close+reopen (the bug Phase 2 fixes).
+  // Each branch must call this with the FINAL state so a 409 from write()
+  // does NOT silently re-clear conflict on a stale save.
+  const mirror = (
+    path: string,
+    action: (fs: FileStore) => void,
+  ) => {
+    if (!deps.fileStore) return
+    action(deps.fileStore)
+  }
 
   const get = (path: string): EditorEntry | undefined => state.entries[path]
 
@@ -97,27 +119,42 @@ export function createEditorStore(deps: EditorDeps) {
       if (res.type === "not-found") {
         if (fallbackContent !== undefined) {
           setState("entries", path, freshEntry(fallbackContent, ""))
+          mirror(path, (fs) => fs.markClean(path, fallbackContent, { hash: "" }))
           return { type: "set", content: fallbackContent }
         }
         setState("entries", path, { ...freshEntry("", ""), missing: true })
+        mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
       setState("entries", path, freshEntry(res.content, res.stamp.hash))
+      mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return { type: "set", content: res.content }
     } catch {
       if (fallbackContent !== undefined) {
         setState("entries", path, freshEntry(fallbackContent, ""))
+        mirror(path, (fs) => fs.markClean(path, fallbackContent, { hash: "" }))
         return { type: "set", content: fallbackContent }
       }
       setState("entries", path, { ...freshEntry("", ""), missing: true })
+      mirror(path, (fs) => fs.markMissing(path))
       return { type: "missing" }
     }
   }
 
   /** CM reports whether its doc differs from the baseline. */
   function setDirty(path: string, dirty: boolean) {
-    if (!state.entries[path]) return
+    const entry = state.entries[path]
+    if (!entry) return
     set(path, { dirty })
+    if (dirty) {
+      // WHY no draft here: CM owns the live buffer. FileStore.draft stays
+      // undefined — edit-mode reads CM directly. Status="dirty" alone is
+      // enough to gate save concurrency and the conflict banner.
+      mirror(path, (fs) => fs.markDirty(path))
+      return
+    }
+    // Returning to clean = restoring baseline (e.g. after discard()).
+    mirror(path, (fs) => fs.markClean(path, entry.baseline.content, { hash: entry.baseline.hash }))
   }
 
   /** Save the current CM content with the hash precondition. */
@@ -125,14 +162,17 @@ export function createEditorStore(deps: EditorDeps) {
     const entry = state.entries[path]
     if (!entry || entry.saving) return { type: "none" }
     set(path, { saving: true })
+    mirror(path, (fs) => fs.markSaving(path))
     try {
       const res = await deps.write({ path, content, expectedHash: entry.baseline.hash || undefined, format })
       if (res.type === "conflict") {
         set(path, { saving: false, conflict: true })
+        mirror(path, (fs) => fs.markConflict(path))
         return { type: "conflict" }
       }
       if (res.type === "not-found") {
         set(path, { saving: false, missing: true })
+        mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
       set(path, {
@@ -143,9 +183,12 @@ export function createEditorStore(deps: EditorDeps) {
         missing: false,
         saving: false,
       })
+      mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
       set(path, { saving: false })
+      // Don't mirror on transport failure — keep prior FileStore status
+      // (probably still "saving"). A subsequent retry will transition again.
       return { type: "none" }
     }
   }
@@ -155,6 +198,7 @@ export function createEditorStore(deps: EditorDeps) {
     const entry = state.entries[path]
     if (!entry) return { type: "none" }
     set(path, { dirty: false, stale: false, conflict: false })
+    mirror(path, (fs) => fs.markClean(path, entry.baseline.content, { hash: entry.baseline.hash }))
     return { type: "set", content: entry.baseline.content }
   }
 
@@ -164,12 +208,15 @@ export function createEditorStore(deps: EditorDeps) {
       const res = await deps.readRaw(path)
       if (res.type === "not-found") {
         set(path, { missing: true })
+        mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
       setState("entries", path, freshEntry(res.content, res.stamp.hash))
+      mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return { type: "set", content: res.content }
     } catch {
       set(path, { missing: true })
+      mirror(path, (fs) => fs.markMissing(path))
       return { type: "missing" }
     }
   }
@@ -181,12 +228,14 @@ export function createEditorStore(deps: EditorDeps) {
       const disk = await deps.readRaw(path)
       if (disk.type === "not-found") {
         set(path, { missing: true, conflict: false })
+        mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
       set(path, { baseline: { content: disk.content, hash: disk.stamp.hash }, conflict: false })
       return save(path, content)
     } catch {
       set(path, { missing: true, conflict: false })
+      mirror(path, (fs) => fs.markMissing(path))
       return { type: "missing" }
     }
   }
@@ -201,6 +250,7 @@ export function createEditorStore(deps: EditorDeps) {
     if (entry.saving) return { type: "none" } // our own write echoing back
     if (entry.dirty) {
       set(path, { stale: true }) // surfaces as a conflict on the next save
+      mirror(path, (fs) => fs.markConflict(path))
       return { type: "none" }
     }
     return reload(path) // clean: safe to refresh
@@ -210,6 +260,7 @@ export function createEditorStore(deps: EditorDeps) {
   function onExternalDelete(path: string): DocEffect {
     if (!state.entries[path]) return { type: "none" }
     set(path, { missing: true })
+    mirror(path, (fs) => fs.markMissing(path))
     return { type: "missing" }
   }
 
@@ -220,6 +271,7 @@ export function createEditorStore(deps: EditorDeps) {
         delete entries[path]
       }),
     )
+    mirror(path, (fs) => fs.remove(path))
   }
 
   /**
@@ -232,14 +284,17 @@ export function createEditorStore(deps: EditorDeps) {
     const entry = state.entries[path]
     if (!entry || entry.saving) return { type: "none" }
     set(path, { saving: true })
+    mirror(path, (fs) => fs.markSaving(path))
     try {
       const res = await deps.write({ path, content, format })
       if (res.type === "conflict") {
         set(path, { saving: false, conflict: true })
+        mirror(path, (fs) => fs.markConflict(path))
         return { type: "conflict" }
       }
       if (res.type === "not-found") {
         set(path, { saving: false, missing: true })
+        mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
       set(path, {
@@ -250,6 +305,7 @@ export function createEditorStore(deps: EditorDeps) {
         missing: false,
         saving: false,
       })
+      mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
       set(path, { saving: false })

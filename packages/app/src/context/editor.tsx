@@ -6,6 +6,7 @@
 import { createContext, onCleanup, useContext, type JSX } from "solid-js"
 import { createPathHelpers } from "./file/path"
 import { useSDK } from "./sdk"
+import { useFileStore } from "./file/store"
 import { createEditorStore, type EditorStore } from "./editor/store"
 
 const EditorContext = createContext<EditorStore>()
@@ -13,6 +14,7 @@ const EditorContext = createContext<EditorStore>()
 export function EditorProvider(props: { children: JSX.Element }) {
   const sdk = useSDK()
   const path = createPathHelpers(() => sdk.directory)
+  const fileStore = useFileStore()
 
   // WHY: the global client uses throwOnError:true, so on any non-2xx the SDK
   // throws the parsed body BEFORE returning res — making res.response.status
@@ -22,6 +24,7 @@ export function EditorProvider(props: { children: JSX.Element }) {
   const api = sdk.createClient({ throwOnError: false })
 
   const store = createEditorStore({
+    fileStore,
     async readRaw(filePath) {
       const res = await api.file.readRaw({ path: filePath })
       if (!res.data) return { type: "not-found" }
