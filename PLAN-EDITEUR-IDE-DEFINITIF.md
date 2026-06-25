@@ -15,8 +15,8 @@
 | Phase 2.2 (trim backend retiré) | **✅ FAIT 2026-06-25** | `76efa186a7` | `.trim()` retiré à `file/index.ts:633`. Pas de `readText()` créé (audit : aucun consumer ne veut le trim). 3 tests backend patchés (ils asservaient le bug R1). 129/129 backend + 488/488 packages/app verts. |
 | Phase 2.3 (unifier read/readRaw) | **✅ FAIT 2026-06-25** | `d8f8c1e998` | `read()` appelle `readRaw()` interne (via `Effect.promise` + `Effect.catch`). VCS mémo paresseux sera dans `FileDoc.vcs` côté frontend (2.4). 488/488 packages/app + 129/129 backend verts. |
 | Phase 2.4a (context wrapper) | **✅ FAIT 2026-06-25** | `21de28e84e` | `createFileStore()` exposé via `createSimpleContext` → `useFileStore()` + `<FileStoreProvider>`. Aucun consommateur branché (fondation pure, 17 LOC). 488/488 packages/app verts. |
-| Phase 2.4b-g + 2.5 + 2.6 | ⏸ reporté | — | Migration editor/viewer/watcher/save + découpage file-tabs.tsx. Reporter à session dédiée (beaucoup trop pour une session, risque runtime élevé). |
-| Phase 2.5 (découper file-tabs.tsx) | ⏸ à faire | — | 1072 → 6 fichiers <300 LOC (editor-panel, viewer-panel, lsp-handlers, references-panel, rename-dialog, code-actions-panel). |
+| Phase 2.4b-g + 2.5 + 2.6 | ⏸ partiel (2.5 fait) | — | 2.5 fait. Reste 2.4b-g (migration FileStore consumers) + 2.6 (close on tab) dans prochaine session dédiée. |
+| Phase 2.5 (découper file-tabs.tsx) | **✅ FAIT 2026-06-25** | `ee487b732f` + `63cd4cd763` + `35c0fb606f` + `1564ca5b4c` + `20d8d38279` + `59bd5709ff` | 972 → 623 LOC. 6 nouveaux fichiers extraits : lsp-handlers.ts, rename-dialog.tsx, code-actions-panel.tsx, references-panel.tsx, editor-panel.tsx, viewer-panel.tsx. + auto-edit.ts pour le module-level set. file-tabs.tsx reste à 623 LOC (zone "alerte" AGENTS.md >500, sous le seuil refactor >800) — comments-overlay + keybindings extractibles dans une future session. |
 | Phase 2.6 (editorStore.close tab close) | ⏸ à faire | — | `layout.tsx close(tab)` → `editorStore.close(path)`. Sans garde dirty pour l'instant (Phase 3). |
 | Phase 3 (R5, R6 save/dirty) | ⏸ à faire | — | |
 | Phase 4 (UI/conv) | ⏸ à faire | — | |
