@@ -29,6 +29,8 @@ import { applyTextEdits, createLspCallbacks, editsForFile } from "@/pages/sessio
 import { RenameDialog, type RenameState } from "@/pages/session/rename-dialog"
 import { CodeActionsPanel, type CodeActionPos } from "@/pages/session/code-actions-panel"
 import { ReferencesPanel, uriToDisplayPath } from "@/pages/session/references-panel"
+import { EditorPanel } from "@/pages/session/editor-panel"
+import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -37,11 +39,9 @@ const CodeMirrorEditor = lazy(() =>
   import("@opencode-ai/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
 )
 
-// Paths that should auto-enter edit mode when their tab mounts (double-click).
-const autoEditPaths = new Set<string>()
-export function requestAutoEdit(path: string) {
-  autoEditPaths.add(path)
-}
+// Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
+// (session-side-panel.tsx) keep their import path stable.
+export const requestAutoEdit = _requestAutoEdit
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -214,7 +214,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   const editorStore = useEditor()
   const settings = useSettings()
   const [editing, setEditing] = createSignal(false)
-  let editorHandle: CodeMirrorHandle | undefined
+  const [editorHandle, setEditorHandle] = createSignal<CodeMirrorHandle | undefined>(undefined)
 
 // LSP callbacks — stable reference, file path is passed per-call.
   const lspCallbacks: LspCallbacks = createLspCallbacks(sdk, {
@@ -265,9 +265,10 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
       // Apply edits to current file if present
       const currentEdits = editsForFile(edit, p)
-      if (currentEdits?.length && editorHandle) {
-        const updated = applyTextEdits(editorHandle.getContent(), currentEdits)
-        editorHandle.setContent(updated)
+      const handle = editorHandle()
+      if (currentEdits?.length && handle) {
+        const updated = applyTextEdits(handle.getContent(), currentEdits)
+        handle.setContent(updated)
       }
 
       // Count affected files for toast
@@ -320,8 +321,9 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     // 1. Apply WorkspaceEdit if present
     if (action.edit?.changes) {
       const currentEdits = editsForFile(action.edit, p)
-      if (currentEdits?.length && editorHandle) {
-        editorHandle.setContent(applyTextEdits(editorHandle.getContent(), currentEdits))
+      const handle = editorHandle()
+      if (currentEdits?.length && handle) {
+        handle.setContent(applyTextEdits(handle.getContent(), currentEdits))
       }
       const fileCount = Object.keys(action.edit.changes).length
       if (fileCount > 1) {
@@ -378,147 +380,19 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     return editorStore.get(p)
   })
 
-  // Guard: hide the pencil for binary files (NUL bytes) and files over 1 MB.
-  const canEdit = createMemo(() => {
-    if (!state()?.loaded) return false
-    const text = contents()
-    if (text.length > 1_000_000) return false
-    if (text.includes("\0")) return false
-    return true
-  })
-
-  // Derived: true once the editor store entry is ready (after open() resolves).
-  // Also false when the file is missing so the CM panel is not shown.
-  const showEditor = createMemo(() => {
-    if (!editing()) return false
-    const p = path()
-    if (!p) return false
-    const entry = editorStore.get(p)
-    return entry !== undefined && !entry.missing
-  })
-
-  const handleEnterEdit = async () => {
+  // Editor action side-effects: refresh the read-mode cache after a write so
+  // the viewer reflects the new bytes. EditorPanel handles save/reload/etc.;
+  // these wrappers only coordinate the post-action file.load().
+  //
+  // WHY force:true: file.load() has a silent-skip when `loaded: true`
+  // (file.tsx:167). Without the force, the viewer's content stays stale
+  // until the next close+reopen. Tracked in PLAN-EDITEUR-IDE-DEFINITIF
+  // (Phase 2.4f removes these calls once FileStore handles refresh internally).
+  const refreshAfterEditor = async () => {
     const p = path()
     if (!p) return
-    setEditing(true)
-    try {
-      // Use ?? not ||: a brand-new empty file has contents() === "" which is
-      // falsy but a valid fallback. The store's readRaw() will succeed on the
-      // empty file; if it fails (race with the filesystem watcher) the "" seed
-      // lets the editor open immediately instead of showing a false
-      // "this file was deleted" banner.
-      await editorStore.open(p, contents() ?? undefined)
-    } catch {
-      setEditing(false)
-      showToast({ variant: "error", title: language.t("toast.file.openFailed") })
-    }
+    await file.load(p, { force: true })
   }
-
-  // Called by CM on every user keystroke: update dirty state.
-  // NOT inside a createEffect — runs imperatively in CM's updateListener.
-  const handleEditorChange = (content: string) => {
-    const p = path()
-    if (!p) return
-    const entry = editorStore.get(p)
-    if (!entry) return
-    editorStore.setDirty(p, content !== entry.baseline.content)
-  }
-
-  const applyDocEffect = (eff: { type: string; content?: string }) => {
-    if (eff.type === "set" && eff.content !== undefined) {
-      editorHandle?.setContent(eff.content)
-    }
-  }
-
-  const handleCtrlS = async () => {
-    const p = path()
-    if (!p) return
-    const content = editorHandle?.getContent() ?? ""
-    const format = settings.general.autoSave()
-    try {
-      const eff = await editorStore.save(p, content, format)
-      applyDocEffect(eff)
-      // WHY: save() never throws (catches internally). A conflict/missing
-      // result is already surfaced by the EditorBanner via the reactive
-      // editorEntry — don't claim success here.
-      if (eff.type === "conflict" || eff.type === "missing") return
-      // Refresh the read-only cache so a close+reopen shows the saved
-      // content (otherwise `load()` skips refetch because `loaded: true`,
-      // see file.tsx:167).
-      await file.load(p, { force: true })
-      showToast({ variant: "success", title: language.t("toast.file.saved") })
-    } catch {
-      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-    }
-  }
-
-  const handleReload = async () => {
-    const p = path()
-    if (!p) return
-    try {
-      applyDocEffect(await editorStore.reload(p))
-    } catch {
-      showToast({ variant: "error", title: language.t("toast.file.reloadFailed") })
-    }
-  }
-
-  const handleOverwrite = async () => {
-    const p = path()
-    if (!p) return
-    const content = editorHandle?.getContent() ?? ""
-    try {
-      applyDocEffect(await editorStore.resolveConflict(p, content, "overwrite"))
-    } catch {
-      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-    }
-  }
-
-  const handleDiscard = () => {
-    const p = path()
-    if (!p) return
-    editorStore.close(p)
-    setEditing(false)
-    // Refresh the read-only cache so the user sees the actual on-disk
-    // content (in case the file was changed externally during the edit
-    // session). Defense-in-depth vs. the handleCtrlS refresh.
-    void file.load(p, { force: true })
-  }
-
-  const handleRecreate = async () => {
-    const p = path()
-    if (!p) return
-    const content = editorHandle?.getContent() ?? ""
-    const format = settings.general.autoSave()
-    try {
-      applyDocEffect(await editorStore.recreate(p, content, format))
-    } catch {
-      showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-    }
-  }
-
-  // Auto-enter edit mode when the file was opened via double-click.
-  createEffect(() => {
-    const p = path()
-    if (!p || editing()) return
-    if (!canEdit()) return
-    if (autoEditPaths.has(p)) {
-      autoEditPaths.delete(p)
-      void handleEnterEdit()
-    }
-  })
-
-  // Auto-apply external reloads to the CM buffer when the watcher triggers
-  // store.reload() on a clean entry (onExternalChange → clean → reload).
-  // The `setContent` guard (doc === content → no-op) makes this idempotent.
-  createEffect(() => {
-    if (!showEditor()) return
-    const entry = editorEntry()
-    if (!entry) return
-    // Only apply when the buffer is clean (no pending dirty/stale/saving/conflict).
-    // A dirty buffer is never touched by the watcher — it sets `stale` instead.
-    if (entry.dirty || entry.stale || entry.saving || entry.conflict || entry.missing) return
-    editorHandle?.setContent(entry.baseline.content)
-  })
   // END FORK
 
   let find: FileSearchHandle | null = null
@@ -807,94 +681,30 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
   return (
     <Dynamic {...tabsContentProps()}>
-      {/* FORK: edit-mode pencil toggle — hidden for binary and large files (ADR-0005 §10).
-          UX (review 2026-06-24 Sprint 3.1): always fully visible so users
-          don't have to discover a hover-only control. The Save button appears
-          next to it once the editor is mounted and there are unsaved changes. */}
-      <Show when={!editing() && canEdit() && path()}>
-        <div class="absolute top-2 right-4 z-10">
-          <IconButton
-            icon="edit-small-2"
-            variant="ghost"
-            size="small"
-            class="size-8 opacity-100 transition-opacity"
-            onClick={handleEnterEdit}
-            aria-label="Edit file"
-          />
-        </div>
-      </Show>
-
-      {/* FORK: Sprint 3.1 — explicit Save button while editing (visible on
-          every platform, including mobile/tablet where Ctrl+S is unavailable).
-          Primary colour when dirty (actionable), ghost when clean (still
-          allows force-save / autosave-toggle). */}
-      <Show when={editing() && path()}>
-        <div class="absolute top-2 right-4 z-10 flex items-center gap-2">
-          <Show when={editorEntry()?.saving}>
-            <span class="text-12-regular text-text-weak">{language.t("toast.file.saving")}</span>
-          </Show>
-          <button
-            type="button"
-            onClick={() => void handleCtrlS()}
-            disabled={editorEntry()?.saving}
-            data-testid="editor-save-button"
-            aria-label={language.t("common.save")}
-            classList={{
-              "h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-12-medium border transition-colors": true,
-              "border-accent bg-accent text-background": editorEntry()?.dirty,
-              "border-border-base text-text-weak hover:text-text-base hover:bg-surface-base-hover": !editorEntry()?.dirty,
-              "opacity-50 pointer-events-none": !!editorEntry()?.saving,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M3 7.5L5.5 10L11 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" />
-            </svg>
-            <span>{language.t("common.save")}</span>
-          </button>
-        </div>
-      </Show>
-
-      {/* FORK: CM editor + conflict/stale/missing banners (ADR-0005 ⑥) */}
-      <div class="cm-editor-banners">
-        <Show when={editing()}>
-          <Show when={editorEntry()} keyed>
-            {(entry) => (
-              <EditorBanner
-                entry={entry}
-                onReload={() => void handleReload()}
-                onOverwrite={() => void handleOverwrite()}
-                onDiscard={handleDiscard}
-                onRecreate={() => void handleRecreate()}
-              />
-            )}
-          </Show>
-        </Show>
-      </div>
-
-      <Show when={showEditor()}>
-        <Show when={path()} keyed>
-          {(p) => (
-            <Suspense>
-              <CodeMirrorEditor
-                path={p}
-                initialContent={editorStore.get(p)?.baseline.content ?? ""}
-                onChange={handleEditorChange}
-                onSave={() => void handleCtrlS()}
-                ref={(h) => {
-                  editorHandle = h
-                }}
-                lsp={lspCallbacks}
-                onNavigate={handleNavigate}
-                onReferences={handleReferences}
-              />
-            </Suspense>
-          )}
-        </Show>
-      </Show>
-
-      {/* Loading spinner while store.open() is in flight after entering edit mode */}
-      <Show when={editing() && !showEditor() && !editorEntry()?.missing}>
-        <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+      {/* FORK: editor block (Phase 2.5) — extracted to editor-panel.tsx.
+          Owns the pencil toggle, Save button, EditorBanner, CM mount, and
+          loading spinner. Calls `refreshAfterEditor` (above) after a
+          successful save/reload/overwrite/discard so the viewer cache stays
+          in sync. */}
+      <Show when={path()}>
+        <EditorPanel
+          path={path}
+          contents={contents}
+          state={state}
+          editing={editing}
+          setEditing={setEditing}
+          editorEntry={editorEntry}
+          editorHandle={editorHandle()}
+          setEditorHandle={setEditorHandle}
+          lspCallbacks={lspCallbacks}
+          onNavigate={handleNavigate}
+          onReferences={handleReferences}
+          onSave={() => refreshAfterEditor()}
+          onReload={() => refreshAfterEditor()}
+          onOverwrite={() => refreshAfterEditor()}
+          onDiscard={() => refreshAfterEditor()}
+          onRecreate={() => refreshAfterEditor()}
+        />
       </Show>
 
       {/* Stretch Phase 2: Code actions panel (Ctrl+.) */}
