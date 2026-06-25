@@ -191,8 +191,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           // the disk stamp used by editor.save() to detect 409 conflicts. The
           // viewer cache above stays for loading/error flags + VCS payload
           // (diff/patch); 2.4c wires editor.tsx to read from FileStore too.
+          //
+          // Phase 2.4d: if the editor has flagged this path as "conflict"
+          // (dirty buffer + external write), DO NOT overwrite that — the
+          // conflict is sticky until the user resolves it via Save (force
+          // overwrite) or Discard. Otherwise a viewer-driven re-read races
+          // the editor and silently clears the warning.
           const rawData = raw.data
-          if (rawData) {
+          if (rawData && fileStore.get(file)?.status !== "conflict") {
             const vcs = content.diff || content.patch ? { diff: content.diff, patch: content.patch } : undefined
             fileStore.markClean(file, rawData.content, rawData.stamp, vcs)
           }
