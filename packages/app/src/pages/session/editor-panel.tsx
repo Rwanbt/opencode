@@ -117,7 +117,7 @@ export function EditorPanel(props: EditorPanelProps) {
     const p = props.path()
     if (!p) return
     const content = props.editorHandle?.getContent() ?? ""
-    const format = settings.general.autoSave()
+    const format = settings.general.formatOnSave()
     try {
       const eff = await editorStore.save(p, content, format)
       applyDocEffect(eff)
@@ -167,7 +167,7 @@ export function EditorPanel(props: EditorPanelProps) {
     const p = props.path()
     if (!p) return
     const content = props.editorHandle?.getContent() ?? ""
-    const format = settings.general.autoSave()
+    const format = settings.general.formatOnSave()
     try {
       applyDocEffect(await editorStore.recreate(p, content, format))
     } catch {
