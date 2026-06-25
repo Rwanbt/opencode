@@ -30,6 +30,7 @@ import { CommandProvider } from "@/context/command"
 import { CommandPaletteMount } from "@/components/dialog-command-palette"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
+import { FileStoreProvider } from "@/context/file/store"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { HighlightsProvider } from "@/context/highlights"
@@ -111,11 +112,13 @@ function AppShellProviders(props: ParentProps) {
 function SessionProviders(props: ParentProps) {
   return (
     <TerminalProvider>
-      <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
-      </FileProvider>
+      <FileStoreProvider>
+        <FileProvider>
+          <PromptProvider>
+            <CommentsProvider>{props.children}</CommentsProvider>
+          </PromptProvider>
+        </FileProvider>
+      </FileStoreProvider>
     </TerminalProvider>
   )
 }
