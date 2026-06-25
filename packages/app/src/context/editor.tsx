@@ -19,12 +19,15 @@ export function EditorProvider(props: { children: JSX.Element }) {
   const path = createPathHelpers(() => sdk.directory)
   const fileStore = useFileStore()
 
-  // WHY: the global client uses throwOnError:true, so on any non-2xx the SDK
-  // throws the parsed body BEFORE returning res — making res.response.status
-  // unreachable and collapsing every error (409 conflict included) to
-  // "not-found". A non-throwing client returns {data, response} where
-  // response is the real Response on HTTP errors (undefined on network drop).
-  const api = sdk.createClient({ throwOnError: false })
+  // FORK (Phase 4.4 — R-code&conv): the SDK default is now
+  // throwOnError: false (see packages/sdk/js/src/v2/client.ts), so we no
+  // longer need the explicit override. Before Phase 4.4 the global client
+  // used throwOnError:true, which threw the parsed body before the editor
+  // store could read res.response.status — collapsing every error (409
+  // conflict included) to "not-found". With the new default the response
+  // status is reachable, so the editor store can distinguish 409 (conflict)
+  // and 404 (missing) without parsing a thrown body.
+  const api = sdk.createClient({})
 
   const store = createEditorStore({
     fileStore,

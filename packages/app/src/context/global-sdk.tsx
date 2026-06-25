@@ -231,7 +231,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const sdk = createSdkForServer({
       server: server.current.http,
       fetch: platform.fetch,
-      throwOnError: true,
+      // FORK (Phase 4.4 — R-code&conv): the global SDK client is now
+      // non-throwing by default (see packages/sdk/js/src/v2/client.ts).
+      // We omit throwOnError here so it inherits the new default — every
+      // consumer of `useGlobalSDK().client` must inspect `res.data` /
+      // `res.error` instead of catching throws.
     })
 
     return {
