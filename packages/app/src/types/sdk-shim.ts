@@ -13,6 +13,7 @@
  * package-local definition backed by the backend Zod schema).
  */
 import type {
+  CommandListResponses,
   ConfigGetResponses,
   EventSubscribeResponses,
   FileListResponses,
@@ -179,7 +180,7 @@ export type Agent = ProjectListResponses[200][number] & {
   name: string
   color?: string
 }
-export type Command = ProjectListResponses[200][number] & {
+export type Command = CommandListResponses[200][number] & {
   [key: string]: unknown
   description?: string
   trigger?: string

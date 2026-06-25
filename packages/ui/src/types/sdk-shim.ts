@@ -6,6 +6,7 @@
  * When the SDK eventually exposes a stable `model` subpath, delete both.
  */
 import type {
+  CommandListResponses,
   ConfigGetResponses,
   EventSubscribeResponses,
   FileListResponses,
@@ -100,7 +101,7 @@ export type Project = ProjectListResponses[200][number] & {
   source?: { value: string; start: number; end: number }
 }
 export type Agent = ProjectListResponses[200][number] & { [key: string]: unknown }
-export type Command = ProjectListResponses[200][number] & {
+export type Command = CommandListResponses[200][number] & {
   [key: string]: unknown
   description?: string
   trigger?: string
