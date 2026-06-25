@@ -629,9 +629,13 @@ export namespace File {
           }
         }
 
-        const content = yield* appFs.readFileString(full).pipe(
-          Effect.catch(() => Effect.succeed("")),
+        // Delegate to readRaw() so the editor (readRaw) and viewer (read)
+        // share a single source of truth on disk bytes. Phase 2.3 — keeps the
+        // empty-string contract on missing/directory paths via Effect.catch.
+        const raw = yield* Effect.promise(() => readRaw(file)).pipe(
+          Effect.catch(() => Effect.succeed({ content: "", stamp: { hash: "" } })),
         )
+        const content = raw.content
 
         if (Instance.project.vcs === "git") {
           return yield* Effect.promise(async (): Promise<File.Content> => {
