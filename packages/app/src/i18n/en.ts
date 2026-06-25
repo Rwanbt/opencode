@@ -46,6 +46,8 @@ export const dict = {
 
   "command.session.new": "New session",
   "command.file.open": "Open file",
+  "command.editor.symbols": "Go to Symbol in File",
+  "command.editor.symbols.description": "Fuzzy-search symbols of the active file via LSP",
   "command.file.new": "New file",
   "command.file.new.description": "Create a new file in the project",
   "command.file.newFolder": "New folder",
@@ -100,6 +102,8 @@ export const dict = {
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
+  "palette.symbols.placeholder": "Search symbols in current file",
+  "palette.symbols.empty": "No symbols found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
 

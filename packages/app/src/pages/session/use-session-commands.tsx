@@ -225,6 +225,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
+  // Go-to-symbol (Mod+Shift+O) — LSP-backed palette scoped to the active file.
+  // Empty when no file tab is active (the modal still renders, just shows
+  // "no symbols" until the user opens a file).
+  const openSymbols = () => {
+    void import("@/components/dialog-select-symbol").then((x) => {
+      dialog.show(() => <x.DialogSelectSymbol />)
+    })
+  }
+
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
@@ -491,6 +500,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       // no default chord.
       disabled: !activeFileTab(),
       onSelect: revertFile,
+    }),
+    fileCommand({
+      id: "editor.symbols",
+      title: language.t("command.editor.symbols"),
+      description: language.t("command.editor.symbols.description"),
+      // Go-to-symbol — VS Code convention.
+      keybind: "mod+shift+o",
+      disabled: !activeFileTab(),
+      onSelect: openSymbols,
     }),
   ]
 
