@@ -89,11 +89,14 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
+  const { sessionID, messageID } = input
   const requestParts: PromptRequestPart[] = [
     {
       id: Identifier.ascending("part"),
       type: "text",
       text: input.text,
+      sessionID,
+      messageID,
     },
   ]
 
@@ -114,6 +117,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         },
         path,
       },
+      sessionID,
+      messageID,
     } satisfies PromptRequestPart
   })
 
@@ -127,6 +132,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         start: attachment.start,
         end: attachment.end,
       },
+      sessionID,
+      messageID,
     } satisfies PromptRequestPart
   })
 
@@ -144,6 +151,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: "text/plain",
       url,
       filename: getFilename(item.path),
+      sessionID,
+      messageID,
     } satisfies PromptRequestPart
 
     if (!comment) return [filePart]
@@ -159,6 +168,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
           mime: "text/plain",
           url,
           filename: getFilename(path),
+          sessionID,
+          messageID,
         } satisfies PromptRequestPart,
       ]
     })
@@ -176,6 +187,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
           preview: item.preview,
           origin: item.commentOrigin,
         }),
+        sessionID,
+        messageID,
       } satisfies PromptRequestPart,
       filePart,
       ...mentions,
@@ -189,6 +202,8 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: attachment.mime,
       url: attachment.dataUrl,
       filename: attachment.filename,
+      sessionID,
+      messageID,
     } satisfies PromptRequestPart
   })
 
