@@ -27,6 +27,7 @@ import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type { LspCallbacks, LspLocation, LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
 import { applyTextEdits, createLspCallbacks, editsForFile } from "@/pages/session/lsp-handlers"
 import { RenameDialog, type RenameState } from "@/pages/session/rename-dialog"
+import { CodeActionsPanel, type CodeActionPos } from "@/pages/session/code-actions-panel"
 import { EditorBanner } from "@/pages/session/editor-banner"
 
 // Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
@@ -289,7 +290,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   }
 
   // Stretch Phase 2: code actions (Ctrl+.)
-  type CodeActionPos = { line: number; character: number; endLine: number; endCharacter: number }
   const [codeActions, setCodeActions] = createSignal<LspCodeAction[]>([])
   const [codeActionsLoading, setCodeActionsLoading] = createSignal(false)
   const [codeActionPos, setCodeActionPos] = createSignal<CodeActionPos | null>(null)
@@ -902,36 +902,12 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       </Show>
 
       {/* Stretch Phase 2: Code actions panel (Ctrl+.) */}
-      <Show when={codeActionsLoading() || codeActions().length > 0}>
-        <div class="border-t border-border-weak-base bg-background-stronger shrink-0">
-          <div class="flex items-center gap-2 px-3 py-1 sticky top-0 bg-background-stronger border-b border-border-weak-base">
-            <span class="text-11-regular text-text-weaker flex-1">Actions ({codeActionsLoading() ? "…" : codeActions().length})</span>
-            <button type="button" onClick={() => setCodeActions([])} class="text-10-regular text-text-weaker hover:text-text-base px-1">✕</button>
-          </div>
-          <div class="max-h-48 overflow-y-auto">
-            <Show when={codeActionsLoading()}>
-              <p class="text-11-regular text-text-weaker px-3 py-2">Chargement…</p>
-            </Show>
-            <For each={codeActions()}>
-              {(action) => (
-                <button
-                  type="button"
-                  onClick={() => void applyCodeAction(action)}
-                  class="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-hover"
-                >
-                  <Show when={action.isPreferred}>
-                    <span class="text-accent-primary text-10-regular shrink-0">✦</span>
-                  </Show>
-                  <span class="text-12-regular text-text-base flex-1 truncate">{action.title}</span>
-                  <Show when={action.kind}>
-                    <span class="text-10-regular text-text-weakest shrink-0">{action.kind}</span>
-                  </Show>
-                </button>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
+      <CodeActionsPanel
+        actions={codeActions}
+        loading={codeActionsLoading}
+        onSelect={(action) => void applyCodeAction(action)}
+        onClose={() => setCodeActions([])}
+      />
 
       {/* Stretch Phase 2: Rename dialog (F2) */}
       <RenameDialog
