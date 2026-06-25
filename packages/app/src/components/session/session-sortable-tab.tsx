@@ -7,15 +7,22 @@ import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { getFilename } from "@opencode-ai/util/path"
 import { useFile } from "@/context/file"
+import { useFileStore } from "@/context/file/store"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
-import { useEditor } from "@/context/editor"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
   // UX (consensus 4-IA review 2026-06-24): a dirty file is shown with an amber
   // dot prefix on the tab. Same on desktop + mobile — VS Code convention.
-  const editor = useEditor()
-  const dirty = createMemo(() => editor.get(props.path)?.dirty === true)
+  //
+  // FORK (Phase 3.3): read from the shared FileStore instead of the editor
+  // store. FileStore is the single source of truth for `status` (PLAN-EDITEUR-
+  // IDE-DEFINITIF Phase 2, R1); the editor store mirrors into it via
+  // editor.setDirty() / save(). Reading directly from FileStore means the
+  // dot reflects the exact same value the viewer / save button / autosave
+  // factory see — no skew between components.
+  const fileStore = useFileStore()
+  const dirty = createMemo(() => fileStore.get(props.path)?.status === "dirty")
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
       <Show
