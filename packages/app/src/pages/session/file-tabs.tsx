@@ -801,15 +801,21 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     scrollSync.queueRestore()
   })
 
-  const renderFile = (source: string) => (
+  // WHY: source is a getter (() => string), not a value, so the JSX reads
+  // it inside each render — when the store mutates .content via produce,
+  // source() returns the new string and Solid re-evaluates the `contents`
+  // expression in the Dynamic's file prop, which triggers a re-render of
+  // the file component. A plain string value would be captured at first
+  // render and never refresh.
+  const renderFile = (source: () => string) => (
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
         file={{
           name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
+          contents: source(),
+          cacheKey: source().length,
         }}
         enableLineSelection
         enableHoverUtility
@@ -1053,9 +1059,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
       <Show when={!editing()}>
         <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
           <Switch>
-            <Match when={viewerSource()} keyed>
-              {(source) => renderFile(source.content)}
-            </Match>
+            <Match when={state()?.loaded}>{renderFile(() => contents())}</Match>
             <Match when={state()?.loading}>
               <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
             </Match>
