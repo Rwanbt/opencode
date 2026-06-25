@@ -337,10 +337,14 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   // the viewer reflects the new bytes. EditorPanel handles save/reload/etc.;
   // these wrappers only coordinate the post-action file.load().
   //
-  // WHY force:true: file.load() has a silent-skip when `loaded: true`
-  // (file.tsx:167). Without the force, the viewer's content stays stale
-  // until the next close+reopen. Tracked in PLAN-EDITEUR-IDE-DEFINITIF
-  // (Phase 2.4f removes these calls once FileStore handles refresh internally).
+  // WHY force:true + WHY still here after Phase 2.4b/c/e: the FileStore IS
+  // updated by editor.save()/reload()/etc. via the mirror added in 2.4c, and
+  // the load() skip-when-clean gate now consults FileStore (2.4e). But the
+  // viewer's RENDER path still reads `state()?.content?.content` from this
+  // file.tsx local cache (file-tabs.tsx:307). Until the viewer subscribes to
+  // FileStore directly (Phase 3+), the only way to refresh its render is a
+  // force:true re-read here. Tracked as the last un-migrated consumer in
+  // PLAN-EDITEUR-IDE-DEFINITIF.
   const refreshAfterEditor = async () => {
     const p = path()
     if (!p) return
