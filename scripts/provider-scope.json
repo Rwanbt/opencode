@@ -1,0 +1,293 @@
+{
+  "$schema": "scripts/provider-scope.schema.json",
+  "_comment": "Static registry of SolidJS Context Providers in OpenCode. Each entry maps a hook to its Provider, source location, mount location, and scope (app|shell|directory|session). The check-provider-scope.ps1 script uses this registry to verify structural invariants — preventing the bug class 'consumer without an ancestor Provider'.",
+  "version": 1,
+  "updated": "2026-06-27",
+  "scopes": {
+    "app": {
+      "description": "Mounted above the Router (entry.tsx or app.tsx). Every consumer anywhere in the tree can use these.",
+      "mountRoots": ["packages/app/src/entry.tsx", "packages/app/src/app.tsx"]
+    },
+    "shell": {
+      "description": "Mounted inside AppShellProviders (in app.tsx, below Router). All pages route-level see them.",
+      "mountRoots": ["packages/app/src/app.tsx"]
+    },
+    "directory": {
+      "description": "Mounted in pages/directory-layout.tsx. Only consumers below that route see them.",
+      "mountRoots": ["packages/app/src/pages/directory-layout.tsx"]
+    },
+    "session": {
+      "description": "Mounted in SessionProviders (in app.tsx, wrapped by SessionRoute). Only consumers below the /session/:id route see them.",
+      "mountRoots": ["packages/app/src/app.tsx"]
+    }
+  },
+  "providers": [
+    {
+      "hook": "usePlatform",
+      "provider": "PlatformProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/platform.tsx",
+      "mountFile": "packages/app/src/entry.tsx",
+      "mountMarker": "PlatformProvider"
+    },
+    {
+      "hook": "useTheme",
+      "provider": "ThemeProvider",
+      "scope": "app",
+      "source": "packages/ui/src/theme/context.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "ThemeProvider"
+    },
+    {
+      "hook": "useLanguage",
+      "provider": "LanguageProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/language.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "LanguageProvider"
+    },
+    {
+      "hook": "useI18n",
+      "provider": "I18nProvider",
+      "scope": "app",
+      "source": "packages/ui/src/context/i18n.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "I18nProvider"
+    },
+    {
+      "hook": "useDialog",
+      "provider": "DialogProvider",
+      "scope": "app",
+      "source": "packages/ui/src/context/dialog.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "DialogProvider"
+    },
+    {
+      "hook": "useMarked",
+      "provider": "MarkedProvider",
+      "scope": "app",
+      "source": "packages/ui/src/context/marked.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "MarkedProvider"
+    },
+    {
+      "hook": "useFileComponent",
+      "provider": "FileComponentProvider",
+      "scope": "app",
+      "source": "packages/ui/src/context/file.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "FileComponentProvider"
+    },
+    {
+      "hook": "useServer",
+      "provider": "ServerProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/server.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "ServerProvider"
+    },
+    {
+      "hook": "useSDK",
+      "provider": "GlobalSDKProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/global-sdk.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "GlobalSDKProvider"
+    },
+    {
+      "hook": "useGlobalSDK",
+      "provider": "GlobalSDKProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/global-sdk.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "GlobalSDKProvider"
+    },
+    {
+      "hook": "useSync",
+      "provider": "GlobalSyncProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/global-sync.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "GlobalSyncProvider"
+    },
+    {
+      "hook": "useGlobalSync",
+      "provider": "GlobalSyncProvider",
+      "scope": "app",
+      "source": "packages/app/src/context/global-sync.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "GlobalSyncProvider"
+    },
+    {
+      "hook": "useSettings",
+      "provider": "SettingsProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/settings.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "SettingsProvider"
+    },
+    {
+      "hook": "usePermission",
+      "provider": "PermissionProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/permission.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "PermissionProvider"
+    },
+    {
+      "hook": "useLayout",
+      "provider": "LayoutProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/layout.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "LayoutProvider"
+    },
+    {
+      "hook": "useNotification",
+      "provider": "NotificationProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/notification.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "NotificationProvider"
+    },
+    {
+      "hook": "useModels",
+      "provider": "ModelsProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/models.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "ModelsProvider"
+    },
+    {
+      "hook": "useCommand",
+      "provider": "CommandProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/command.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "CommandProvider"
+    },
+    {
+      "hook": "useHighlights",
+      "provider": "HighlightsProvider",
+      "scope": "shell",
+      "source": "packages/app/src/context/highlights.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "HighlightsProvider"
+    },
+    {
+      "hook": "useSDK",
+      "provider": "SDKProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/sdk.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "SDKProvider"
+    },
+    {
+      "hook": "useFileStore",
+      "provider": "FileStoreProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/file/store.ts",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "FileStoreProvider"
+    },
+    {
+      "hook": "useSync",
+      "provider": "SyncProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/sync.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "SyncProvider"
+    },
+    {
+      "hook": "useLspDiagnostics",
+      "provider": "LspDiagnosticsProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/lsp-diagnostics.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "LspDiagnosticsProvider"
+    },
+    {
+      "hook": "useData",
+      "provider": "DataProvider",
+      "scope": "directory",
+      "source": "packages/ui/src/context/data.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "DataProvider"
+    },
+    {
+      "hook": "useLocal",
+      "provider": "LocalProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/local.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "LocalProvider"
+    },
+    {
+      "hook": "useEditor",
+      "provider": "EditorProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/editor.tsx",
+      "mountFile": "packages/app/src/pages/directory-layout.tsx",
+      "mountMarker": "EditorProvider"
+    },
+    {
+      "hook": "useEditorCloseGuard",
+      "provider": "EditorCloseGuardProvider",
+      "scope": "directory",
+      "source": "packages/app/src/context/editor/close-guard.tsx",
+      "mountFile": "packages/app/src/context/editor.tsx",
+      "mountMarker": "EditorCloseGuardProvider"
+    },
+    {
+      "hook": "useTerminal",
+      "provider": "TerminalProvider",
+      "scope": "session",
+      "source": "packages/app/src/context/terminal.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "TerminalProvider"
+    },
+    {
+      "hook": "useFile",
+      "provider": "FileProvider",
+      "scope": "session",
+      "source": "packages/app/src/context/file.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "FileProvider"
+    },
+    {
+      "hook": "usePrompt",
+      "provider": "PromptProvider",
+      "scope": "session",
+      "source": "packages/app/src/context/prompt.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "PromptProvider"
+    },
+    {
+      "hook": "useComments",
+      "provider": "CommentsProvider",
+      "scope": "session",
+      "source": "packages/app/src/context/comments.tsx",
+      "mountFile": "packages/app/src/app.tsx",
+      "mountMarker": "CommentsProvider"
+    }
+  ],
+  "latent": [
+    {
+      "_comment": "Latent bug: WorkerPoolProvider is exported but never mounted. No runtime consumer exists in packages/app/src, but if one is added it will crash. Either mount in AppBaseProviders or remove.",
+      "hook": "useWorkerPool",
+      "provider": "WorkerPoolProvider",
+      "scope": "unmounted",
+      "source": "packages/ui/src/context/worker-pool.tsx",
+      "mountFile": null,
+      "mountMarker": null
+    }
+  ],
+  "thirdPartyHooks": [
+    {
+      "_comment": "useDialogContext comes from @kobalte/core/dialog. It requires a <Kobalte> ancestor in the same JSX tree, not a Solid Provider mount. Out of scope for this registry — Kobalte handles its own propagation. Phase-10-Audit flagged a latent propagation issue via Kobalte.Portal (see _audit/Phase-10-Provider-Matrix-2026-06-27.md).",
+      "hook": "useDialogContext",
+      "provider": "Kobalte.Dialog (third-party)",
+      "scope": "external"
+    }
+  ]
+}
