@@ -13,6 +13,9 @@ import { EditorProvider, EditorTabCleanup } from "@/context/editor"
 // Phase 5.5: LSP diagnostics store (lives alongside SyncProvider so the listener
 // auto-tears-down on directory change).
 import { LspDiagnosticsProvider } from "@/context/lsp-diagnostics"
+// FileStoreProvider lives at directory scope (sibling of SDKProvider) so EditorProvider
+// (which calls useFileStore) sees it as an ancestor. Fix: pre-flight-0-filestore-scope.
+import { FileStoreProvider } from "@/context/file/store"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -85,11 +88,13 @@ export default function Layout(props: ParentProps) {
     <Show when={resolved()} keyed>
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
-          <SyncProvider>
-            <LspDiagnosticsProvider>
-              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-            </LspDiagnosticsProvider>
-          </SyncProvider>
+          <FileStoreProvider>
+            <SyncProvider>
+              <LspDiagnosticsProvider>
+                <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+              </LspDiagnosticsProvider>
+            </SyncProvider>
+          </FileStoreProvider>
         </SDKProvider>
       )}
     </Show>
