@@ -13,13 +13,14 @@
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/sdk-shared": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "aws4fetch": "^1.0.20",
+    "@opencode-ai/util": "workspace:*",
     "@pierre/diffs": "catalog:",
+    "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
-    "@solidjs/meta": "catalog:",
+    "aws4fetch": "^1.0.20",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "js-base64": "3.7.7",
