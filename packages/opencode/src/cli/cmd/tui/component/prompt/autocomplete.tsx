@@ -305,17 +305,19 @@ export function Autocomplete(props: {
     const width = props.anchor().width - 4
 
     for (const res of Object.values(sync.data.mcp_resource)) {
-      const text = `${res.name} (${res.uri})`
+      if (!res.name) continue
+      const name = res.name
+      const text = `${name} (${res.uri})`
       options.push({
         display: Locale.truncateMiddle(text, width),
         value: text,
         description: res.description,
         onSelect: () => {
-          insertPart(res.name, {
+          insertPart(name, {
             type: "file",
             mime: res.mimeType ?? "text/plain",
-            filename: res.name,
-            url: res.uri,
+            filename: name,
+            url: res.uri ?? "",
             source: {
               type: "resource",
               text: {
@@ -324,7 +326,7 @@ export function Autocomplete(props: {
                 value: "",
               },
               clientName: res.client,
-              uri: res.uri,
+              uri: res.uri ?? "",
             },
           })
         },

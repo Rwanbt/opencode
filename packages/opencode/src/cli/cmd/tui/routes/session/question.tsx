@@ -16,7 +16,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() => props.request.questions ?? [])
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
