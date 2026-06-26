@@ -230,12 +230,14 @@ export type Provider = ProviderListResponses[200]["all"][number]
 // types. Re-export the v1 shapes (which still exist) as `ProviderV2`/
 // `ModelV2` so the plugin compiles without touching the hook contract.
 //
+// Also re-export `Model` directly because some plugin imports use
+// `import { Model as ModelV2 }` syntax and need the source name visible.
+//
 // WHY v1: the SDK has not yet finished the v2 migration for Provider/Model.
 // Until the v2 SDK exposes a typed Provider/Model top-level alias, this
 // re-export keeps the plugin source-compatible. Remove when v2 surfaces
 // the typed shapes natively.
-export type ProviderV2 = ProviderV1
-export type ModelV2 = ModelV1
+export type { ModelV1 as Model, ModelV1 as ModelV2, ProviderV1 as ProviderV1, ProviderV1 as ProviderV2 }
 
 // ----- Auth response -----
 // ProviderAuthResponse comes from the SDK v2 re-export (the *Responses
