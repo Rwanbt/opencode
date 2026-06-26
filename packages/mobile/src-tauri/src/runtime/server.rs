@@ -32,6 +32,7 @@ fn server_start_lock() -> &'static tokio::sync::Mutex<()> {
 /// On Android, executables are in nativeLibraryDir (packaged as JNI libs)
 /// to satisfy SELinux execute permissions.
 #[tauri::command]
+#[cfg(unix)]
 pub async fn start_embedded_server(
     app: AppHandle,
     port: u32,
@@ -449,6 +450,7 @@ const SECCOMP_RISK_APPLETS: &[&str] =
 /// applet set, Android's seccomp-safe /system/bin/toybox applets, a few direct
 /// /system/bin binaries, and busybox-only fallbacks. Idempotent: each symlink
 /// is recreated only when missing or pointing at a stale target.
+#[cfg(unix)]
 fn setup_command_symlinks(nlib_dir: &Path, bin_link_dir: &Path) {
     let bin_links = [
         ("libbash_exec.so", "bash"),
@@ -634,6 +636,7 @@ fn setup_command_symlinks(nlib_dir: &Path, bin_link_dir: &Path) {
 /// Recreate the compat-name and bun-pty shared-library symlinks (D-01 step 2b).
 /// Android ships libs as lib*.so JNI names; bun and bun-pty look them up under
 /// their canonical names, so we point those at the nativeLibraryDir originals.
+#[cfg(unix)]
 fn setup_compat_lib_symlinks(nlib_dir: &Path, dir: &Path, lib_link_dir: &Path) {
     let links = [
         ("libstdcpp_compat.so", "libstdc++.so.6"),

@@ -10,6 +10,14 @@
 //! three entry points are `pub(super)` so `start_embedded_server` /
 //! `install_extended_env` (still in `runtime.rs`) and the `mod tests` can call
 //! them through `runtime`'s `use toolchain::{…}` re-export.
+//!
+//! File gated to Unix (C-008): every entry point here uses `std::os::unix` or
+//! `PermissionsExt::set_mode`, neither of which exists on Windows. On Windows
+//! `cargo clippy --all-targets` would otherwise fail with E0433 / E0599 in the
+//! host `cfg(test)` build. Tests in `runtime.rs` that call these entry points
+//! carry their own `#[cfg(unix)]` so the Windows test set skips them cleanly.
+#![cfg(unix)]
+
 use super::*;
 
 /// Recreate rootfs hardlink aliases as symlinks. Alpine ships each compiler

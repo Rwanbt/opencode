@@ -1,8 +1,13 @@
 use serde::{Deserialize, Serialize};
+#[allow(unused_imports)]
 use std::fs;
+#[allow(unused_imports)]
 use std::path::{Path, PathBuf};
+#[allow(unused_imports)]
 use std::process::{Child, Command, Stdio};
+#[allow(unused_imports)]
 use std::sync::Mutex;
+#[allow(unused_imports)]
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -10,7 +15,13 @@ use tauri::{AppHandle, Emitter, Manager};
 // the logged symlink helper, and the cargo/rustc/gcc shebang wrappers) lives in
 // `runtime/toolchain.rs`. Re-imported here so `start_embedded_server` /
 // `install_extended_env` and `mod tests` keep calling them unqualified.
+//
+// The module is gated to Unix (C-008) — every entry point uses `std::os::unix`
+// or `PermissionsExt::set_mode`. Windows hosts don't have those, so the mod
+// decl + re-import are Unix-only too.
+#[cfg(unix)]
 mod toolchain;
+#[cfg(unix)]
 use toolchain::{force_symlink, prepare_toolchain_wrappers, repair_rootfs_hardlinks};
 
 // D-01 step 3: runtime extraction + readiness/schema gating lives in
@@ -40,7 +51,12 @@ const RUNTIME_SCHEMA_VERSION: u32 = 1;
 // SERVER_PROCESS / single-flight statics) lives in `runtime/server.rs`. The
 // commands are re-exported so lib.rs's android-only generate_handler! can still
 // reference `runtime::start_embedded_server` etc.
+//
+// `start_embedded_server` and `__cmd__start_embedded_server` are Unix-only
+// (C-008 — they pull in the toolchain Unix APIs via setup_*_symlinks).
+#[cfg(unix)]
 mod server;
+#[cfg(unix)]
 #[allow(unused_imports)]
 pub use server::{
     __cmd__check_local_health, __cmd__read_server_logs, __cmd__start_embedded_server,
@@ -131,6 +147,7 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
 /// app_data_file for untrusted_app). The pre-built rootfs includes all dev
 /// tools + libmusl_exec.so (musl-compiled LD_PRELOAD hook for sub-fork fix).
 #[tauri::command]
+#[cfg(unix)]
 pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
     log::info!("[install_ext] ENTRY");
     let dir = runtime_dir(&app);
