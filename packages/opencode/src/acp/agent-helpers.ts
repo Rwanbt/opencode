@@ -5,7 +5,7 @@ import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { applyPatch } from "diff"
-import type { AssistantMessage, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk-shared"
 
 const log = Log.create({ service: "acp-agent" })
 
