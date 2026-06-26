@@ -874,6 +874,22 @@ export namespace File {
       await fsRm(tmp, { force: true }).catch(() => {})
       throw e
     }
+    // FORK (BUG-A Phase 8 diagnostic): re-read full to confirm the rename landed.
+    // On Windows + antivirus/FUSE/OneDrive, the rename can succeed at the API
+    // level but the FS still serves cached old bytes until next flush. We log a
+    // warning so the next save failure has a hook without paying a hash cost.
+    try {
+      const written = await Filesystem.readText(full)
+      if (written !== content) {
+        log.warn("atomicWrite post-rename mismatch — FS may be caching old bytes", {
+          full,
+          expectedLen: content.length,
+          actualLen: written.length,
+        })
+      }
+    } catch (e) {
+      log.warn("atomicWrite post-rename read-back failed", { full, error: String(e) })
+    }
   }
 
   async function notifyWrite(full: string, kind: "add" | "change") {
@@ -930,6 +946,14 @@ export namespace File {
     expectedHash?: string
     format?: boolean
   }): Promise<WriteResult> {
+    // FORK (BUG-A Phase 8): refuse absolute paths. On win32, `path.join(root, abs)`
+    // silently truncates to `abs`, hiding cross-project writes. Frontend must send
+    // project-relative paths via canonical().
+    if (path.isAbsolute(input.path)) {
+      throw new Error(
+        `File.write: input.path must be relative to project root, got absolute: ${input.path}`,
+      )
+    }
     const full = path.join(Instance.directory, input.path)
     assertWritableTarget(full)
     return FileTime.withLock(full, async () => {
@@ -962,6 +986,12 @@ export namespace File {
 
   /** Read raw (untrimmed) text + stamp, so the editor can round-trip the exact bytes for hashing. */
   export async function readRaw(file: string): Promise<RawContent> {
+    // FORK (BUG-A Phase 8): same defensive check as write() — refuse absolute.
+    if (path.isAbsolute(file)) {
+      throw new Error(
+        `File.readRaw: file must be relative to project root, got absolute: ${file}`,
+      )
+    }
     const full = path.join(Instance.directory, file)
     assertInsideProject(full)
     if (!(await Filesystem.exists(full))) throw new PathNotFoundError(file)
