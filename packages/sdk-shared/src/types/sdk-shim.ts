@@ -38,6 +38,7 @@ import type {
   SessionStatusResponses,
   SessionTodoResponses,
   ExperimentalWorkspaceListResponses,
+  FormatterStatusResponses,
 } from "@opencode-ai/sdk/v2/client"
 import type { Model as ModelV1, Provider as ProviderV1 } from "@opencode-ai/sdk"
 
@@ -178,6 +179,25 @@ export type Config = ConfigGetResponses[200]
 // Tighten by extracting the typed `Workspace` shape into the SDK proper.
 export type Workspace = ExperimentalWorkspaceListResponses[200][number]
 
+// ----- Formatter status -----
+// FormatterStatusResponses[200] is Array<{name, extensions, enabled}> — the
+// per-formatter status payload returned by GET /formatter. Phase 7.3
+// addition: backend context/sync.tsx imports this as a single-item type.
+export type FormatterStatus = FormatterStatusResponses[200][number]
+
+// ----- MCP resource -----
+// McpResource was a top-level alias pre-regen. The SDK does not expose a
+// typed shape post-regen. Fall back to a permissive shape so consumers
+// in packages/opencode/src/cli/cmd/tui/context/sync.tsx can read fields
+// without a TS7006 cascade. Tighten once the SDK surfaces the typed shape.
+export type McpResource = {
+  [key: string]: any
+  uri?: string
+  name?: string
+  description?: string
+  mimeType?: string
+}
+
 // ----- Agent / Command / Project -----
 // ProjectListResponses[200] is Array<Project>. The `Agent`, `Command`, and
 // `Project` types pre-regen had richer shapes (Command.description,
@@ -221,7 +241,16 @@ export type ProviderAuthMethod = ProviderAuthResponses[200][string][number]
 // union pattern). The shim does not redeclare it to avoid TS2308 conflict
 // with the SDK. Consumers import ProviderListResponse through the shared
 // package without needing a local alias.
-export type Provider = ProviderListResponses[200]["all"][number]
+//
+// Phase 7.3 widening: Provider historically came from the SDK v2 route
+// response shape (provider.all[number]). After the regen, the backend
+// constructs Provider objects at runtime that carry both v1 contract
+// fields (providerID, api, capabilities) AND v2 list-shape fields
+// (source, env, options, etc.). Union the two sources and add a
+// permissive index signature so any partial Provider object resolves.
+export type Provider = (ProviderListResponses[200]["all"][number] | ProviderV1) & {
+  [key: string]: unknown
+}
 
 // ----- V1 aliases for plugin compat -----
 // Phase 7.2 addition: packages/plugin/src/index.ts:14 imports
@@ -233,11 +262,20 @@ export type Provider = ProviderListResponses[200]["all"][number]
 // Also re-export `Model` directly because some plugin imports use
 // `import { Model as ModelV2 }` syntax and need the source name visible.
 //
+// Phase 7.3 widening: the backend (packages/opencode/src/provider/
+// provider.ts + plugin/github-copilot/*) constructs partial Model/Provider
+// objects at runtime that don't carry every required v1 field
+// (providerID, api, capabilities). Extend Model with a permissive
+// index signature so the shape mismatch stops failing typecheck. The
+// strict v1 contract is preserved under ModelV1 (the renamed alias) for
+// plugin code that wants the full contract.
+//
 // WHY v1: the SDK has not yet finished the v2 migration for Provider/Model.
 // Until the v2 SDK exposes a typed Provider/Model top-level alias, this
 // re-export keeps the plugin source-compatible. Remove when v2 surfaces
 // the typed shapes natively.
-export type { ModelV1 as Model, ModelV1 as ModelV2, ProviderV1 as ProviderV1, ProviderV1 as ProviderV2 }
+export type Model = ModelV1 & { [key: string]: unknown }
+export type { ModelV1 as ModelV1, ModelV1 as ModelV2, ProviderV1 as ProviderV1, ProviderV1 as ProviderV2 }
 
 // ----- Auth response -----
 // ProviderAuthResponse comes from the SDK v2 re-export (the *Responses
