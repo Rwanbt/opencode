@@ -59,6 +59,7 @@
     "@codemirror/view": "6.43.1",
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk-shared": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
