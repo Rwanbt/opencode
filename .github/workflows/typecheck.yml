@@ -31,6 +31,7 @@ jobs:
             | grep -v "file-tree.tsx" \
             | grep -v "prompt-input.tsx" \
             | grep -v "settings-general.tsx" \
+            | grep -v "settings-remote-access.tsx" \
             | grep -v "ui/src/components/markdown.tsx" \
             | grep -v "ui/src/components/file-ssr.tsx" \
             | grep -v "ui/src/components/icon.tsx" \

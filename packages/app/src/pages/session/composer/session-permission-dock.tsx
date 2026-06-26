@@ -59,7 +59,7 @@ export function SessionPermissionDock(props: {
         </div>
       </Show>
 
-      <Show when={props.request.patterns.length > 0}>
+      <Show when={(props.request.patterns ?? []).length > 0}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-patterns">
