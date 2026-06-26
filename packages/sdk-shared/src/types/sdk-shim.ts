@@ -133,8 +133,10 @@ export type PermissionRequest = {
   sessionID: string
   permission?: string
   pattern?: string
+  patterns?: string[]
   metadata?: any
   always?: string[]
+  tool?: { messageID: string; callID: string }
 }
 export type QuestionRequest = {
   [key: string]: any
@@ -144,16 +146,20 @@ export type QuestionRequest = {
 }
 
 // QuestionInfo / QuestionAnswer are derived fields on a question request.
+// QuestionAnswer is a per-question array of selected option labels (the
+// consumer at packages/opencode/src/cli/cmd/tui/routes/session/question.tsx
+// treats each answer entry as a string[]: indexOf/push/splice/filter and
+// passes it directly to sdk.client.question.reply which expects
+// `answers: string[][]`). The previous `{ answer?: string }` shape was the
+// pre-regen top-level alias; the regen dropped it and the consumer expects
+// the array shape that matches the SDK's QuestionReplyData body.
 export type QuestionInfo = {
   [key: string]: any
   question?: string
   header?: string
   options?: Array<{ label: string; description?: string }>
 }
-export type QuestionAnswer = {
-  [key: string]: any
-  answer?: string
-}
+export type QuestionAnswer = string[]
 
 // ----- Event -----
 // EventSubscribeResponses[200] is the union of all SSE event shapes.
@@ -165,6 +171,19 @@ export type Event = EventSubscribeResponses[200]
 // discriminated variant so consumers like notification.tsx can index the
 // error field without an inline Extract at every callsite.
 export type EventSessionError = Extract<Event, { type: "session.error" }>
+// EventMessagePartUpdated / EventMessagePartDelta — top-level aliases for
+// the part-update SSE events. Re-export the extracted discriminated variants
+// so test files (test/acp/event-subscription.test.ts) can construct payloads
+// without an inline Extract at every callsite.
+export type EventMessagePartUpdated = Extract<Event, { type: "message.part.updated" }>
+export type EventMessagePartDelta = Extract<Event, { type: "message.part.delta" }>
+// ToolStatePending / ToolStateRunning — discriminated variants of
+// ToolPart["state"]. Mirrors the Zod schemas in
+// packages/opencode/src/session/message-v2.ts (ToolStatePending/Running).
+// The shim can only expose structural shapes; tightening to the exact Zod
+// payload requires backend-side exposure of the typed schemas.
+export type ToolStatePending = Extract<ToolPart["state"], { status: "pending" }>
+export type ToolStateRunning = Extract<ToolPart["state"], { status: "running" }>
 
 // ----- Config -----
 // ConfigGetResponses[200] is the global config snapshot.
@@ -213,12 +232,35 @@ export type Project = ProjectListResponses[200][number] & {
   description?: string
   source?: { value: string; start: number; end: number }
 }
-export type Agent = ProjectListResponses[200][number] & {
-  [key: string]: unknown
+// Agent — the backend Zod schema in
+// packages/opencode/src/agent/agent.ts (Agent.Info) is the runtime contract:
+//   { name, description?, mode: "subagent"|"primary"|"all", native?, hidden?,
+//     topP?, temperature?, color?, permission?, model?, variant?, prompt?,
+//     options?, steps?, mcp? }
+// The previous shim derived Agent from ProjectListResponses[200][number]
+// which has fields the runtime Agent.Info never carries (id, worktree, time,
+// sandboxes), causing TS2345 cascade at setStore("agent", reconcile(...))
+// in packages/opencode/src/cli/cmd/tui/context/sync.tsx:414. Redefine Agent
+// explicitly so consumer code stays source-compatible. Keep [key: string]:
+// unknown so consumers can reach any future Zod extension without an extra
+// round-trip through the shim.
+export type Agent = {
   name: string
+  description?: string
+  mode: "all" | "primary" | "subagent"
+  native?: boolean
+  hidden?: boolean
+  topP?: number
+  temperature?: number
   color?: string
+  permission?: Array<{ permission: string; pattern?: string; action: "allow" | "ask" | "deny" }>
   model?: { providerID: string; modelID: string }
   variant?: string
+  prompt?: string
+  options?: Record<string, any>
+  steps?: number
+  mcp?: { allow?: string[]; deny?: string[] }
+  [key: string]: unknown
 }
 export type Command = CommandListResponses[200][number] & {
   [key: string]: unknown
@@ -246,9 +288,15 @@ export type ProviderAuthMethod = ProviderAuthResponses[200][string][number]
 // response shape (provider.all[number]). After the regen, the backend
 // constructs Provider objects at runtime that carry both v1 contract
 // fields (providerID, api, capabilities) AND v2 list-shape fields
-// (source, env, options, etc.). Union the two sources and add a
-// permissive index signature so any partial Provider object resolves.
-export type Provider = (ProviderListResponses[200]["all"][number] | ProviderV1) & {
+// (source, env, options, etc.). Union the two sources and normalize the
+// models field to the widened Model shape so consumers like
+// dialog-model.tsx:89 can read info.providerID (a ProviderHook contract
+// field) without a per-call cast. Without the Omit/models override, the
+// union's models field would resolve to the slim v2 list Model shape that
+// omits providerID/api/capabilities, breaking both UI consumers and the
+// plugin hook (copilot.ts:47/59 passes provider.models as the hook return).
+export type Provider = Omit<ProviderListResponses[200]["all"][number] | ProviderV1, "models"> & {
+  models: Record<string, Model>
   [key: string]: unknown
 }
 
@@ -263,18 +311,29 @@ export type Provider = (ProviderListResponses[200]["all"][number] | ProviderV1) 
 // `import { Model as ModelV2 }` syntax and need the source name visible.
 //
 // Phase 7.3 widening: the backend (packages/opencode/src/provider/
-// provider.ts + plugin/github-copilot/*) constructs partial Model/Provider
-// objects at runtime that don't carry every required v1 field
-// (providerID, api, capabilities). Extend Model with a permissive
-// index signature so the shape mismatch stops failing typecheck. The
-// strict v1 contract is preserved under ModelV1 (the renamed alias) for
-// plugin code that wants the full contract.
+// provider.ts + plugin/github-copilot/*) constructs Model objects at runtime
+// that extend the v1 shape with fields the SDK doesn't model yet
+// (capabilities.interleaved, limit.input, family, release_date, variants).
+// Re-declare Model with the runtime contract so consumer code (test fixtures,
+// plugin hook returns, transcript formatters) can construct or access these
+// fields without TS2353 (excess property check) or TS2339 (property missing)
+// cascades. The strict v1 contract is preserved under ModelV1 for plugin
+// code that wants the full contract.
 //
-// WHY v1: the SDK has not yet finished the v2 migration for Provider/Model.
+// WHY v1 base: the SDK has not yet finished the v2 migration for Provider/Model.
 // Until the v2 SDK exposes a typed Provider/Model top-level alias, this
 // re-export keeps the plugin source-compatible. Remove when v2 surfaces
 // the typed shapes natively.
-export type Model = ModelV1 & { [key: string]: unknown }
+export type Model = Omit<ModelV1, "capabilities" | "limit"> & {
+  capabilities: ModelV1["capabilities"] & {
+    interleaved?: boolean | { field: "reasoning_content" | "reasoning_details" }
+  }
+  limit: ModelV1["limit"] & { input?: number }
+  family?: string
+  release_date?: string
+  variants?: Record<string, { [key: string]: unknown }>
+  [key: string]: unknown
+}
 export type { ModelV1 as ModelV1, ModelV1 as ModelV2, ProviderV1 as ProviderV1, ProviderV1 as ProviderV2 }
 
 // ----- Auth response -----
