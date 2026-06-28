@@ -20,8 +20,6 @@ import { useLanguage } from "@/context/language"
 export function DialogDirtyClose(props: {
   /** Canonical path of the dirty file. */
   path: string | undefined
-  /** When true the dialog is visible. */
-  open: boolean
   /** Disable the Save button while a save is in flight. */
   saving: boolean
   onSave: () => void

@@ -629,12 +629,32 @@ export namespace File {
           }
         }
 
-        // Delegate to readRaw() so the editor (readRaw) and viewer (read)
-        // share a single source of truth on disk bytes. Phase 2.3 — keeps the
-        // empty-string contract on missing/directory paths via Effect.catch.
-        const raw = yield* Effect.promise(() => readRaw(file)).pipe(
-          Effect.catch(() => Effect.succeed({ content: "", stamp: { hash: "" } })),
-        )
+// Delegate to readRaw() so the editor (readRaw) and viewer (read)
+// share a single source of truth on disk bytes. Phase 2.3 — keeps the
+// empty-string contract on missing/directory paths via Effect.catch.
+//
+// REGRESSION FIX 2026-06-27: the previous Effect.catch swallowed ALL
+// errors (incl. genuine readRaw failures) into an empty-content stub.
+// Symptom: viewer panel showed empty even when the editor's CM buffer
+// held the fresh bytes — the bug "the file is empty in read mode but
+// full in edit mode" the user reported. Now we only fall back to ""
+// when the file genuinely does not exist on disk (ENOENT); other
+// errors propagate so the route handler turns them into 5xx and the
+// frontend can react.
+        let raw: RawContent
+        try {
+          raw = yield* Effect.promise(() => readRaw(file))
+        } catch (e) {
+          if (e instanceof PathNotFoundError) {
+            raw = { content: "", stamp: { hash: "", mtime: undefined, size: undefined } }
+          } else {
+            // FORK (REGRESSION FIX 2026-06-27): propagate genuine readRaw
+            // failures (transport, AV-blocked, FS cache stale, etc.) so
+            // the route handler can return a 5xx and the frontend can
+            // react, instead of silently showing an empty viewer.
+            throw e
+          }
+        }
         const content = raw.content
 
         if (Instance.project.vcs === "git") {
@@ -874,22 +894,46 @@ export namespace File {
       await fsRm(tmp, { force: true }).catch(() => {})
       throw e
     }
-    // FORK (BUG-A Phase 8 diagnostic): re-read full to confirm the rename landed.
+    // FORK (BUG-A Phase 8 diagnostic — REGRESSION FIX 2026-06-27):
     // On Windows + antivirus/FUSE/OneDrive, the rename can succeed at the API
-    // level but the FS still serves cached old bytes until next flush. We log a
-    // warning so the next save failure has a hook without paying a hash cost.
-    try {
-      const written = await Filesystem.readText(full)
-      if (written !== content) {
-        log.warn("atomicWrite post-rename mismatch — FS may be caching old bytes", {
+    // level but the FS still serves cached old bytes until next flush. The
+    // previous behaviour logged a warning and continued — the route handler
+    // then returned 200 with the new content, the frontend showed "Saved",
+    // and the on-disk file kept its old bytes. User-visible symptom: "I typed
+    // coucou, hit Ctrl+S, toast Saved, reopened the file — coucou is gone."
+    //
+    // Retry the read-back a few times to absorb transient FS-cache lag, then
+    // throw if the bytes still don't match. The error propagates through the
+    // route handler as a 500 and the frontend now surfaces "SaveFailed".
+    //
+    // REGRESSION FIX 2026-06-27 (round 2): extended to 10×200ms (2 s total).
+    // On heavily-loaded Windows hosts with aggressive antivirus the FS cache
+    // can take >250 ms to flush — the previous 5×50ms budget surfaced false
+    // positives where the cache hadn't caught up yet but would have on the
+    // next read.
+    const RETRIES = 10
+    const DELAY_MS = 200
+    let lastSeen: string | undefined
+    for (let i = 0; i < RETRIES; i++) {
+      try {
+        lastSeen = await Filesystem.readText(full)
+        if (lastSeen === content) return
+      } catch (e) {
+        log.warn("atomicWrite post-rename read-back failed", {
           full,
-          expectedLen: content.length,
-          actualLen: written.length,
+          attempt: i,
+          error: String(e),
         })
       }
-    } catch (e) {
-      log.warn("atomicWrite post-rename read-back failed", { full, error: String(e) })
+      if (i < RETRIES - 1) await new Promise((r) => setTimeout(r, DELAY_MS))
     }
+    throw new Error(
+      `atomicWrite: post-rename read-back mismatch for ${full} ` +
+        `after ${RETRIES} retries (expected ${content.length} bytes, last seen ${
+          lastSeen?.length ?? "?"
+        } bytes). The filesystem is likely serving stale cached bytes — ` +
+        `an antivirus, backup agent, or remote-sync daemon is interfering with the write.`,
+    )
   }
 
   async function notifyWrite(full: string, kind: "add" | "change") {

@@ -19,29 +19,55 @@ export function EditorProvider(props: { children: JSX.Element }) {
   const path = createPathHelpers(() => sdk.directory)
   const fileStore = useFileStore()
 
-  // FORK (Phase 4.4 — R-code&conv): the SDK default is now
-  // throwOnError: false (see packages/sdk/js/src/v2/client.ts), so we no
-  // longer need the explicit override. Before Phase 4.4 the global client
-  // used throwOnError:true, which threw the parsed body before the editor
-  // store could read res.response.status — collapsing every error (409
-  // conflict included) to "not-found". With the new default the response
-  // status is reachable, so the editor store can distinguish 409 (conflict)
-  // and 404 (missing) without parsing a thrown body.
-  const api = sdk.createClient({})
-
+  // FORK (ROOT-CAUSE FIX 2026-06-28): use sdk.client (directory-bound) for all
+  // editor file I/O. A dedicated client was introduced in 40f49c0e5c to get
+  // throwOnError:false, but `sdk.createClient({})` carries NO directory — so
+  // the server resolved every write against the sidecar's process.cwd() and
+  // saves landed in a phantom file outside the project (toast "Saved", disk
+  // unchanged). sdk.client is now non-throwing by default AND carries the
+  // current directory, so it is both correct and reactive (the memo re-creates
+  // when the directory changes). Reads/writes go to the project the viewer
+  // reads from. See Plan-Fix-Editor-Save-Directory-RootCause-2026-06-28.
   const store = createEditorStore({
     fileStore,
     async readRaw(filePath) {
-      const res = await api.file.readRaw({ path: filePath })
+      const res = await sdk.client.file.readRaw({ path: filePath })
       if (!res.data) return { type: "not-found" }
       return { type: "ok", content: res.data.content, stamp: res.data.stamp }
     },
 
     async write({ path: filePath, content, expectedHash, format }) {
-      const res = await api.file.write({ path: filePath, content, expectedHash, format })
+      // FORK (REGRESSION FIX 2026-06-27, root-cause confirmed empirically):
+      // The backend's overwrite guard refuses writes on existing files without
+      // a matching expectedHash (returns 409 "expectedHash is required to
+      // overwrite an existing file"). The editor store's baseline.hash can be
+      // "" when the file was opened via fallbackContent or the open() raced
+      // the file watcher, which sent undefined → 409 → "Saved" was silently
+      // swallowed as not-found, leaving the on-disk file empty.
+      //
+      // Fetch the current disk stamp here so the backend's precondition can
+      // validate against actual state. Cost: one extra readRaw on the cold
+      // path only (the warm path keeps the existing expectedHash from caller).
+      let effectiveHash = expectedHash
+      if (!effectiveHash) {
+        try {
+          const raw = await sdk.client.file.readRaw({ path: filePath })
+          if (raw.data?.stamp?.hash) effectiveHash = raw.data.stamp.hash
+        } catch {
+          // ignore — fall through; backend will 409 if a hash is genuinely required
+        }
+      }
+      const res = await sdk.client.file.write({ path: filePath, content, expectedHash: effectiveHash, format })
       if (res.response?.status === 409) return { type: "conflict" }
       if (res.response?.status === 404) return { type: "not-found" }
-      if (!res.data) return { type: "not-found" }
+      // FORK (REGRESSION FIX 2026-06-27): do NOT collapse 5xx and missing-body
+      // responses to "not-found". The previous code mapped both to a phantom
+      // not-found effect that bypassed the SaveFailed toast — the editor
+      // surface then displayed "Saved" while the disk write had silently
+      // failed (e.g. atomicWrite post-rename mismatch from FS caching). Return
+      // an explicit error so the editor banner + toast can react.
+      if (res.response && res.response.status >= 500) return { type: "error" }
+      if (!res.data) return { type: "error" }
       return {
         type: "ok",
         content: res.data.content,

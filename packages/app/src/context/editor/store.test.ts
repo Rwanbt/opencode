@@ -49,13 +49,31 @@ describe("editor store — open", () => {
     expect(store.get("ghost.ts")!.missing).toBe(true)
   })
 
-  test("already-open returns baseline without re-reading", async () => {
+  test("already-open re-reads disk (no stale baseline)", async () => {
     const { deps, disk } = fakeDeps({ "a.ts": "v1" })
     const store = createEditorStore(deps)
     await store.open("a.ts")
     disk.set("a.ts", "changed-on-disk")
     const eff = await store.open("a.ts")
-    expect(eff).toEqual({ type: "set", content: "v1" }) // not re-read
+    expect(eff).toEqual({ type: "set", content: "changed-on-disk" })
+    expect(store.get("a.ts")!.baseline.content).toBe("changed-on-disk")
+  })
+
+  test("save → close → reopen returns fresh disk content", async () => {
+    // Regression for the bug where saving, closing, then reopening a file
+    // showed the pre-modification baseline instead of the saved bytes.
+    // Root cause was the existing && !existing.missing short-circuit in
+    // editor.open() returning a cached baseline without re-reading disk.
+    const { deps, disk } = fakeDeps({ "a.ts": "v1" })
+    const store = createEditorStore(deps)
+    await store.open("a.ts")
+    store.setDirty("a.ts", true)
+    await store.save("a.ts", "v2-after-save")
+    store.close("a.ts")
+    const eff = await store.open("a.ts")
+    expect(eff).toEqual({ type: "set", content: "v2-after-save" })
+    expect(disk.get("a.ts")).toBe("v2-after-save")
+    expect(store.get("a.ts")!.baseline.content).toBe("v2-after-save")
   })
 })
 

@@ -49,6 +49,7 @@ export type WriteResult =
   | { type: "ok"; content: string; stamp: Stamp; formatted: boolean }
   | { type: "conflict" }
   | { type: "not-found" }
+  | { type: "error" }
 
 export interface EditorDeps {
   readRaw: (path: string) => Promise<ReadRawResult>
@@ -71,6 +72,9 @@ export type DocEffect =
   | { type: "none" } // leave the CM doc untouched
   | { type: "conflict" } // save blocked by 409 — show the conflict banner
   | { type: "missing" } // file gone on disk — show the delete-on-disk actions
+  | { type: "error" } // FORK (REGRESSION FIX 2026-06-27): backend write failed
+                       // (e.g. atomicWrite post-rename mismatch) — surface a
+                       // SaveFailed toast instead of the phantom "Saved".
 
 function freshEntry(content: string, hash: string): EditorEntry {
   return { baseline: { content, hash }, dirty: false, stale: false, saving: false, conflict: false, missing: false }
@@ -110,10 +114,18 @@ export function createEditorStore(deps: EditorDeps) {
    * Load baseline for a file. Returns the content to seed the CM doc.
    * When fallbackContent is provided (e.g. from the read-mode view), the editor
    * opens even if readRaw fails — avoids a false "file deleted" banner.
+   *
+   * WHY always re-read disk (was: short-circuit if existing && !missing):
+   *   the previous implementation returned `existing.baseline.content`
+   *   without ever calling readRaw, so a baseline that drifted from disk
+   *   (e.g. close-guard's save flow fed back the pre-modification
+   *   baseline through FileStore, or the editor entry outlived a tab
+   *   close+reopen cycle) made the next edit-mode open show stale bytes
+   *   while the disk already held the fresh ones. EditorTabCleanup calls
+   *   `editor.close()` on tab removal, so the cost of an extra readRaw
+   *   is paid only on entry into edit mode — acceptable.
    */
   async function open(path: string, fallbackContent?: string): Promise<DocEffect> {
-    const existing = state.entries[path]
-    if (existing && !existing.missing) return { type: "set", content: existing.baseline.content }
     try {
       const res = await deps.readRaw(path)
       if (res.type === "not-found") {
@@ -174,6 +186,14 @@ export function createEditorStore(deps: EditorDeps) {
         set(path, { saving: false, missing: true })
         mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
+      }
+      if (res.type === "error") {
+        // FORK (REGRESSION FIX 2026-06-27): surface backend write failures
+        // (e.g. atomicWrite post-rename mismatch on Windows + AV/OneDrive)
+        // instead of leaving the editor in "saving=false" + FileStore in a
+        // stale state. The UI banner + SaveFailed toast now react to this.
+        set(path, { saving: false })
+        return { type: "error" }
       }
       set(path, {
         baseline: { content: res.content, hash: res.stamp.hash },
@@ -304,6 +324,11 @@ export function createEditorStore(deps: EditorDeps) {
         set(path, { saving: false, missing: true })
         mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
+      }
+      if (res.type === "error") {
+        // See save() above.
+        set(path, { saving: false })
+        return { type: "error" }
       }
       set(path, {
         baseline: { content: res.content, hash: res.stamp.hash },

@@ -97,6 +97,14 @@ export function EditorPanel(props: EditorPanelProps) {
     const h = props.editorHandle
     if (!p) return
     fileStore.setDraftGetter(p, () => h?.getContent() ?? "")
+    // TEMP-DBG (round 3): log every effect run so we can see in the file
+    // whether the createEffect re-fires when CM mounts. Without this we have
+    // no visibility into Solid reactivity at runtime.
+    try {
+      const fs = require("node:fs") as typeof import("node:fs")
+      const line = `[editor-panel ${new Date().toISOString()}] path=${p} handleDefined=${!!h} handleType=${h ? (h.constructor?.name ?? "?") : "undefined"}\n`
+      fs.appendFileSync("D:\\App\\OpenCode\\.build-temp\\editor-panel-debug.log", line)
+    } catch {}
     return () => {
       fileStore.setDraftGetter(p, undefined)
     }
