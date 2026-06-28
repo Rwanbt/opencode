@@ -77,6 +77,31 @@ export function EditorPanel(props: EditorPanelProps) {
   })
   onCleanup(() => autosave.cancelAll())
 
+  // FORK (round 3, PLAN-FIX-CLOSE-GUARD-SAVE): register a CM live-content
+  // getter on FileStore so consumers without a CM handle in scope (e.g. the
+  // close-guard dialog) can read the freshest bytes at save time. Why a
+  // getter rather than mirroring into `FileDoc.draft` per keystroke: CM owns
+  // the live buffer, copying a 1MB string on every keystroke is a perf
+  // killer, and the getter is read at save time so it can never go stale.
+  //
+  // IMPORTANT: read `props.editorHandle` BEFORE the `if (!p) return` guard
+  // so Solid tracks the handle dependency. If guarded first, the effect
+  // only re-runs on path changes and would capture the initial (undefined)
+  // handle — yielding a getter that always returns "".
+  //
+  // IMPORTANT: return a cleanup closure so Solid unregisters the getter
+  // BEFORE re-running the effect on the next path change AND on dispose.
+  // Without this, switching tabs accumulates stale getters in the map.
+  createEffect(() => {
+    const p = props.path()
+    const h = props.editorHandle
+    if (!p) return
+    fileStore.setDraftGetter(p, () => h?.getContent() ?? "")
+    return () => {
+      fileStore.setDraftGetter(p, undefined)
+    }
+  })
+
   // Guard: hide the pencil for binary files (NUL bytes) and files over 1 MB.
   const canEdit = createMemo(() => {
     if (!props.state()?.loaded) return false
@@ -144,8 +169,16 @@ export function EditorPanel(props: EditorPanelProps) {
       applyDocEffect(eff)
       // WHY: save() never throws (catches internally). A conflict/missing
       // result is already surfaced by the EditorBanner via the reactive
-      // editorEntry — don't claim success here.
-      if (eff.type === "conflict" || eff.type === "missing") return
+      // editorEntry — don't claim success here. REGRESSION FIX 2026-06-27:
+      // an explicit "error" effect now surfaces a SaveFailed toast so a
+      // silently-failed backend write (e.g. atomicWrite post-rename
+      // mismatch from Windows FS caching) doesn't claim success.
+      if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
+        if (eff.type === "error") {
+          showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+        }
+        return
+      }
       await props.onSave()
       showToast({ variant: "success", title: language.t("toast.file.saved") })
     } catch {
@@ -169,7 +202,13 @@ export function EditorPanel(props: EditorPanelProps) {
     if (!p) return
     const content = props.editorHandle?.getContent() ?? ""
     try {
-      applyDocEffect(await editorStore.resolveConflict(p, content, "overwrite"))
+      const eff = await editorStore.resolveConflict(p, content, "overwrite")
+      applyDocEffect(eff)
+      // See handleCtrlS — also surface backend errors here.
+      if (eff.type === "error") {
+        showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+        return
+      }
       await props.onOverwrite()
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
@@ -190,7 +229,12 @@ export function EditorPanel(props: EditorPanelProps) {
     const content = props.editorHandle?.getContent() ?? ""
     const format = settings.general.formatOnSave()
     try {
-      applyDocEffect(await editorStore.recreate(p, content, format))
+      const eff = await editorStore.recreate(p, content, format)
+      applyDocEffect(eff)
+      // See handleCtrlS.
+      if (eff.type === "error") {
+        showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+      }
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }

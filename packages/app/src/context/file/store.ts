@@ -12,6 +12,15 @@
 // Phase 2.1 = foundation only. Consumers (`context/file.tsx`, the editor
 // store, `file-tabs.tsx`) are migrated in 2.4–2.6. No call site of this store
 // exists yet — wire-up comes later.
+//
+// FORK (round 3, 2026-06-28, PLAN-FIX-CLOSE-GUARD-SAVE): draft getter pattern.
+// CM owns the live buffer; mirroring the full content into `FileDoc.draft` on
+// every keystroke is a perf killer on large files (1MB+) and duplicates state.
+// Instead, consumers that need the live CM content (close-guard, autosave
+// scheduling) register a zero-arg getter at mount time. `getDraftContent(p)`
+// calls the getter on demand at save time, so it always reads the freshest
+// bytes without any per-keystroke copy. Cleanup is mandatory at unmount
+// (via `setDraftGetter(p, undefined)`) and on `remove(p)`.
 
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -46,6 +55,12 @@ export interface FileDoc {
 export function createFileStore() {
   const [state, setState] = createStore<{ docs: Record<string, FileDoc> }>({ docs: {} })
 
+  // FORK (round 3): live-CM getter registry. See header comment.
+  // Each entry maps a canonical path to a closure returning the current CM
+  // buffer. The closure is set on mount and cleared on unmount/remove so a
+  // stale ref cannot leak into a later save.
+  const draftGetters = new Map<string, () => string | undefined>()
+
   const get = (path: string): FileDoc | undefined => state.docs[path]
 
   const set = (path: string, patch: Partial<FileDoc>) =>
@@ -61,13 +76,15 @@ export function createFileStore() {
     setState("docs", path, doc)
   }
 
-  const remove = (path: string) =>
+  const remove = (path: string) => {
+    draftGetters.delete(path)
     setState(
       "docs",
       produce((docs) => {
         delete docs[path]
       }),
     )
+  }
 
   // WHY a dedicated `markClean` rather than letting callers compose `set(...)`:
   // enforces that transitioning to clean always clears the draft. A dirty draft
@@ -140,6 +157,22 @@ export function createFileStore() {
       }),
     )
 
+  // FORK (round 3): live-CM getter registry API. See header comment.
+  // `undefined` getter → unregister. No setter when there's no live CM mounted
+  // (e.g. viewer-only or right after EditorTabCleanup).
+  const setDraftGetter = (
+    path: string,
+    getter: (() => string | undefined) | undefined,
+  ) => {
+    if (getter === undefined) draftGetters.delete(path)
+    else draftGetters.set(path, getter)
+  }
+
+  const getDraftContent = (path: string): string | undefined => {
+    const g = draftGetters.get(path)
+    return g ? g() : undefined
+  }
+
   return {
     state,
     get,
@@ -151,6 +184,8 @@ export function createFileStore() {
     markSaving,
     markConflict,
     markMissing,
+    setDraftGetter,
+    getDraftContent,
   }
 }
 

@@ -13,10 +13,13 @@
 // System tabs ("context", "review") bypass the guard — no FileStore entry
 // to consult, no draft to lose.
 
-import { createContext, createSignal, useContext, type JSX } from "solid-js"
+import { createContext, createEffect, createSignal, useContext, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useEditor } from "../editor"
 import { useFileStore } from "../file/store"
+import { useLanguage } from "../language"
 import { useLayout } from "../layout"
 import { useSDK } from "../sdk"
 import { createPathHelpers } from "../file/path"
@@ -40,8 +43,10 @@ const Ctx = createContext<EditorCloseGuard>()
 export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.Element {
   const editor = useEditor()
   const fileStore = useFileStore()
+  const language = useLanguage()
   const layout = useLayout()
   const sdk = useSDK()
+  const dialog = useDialog()
   const params = useParams()
   const pathHelpers = createPathHelpers(() => sdk.directory)
 
@@ -65,45 +70,90 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
     },
   }
 
+  // WHY dialog.show(): DialogDirtyClose renders the custom <Dialog>
+  // component (Kobalte.Content / Kobalte.Title / ...) which requires a
+  // <Kobalte> root ancestor to provide DialogContext. That root only
+  // exists inside the DialogProvider's <Show when={active}> branch, so
+  // the dialog MUST be opened via dialog.show() rather than mounted
+  // directly in this provider's JSX (which sits at boot and would
+  // throw "useDialogContext must be used within a Dialog component"
+  // on the first render).
+  createEffect(() => {
+    const p = pending()
+    if (!p) return
+    dialog.show(
+      () => (
+        <DialogDirtyClose
+          path={p.path}
+          saving={saving()}
+          onCancel={() => {
+            setSaving(false)
+            setPending(null)
+            dialog.close()
+            p.resolve("cancelled")
+          }}
+          onDiscard={() => {
+            setSaving(false)
+            layout.tabs(sessionKey()).close(p.tab)
+            setPending(null)
+            dialog.close()
+            p.resolve("closed")
+          }}
+          onSave={async () => {
+            setSaving(true)
+            // FORK (round 3, PLAN-FIX-CLOSE-GUARD-SAVE) — Fix A: prefer the
+            // live CM content (registered as a getter in editor-panel.tsx) over
+            // `FileStore.content` which is only the last-known baseline. The
+            // previous implementation sent the baseline back to the backend,
+            // producing a silent no-op write when expectedHash matched disk.
+            // Fallback order: live CM → baseline (covers editor not yet
+            // mounted, or tab close-guard fired before the getter effect ran).
+            const live =
+              fileStore.getDraftContent(p.path) ?? fileStore.get(p.path)?.content ?? ""
+            const eff = await editor.save(p.path, live)
+            setSaving(false)
+            // FORK (round 3, EC1) — Fix B: never close the tab if save failed.
+            // A 409 (external edit), 404 (file deleted), or 500 (backend error)
+            // must keep the tab open so the user can resolve via the existing
+            // conflict/missing banner or retry. The previous implementation
+            // closed the tab unconditionally, silently dropping the user's
+            // edits in those cases.
+            if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
+              if (eff.type === "error") {
+                showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+              }
+              // Banner conflict/missing is already shown by EditorBanner via
+              // the reactive editorEntry. Order matters: setPending(null)
+              // BEFORE dialog.close() so the dialog.onClose callback sees
+              // pending === null and does not double-resolve the promise.
+              setPending(null)
+              dialog.close()
+              p.resolve("cancelled")
+              return
+            }
+            layout.tabs(sessionKey()).close(p.tab)
+            setPending(null)
+            dialog.close()
+            p.resolve("closed")
+          }}
+        />
+      ),
+      () => {
+        // Dialog closed via Escape / overlay click / programmatic close.
+        // Cancel any still-pending close so callers don't hang on a
+        // promise that will never resolve.
+        const cur = pending()
+        if (!cur) return
+        setSaving(false)
+        setPending(null)
+        cur.resolve("cancelled")
+      },
+    )
+  })
+
   return (
     <Ctx.Provider value={api}>
       {props.children}
-      <DialogDirtyClose
-        path={pending()?.path}
-        open={pending() !== null}
-        saving={saving()}
-        onCancel={() => {
-          const cur = pending()
-          if (!cur) return
-          setPending(null)
-          setSaving(false)
-          cur.resolve("cancelled")
-        }}
-        onDiscard={() => {
-          const cur = pending()
-          if (!cur) return
-          setPending(null)
-          setSaving(false)
-          layout.tabs(sessionKey()).close(cur.tab)
-          cur.resolve("closed")
-        }}
-        onSave={async () => {
-          const cur = pending()
-          if (!cur) return
-          setSaving(true)
-          // WHY content source: CM owns the live buffer in the editor
-          // panel; FileStore.content is the last-known baseline. The CM
-          // handle isn't reachable from this provider (Phase 4 can plumb
-          // a ref through). Passing baseline is acceptable for now — the
-          // server returns the canonical post-save content and the editor
-          // reconciles via `set` effect.
-          await editor.save(cur.path, fileStore.get(cur.path)?.content ?? "")
-          setSaving(false)
-          setPending(null)
-          layout.tabs(sessionKey()).close(cur.tab)
-          cur.resolve("closed")
-        }}
-      />
     </Ctx.Provider>
   )
 }

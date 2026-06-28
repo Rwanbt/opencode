@@ -141,3 +141,41 @@ describe("file store — content + vcs split (PLAN Phase 2 contract)", () => {
     expect(s.get("git.ts")!.vcs?.diff).toBe("diff")
   })
 })
+
+// FORK (round 3, PLAN-FIX-CLOSE-GUARD-SAVE): live-CM getter registry. The
+// getter pattern lets consumers (close-guard dialog, autosave) read the fresh
+// CM buffer at save time without copying it on every keystroke. The store
+// must support set / get / clear semantics AND clean up automatically when
+// the underlying doc is removed (so a stale closure cannot leak into a
+// later save).
+describe("file store — draft getter pattern (round 3)", () => {
+  test("setDraftGetter + getDraftContent roundtrip", () => {
+    const s = createFileStore()
+    s.setDraftGetter("a.ts", () => "live content")
+    expect(s.getDraftContent("a.ts")).toBe("live content")
+  })
+
+  test("getDraftContent returns undefined if no getter registered", () => {
+    const s = createFileStore()
+    expect(s.getDraftContent("a.ts")).toBeUndefined()
+  })
+
+  test("setDraftGetter(undefined) unregisters", () => {
+    const s = createFileStore()
+    s.setDraftGetter("a.ts", () => "live")
+    s.setDraftGetter("a.ts", undefined)
+    expect(s.getDraftContent("a.ts")).toBeUndefined()
+  })
+
+  test("remove() also clears the draft getter", () => {
+    // WHY this invariant: a leftover getter after remove() would feed the
+    // live CM closure into a later save for a path that the store no longer
+    // owns — potentially writing bytes from an unmounted editor. The
+    // cleanup must run alongside the doc deletion.
+    const s = createFileStore()
+    s.upsert("a.ts", { content: "", stamp: { hash: "" }, status: "clean" })
+    s.setDraftGetter("a.ts", () => "live")
+    s.remove("a.ts")
+    expect(s.getDraftContent("a.ts")).toBeUndefined()
+  })
+})
