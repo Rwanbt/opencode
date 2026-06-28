@@ -4,8 +4,7 @@ import { render } from "solid-js/web"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrent as getCurrentDeepLink, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import {
-  AppBaseProviders,
-  AppInterface,
+  AppProviders,
   PlatformProvider,
   ServerConnection,
   checkServerReachable,
@@ -585,11 +584,10 @@ function FullApp(props: {
 
   return (
     <PlatformProvider value={props.platform}>
-      <AppBaseProviders>
-        <AppInterface
-          defaultServer={defaultKey()}
-          servers={servers()}
-        />
+      <AppProviders
+        defaultServer={defaultKey()}
+        servers={servers()}
+      >
         <Show when={llmLoading().loading}>
           <div style={{
             position: "fixed", bottom: "0", left: "0", right: "0",
@@ -601,7 +599,7 @@ function FullApp(props: {
             "font-family": "system-ui, -apple-system, sans-serif",
           }}>
             <div style={{
-              width: "14px", height: "14px", border: "2px solid #334155",
+              width: "14px", height: "14px", "border": "2px solid #334155",
               "border-top-color": "#3b82f6", "border-radius": "50%",
               animation: "spin 1s linear infinite", "flex-shrink": "0",
             }} />
@@ -650,7 +648,7 @@ function FullApp(props: {
             </button>
           </div>
         </Show>
-      </AppBaseProviders>
+      </AppProviders>
     </PlatformProvider>
   )
 }

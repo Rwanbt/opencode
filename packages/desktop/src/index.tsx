@@ -3,8 +3,7 @@
 import {
   ACCEPTED_FILE_EXTENSIONS,
   filePickerFilters,
-  AppBaseProviders,
-  AppInterface,
+  AppProviders,
   handleNotificationClick,
   loadLocaleDict,
   normalizeLocale,
@@ -548,20 +547,17 @@ render(() => {
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders locale={locale.latest}>
-        <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading}>
-          {(_) => {
-            return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-              >
-                <Inner />
-              </AppInterface>
-            )
-          }}
-        </Show>
-      </AppBaseProviders>
+      <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading}>
+        {(_) => (
+          <AppProviders
+            locale={locale.latest}
+            defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+            servers={servers()}
+          >
+            <Inner />
+          </AppProviders>
+        )}
+      </Show>
     </PlatformProvider>
   )
 }, root!)

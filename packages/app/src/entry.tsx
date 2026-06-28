@@ -1,7 +1,7 @@
 // @refresh reload
 
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface } from "@/app"
+import { AppProviders } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
@@ -130,13 +130,11 @@ if (root instanceof HTMLElement) {
   render(
     () => (
       <PlatformProvider value={platform}>
-        <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            servers={[server]}
-            disableHealthCheck
-          />
-        </AppBaseProviders>
+        <AppProviders
+          defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+          servers={[server]}
+          disableHealthCheck
+        />
       </PlatformProvider>
     ),
     root,

@@ -40,6 +40,7 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
+import { SDKProvider } from "@/context/sdk"
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -122,6 +123,26 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
+// FORK (REGRESSION FIX 2026-06-27, round 2): DialogProvider sits ABOVE the
+// SDKProvider in the provider tree (see AppBaseProviders below) — when an app
+// component calls `dialog.show(() => <MyDialog />)`, the rendered MyDialog
+// mounts inside DialogProvider's <Show> branch but BELOW any router-scoped
+// provider. That broke DialogFileCreate / DialogFileRename / etc. that
+// depend on `useSDK()` + `useFile()` (both scoped via DirectoryLayout).
+//
+// Wrapping DialogProvider with SDKProvider at the AppBaseProviders level
+// (NOT RouterRoot) is required because entry.tsx mounts AppBaseProviders
+// OUTSIDE the Router. useParams() therefore does not work here — fall back
+// to an empty directory accessor. File ops inside dialogs use absolute
+// paths (parentDir prop) so the empty directory is irrelevant for the
+// SDK client; it only exists to satisfy useSDK()/useFile() context lookup.
+// The DirectoryLayout's own SDKProvider further down still takes precedence
+// for components rendered inside a route.
+function FallbackSDKForDialogs(props: ParentProps) {
+  const directory = createMemo(() => "")
+  return <SDKProvider directory={directory}>{props.children}</SDKProvider>
+}
+
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
@@ -133,30 +154,27 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
-export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
+// Bottom-half providers — MUST be mounted as a descendant of
+// GlobalSDKProvider so FallbackSDKForDialogs (SDKProvider.init → useGlobalSDK)
+// resolves. Caller (AppProviders) is responsible for placing LanguageProvider
+// and the outer ErrorBoundary ABOVE this so the fallback of the inner
+// ErrorBoundary here can still call useLanguage() / usePlatform().
+//
+// The inner ErrorBoundary catches runtime errors from QueryProvider /
+// DialogProvider / etc. so a runtime crash doesn't take down the whole tree.
+export function AppBaseProviders(props: ParentProps) {
   return (
-    <MetaProvider>
-      <Font />
-      <ThemeProvider
-        onThemeApplied={(_, mode) => {
-          void window.api?.setTitlebar?.({ mode })
-        }}
-      >
-        <LanguageProvider locale={props.locale}>
-          <UiI18nBridge>
-            <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <QueryProvider>
-                <DialogProvider>
-                  <MarkedProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
-                </DialogProvider>
-              </QueryProvider>
-            </ErrorBoundary>
-          </UiI18nBridge>
-        </LanguageProvider>
-      </ThemeProvider>
-    </MetaProvider>
+    <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+      <QueryProvider>
+        <FallbackSDKForDialogs>
+          <DialogProvider>
+            <MarkedProvider>
+              <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+            </MarkedProvider>
+          </DialogProvider>
+        </FallbackSDKForDialogs>
+      </QueryProvider>
+    </ErrorBoundary>
   )
 }
 
@@ -279,37 +297,106 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-export function AppInterface(props: {
-  children?: JSX.Element
+// Canonical provider tree (Fix-GlobalSDK Phase 1). AppProviders is the
+// single source of truth for the order in which ServerProvider →
+// GlobalSDKProvider → AppBaseProviders are mounted. Entry points (desktop
+// Tauri, desktop Electron, mobile, web) MUST use AppProviders instead of
+// manually assembling ServerProvider/GlobalSDKProvider around
+// AppBaseProviders/AppInterface — that mistake reproduces the boot-time
+// "GlobalSDK context must be used within a context provider" crash.
+//
+// Order rationale:
+//   • ServerProvider is at the top because GlobalSDKProvider.init calls
+//     useServer() (global-sdk.tsx:20). Mounting GlobalSDKProvider above
+//     ServerProvider causes useServer() to throw at SDK init.
+//   • GlobalSDKProvider must sit above AppBaseProviders because
+//     FallbackSDKForDialogs (inside AppBaseProviders, app.tsx) renders
+//     SDKProvider whose init calls useGlobalSDK() (sdk.tsx:14). Mounting
+//     GlobalSDKProvider below AppBaseProviders → boot crash.
+//   • ErrorBoundary wraps GlobalSDKProvider so SDK init errors surface a
+//     clean ErrorPage instead of an uncaught throw. A second ErrorBoundary
+//     remains inside AppBaseProviders for runtime errors.
+//   • ConnectionGate stays inside AppInterface because it gates the Router
+//     render on the health check and consumes useServer + usePlatform.
+//
+// See [[Fix-GlobalSDK-Provider-Tree]] for the full target topology and
+// [[Fix-GlobalSDK-Phase0-prep]] for the diagnostic of the bug.
+export function AppProviders(props: ParentProps<{
+  locale?: Locale
   defaultServer: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
-}) {
+}>) {
   return (
     <ServerProvider
       defaultServer={props.defaultServer}
       disableHealthCheck={props.disableHealthCheck}
       servers={props.servers}
     >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          <GlobalSDKProvider>
-            <GlobalSyncProvider>
-              <Dynamic
-                component={props.router ?? Router}
-                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-              >
-                <Route path="/" component={HomeRoute} />
-                <Route path="/:dir" component={DirectoryLayout}>
-                  <Route path="/" component={SessionIndexRoute} />
-                  <Route path="/session/:id?" component={SessionRoute} />
-                </Route>
-              </Dynamic>
-            </GlobalSyncProvider>
-          </GlobalSDKProvider>
-        </ServerKey>
-      </ConnectionGate>
+      <MetaProvider>
+        <Font />
+        <ThemeProvider
+          onThemeApplied={(_, mode) => {
+            void window.api?.setTitlebar?.({ mode })
+          }}
+        >
+          <LanguageProvider locale={props.locale}>
+            <UiI18nBridge>
+              <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+                <GlobalSDKProvider>
+                  <AppBaseProviders>
+                    <AppInterface
+                      router={props.router}
+                      disableHealthCheck={props.disableHealthCheck}
+                    >
+                      {props.children}
+                    </AppInterface>
+                  </AppBaseProviders>
+                </GlobalSDKProvider>
+              </ErrorBoundary>
+            </UiI18nBridge>
+          </LanguageProvider>
+        </ThemeProvider>
+      </MetaProvider>
     </ServerProvider>
+  )
+}
+
+// Reduced from the original full provider tree. ServerProvider and
+// GlobalSDKProvider have moved up into AppProviders (Fix-GlobalSDK Phase 1).
+// AppInterface now only mounts the Router-scoped providers (ConnectionGate,
+// ServerKey, GlobalSyncProvider) and the Router itself. Kept exported so
+// legacy callers compile during the transition — new entry points should
+// prefer AppProviders.
+export function AppInterface(props: {
+  children?: JSX.Element
+  router?: Component<BaseRouterProps>
+  disableHealthCheck?: boolean
+  // @deprecated moved to AppProviders. Kept optional+ignored here so
+  // existing entry points (desktop/src/index.tsx, desktop-electron, mobile)
+  // keep compiling until they migrate to AppProviders in Phases 2-4.
+  defaultServer?: ServerConnection.Key
+  servers?: Array<ServerConnection.Any>
+}) {
+  return (
+    <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+      <ServerKey>
+        <GlobalSyncProvider>
+          <Dynamic
+            component={props.router ?? Router}
+            root={(routerProps) => (
+              <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
+            )}
+          >
+            <Route path="/" component={HomeRoute} />
+            <Route path="/:dir" component={DirectoryLayout}>
+              <Route path="/" component={SessionIndexRoute} />
+              <Route path="/session/:id?" component={SessionRoute} />
+            </Route>
+          </Dynamic>
+        </GlobalSyncProvider>
+      </ServerKey>
+    </ConnectionGate>
   )
 }
