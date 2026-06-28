@@ -1,6 +1,6 @@
 // @ts-nocheck — see comment below
 import { test, expect, describe } from "bun:test"
-import { createFile, createFolder, renameNode, deleteNode, moveNode, type FileOpDeps } from "./operations"
+import { createFile, createFolder, renameNode, deleteNode, moveNode, createFileOpDeps, type FileOpDeps } from "./operations"
 
 // Pure unit tests for file operations. SDK is mocked at the deps boundary — no
 // network, no SolidJS, no toast. Covers the happy path, error code mapping
@@ -288,5 +288,63 @@ describe("moveNode", () => {
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.code).toBe("exists")
     expect(refreshed).toEqual([])
+  })
+})
+
+// Regression guard for the 2026-06-29 dialog crash: file-management dialogs
+// render in the DialogProvider portal scope (above the route), so they cannot
+// call useFile()/useSDK() themselves — the deps must be built at the call site
+// from the directory-scoped sdk.client + file.tree and injected as a prop.
+// This test pins that wiring: createFileOpDeps must delegate to the SAME
+// sdk.client.file.* and file.tree.refresh it is handed (the directory-bound
+// ones), never a default/empty-directory client.
+describe("createFileOpDeps", () => {
+  function fakeContexts() {
+    const calls: { op: string; arg: unknown }[] = []
+    const sdk = {
+      client: {
+        file: {
+          write: (arg: unknown) => (calls.push({ op: "write", arg }), Promise.resolve("w")),
+          mkdir: (arg: unknown) => (calls.push({ op: "mkdir", arg }), Promise.resolve("m")),
+          rename: (arg: unknown) => (calls.push({ op: "rename", arg }), Promise.resolve("r")),
+          move: (arg: unknown) => (calls.push({ op: "move", arg }), Promise.resolve("mv")),
+          delete: (arg: unknown) => (calls.push({ op: "delete", arg }), Promise.resolve("d")),
+        },
+      },
+    }
+    const file = {
+      tree: { refresh: (arg: unknown) => (calls.push({ op: "refresh", arg }), Promise.resolve()) },
+    }
+    return { sdk, file, calls }
+  }
+
+  test("forwards every op to the directory-scoped sdk.client + file.tree", async () => {
+    const { sdk, file, calls } = fakeContexts()
+    const deps = createFileOpDeps(sdk, file)
+    await deps.write({ path: "a.ts", content: "x" })
+    await deps.mkdir({ path: "dir" })
+    await deps.rename({ from: "a.ts", to: "b.ts" })
+    await deps.move({ from: "b.ts", to: "sub/b.ts" })
+    await deps.del({ path: "sub/b.ts" })
+    await deps.refreshDir("sub")
+    expect(calls).toEqual([
+      { op: "write", arg: { path: "a.ts", content: "x" } },
+      { op: "mkdir", arg: { path: "dir" } },
+      { op: "rename", arg: { from: "a.ts", to: "b.ts" } },
+      { op: "move", arg: { from: "b.ts", to: "sub/b.ts" } },
+      { op: "delete", arg: { path: "sub/b.ts" } },
+      { op: "refresh", arg: "sub" },
+    ])
+  })
+
+  test("reads sdk.client lazily so it tracks the active directory", async () => {
+    // Swapping sdk.client after deps creation must be reflected — proves the
+    // deps don't snapshot a stale (e.g. empty-directory) client at build time.
+    const first = fakeContexts()
+    const deps = createFileOpDeps(first.sdk, first.file)
+    const second = fakeContexts().sdk.client
+    first.sdk.client = second
+    await deps.write({ path: "z.ts", content: "" })
+    expect(first.calls).toEqual([]) // old client untouched
   })
 })

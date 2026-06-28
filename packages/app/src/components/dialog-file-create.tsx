@@ -6,37 +6,30 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
 import { createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
-import { useFile } from "@/context/file"
 import { createFile, createFolder, type FileOpDeps } from "@/context/file/operations"
 
+// FORK: deps are injected by the call site (createFileOpDeps) because this
+// dialog renders in the DialogProvider portal scope, outside the route-scoped
+// FileProvider/SDKProvider. See createFileOpDeps in context/file/operations.
 export function DialogFileCreate(props: {
   mode: "file" | "folder"
   parentDir: string
+  deps: FileOpDeps
   onCreated?: (path: string) => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
-  const file = useFile()
 
   const [name, setName] = createSignal("")
-
-  const deps: FileOpDeps = {
-    write: (input) => sdk.client.file.write(input),
-    mkdir: (input) => sdk.client.file.mkdir(input),
-    rename: (input) => sdk.client.file.rename(input),
-    move: (input) => sdk.client.file.move(input),
-    del: (input) => sdk.client.file.delete(input),
-    refreshDir: (dir) => file.tree.refresh(dir),
-  }
 
   const mutation = useMutation(() => ({
     mutationFn: async () => {
       const n = name().trim()
       if (!n) return
       const result =
-        props.mode === "file" ? await createFile(deps, props.parentDir, n) : await createFolder(deps, props.parentDir, n)
+        props.mode === "file"
+          ? await createFile(props.deps, props.parentDir, n)
+          : await createFolder(props.deps, props.parentDir, n)
       if (!result.ok) {
         const key = result.code === "exists" ? "toast.file.exists" : "toast.file.createFailed"
         showToast({ variant: "error", title: language.t(key) })

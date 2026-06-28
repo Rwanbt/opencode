@@ -6,36 +6,25 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
 import { createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
-import { useFile } from "@/context/file"
 import { renameNode, type FileOpDeps } from "@/context/file/operations"
 import type { FileNode } from "../types/sdk-shim"
 
+// FORK: deps injected by the call site — see createFileOpDeps.
 export function DialogFileRename(props: {
   node: FileNode
+  deps: FileOpDeps
   onRenamed?: (oldPath: string, newPath: string) => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
-  const file = useFile()
 
   const [name, setName] = createSignal(props.node.name)
-
-  const deps: FileOpDeps = {
-    write: (input) => sdk.client.file.write(input),
-    mkdir: (input) => sdk.client.file.mkdir(input),
-    rename: (input) => sdk.client.file.rename(input),
-    move: (input) => sdk.client.file.move(input),
-    del: (input) => sdk.client.file.delete(input),
-    refreshDir: (dir) => file.tree.refresh(dir),
-  }
 
   const mutation = useMutation(() => ({
     mutationFn: async () => {
       const n = name().trim()
       if (!n || n === props.node.name) return
-      const result = await renameNode(deps, props.node.path, n)
+      const result = await renameNode(props.deps, props.node.path, n)
       if (!result.ok) {
         const key = result.code === "exists" ? "toast.file.exists" : "toast.file.renameFailed"
         showToast({ variant: "error", title: language.t(key) })

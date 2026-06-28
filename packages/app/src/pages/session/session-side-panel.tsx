@@ -23,6 +23,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
+import { createFileOpDeps } from "@/context/file/operations"
 import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -170,6 +171,7 @@ export function SessionSidePanel(props: {
         <x.DialogFileCreate
           mode="file"
           parentDir={parentDir}
+          deps={createFileOpDeps(sdk, file)}
           onCreated={(path) => openTab(file.tab(path))}
         />
       ))
@@ -178,7 +180,7 @@ export function SessionSidePanel(props: {
 
   const handleNewFolder = (parentDir: string) => {
     void import("@/components/dialog-file-create").then((x) => {
-      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir={parentDir} />)
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir={parentDir} deps={createFileOpDeps(sdk, file)} />)
     })
   }
 
@@ -187,6 +189,7 @@ export function SessionSidePanel(props: {
       dialog.show(() => (
         <x.DialogFileRename
           node={node}
+          deps={createFileOpDeps(sdk, file)}
           onRenamed={(oldPath, newPath) => {
             tabs().close(file.tab(oldPath))
             openTab(file.tab(newPath))
@@ -201,6 +204,7 @@ export function SessionSidePanel(props: {
       dialog.show(() => (
         <x.DialogFileDelete
           node={node}
+          deps={createFileOpDeps(sdk, file)}
           onDeleted={(path) => tabs().close(file.tab(path))}
         />
       ))
@@ -212,6 +216,7 @@ export function SessionSidePanel(props: {
       dialog.show(() => (
         <x.DialogFileMove
           node={node}
+          deps={createFileOpDeps(sdk, file)}
           onMoved={(oldPath, newPath) => {
             tabs().close(file.tab(oldPath))
             openTab(file.tab(newPath))

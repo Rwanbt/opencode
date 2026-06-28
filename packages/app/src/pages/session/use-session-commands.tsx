@@ -5,6 +5,7 @@ import { useEditor } from "@/context/editor"
 import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { createFileOpDeps } from "@/context/file/operations"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
@@ -457,13 +458,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const newFile = () => {
     void import("@/components/dialog-file-create").then((x) => {
-      dialog.show(() => <x.DialogFileCreate mode="file" parentDir="" />)
+      dialog.show(() => <x.DialogFileCreate mode="file" parentDir="" deps={createFileOpDeps(sdk, file)} />)
     })
   }
 
   const newFolder = () => {
     void import("@/components/dialog-file-create").then((x) => {
-      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir="" />)
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir="" deps={createFileOpDeps(sdk, file)} />)
     })
   }
 

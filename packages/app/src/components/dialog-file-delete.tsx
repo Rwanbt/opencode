@@ -4,32 +4,21 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
-import { useFile } from "@/context/file"
 import { deleteNode, type FileOpDeps } from "@/context/file/operations"
 import type { FileNode } from "../types/sdk-shim"
 
+// FORK: deps injected by the call site — see createFileOpDeps.
 export function DialogFileDelete(props: {
   node: FileNode
+  deps: FileOpDeps
   onDeleted?: (path: string) => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
-  const file = useFile()
-
-  const deps: FileOpDeps = {
-    write: (input) => sdk.client.file.write(input),
-    mkdir: (input) => sdk.client.file.mkdir(input),
-    rename: (input) => sdk.client.file.rename(input),
-    move: (input) => sdk.client.file.move(input),
-    del: (input) => sdk.client.file.delete(input),
-    refreshDir: (dir) => file.tree.refresh(dir),
-  }
 
   const mutation = useMutation(() => ({
     mutationFn: async () => {
-      const result = await deleteNode(deps, props.node.path)
+      const result = await deleteNode(props.deps, props.node.path)
       if (!result.ok) {
         showToast({ variant: "error", title: language.t("toast.file.deleteFailed") })
         return

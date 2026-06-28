@@ -1,3 +1,6 @@
+import type { useSDK } from "@/context/sdk"
+import type { useFile } from "@/context/file"
+
 export type FileOpResult = { ok: true } | { ok: false; code: "conflict" | "not-found" | "exists" | "denied" | "error"; message: string }
 
 export interface FileOpDeps {
@@ -7,6 +10,27 @@ export interface FileOpDeps {
   move: (input: { from: string; to: string }) => Promise<unknown>
   del: (input: { path: string }) => Promise<unknown>
   refreshDir: (dir: string) => Promise<void> | void
+}
+
+// WHY: file-management dialogs render in the DialogProvider portal scope
+// (app.tsx), which sits ABOVE the route-scoped FileProvider and the real
+// directory-bound SDKProvider. Calling useFile()/useSDK() from inside a dialog
+// therefore either throws ("File context must be used within a context
+// provider") or resolves to the empty-directory fallback SDK — which makes the
+// server write to process.cwd() instead of the open project (same phantom-file
+// class as the 40f49c0e5c save regression). The call site (inside the route)
+// DOES have both contexts, and dialog.show()'s element factory captures them
+// lexically, so build the deps there and pass them in as a prop. Reads
+// sdk.client/file.tree lazily, so it stays current with the active directory.
+export function createFileOpDeps(sdk: ReturnType<typeof useSDK>, file: ReturnType<typeof useFile>): FileOpDeps {
+  return {
+    write: (input) => sdk.client.file.write(input),
+    mkdir: (input) => sdk.client.file.mkdir(input),
+    rename: (input) => sdk.client.file.rename(input),
+    move: (input) => sdk.client.file.move(input),
+    del: (input) => sdk.client.file.delete(input),
+    refreshDir: (dir) => file.tree.refresh(dir),
+  }
 }
 
 // WHY: backend list() builds paths via node:path.relative, which yields "\"
