@@ -242,6 +242,7 @@ pub async fn start_embedded_server(
 
     let mut child = Command::new(&cmd_path)
         .args(&cmd_args)
+        .current_dir(&home_dir)
         .env("PATH", &path)
         .env("LD_LIBRARY_PATH", &lib_path)
         .env("HOME", home_dir.to_str().unwrap_or("/tmp"))
