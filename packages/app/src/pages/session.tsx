@@ -625,7 +625,6 @@ export default function Page() {
     vcsMode,
     wantsReview,
     composer,
-    isDesktop,
     loadVcs,
     refreshVcs,
     activeFileTab,

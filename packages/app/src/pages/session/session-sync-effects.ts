@@ -28,7 +28,6 @@ export interface SessionSyncEffectsDeps {
   vcsMode: () => VcsMode | undefined
   wantsReview: () => boolean
   composer: { blocked: () => boolean }
-  isDesktop: () => boolean
   loadVcs: (mode: VcsMode, force?: boolean) => Promise<void>
   refreshVcs: () => void
   activeFileTab: () => string | undefined
@@ -49,7 +48,6 @@ export function createSessionSyncEffects(deps: SessionSyncEffectsDeps) {
     vcsMode,
     wantsReview,
     composer,
-    isDesktop,
     loadVcs,
     refreshVcs,
     activeFileTab,
@@ -240,7 +238,6 @@ export function createSessionSyncEffects(deps: SessionSyncEffectsDeps) {
   let treeDir: string | undefined
   createEffect(() => {
     const dir = sdk.directory
-    if (!isDesktop()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
