@@ -207,9 +207,7 @@ export function createEditorStore(deps: EditorDeps) {
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
       set(path, { saving: false })
-      // Don't mirror on transport failure — keep prior FileStore status
-      // (probably still "saving"). A subsequent retry will transition again.
-      return { type: "none" }
+      return { type: "error" }
     }
   }
 
