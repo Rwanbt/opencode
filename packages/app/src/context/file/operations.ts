@@ -22,13 +22,22 @@ export interface FileOpDeps {
 // DOES have both contexts, and dialog.show()'s element factory captures them
 // lexically, so build the deps there and pass them in as a prop. Reads
 // sdk.client/file.tree lazily, so it stays current with the active directory.
+async function assertOk(res: { data?: unknown; response?: Response; error?: unknown }) {
+  if (res.error) throw res.error
+  if (res.response && !res.response.ok) {
+    let msg = `HTTP ${res.response.status}`
+    try { const body = await res.response.clone().text(); if (body) msg = body } catch {}
+    throw new Error(msg)
+  }
+}
+
 export function createFileOpDeps(sdk: ReturnType<typeof useSDK>, file: ReturnType<typeof useFile>): FileOpDeps {
   return {
-    write: (input) => sdk.client.file.write(input),
-    mkdir: (input) => sdk.client.file.mkdir(input),
-    rename: (input) => sdk.client.file.rename(input),
-    move: (input) => sdk.client.file.move(input),
-    del: (input) => sdk.client.file.delete(input),
+    write: async (input) => { const r = await sdk.client.file.write(input); await assertOk(r) },
+    mkdir: async (input) => { const r = await sdk.client.file.mkdir(input); await assertOk(r) },
+    rename: async (input) => { const r = await sdk.client.file.rename(input); await assertOk(r) },
+    move: async (input) => { const r = await sdk.client.file.move(input); await assertOk(r) },
+    del: async (input) => { const r = await sdk.client.file.delete(input); await assertOk(r) },
     refreshDir: (dir) => file.tree.refresh(dir),
   }
 }
