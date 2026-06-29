@@ -189,6 +189,10 @@ export function EditorPanel(props: EditorPanelProps) {
       }
       await props.onSave()
       showToast({ variant: "success", title: language.t("toast.file.saved") })
+      // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
+      // viewer re-mounts and the editor (CM) unmounts. NOT done on
+      // conflict/missing/error above — banner must remain visible.
+      props.setEditing(false)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
@@ -218,6 +222,10 @@ export function EditorPanel(props: EditorPanelProps) {
         return
       }
       await props.onOverwrite()
+      // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
+      // viewer re-mounts after the user explicitly resolved the conflict by
+      // overwriting disk. NOT done on error above.
+      props.setEditing(false)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
