@@ -316,8 +316,10 @@ function ServerKey(props: ParentProps) {
 //   • ErrorBoundary wraps GlobalSDKProvider so SDK init errors surface a
 //     clean ErrorPage instead of an uncaught throw. A second ErrorBoundary
 //     remains inside AppBaseProviders for runtime errors.
-//   • ConnectionGate stays inside AppInterface because it gates the Router
-//     render on the health check and consumes useServer + usePlatform.
+//   • ConnectionGate, ServerKey, and GlobalSyncProvider sit above
+//     AppBaseProviders so that DialogProvider (inside AppBaseProviders)
+//     has access to GlobalSyncProvider. This fixes 11 dialogs that
+//     crashed with "useGlobalSync must be used within GlobalSyncProvider".
 //
 // See [[Fix-GlobalSDK-Provider-Tree]] for the full target topology and
 // [[Fix-GlobalSDK-Phase0-prep]] for the diagnostic of the bug.
@@ -345,14 +347,19 @@ export function AppProviders(props: ParentProps<{
             <UiI18nBridge>
               <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
                 <GlobalSDKProvider>
-                  <AppBaseProviders>
-                    <AppInterface
-                      router={props.router}
-                      disableHealthCheck={props.disableHealthCheck}
-                    >
-                      {props.children}
-                    </AppInterface>
-                  </AppBaseProviders>
+                  <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+                    <ServerKey>
+                      <GlobalSyncProvider>
+                        <AppBaseProviders>
+                          <AppInterface
+                            router={props.router}
+                          >
+                            {props.children}
+                          </AppInterface>
+                        </AppBaseProviders>
+                      </GlobalSyncProvider>
+                    </ServerKey>
+                  </ConnectionGate>
                 </GlobalSDKProvider>
               </ErrorBoundary>
             </UiI18nBridge>
@@ -363,40 +370,33 @@ export function AppProviders(props: ParentProps<{
   )
 }
 
-// Reduced from the original full provider tree. ServerProvider and
-// GlobalSDKProvider have moved up into AppProviders (Fix-GlobalSDK Phase 1).
-// AppInterface now only mounts the Router-scoped providers (ConnectionGate,
-// ServerKey, GlobalSyncProvider) and the Router itself. Kept exported so
-// legacy callers compile during the transition — new entry points should
-// prefer AppProviders.
+// Reduced from the original full provider tree. ServerProvider,
+// GlobalSDKProvider, ConnectionGate, ServerKey, and GlobalSyncProvider have
+// moved up into AppProviders (Fix-GlobalSDK Phase 1 + P7-DialogContext fix).
+// AppInterface now only mounts the Router. Kept exported so legacy callers
+// compile during the transition — new entry points should prefer AppProviders.
 export function AppInterface(props: {
   children?: JSX.Element
   router?: Component<BaseRouterProps>
-  disableHealthCheck?: boolean
   // @deprecated moved to AppProviders. Kept optional+ignored here so
   // existing entry points (desktop/src/index.tsx, desktop-electron, mobile)
   // keep compiling until they migrate to AppProviders in Phases 2-4.
   defaultServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
+  disableHealthCheck?: boolean
 }) {
   return (
-    <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-      <ServerKey>
-        <GlobalSyncProvider>
-          <Dynamic
-            component={props.router ?? Router}
-            root={(routerProps) => (
-              <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
-            )}
-          >
-            <Route path="/" component={HomeRoute} />
-            <Route path="/:dir" component={DirectoryLayout}>
-              <Route path="/" component={SessionIndexRoute} />
-              <Route path="/session/:id?" component={SessionRoute} />
-            </Route>
-          </Dynamic>
-        </GlobalSyncProvider>
-      </ServerKey>
-    </ConnectionGate>
+    <Dynamic
+      component={props.router ?? Router}
+      root={(routerProps) => (
+        <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
+      )}
+    >
+      <Route path="/" component={HomeRoute} />
+      <Route path="/:dir" component={DirectoryLayout}>
+        <Route path="/" component={SessionIndexRoute} />
+        <Route path="/session/:id?" component={SessionRoute} />
+      </Route>
+    </Dynamic>
   )
 }

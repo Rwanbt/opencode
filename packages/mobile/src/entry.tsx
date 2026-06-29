@@ -63,6 +63,11 @@ function applySessionDeepLink(raw: string): boolean {
   return true
 }
 
+// Build marker — visible in chrome://inspect console + logcat (debuggable build).
+// The date is baked at COMPILE time so it identifies which dist is running.
+const BUILD_STAMP = "__BUILD_2026_06_29_P7__"
+console.warn(`[BOOT] frontend=${BUILD_STAMP}`)
+
 // Hide the static loading indicator
 const loadingEl = document.getElementById("loading")
 if (loadingEl) loadingEl.style.display = "none"
