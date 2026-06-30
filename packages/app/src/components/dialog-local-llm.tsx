@@ -281,9 +281,16 @@ export function DialogLocalLLM() {
       const configRaw = localStorage.getItem("opencode-model-config")
       const modelConfig = configRaw ? JSON.parse(configRaw) : {}
 
+      // "auto" must match the ceiling actually passed to llama-server via
+      // --ctx-size (packages/opencode/src/local-llm-server/auto-config.ts
+      // ::deriveConfig — RAM-tiered, maxes out at 16384). Advertising the
+      // model's much larger native context (e.g. 131072) here caused
+      // compaction to plan around a budget the server was never configured
+      // to actually serve, producing a hard "Conversation history too large
+      // to compact" error well before the real 16384-token limit was hit.
       const contextSize = modelConfig.contextMode === "manual"
         ? modelConfig.contextManual || 32768
-        : 131072 // auto: use model's native context
+        : 16384 // auto: matches local-llm-server's default --ctx-size ceiling
 
       // Detect vision projector: if any mmproj-*.gguf is installed, vision-capable models
       // get modalities.input.image=true so the provider layer passes image blocks through.

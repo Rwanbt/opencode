@@ -210,8 +210,17 @@ export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers 
         `OPENCODE_ALLOW_CPU_ONLY=1 to explicitly allow CPU-only inference.`,
     )
   }
+  // +1: llama.cpp counts the output/lm_head layer separately from the
+  // transformer block count (GGUF's <arch>.block_count). Capping at
+  // modelLayers alone leaves that one extra layer on CPU — a 1-layer
+  // partial CPU/GPU split. Verified on an RTX 4070 8GB with a 33-layer
+  // hybrid SSM model (Ornith-1.0-9B, block_count=32): requesting exactly
+  // 32 landed in a partial-offload zone that either OOM'd or hit a
+  // llama.cpp scheduler assertion specific to that architecture, while
+  // requesting 33 (true full GPU offload) loaded cleanly at 6285/8187 MiB
+  // and ran at 37 tok/s vs the CPU-only fallback's 2.9 tok/s.
   const nGpuLayers = hasUsableGpu
-    ? Math.max(0, Math.min(modelLayers, Math.floor(vramBudget / mbPerLayer)))
+    ? Math.max(0, Math.min(modelLayers + 1, Math.floor(vramBudget / mbPerLayer)))
     : 0
 
   // Threads: use only the "big" cores on heterogeneous CPUs, cap at 6 to

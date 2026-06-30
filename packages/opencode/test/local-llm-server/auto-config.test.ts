@@ -30,9 +30,11 @@ describe("deriveConfig", () => {
     expect(big.nGpuLayers).toBeGreaterThanOrEqual(small.nGpuLayers)
   })
 
-  test("caps layers at modelLayers", () => {
+  test("caps layers at modelLayers + 1 (output layer)", () => {
+    // +1 accounts for llama.cpp's output/lm_head layer, counted separately
+    // from the GGUF block_count — see auto-config.ts comment on nGpuLayers.
     const cfg = deriveConfig(profile({ vramMb: 64 * 1024 }), 1_000, 32)
-    expect(cfg.nGpuLayers).toBeLessThanOrEqual(32)
+    expect(cfg.nGpuLayers).toBeLessThanOrEqual(33)
   })
 
   test("returns 0 layers on CPU-only profile", () => {

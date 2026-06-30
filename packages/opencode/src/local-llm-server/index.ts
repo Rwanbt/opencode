@@ -453,7 +453,7 @@ export namespace LocalLLMServer {
 
   // ── Spawn helpers ─────────────────────────────────────────────────────────
 
-  function buildArgs(modelPath: string): string[] {
+  function buildArgs(modelPath: string, nGpuLayersOverride?: number): { args: string[]; nGpuLayers: number } {
     initPaths()
     // deriveConfig picks GPU layers / threads / batch / KV quant based on
     // the running device (see auto-config.ts). Env overrides remain available
@@ -474,9 +474,32 @@ export namespace LocalLLMServer {
     if (kvCacheRaw !== kvCache)
       log.warn("Invalid OPENCODE_KV_CACHE_TYPE, fallback to adaptive", { kvCacheRaw, chosen: kvCache })
 
-    // n_gpu_layers: env override first, else adaptive. "99" remains the
-    // historic "offload everything" sentinel; users who want that opt in.
-    const ngl = process.env.OPENCODE_N_GPU_LAYERS ?? String(cfg.nGpuLayers)
+    // n_gpu_layers: explicit override (OOM retry) > env override > adaptive.
+    // "99" remains the historic "offload everything" sentinel; users who want
+    // that opt in via env.
+    const ngl =
+      nGpuLayersOverride !== undefined
+        ? String(Math.max(0, nGpuLayersOverride))
+        : (process.env.OPENCODE_N_GPU_LAYERS ?? String(cfg.nGpuLayers))
+
+    // --ctx-size: env override > adaptive (deriveConfig, RAM-tiered).
+    //
+    // Without this, llama-server starts from the GGUF's native n_ctx_train
+    // (e.g. 262144 for Ornith-1.0-9B) and relies entirely on its own
+    // experimental --fit auto-reduction to shrink it to fit VRAM. Verified
+    // on an RTX 4070 8GB laptop GPU: --fit alone reduced Ornith's context to
+    // 169984 — still far more than needed for coding tasks — leaving too
+    // little VRAM margin and triggering either a CUDA OOM (full GPU offload)
+    // or a llama.cpp scheduler assertion crash specific to this model's
+    // hybrid Gated Delta Net architecture under partial CPU/GPU offload
+    // (`GGML_ASSERT(ctx->mem_buffer != NULL)` in sched_reserve). With an
+    // explicit --ctx-size 16384 cap, the same model loads fully on GPU
+    // (ngl=99) using 6285/8187 MiB and runs at 37 tok/s decode, vs 2.9 tok/s
+    // when forced to CPU-only as a workaround. Capping context — not
+    // reducing GPU layers — is the actual fix for this failure class.
+    const ctxSize = process.env.OPENCODE_LLAMA_CTX_SIZE
+      ? Number(process.env.OPENCODE_LLAMA_CTX_SIZE)
+      : cfg.contextSize
 
     // NOTE: --fit / -fitt / -fitc sont spécifiques au fork llama.cpp intégré.
     // Opt-in via OPENCODE_LLAMA_ENABLE_FIT=1 pour éviter de crasher sur llama.cpp upstream.
@@ -484,7 +507,7 @@ export namespace LocalLLMServer {
 
     log.info("llama adaptive config", {
       profile: { gpu: profile.gpuBackend, vramMb: profile.vramMb, totalRamMb: profile.totalRamMb, bigCores: profile.cpuCores.big },
-      chosen: { nGpuLayers: ngl, nThreads: cfg.nThreads, batchSize: cfg.batchSize, kvCache },
+      chosen: { nGpuLayers: ngl, nThreads: cfg.nThreads, batchSize: cfg.batchSize, kvCache, ctxSize },
       modelSizeMb,
     })
 
@@ -499,6 +522,7 @@ export namespace LocalLLMServer {
         batch_size: cfg.batchSize,
         ubatch_size: cfg.uBatchSize,
         kv_cache_type: kvCache,
+        context_size: ctxSize,
       }
       fs.writeFileSync(path.join(BASE_DIR, "llm_config.json"), JSON.stringify(shared))
     } catch (e) {
@@ -514,6 +538,8 @@ export namespace LocalLLMServer {
       "127.0.0.1",
       "--n-gpu-layers",
       ngl,
+      "--ctx-size",
+      String(ctxSize),
       "--flash-attn",
       "on",
       "--cache-type-k",
@@ -604,7 +630,7 @@ export namespace LocalLLMServer {
       }
     }
 
-    return args
+    return { args, nGpuLayers: Number(ngl) }
   }
 
   async function waitUntilReady(
@@ -631,17 +657,33 @@ export namespace LocalLLMServer {
     )
   }
 
-  async function spawnAndWait(modelID: string, signal?: AbortSignal): Promise<void> {
-    const found = await findModelFile(modelID)
-    if (!found)
-      throw new Error(`[LocalLLMServer] Runtime or model not found for "${modelID}"`)
+  // Matches the CUDA/ggml allocator failure modes seen when a model (or its
+  // compute graph buffer — notably oversized on hybrid SSM/attention archs
+  // whose recurrent-state buffer doesn't shrink with --fit's context
+  // reduction) doesn't fit in available VRAM.
+  const OOM_PATTERN = /cudaMalloc failed: out of memory|unable to allocate|failed to allocate.*buffer/i
 
-    const { serverExe, modelPath, modelFile } = found
-    log.info("Spawning llama-server", { exe: serverExe, model: modelFile, port: PORT })
+  async function waitForPortFree(timeoutMs = 5000): Promise<void> {
+    const t0 = Date.now()
+    while (Date.now() - t0 < timeoutMs) {
+      if (!(await isPortOpen())) return
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  }
 
+  async function spawnOnce(
+    modelID: string,
+    serverExe: string,
+    modelPath: string,
+    modelFile: string,
+    signal: AbortSignal | undefined,
+    nGpuLayersOverride: number | undefined,
+  ): Promise<void> {
     const stderrBuf = new RingBuffer(STDERR_BUFFER_SIZE)
+    const { args, nGpuLayers } = buildArgs(modelPath, nGpuLayersOverride)
+    log.info("Spawning llama-server", { exe: serverExe, model: modelFile, port: PORT, nGpuLayers })
 
-    const child = Bun.spawn([serverExe, ...buildArgs(modelPath)], {
+    const child = Bun.spawn([serverExe, ...args], {
       stdout: "ignore",
       stderr: "pipe",
     })
@@ -693,6 +735,60 @@ export namespace LocalLLMServer {
       _ownedChildPid = null
       _currentModelID = null
       throw e
+    }
+  }
+
+  async function spawnAndWait(modelID: string, signal?: AbortSignal): Promise<void> {
+    const found = await findModelFile(modelID)
+    if (!found)
+      throw new Error(`[LocalLLMServer] Runtime or model not found for "${modelID}"`)
+
+    const { serverExe, modelPath, modelFile } = found
+
+    try {
+      await spawnOnce(modelID, serverExe, modelPath, modelFile, signal, undefined)
+      return
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      if (!OOM_PATTERN.test(message)) throw e
+
+      // First attempt OOM'd in the CUDA allocator. Retry once with GPU
+      // layers reduced (partial CPU offload) — this only engages on a
+      // failure the existing flow already couldn't recover from, so it
+      // cannot regress configs that load successfully today.
+      const profile = detectProfile()
+      const modelSizeMb = (() => {
+        try {
+          return Math.max(1, Math.floor(fs.statSync(modelPath).size / (1024 * 1024)))
+        } catch {
+          return 0
+        }
+      })()
+      const baselineNgl = process.env.OPENCODE_N_GPU_LAYERS
+        ? Number(process.env.OPENCODE_N_GPU_LAYERS)
+        : deriveConfig(profile, modelSizeMb).nGpuLayers
+      const reducedNgl = Math.max(0, Math.floor(baselineNgl * 0.7))
+
+      log.warn("llama-server OOM at startup — retrying with reduced GPU layers", {
+        model: modelFile,
+        baselineNgl,
+        reducedNgl,
+      })
+      await waitForPortFree()
+
+      try {
+        await spawnOnce(modelID, serverExe, modelPath, modelFile, signal, reducedNgl)
+        log.info("llama-server recovered with reduced GPU layers", { nGpuLayers: reducedNgl })
+        return
+      } catch (e2) {
+        const message2 = e2 instanceof Error ? e2.message : String(e2)
+        if (!OOM_PATTERN.test(message2)) throw e2
+        throw new Error(
+          `[LocalLLMServer] Modèle "${modelFile}" trop volumineux pour la VRAM disponible, ` +
+            `même avec un offload GPU réduit (${reducedNgl} couches). ` +
+            `Essayez une quantization plus légère (Q3/Q2) ou un modèle plus petit.`,
+        )
+      }
     }
   }
 
