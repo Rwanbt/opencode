@@ -37,6 +37,16 @@ describe("deriveConfig", () => {
     expect(cfg.nGpuLayers).toBeLessThanOrEqual(33)
   })
 
+  test("respects real block_count instead of hardcoded 32", () => {
+    // 28-layer model (Gemma/Qwen-small): cap at 29, not 33.
+    const small = deriveConfig(profile({ vramMb: 64 * 1024 }), 1_000, 28)
+    expect(small.nGpuLayers).toBeLessThanOrEqual(29)
+    // 36-layer model: must allow >33 (would be wrongly capped if 32 hardcoded).
+    const big = deriveConfig(profile({ vramMb: 64 * 1024 }), 1_000, 36)
+    expect(big.nGpuLayers).toBeLessThanOrEqual(37)
+    expect(big.nGpuLayers).toBeGreaterThan(33)
+  })
+
   test("returns 0 layers on CPU-only profile", () => {
     const cfg = deriveConfig(profile({ gpuBackend: "none", vramMb: 0 }), 4 * 1024, 32)
     expect(cfg.nGpuLayers).toBe(0)

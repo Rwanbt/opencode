@@ -14,7 +14,7 @@ import os from "node:os"
 import fs from "node:fs"
 import net from "node:net"
 import { Log } from "@/util/log"
-import { detectProfile, deriveConfig } from "./auto-config"
+import { detectProfile, deriveConfig, readGgufMeta } from "./auto-config"
 
 const log = Log.create({ service: "local-llm-server" })
 
@@ -466,7 +466,8 @@ export namespace LocalLLMServer {
         return 0
       }
     })()
-    const cfg = deriveConfig(profile, modelSizeMb)
+    const blockCount = readGgufMeta(modelPath)?.blockCount ?? 32
+    const cfg = deriveConfig(profile, modelSizeMb, blockCount)
 
     // KV cache quant: env override first, else adaptive.
     const kvCacheRaw = process.env.OPENCODE_KV_CACHE_TYPE ?? cfg.kvCacheType
@@ -764,9 +765,10 @@ export namespace LocalLLMServer {
           return 0
         }
       })()
+      const blockCount = readGgufMeta(modelPath)?.blockCount ?? 32
       const baselineNgl = process.env.OPENCODE_N_GPU_LAYERS
         ? Number(process.env.OPENCODE_N_GPU_LAYERS)
-        : deriveConfig(profile, modelSizeMb).nGpuLayers
+        : deriveConfig(profile, modelSizeMb, blockCount).nGpuLayers
       const reducedNgl = Math.max(0, Math.floor(baselineNgl * 0.7))
 
       log.warn("llama-server OOM at startup — retrying with reduced GPU layers", {
