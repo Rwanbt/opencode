@@ -244,3 +244,103 @@ export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers 
 
   return { nGpuLayers, nThreads, batchSize, uBatchSize, kvCacheType, contextSize }
 }
+
+// ── GGUF metadata reader ─────────────────────────────────────────────────────
+//
+// Reads `<arch>.block_count` (the real transformer layer count) so deriveConfig
+// stops hardcoding 32. GGUF metadata always precedes tensor data, so reading a
+// bounded prefix of the file is enough. Returns null on any parse issue — the
+// caller falls back to 32.
+
+import fsGguf from "node:fs"
+
+export function readGgufMeta(
+  modelPath: string,
+): { architecture: string | null; blockCount: number | null } | null {
+  let fd: number | undefined
+  try {
+    fd = fsGguf.openSync(modelPath, "r")
+    const CAP = 16 * 1024 * 1024 // 16 MiB covers metadata for all known models
+    const size = Math.min(CAP, fsGguf.fstatSync(fd).size)
+    const buf = Buffer.allocUnsafe(size)
+    fsGguf.readSync(fd, buf, 0, size, 0)
+
+    if (buf.toString("ascii", 0, 4) !== "GGUF") return null
+    let off = 4
+    const u32 = () => {
+      const v = buf.readUInt32LE(off)
+      off += 4
+      return v
+    }
+    const u64 = () => {
+      const v = Number(buf.readBigUInt64LE(off))
+      off += 8
+      return v
+    }
+    const str = () => {
+      const len = u64()
+      const s = buf.toString("utf8", off, off + len)
+      off += len
+      return s
+    }
+    const scalarSize = (t: number): number => {
+      switch (t) {
+        case 0:
+        case 1:
+        case 7:
+          return 1
+        case 2:
+        case 3:
+          return 2
+        case 4:
+        case 5:
+        case 6:
+          return 4
+        case 10:
+        case 11:
+        case 12:
+          return 8
+        default:
+          throw new Error("unknown gguf scalar type")
+      }
+    }
+
+    const version = u32()
+    if (version < 2 || version > 3) return null
+    u64() // tensor_count
+    const kvCount = u64()
+
+    let architecture: string | null = null
+    let blockCount: number | null = null
+
+    for (let i = 0; i < kvCount; i++) {
+      const key = str()
+      const vtype = u32()
+      if (vtype === 8) {
+        const val = str()
+        if (key === "general.architecture") architecture = val
+      } else if (vtype === 9) {
+        const elemT = u32()
+        const count = u64()
+        if (elemT === 8) for (let j = 0; j < count; j++) str()
+        else off += scalarSize(elemT) * count
+      } else {
+        if (key.endsWith(".block_count")) {
+          if (vtype === 4) blockCount = buf.readUInt32LE(off)
+          else if (vtype === 5) blockCount = buf.readInt32LE(off)
+          else if (vtype === 10) blockCount = Number(buf.readBigUInt64LE(off))
+        }
+        off += scalarSize(vtype)
+      }
+      if (architecture && blockCount != null) break
+    }
+    return { architecture, blockCount }
+  } catch {
+    return null
+  } finally {
+    if (fd !== undefined)
+      try {
+        fsGguf.closeSync(fd)
+      } catch {}
+  }
+}

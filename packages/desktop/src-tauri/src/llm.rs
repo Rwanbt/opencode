@@ -476,6 +476,86 @@ pub async fn set_llm_config(args: SetLlmConfigArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Base-model architectures that use a separate vision projector (mmproj).
+/// Extend when adding a new VLM — VERIFY the exact string first (runbook
+/// verification step) because llama.cpp's name may differ from the HF name.
+const MULTIMODAL_ARCHITECTURES: &[&str] =
+    &["gemma3", "mllama", "qwen2vl", "qwen2.5vl", "llava", "idefics3", "smolvlm"];
+
+/// Minimal GGUF metadata reader — returns `general.architecture`, or None on
+/// any parse failure (caller decides the safe default). GGUF spec v2/v3.
+fn read_gguf_architecture(path: &std::path::Path) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut b4 = [0u8; 4];
+    let mut b8 = [0u8; 8];
+
+    f.read_exact(&mut b4).ok()?;
+    if &b4 != b"GGUF" {
+        return None;
+    }
+    f.read_exact(&mut b4).ok()?;
+    let version = u32::from_le_bytes(b4);
+    if version < 2 || version > 3 {
+        return None;
+    }
+    f.read_exact(&mut b8).ok()?; // tensor_count (unused)
+    f.read_exact(&mut b8).ok()?;
+    let kv_count = u64::from_le_bytes(b8);
+
+    fn read_str(f: &mut std::fs::File) -> Option<String> {
+        use std::io::Read;
+        let mut l = [0u8; 8];
+        f.read_exact(&mut l).ok()?;
+        let len = u64::from_le_bytes(l) as usize;
+        if len > 1_000_000 {
+            return None; // sanity guard against a corrupt length
+        }
+        let mut buf = vec![0u8; len];
+        f.read_exact(&mut buf).ok()?;
+        String::from_utf8(buf).ok()
+    }
+    fn scalar_size(t: u32) -> Option<i64> {
+        Some(match t {
+            0 | 1 | 7 => 1,    // u8 / i8 / bool
+            2 | 3 => 2,        // u16 / i16
+            4 | 5 | 6 => 4,    // u32 / i32 / f32
+            10 | 11 | 12 => 8, // u64 / i64 / f64
+            _ => return None,
+        })
+    }
+
+    for _ in 0..kv_count {
+        let key = read_str(&mut f)?;
+        f.read_exact(&mut b4).ok()?;
+        let vtype = u32::from_le_bytes(b4);
+        if vtype == 8 {
+            let val = read_str(&mut f)?;
+            if key == "general.architecture" {
+                return Some(val);
+            }
+        } else if vtype == 9 {
+            // array: elem_type(u32), count(u64), elements
+            f.read_exact(&mut b4).ok()?;
+            let elem_t = u32::from_le_bytes(b4);
+            f.read_exact(&mut b8).ok()?;
+            let count = u64::from_le_bytes(b8);
+            if elem_t == 8 {
+                for _ in 0..count {
+                    read_str(&mut f)?;
+                }
+            } else {
+                let sz = scalar_size(elem_t)?;
+                f.seek(SeekFrom::Current(sz * count as i64)).ok()?;
+            }
+        } else {
+            let sz = scalar_size(vtype)?;
+            f.seek(SeekFrom::Current(sz)).ok()?;
+        }
+    }
+    None
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Option<String>) -> Result<(), String> {
