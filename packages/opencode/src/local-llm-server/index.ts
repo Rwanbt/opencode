@@ -468,7 +468,7 @@ export namespace LocalLLMServer {
     })()
     const ggufMeta = readGgufMeta(modelPath)
     const blockCount = ggufMeta?.blockCount ?? 32
-    const cfg = deriveConfig(profile, modelSizeMb, blockCount, ggufMeta?.architecture ?? null)
+    const cfg = deriveConfig(profile, modelSizeMb, blockCount, ggufMeta?.architecture ?? null, undefined, ggufMeta)
 
     // KV cache quant: env override first, else adaptive.
     const kvCacheRaw = process.env.OPENCODE_KV_CACHE_TYPE ?? cfg.kvCacheType

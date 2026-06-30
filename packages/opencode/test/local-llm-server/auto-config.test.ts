@@ -63,6 +63,41 @@ describe("deriveConfig", () => {
     expect(other.nGpuLayers).toBeLessThan(33)
   })
 
+  test("adaptive contextSize uses real free VRAM + KV cost, not a flat RAM tier", () => {
+    // Real GGUF metadata read from ornith-1.0-9b-Q4_K_M.gguf this session via
+    // readGgufMeta(): hybrid SSM model, 8 attention blocks out of 32 total.
+    const ornithMeta = {
+      attentionLayerCount: 8,
+      blockCount: 32,
+      attentionHeadCountKv: 4,
+      attentionHeadCount: 16,
+      attentionKeyLength: 256,
+      embeddingLength: 4096,
+    }
+    // Precision check: at ctx=24576 the formula must match llama-server's own
+    // reported "CUDA0 KV buffer size = 408.00 MiB" exactly (measured this
+    // session with --cache-type-k/v q8_0).
+    const bytesPerTokenKv = 2 * ornithMeta.attentionLayerCount * ornithMeta.attentionHeadCountKv * ornithMeta.attentionKeyLength * 1.0625
+    expect((bytesPerTokenKv * 24576) / 1024 / 1024).toBeCloseTo(408.0, 1)
+
+    // Idle free VRAM measured this session on an RTX 4070 8GB.
+    const cfg = deriveConfig(profile({ vramMb: 8 * 1024 }), 5368, 32, "qwen35", 7282, ornithMeta)
+    // Must escape the old hardcoded 16384 ceiling — that's the whole point of
+    // this fix (it was structurally too small to fit a real system prompt
+    // alongside Ornith's instructions, causing an infinite compaction loop).
+    expect(cfg.contextSize).toBeGreaterThan(16384)
+    // Must stay below the empirically-risky zone (98304 left only ~200 MiB
+    // free, too tight for real-world use alongside other GPU consumers).
+    expect(cfg.contextSize).toBeLessThan(98304)
+  })
+
+  test("adaptive contextSize falls back to the RAM tier without GGUF attention metadata", () => {
+    // Unknown/unreadable model (ggufMeta null) — preserve the old behavior
+    // rather than guessing.
+    const cfg = deriveConfig(profile({ vramMb: 8 * 1024, totalRamMb: 16 * 1024 }), 5368, 32, null, 7282, null)
+    expect(cfg.contextSize).toBe(16384)
+  })
+
   test("returns 0 layers on CPU-only profile", () => {
     const cfg = deriveConfig(profile({ gpuBackend: "none", vramMb: 0 }), 4 * 1024, 32)
     expect(cfg.nGpuLayers).toBe(0)
