@@ -288,9 +288,15 @@ export function DialogLocalLLM() {
       // compaction to plan around a budget the server was never configured
       // to actually serve, producing a hard "Conversation history too large
       // to compact" error well before the real 16384-token limit was hit.
-      const contextSize = modelConfig.contextMode === "manual"
-        ? modelConfig.contextManual || 32768
-        : 16384 // auto: matches local-llm-server's default --ctx-size ceiling
+      // Both modes must stay within the ceiling the server is actually started
+      // with (deriveConfig / Rust --ctx-size = 16384). Announcing more makes
+      // compaction plan around a budget that never exists. Raising this REQUIRES
+      // raising the server-side --ctx-size in lockstep.
+      const SERVABLE_CTX_CEILING = 16384
+      const contextSize =
+        modelConfig.contextMode === "manual"
+          ? Math.min(modelConfig.contextManual || SERVABLE_CTX_CEILING, SERVABLE_CTX_CEILING)
+          : SERVABLE_CTX_CEILING
 
       // Detect vision projector: if any mmproj-*.gguf is installed, vision-capable models
       // get modalities.input.image=true so the provider layer passes image blocks through.
