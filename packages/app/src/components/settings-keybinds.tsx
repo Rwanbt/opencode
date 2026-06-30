@@ -256,9 +256,23 @@ function useKeyCapture(input: {
 }
 
 export const SettingsKeybinds: Component = () => {
-  const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+
+  let command: CommandContext | undefined
+  try {
+    command = useCommand()
+  } catch {
+    // Outside Router context (dialog portal) — CommandProvider not available
+  }
+
+  if (!command) {
+    return (
+      <div class="flex flex-col items-center justify-center py-12 text-center">
+        <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.title")}</span>
+      </div>
+    )
+  }
 
   const [store, setStore] = createStore({
     active: null as string | null,

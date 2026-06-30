@@ -35,8 +35,21 @@ function statusLabel(kind: McpStatusKind | undefined) {
 // ─── MCP section ───────────────────────────────────────────────────────────
 
 const McpSection: Component = () => {
-  const sync = useSync()
+  let sync: ReturnType<typeof useSync> | undefined
+  try {
+    sync = useSync()
+  } catch {
+    // Outside Router context (dialog portal) — SyncProvider not available
+  }
   const sdk = useSDK()
+
+  if (!sync) {
+    return (
+      <div class="text-12-regular text-text-weak text-center py-6 bg-surface-base rounded-lg">
+        MCP non disponible dans ce contexte.
+      </div>
+    )
+  }
 
   const [showAdd, setShowAdd] = createSignal(false)
   const [addType, setAddType] = createSignal<"remote" | "local">("remote")

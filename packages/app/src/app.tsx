@@ -90,22 +90,18 @@ function QueryProvider(props: ParentProps) {
 
 function AppShellProviders(props: ParentProps) {
   return (
-    <SettingsProvider>
-      <PermissionProvider>
-        <LayoutProvider>
-          <NotificationProvider>
-            <ModelsProvider>
-              <CommandProvider>
-                <HighlightsProvider>
-                  <Layout>{props.children}</Layout>
-                </HighlightsProvider>
-                <CommandPaletteMount />
-              </CommandProvider>
-            </ModelsProvider>
-          </NotificationProvider>
-        </LayoutProvider>
-      </PermissionProvider>
-    </SettingsProvider>
+    <PermissionProvider>
+      <LayoutProvider>
+        <NotificationProvider>
+          <CommandProvider>
+            <HighlightsProvider>
+              <Layout>{props.children}</Layout>
+            </HighlightsProvider>
+            <CommandPaletteMount />
+          </CommandProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    </PermissionProvider>
   )
 }
 
@@ -165,15 +161,19 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
 export function AppBaseProviders(props: ParentProps) {
   return (
     <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-      <QueryProvider>
-        <FallbackSDKForDialogs>
-          <DialogProvider>
-            <MarkedProvider>
-              <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-            </MarkedProvider>
-          </DialogProvider>
-        </FallbackSDKForDialogs>
-      </QueryProvider>
+      <SettingsProvider>
+        <ModelsProvider>
+          <QueryProvider>
+            <FallbackSDKForDialogs>
+              <DialogProvider>
+                <MarkedProvider>
+                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                </MarkedProvider>
+              </DialogProvider>
+            </FallbackSDKForDialogs>
+          </QueryProvider>
+        </ModelsProvider>
+      </SettingsProvider>
     </ErrorBoundary>
   )
 }
