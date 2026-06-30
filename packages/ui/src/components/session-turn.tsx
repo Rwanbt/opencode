@@ -135,6 +135,19 @@ function heading(text: string) {
     const value = clean(strong[1])
     if (value) return value
   }
+
+  // Fallback for local models that emit free-form reasoning (no markdown
+  // headings, e.g. DeepSeek-R1-style "<think> Okay, let me..."). Surface the
+  // first meaningful line so the thinking indicator shows a live topic instead
+  // of a static label. Cloud models keep structured headings (matched above).
+  const firstLine = markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("<") && !line.startsWith("|"))
+  if (firstLine) {
+    const value = clean(firstLine).slice(0, 80)
+    if (value) return value
+  }
 }
 
 export function SessionTurn(
