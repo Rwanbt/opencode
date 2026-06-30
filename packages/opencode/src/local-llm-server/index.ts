@@ -466,8 +466,9 @@ export namespace LocalLLMServer {
         return 0
       }
     })()
-    const blockCount = readGgufMeta(modelPath)?.blockCount ?? 32
-    const cfg = deriveConfig(profile, modelSizeMb, blockCount)
+    const ggufMeta = readGgufMeta(modelPath)
+    const blockCount = ggufMeta?.blockCount ?? 32
+    const cfg = deriveConfig(profile, modelSizeMb, blockCount, ggufMeta?.architecture ?? null)
 
     // KV cache quant: env override first, else adaptive.
     const kvCacheRaw = process.env.OPENCODE_KV_CACHE_TYPE ?? cfg.kvCacheType
@@ -765,10 +766,11 @@ export namespace LocalLLMServer {
           return 0
         }
       })()
-      const blockCount = readGgufMeta(modelPath)?.blockCount ?? 32
+      const ggufMeta = readGgufMeta(modelPath)
+      const blockCount = ggufMeta?.blockCount ?? 32
       const baselineNgl = process.env.OPENCODE_N_GPU_LAYERS
         ? Number(process.env.OPENCODE_N_GPU_LAYERS)
-        : deriveConfig(profile, modelSizeMb, blockCount).nGpuLayers
+        : deriveConfig(profile, modelSizeMb, blockCount, ggufMeta?.architecture ?? null).nGpuLayers
       const reducedNgl = Math.max(0, Math.floor(baselineNgl * 0.7))
 
       log.warn("llama-server OOM at startup — retrying with reduced GPU layers", {

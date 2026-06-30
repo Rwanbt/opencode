@@ -495,78 +495,136 @@ const MULTIMODAL_ARCHITECTURES: &[&str] = &[
     "smolvlm",
 ];
 
-/// Minimal GGUF metadata reader — returns `general.architecture`, or None on
-/// any parse failure (caller decides the safe default). GGUF spec v2/v3.
-fn read_gguf_architecture(path: &std::path::Path) -> Option<String> {
+/// Architectures known to crash (CUDA error or scheduler assertion) when
+/// llama.cpp lands them in a PARTIAL GPU/CPU split, but load fine at either
+/// full GPU offload or full CPU. Confirmed on Ornith-1.0-9B (GGUF
+/// general.architecture = "qwen35", a hybrid SSM/Gated-Delta-Net model).
+/// Mirrors NO_PARTIAL_OFFLOAD_ARCHITECTURES in
+/// packages/opencode/src/local-llm-server/auto-config.ts — keep both in sync.
+const NO_PARTIAL_OFFLOAD_ARCHITECTURES: &[&str] = &["qwen35"];
+
+/// Minimal GGUF metadata: `general.architecture` and `<arch>.block_count`.
+struct GgufMeta {
+    architecture: Option<String>,
+    block_count: Option<u32>,
+}
+
+/// Minimal GGUF metadata reader, mirroring the TS sidecar's `readGgufMeta`
+/// (packages/opencode/src/local-llm-server/auto-config.ts). Returns fields as
+/// None on any parse failure (caller decides the safe default). GGUF spec v2/v3.
+fn read_gguf_meta(path: &std::path::Path) -> GgufMeta {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let mut b4 = [0u8; 4];
-    let mut b8 = [0u8; 8];
 
-    f.read_exact(&mut b4).ok()?;
-    if &b4 != b"GGUF" {
-        return None;
-    }
-    f.read_exact(&mut b4).ok()?;
-    let version = u32::from_le_bytes(b4);
-    if version < 2 || version > 3 {
-        return None;
-    }
-    f.read_exact(&mut b8).ok()?; // tensor_count (unused)
-    f.read_exact(&mut b8).ok()?;
-    let kv_count = u64::from_le_bytes(b8);
+    fn inner(path: &std::path::Path) -> Option<GgufMeta> {
+        let mut f = std::fs::File::open(path).ok()?;
+        let mut b4 = [0u8; 4];
+        let mut b8 = [0u8; 8];
 
-    fn read_str(f: &mut std::fs::File) -> Option<String> {
-        use std::io::Read;
-        let mut l = [0u8; 8];
-        f.read_exact(&mut l).ok()?;
-        let len = u64::from_le_bytes(l) as usize;
-        if len > 1_000_000 {
-            return None; // sanity guard against a corrupt length
-        }
-        let mut buf = vec![0u8; len];
-        f.read_exact(&mut buf).ok()?;
-        String::from_utf8(buf).ok()
-    }
-    fn scalar_size(t: u32) -> Option<i64> {
-        Some(match t {
-            0 | 1 | 7 => 1,    // u8 / i8 / bool
-            2 | 3 => 2,        // u16 / i16
-            4 | 5 | 6 => 4,    // u32 / i32 / f32
-            10 | 11 | 12 => 8, // u64 / i64 / f64
-            _ => return None,
-        })
-    }
-
-    for _ in 0..kv_count {
-        let key = read_str(&mut f)?;
         f.read_exact(&mut b4).ok()?;
-        let vtype = u32::from_le_bytes(b4);
-        if vtype == 8 {
-            let val = read_str(&mut f)?;
-            if key == "general.architecture" {
-                return Some(val);
+        if &b4 != b"GGUF" {
+            return None;
+        }
+        f.read_exact(&mut b4).ok()?;
+        let version = u32::from_le_bytes(b4);
+        if version < 2 || version > 3 {
+            return None;
+        }
+        f.read_exact(&mut b8).ok()?; // tensor_count (unused)
+        f.read_exact(&mut b8).ok()?;
+        let kv_count = u64::from_le_bytes(b8);
+
+        fn read_str(f: &mut std::fs::File) -> Option<String> {
+            use std::io::Read;
+            let mut l = [0u8; 8];
+            f.read_exact(&mut l).ok()?;
+            let len = u64::from_le_bytes(l) as usize;
+            if len > 1_000_000 {
+                return None; // sanity guard against a corrupt length
             }
-        } else if vtype == 9 {
-            // array: elem_type(u32), count(u64), elements
+            let mut buf = vec![0u8; len];
+            f.read_exact(&mut buf).ok()?;
+            String::from_utf8(buf).ok()
+        }
+        fn scalar_size(t: u32) -> Option<i64> {
+            Some(match t {
+                0 | 1 | 7 => 1,    // u8 / i8 / bool
+                2 | 3 => 2,        // u16 / i16
+                4 | 5 | 6 => 4,    // u32 / i32 / f32
+                10 | 11 | 12 => 8, // u64 / i64 / f64
+                _ => return None,
+            })
+        }
+
+        let mut architecture: Option<String> = None;
+        let mut block_count: Option<u32> = None;
+
+        for _ in 0..kv_count {
+            let key = read_str(&mut f)?;
             f.read_exact(&mut b4).ok()?;
-            let elem_t = u32::from_le_bytes(b4);
-            f.read_exact(&mut b8).ok()?;
-            let count = u64::from_le_bytes(b8);
-            if elem_t == 8 {
-                for _ in 0..count {
-                    read_str(&mut f)?;
+            let vtype = u32::from_le_bytes(b4);
+            if vtype == 8 {
+                let val = read_str(&mut f)?;
+                if key == "general.architecture" {
+                    architecture = Some(val);
+                }
+            } else if vtype == 9 {
+                // array: elem_type(u32), count(u64), elements
+                f.read_exact(&mut b4).ok()?;
+                let elem_t = u32::from_le_bytes(b4);
+                f.read_exact(&mut b8).ok()?;
+                let count = u64::from_le_bytes(b8);
+                if elem_t == 8 {
+                    for _ in 0..count {
+                        read_str(&mut f)?;
+                    }
+                } else {
+                    let sz = scalar_size(elem_t)?;
+                    f.seek(SeekFrom::Current(sz * count as i64)).ok()?;
                 }
             } else {
-                let sz = scalar_size(elem_t)?;
-                f.seek(SeekFrom::Current(sz * count as i64)).ok()?;
+                if key.ends_with(".block_count") {
+                    match vtype {
+                        4 => {
+                            let mut v4 = [0u8; 4];
+                            f.read_exact(&mut v4).ok()?;
+                            block_count = Some(u32::from_le_bytes(v4));
+                            if architecture.is_some() {
+                                return Some(GgufMeta { architecture, block_count });
+                            }
+                            continue;
+                        }
+                        5 => {
+                            let mut v4 = [0u8; 4];
+                            f.read_exact(&mut v4).ok()?;
+                            block_count = Some(i32::from_le_bytes(v4).max(0) as u32);
+                            if architecture.is_some() {
+                                return Some(GgufMeta { architecture, block_count });
+                            }
+                            continue;
+                        }
+                        10 => {
+                            let mut v8 = [0u8; 8];
+                            f.read_exact(&mut v8).ok()?;
+                            block_count = Some(u64::from_le_bytes(v8).min(u32::MAX as u64) as u32);
+                            if architecture.is_some() {
+                                return Some(GgufMeta { architecture, block_count });
+                            }
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+                let sz = scalar_size(vtype)?;
+                f.seek(SeekFrom::Current(sz)).ok()?;
             }
-        } else {
-            let sz = scalar_size(vtype)?;
-            f.seek(SeekFrom::Current(sz)).ok()?;
+            if architecture.is_some() && block_count.is_some() {
+                return Some(GgufMeta { architecture, block_count });
+            }
         }
+        Some(GgufMeta { architecture, block_count })
     }
-    None
+
+    inner(path).unwrap_or(GgufMeta { architecture: None, block_count: None })
 }
 
 #[tauri::command]
@@ -620,6 +678,9 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     if let Some(ref mmp) = mmproj_path {
         tracing::info!("[LLM] Multimodal projector detected: {}", mmp.display());
     }
+    // Read once, reused below both for the mmproj guard and the no-partial-
+    // offload decision (NO_PARTIAL_OFFLOAD_ARCHITECTURES).
+    let gguf_meta = read_gguf_meta(&model_path);
     // Guard (4.1 / M7): only attach a vision projector to a genuinely
     // multimodal base model. A stray mmproj-*.gguf in the models dir (e.g. for
     // Gemma) otherwise gets force-loaded onto a text-only model (Ornith),
@@ -627,8 +688,8 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     // model's own architecture from its GGUF metadata. On parse failure we keep
     // the projector (preserves vision; failures are rare) but log it.
     if mmproj_path.is_some() {
-        match read_gguf_architecture(&model_path) {
-            Some(arch) if MULTIMODAL_ARCHITECTURES.contains(&arch.as_str()) => {
+        match gguf_meta.architecture.as_deref() {
+            Some(arch) if MULTIMODAL_ARCHITECTURES.contains(&arch) => {
                 tracing::info!("[LLM] Base model architecture '{}' is multimodal — keeping mmproj", arch);
             }
             Some(arch) => {
@@ -743,13 +804,39 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .map(|v| v.eq_ignore_ascii_case("true") || v == "1" || v.eq_ignore_ascii_case("on"))
         .unwrap_or(true);
 
-    // n_gpu_layers: env > shared file > 99 (the historic "offload everything"
-    // sentinel; llama.cpp silently caps it to the real layer count).
+    // n_gpu_layers: env > shared file > architecture-aware default.
     let n_gpu_layers = std::env::var("OPENCODE_N_GPU_LAYERS")
         .ok()
         .and_then(|s| s.parse::<u32>().ok())
         .or(adaptive.as_ref().and_then(|c| c.n_gpu_layers))
-        .unwrap_or(99);
+        .unwrap_or_else(|| {
+            // No env override, no shared TS config yet (cold launch / dialog
+            // "Charger" path before the sidecar has ever run for this model).
+            // Historic default was the 99 sentinel ("offload everything";
+            // llama.cpp caps it to the real layer count). For architectures
+            // where a PARTIAL split is fatal (NO_PARTIAL_OFFLOAD_ARCHITECTURES
+            // — confirmed on Ornith's hybrid SSM scheduler), decide full-vs-CPU
+            // up front from real free VRAM instead of leaving it to chance.
+            match (gguf_meta.architecture.as_deref(), gguf_meta.block_count) {
+                (Some(arch), Some(block_count)) if NO_PARTIAL_OFFLOAD_ARCHITECTURES.contains(&arch) => {
+                    let model_size_mb = std::fs::metadata(&model_path)
+                        .map(|m| m.len() / (1024 * 1024))
+                        .unwrap_or(0) as f64;
+                    let mb_per_layer = (model_size_mb / (block_count + 1).max(1) as f64).max(1.0);
+                    let full_footprint_mib = mb_per_layer * (block_count + 1) as f64 + 768.0;
+                    if check_vram_free(full_footprint_mib as u64) {
+                        block_count + 1
+                    } else {
+                        tracing::warn!(
+                            "[LLM] '{}' is a no-partial-offload architecture and free VRAM looks too tight for full GPU offload ({} layers) — falling back to CPU-only to avoid a partial-split crash",
+                            arch, block_count + 1
+                        );
+                        0
+                    }
+                }
+                _ => 99,
+            }
+        });
 
     // Threads: env > shared file > physical cores heuristic.
     let n_threads = std::env::var("OPENCODE_N_THREADS")

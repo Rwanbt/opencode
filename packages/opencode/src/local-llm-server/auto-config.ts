@@ -189,7 +189,39 @@ export function stopThermalListener() {
 
 // ── Config derivation ──────────────────────────────────────────────────────
 
-export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers = 32): LlamaConfig {
+// Architectures known to crash (CUDA error or scheduler assertion) when
+// llama.cpp's --fit lands them in a PARTIAL GPU/CPU split, but load fine at
+// either full GPU offload or full CPU. Confirmed on Ornith-1.0-9B (GGUF
+// general.architecture = "qwen35", a hybrid SSM/Gated-Delta-Net model):
+// 22-32/33 layers on GPU OOMs or hits a scheduler assertion; 0/33 (CPU) and
+// 33/33 (full GPU) both load cleanly. For these, deriveConfig must never
+// return a partial value — only 0 or modelLayers+1.
+export const NO_PARTIAL_OFFLOAD_ARCHITECTURES = new Set(["qwen35"])
+
+// Fresh (uncached) free-VRAM probe, distinct from DeviceProfile.vramMb (total
+// capacity, cached once per process). Total*0.85 is a static estimate that
+// ignores whatever else (browser, compositor, a prior model) is currently
+// resident on the card — exactly the gap that let --fit silently downgrade
+// a requested 33-layer offload to 23 (a partial split) when real free VRAM
+// was tighter than the total-based estimate assumed. Used only for the
+// full-vs-CPU binary decision below, where landing on the wrong side is fatal
+// for NO_PARTIAL_OFFLOAD_ARCHITECTURES.
+function probeFreeVramMb(): number | null {
+  const r = probe("nvidia-smi", ["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
+  if (!r.ok) return null
+  const mb = parseInt(r.stdout.split("\n")[0]?.trim() ?? "", 10)
+  return Number.isFinite(mb) && mb > 0 ? mb : null
+}
+
+export function deriveConfig(
+  p: DeviceProfile,
+  modelSizeMb: number,
+  modelLayers = 32,
+  architecture: string | null = null,
+  // Test seam: overrides the live nvidia-smi probe so tests stay deterministic
+  // regardless of the actual GPU state on whatever machine runs them.
+  freeVramMbOverride?: number | null,
+): LlamaConfig {
   const thermalMult = p.thermalState === "critical" ? 0.5 : p.thermalState === "serious" ? 0.75 : 1
 
   // GPU layers: fit as many as the VRAM budget allows. 85 % of VRAM is a
@@ -210,18 +242,30 @@ export function deriveConfig(p: DeviceProfile, modelSizeMb: number, modelLayers 
         `OPENCODE_ALLOW_CPU_ONLY=1 to explicitly allow CPU-only inference.`,
     )
   }
-  // +1: llama.cpp counts the output/lm_head layer separately from the
-  // transformer block count (GGUF's <arch>.block_count). Capping at
-  // modelLayers alone leaves that one extra layer on CPU — a 1-layer
-  // partial CPU/GPU split. Verified on an RTX 4070 8GB with a 33-layer
-  // hybrid SSM model (Ornith-1.0-9B, block_count=32): requesting exactly
-  // 32 landed in a partial-offload zone that either OOM'd or hit a
-  // llama.cpp scheduler assertion specific to that architecture, while
-  // requesting 33 (true full GPU offload) loaded cleanly at 6285/8187 MiB
-  // and ran at 37 tok/s vs the CPU-only fallback's 2.9 tok/s.
-  const nGpuLayers = hasUsableGpu
-    ? Math.max(0, Math.min(modelLayers + 1, Math.floor(vramBudget / mbPerLayer)))
-    : 0
+
+  let nGpuLayers: number
+  if (hasUsableGpu && architecture && NO_PARTIAL_OFFLOAD_ARCHITECTURES.has(architecture)) {
+    // Binary decision only — never a partial value. Use FRESH free VRAM, not
+    // the cached total*0.85 estimate, since that estimate is exactly what
+    // let --fit downgrade to a partial (and fatal) split for this model.
+    const freeMb = freeVramMbOverride !== undefined ? freeVramMbOverride : probeFreeVramMb()
+    const fullFootprintMb = mbPerLayer * (modelLayers + 1) + 768 // KV cache + compute buffer margin
+    const fitsFullOffload = freeMb !== null ? freeMb >= fullFootprintMb : vramBudget >= fullFootprintMb
+    nGpuLayers = fitsFullOffload ? modelLayers + 1 : 0
+  } else {
+    // +1: llama.cpp counts the output/lm_head layer separately from the
+    // transformer block count (GGUF's <arch>.block_count). Capping at
+    // modelLayers alone leaves that one extra layer on CPU — a 1-layer
+    // partial CPU/GPU split. Verified on an RTX 4070 8GB with a 33-layer
+    // hybrid SSM model (Ornith-1.0-9B, block_count=32): requesting exactly
+    // 32 landed in a partial-offload zone that either OOM'd or hit a
+    // llama.cpp scheduler assertion specific to that architecture, while
+    // requesting 33 (true full GPU offload) loaded cleanly at 6285/8187 MiB
+    // and ran at 37 tok/s vs the CPU-only fallback's 2.9 tok/s.
+    nGpuLayers = hasUsableGpu
+      ? Math.max(0, Math.min(modelLayers + 1, Math.floor(vramBudget / mbPerLayer)))
+      : 0
+  }
 
   // Threads: use only the "big" cores on heterogeneous CPUs, cap at 6 to
   // avoid diminishing returns + P-core contention on the WebView.

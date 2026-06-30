@@ -47,6 +47,22 @@ describe("deriveConfig", () => {
     expect(big.nGpuLayers).toBeGreaterThan(33)
   })
 
+  test("never returns a partial offload for NO_PARTIAL_OFFLOAD_ARCHITECTURES", () => {
+    // Plenty of free VRAM -> full offload (modelLayers + 1), not a floor() partial.
+    const ample = deriveConfig(profile({ vramMb: 8 * 1024 }), 5368, 32, "qwen35", 7000)
+    expect(ample.nGpuLayers).toBe(33)
+
+    // Free VRAM too tight for full offload -> CPU only (0), never a partial split
+    // (the documented crash zone for this architecture's hybrid SSM scheduler).
+    const tight = deriveConfig(profile({ vramMb: 8 * 1024 }), 5368, 32, "qwen35", 2000)
+    expect(tight.nGpuLayers).toBe(0)
+
+    // Other architectures are unaffected — still use the floor()-based partial formula.
+    const other = deriveConfig(profile({ vramMb: 3 * 1024 }), 5368, 32, "llama", 2000)
+    expect(other.nGpuLayers).toBeGreaterThan(0)
+    expect(other.nGpuLayers).toBeLessThan(33)
+  })
+
   test("returns 0 layers on CPU-only profile", () => {
     const cfg = deriveConfig(profile({ gpuBackend: "none", vramMb: 0 }), 4 * 1024, 32)
     expect(cfg.nGpuLayers).toBe(0)
