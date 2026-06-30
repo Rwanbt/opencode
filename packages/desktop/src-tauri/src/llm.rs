@@ -479,8 +479,21 @@ pub async fn set_llm_config(args: SetLlmConfigArgs) -> Result<(), String> {
 /// Base-model architectures that use a separate vision projector (mmproj).
 /// Extend when adding a new VLM — VERIFY the exact string first (runbook
 /// verification step) because llama.cpp's name may differ from the HF name.
-const MULTIMODAL_ARCHITECTURES: &[&str] =
-    &["gemma3", "mllama", "qwen2vl", "qwen2.5vl", "llava", "idefics3", "smolvlm"];
+/// "gemma4" confirmed against this repo's vendored llama.cpp source
+/// (llama.cpp/src/llama-arch.cpp: LLM_ARCH_GEMMA4 -> "gemma4") — the runbook's
+/// original list only had "gemma3" and would have wrongly stripped mmproj
+/// from the user's actual Gemma-4 E4B model.
+const MULTIMODAL_ARCHITECTURES: &[&str] = &[
+    "gemma3",
+    "gemma3n",
+    "gemma4",
+    "mllama",
+    "qwen2vl",
+    "qwen2.5vl",
+    "llava",
+    "idefics3",
+    "smolvlm",
+];
 
 /// Minimal GGUF metadata reader — returns `general.architecture`, or None on
 /// any parse failure (caller decides the safe default). GGUF spec v2/v3.
@@ -580,7 +593,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     // size) over BF16 / F32 when multiple are present. The agent caller
     // doesn't need to know about this — image content blocks just start
     // working as soon as the user drops a mmproj next to the model.
-    let mmproj_path: Option<PathBuf> = {
+    let mut mmproj_path: Option<PathBuf> = {
         let dir = model_path.parent().unwrap_or_else(|| std::path::Path::new(""));
         let mut candidates: Vec<PathBuf> = std::fs::read_dir(dir)
             .ok()
@@ -606,6 +619,29 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
     };
     if let Some(ref mmp) = mmproj_path {
         tracing::info!("[LLM] Multimodal projector detected: {}", mmp.display());
+    }
+    // Guard (4.1 / M7): only attach a vision projector to a genuinely
+    // multimodal base model. A stray mmproj-*.gguf in the models dir (e.g. for
+    // Gemma) otherwise gets force-loaded onto a text-only model (Ornith),
+    // wasting ~944 MB VRAM and pushing an 8 GB GPU into OOM. We read the base
+    // model's own architecture from its GGUF metadata. On parse failure we keep
+    // the projector (preserves vision; failures are rare) but log it.
+    if mmproj_path.is_some() {
+        match read_gguf_architecture(&model_path) {
+            Some(arch) if MULTIMODAL_ARCHITECTURES.contains(&arch.as_str()) => {
+                tracing::info!("[LLM] Base model architecture '{}' is multimodal — keeping mmproj", arch);
+            }
+            Some(arch) => {
+                tracing::warn!(
+                    "[LLM] Skipping mmproj: base model architecture '{}' is not multimodal",
+                    arch
+                );
+                mmproj_path = None;
+            }
+            None => {
+                tracing::warn!("[LLM] Could not read model architecture — keeping mmproj (may waste VRAM if text-only)");
+            }
+        }
     }
 
     // Unload any existing model managed by this app
