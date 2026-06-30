@@ -737,6 +737,17 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         .and_then(|s| s.parse::<u32>().ok())
         .or(adaptive.as_ref().and_then(|c| c.ubatch_size));
 
+    // Context cap: env > shared file > 16384. Mirrors the TS sidecar's
+    // --ctx-size. Without it llama-server starts at the GGUF's native n_ctx
+    // (e.g. 262144 for Ornith) and OOMs / hits a scheduler assertion on hybrid
+    // SSM models. --fit's -fitc is only a FLOOR, never a ceiling, so it cannot
+    // bound the context on its own.
+    let context_size = std::env::var("OPENCODE_LLAMA_CTX_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .or(adaptive.as_ref().and_then(|c| c.context_size))
+        .unwrap_or(16384);
+
     tracing::info!(
         "[LLM] Config: kv={}, offload={}, mmap={}, ngl={}, threads={}, batch={:?}, ubatch={:?}",
         kv_cache_type, offload_mode, mmap_mode, n_gpu_layers, n_threads, batch_size, ubatch_size
@@ -764,13 +775,18 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
         // will still clamp to available VRAM via the embedded fork.
         .arg("--n-gpu-layers")
         .arg(n_gpu_layers.to_string())
-        // --fit auto-adjusts ctx_size and layer placement to available VRAM
+        // Hard context ceiling — mirrors the TS sidecar's --ctx-size. Bounds the
+        // KV cache so hybrid SSM models (Ornith) load on GPU instead of
+        // expanding to their native n_ctx and OOMing.
+        .arg("--ctx-size")
+        .arg(context_size.to_string())
+        // --fit auto-adjusts layer placement to available VRAM
         .arg("--fit")
         .arg("on")
         .arg("-fitt")
         .arg("512") // leave 512 MiB free for OS/display
         .arg("-fitc")
-        .arg("16384") // never go below 16K context
+        .arg(context_size.to_string()) // floor == ceiling: no room to expand
         // Flash Attention for memory efficiency (env-overridable)
         .arg("--flash-attn")
         .arg(if flash_attn { "on" } else { "off" })
@@ -992,6 +1008,8 @@ struct SharedLlmConfig {
     ubatch_size: Option<u32>,
     #[serde(default)]
     kv_cache_type: Option<String>,
+    #[serde(default)]
+    context_size: Option<u32>,
 }
 
 fn read_shared_llm_config() -> Option<SharedLlmConfig> {
