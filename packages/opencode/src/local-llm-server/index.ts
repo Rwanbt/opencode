@@ -51,6 +51,12 @@ function initPaths(): void {
 }
 
 const STARTUP_TIMEOUT_MS = 120_000
+// Mobile JNI readiness is gated by Kotlin's own readiness loop
+// (LlamaEngine.startServer polls /v1/models up to 180_000ms). The TS poll must
+// outlive Kotlin's budget or it preempts a legitimate slow CPU-only load (e.g.
+// Gemma-4 E4B on Adreno 6xx) with a generic timeout. +10s margin over the 180s
+// Kotlin ceiling. Desktop keeps the 120s STARTUP_TIMEOUT_MS (separate calibration).
+const MOBILE_STARTUP_TIMEOUT_MS = 190_000
 const LOCK_ACQUIRE_TIMEOUT_MS = 150_000
 const HEALTH_POLL_INTERVAL_MS = 500
 const HEALTH_CHECK_TIMEOUT_MS = 3_000
@@ -865,6 +871,28 @@ export namespace LocalLLMServer {
 
   // ── Public API ────────────────────────────────────────────────────────────
 
+  // Mobile-only: LlamaEngine.load() writes <runtime>/llm_ipc/blocked when the
+  // OOM crash-loop circuit breaker refuses to reload a model. The MainActivity
+  // auto-load path bypasses the IPC command loop that produces the
+  // "error:blocked:" message, so the bun sidecar reads this marker to fail-fast
+  // instead of polling /health for the full startup timeout. The runtime dir is
+  // the parent of the mobile shell's $HOME (runtime/home) — the same dir Kotlin
+  // and Rust resolve via runtime_dir() — so both sides agree without baking in
+  // an absolute Android data path. Returns null on any resolution/IO failure so
+  // the caller degrades gracefully to the existing poll behaviour.
+  function readMobileBlockedMarker(): { name: string } | null {
+    const home = process.env.HOME
+    if (!home) return null
+    try {
+      const name = fs
+        .readFileSync(path.join(path.dirname(home), "llm_ipc", "blocked"), "utf8")
+        .trim()
+      return name ? { name } : null
+    } catch {
+      return null
+    }
+  }
+
   /**
    * Point d'entrée unique. Idempotent, safe pour appels concurrents (intra ET inter-process).
    *
@@ -888,10 +916,24 @@ export namespace LocalLLMServer {
     // otherwise the caller hits /v1/chat/completions too early and gets 503
     // `{"status":"loading"}` which the AI SDK gives up on after 3 retries.
     if (process.env.OPENCODE_CLIENT === "mobile-embedded") {
+      // Fail-fast on circuit-breaker block: when Kotlin refuses to reload a
+      // model that has OOM-crashed the app repeatedly, port 14097 never opens,
+      // so a blind /health poll would always run out the startup timeout and
+      // surface a generic "did not become ready" error. Read the durable marker
+      // LlamaEngine.load() writes and throw the real reason instead.
+      const blockedMsg = (m: { name: string }) =>
+        `[LocalLLMServer] Mobile JNI model load is blocked: ${m.name} crashed the app repeatedly while loading. Select a smaller model in Settings.`
+      let blocked = readMobileBlockedMarker()
+      if (blocked) throw new Error(blockedMsg(blocked))
       log.info("mobile-embedded: waiting for JNI llama-server to report ready")
       const t0 = Date.now()
-      while (Date.now() - t0 < STARTUP_TIMEOUT_MS) {
+      while (Date.now() - t0 < MOBILE_STARTUP_TIMEOUT_MS) {
         if (signal?.aborted) throw new Error("[LocalLLMServer] Cancelled waiting for mobile JNI")
+        // Re-check each iteration: a cold-start auto-load may still be racing
+        // to write the marker while we poll, so a marker absent at entry can
+        // appear mid-loop.
+        blocked = readMobileBlockedMarker()
+        if (blocked) throw new Error(blockedMsg(blocked))
         try {
           const res = await fetch(`http://127.0.0.1:${PORT}/health`, {
             signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
@@ -910,7 +952,7 @@ export namespace LocalLLMServer {
         await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS))
       }
       throw new Error(
-        `[LocalLLMServer] Mobile JNI llama-server did not become ready within ${STARTUP_TIMEOUT_MS}ms`,
+        `[LocalLLMServer] Mobile JNI llama-server did not become ready within ${MOBILE_STARTUP_TIMEOUT_MS}ms`,
       )
     }
     initPaths()

@@ -438,6 +438,13 @@ object LlamaEngine {
             val stateFile = java.io.File(ipcDir, "load_state")
             val safeName = modelFileForBreaker.name.replace(Regex("[/\\\\]"), "_")
             val failCountFile = java.io.File(ipcDir, "fail_count_$safeName")
+            // Blocked-marker file read by LocalLLMServer.ensureRunning (bun sidecar)
+            // to fail-fast instead of polling /health for the full startup timeout.
+            // Cleared at the start of every attempt: a fresh load() call supersedes
+            // whatever the previous call decided, and is rewritten below only if
+            // this attempt is blocked again.
+            val blockedFile = java.io.File(ipcDir, "blocked")
+            try { blockedFile.delete() } catch (_: Exception) {}
             var failCount = try {
                 if (failCountFile.exists()) failCountFile.readText().trim().toIntOrNull() ?: 0 else 0
             } catch (_: Exception) { 0 }
@@ -455,6 +462,7 @@ object LlamaEngine {
                 Log.w(TAG, "Crash-loop circuit breaker: ${modelFileForBreaker.name} crashed $failCount times while loading — blocking auto-retry")
                 lastLoadWasBlocked = true
                 try { stateFile.delete() } catch (_: Exception) {}
+                try { blockedFile.writeText(modelFileForBreaker.name) } catch (_: Exception) {}
                 return false
             }
             downgradeTier = failCount

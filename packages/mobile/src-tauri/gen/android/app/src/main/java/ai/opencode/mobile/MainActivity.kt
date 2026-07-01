@@ -133,14 +133,31 @@ class MainActivity : TauriActivity() {
       try {
         val modelsDir = File(runtimeDir, "models")
         if (modelsDir.exists()) {
-          val ggufFiles = modelsDir.listFiles()?.filter { it.name.endsWith(".gguf") } ?: emptyList()
+          // Exclude multimodal projector companions (always named "mmproj-*.gguf"
+          // by model-manager.tsx's downloadModel(catalog.mmprojUrl, catalog.mmprojFilename),
+          // downloaded right after their paired main model so they carry a LATER
+          // mtime). Without this filter, "most recently modified .gguf" picks the
+          // projector itself as the model to load — llama-server correctly refuses
+          // ("CLIP cannot be used as main model"), dies at startup, port 14097 never
+          // opens, and the sidecar times out with a generic "did not become ready".
+          val ggufFiles = modelsDir.listFiles()
+            ?.filter { it.name.endsWith(".gguf") && !it.name.startsWith("mmproj-", ignoreCase = true) }
+            ?: emptyList()
           if (ggufFiles.isNotEmpty()) {
             // Load the first (or most recently modified) model
             val model = ggufFiles.maxByOrNull { it.lastModified() }
             if (model != null) {
               android.util.Log.i("OpenCode", "Auto-loading model (JNI/GPU): ${model.name}")
               val ok = LlamaEngine.load(model.absolutePath)
-              android.util.Log.i("OpenCode", "Model loaded: $ok")
+              // Distinguish a circuit-breaker block from an ordinary failure: the
+              // block writes a durable marker read by the sidecar (fail-fast in
+              // LocalLLMServer.ensureRunning), and logging the reason here makes it
+              // trivially visible in logcat during on-device verification.
+              when {
+                ok -> android.util.Log.i("OpenCode", "Model loaded: ${model.name}")
+                LlamaEngine.lastLoadWasBlocked -> android.util.Log.w("OpenCode", "Model auto-load BLOCKED by crash-loop circuit breaker: ${model.name} (blocked marker written for sidecar)")
+                else -> android.util.Log.w("OpenCode", "Model auto-load failed (not blocked): ${model.name}")
+              }
             }
           }
         }
