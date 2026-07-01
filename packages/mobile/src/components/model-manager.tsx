@@ -38,10 +38,34 @@ export function ModelManager(props: Props) {
   const [downloadProgress, setDownloadProgress] = createSignal<Record<string, ModelDownloadProgress>>({})
   const [customUrl, setCustomUrl] = createSignal("")
   const [error, setError] = createSignal("")
+  // Filename awaiting an explicit "load anyway" confirmation (heavy model —
+  // see isHeavyForDevice). Previously this only showed a non-blocking
+  // "Heavy for this device" badge on the catalog download card; nothing
+  // stopped an already-downloaded heavy model from loading straight into an
+  // OOM crash-loop.
+  const [pendingHeavyStart, setPendingHeavyStart] = createSignal<string | null>(null)
 
   // Device profile is frozen at first render — RAM doesn't change and the
   // overhead of re-reading per frame would be wasted.
   const deviceProfile = detectDeviceProfile()
+
+  /** Installed models aren't always catalog entries (custom URL imports have
+   *  no minRamGB) — fall back to a size-vs-RAM ratio in that case. 0.6 leaves
+   *  the same ~40% system+context headroom the adaptive ctx tables assume. */
+  function isHeavyForDevice(filename: string, sizeBytes: number): boolean {
+    const catalogMatch = MODEL_CATALOG.find((m) => m.filename === filename)
+    if (catalogMatch) return !fitsOnDevice(catalogMatch, deviceProfile)
+    return sizeBytes / 1_000_000_000 > deviceProfile.ramGB * 0.6
+  }
+
+  function requestStart(filename: string, sizeBytes: number) {
+    if (pendingHeavyStart() !== filename && isHeavyForDevice(filename, sizeBytes)) {
+      setPendingHeavyStart(filename)
+      return
+    }
+    setPendingHeavyStart(null)
+    void handleStartServer(filename)
+  }
 
   let unlisten: UnlistenFn | undefined
 
@@ -372,13 +396,25 @@ export function ModelManager(props: Props) {
                         {actionLoading() === "__stop__" ? "..." : "Stop"}
                       </button>
                     </Show>
-                    <Show when={!isActive()}>
+                    <Show when={!isActive() && pendingHeavyStart() !== model.filename}>
                       <button
-                        onClick={() => handleStartServer(model.filename)}
+                        onClick={() => requestStart(model.filename, model.size)}
                         disabled={isLoading()}
                         style={isLoading() ? btnDisabled : btnSuccess}
                       >
                         {isLoading() ? "..." : "Start"}
+                      </button>
+                    </Show>
+                    <Show when={!isActive() && pendingHeavyStart() === model.filename}>
+                      <button onClick={() => setPendingHeavyStart(null)} style={btnDisabled}>
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => requestStart(model.filename, model.size)}
+                        disabled={isLoading()}
+                        style={isLoading() ? btnDisabled : btnDanger}
+                      >
+                        {isLoading() ? "..." : "Load anyway"}
                       </button>
                     </Show>
                     <button
@@ -390,6 +426,11 @@ export function ModelManager(props: Props) {
                     </button>
                   </div>
                 </div>
+                <Show when={pendingHeavyStart() === model.filename}>
+                  <div style={{ "font-size": "12px", color: "#fcd34d", "margin-top": "8px" }}>
+                    Heavy for this device ({deviceProfile.ramGB} GB RAM) — may crash the app while loading.
+                  </div>
+                </Show>
               </div>
             )
           }}

@@ -497,6 +497,7 @@ function FullApp(props: {
 }) {
   const [llmLoading, setLlmLoading] = createSignal<LLMLoadingState>({ loading: false })
   const [noModelBanner, setNoModelBanner] = createSignal(false)
+  const [blockedModelBanner, setBlockedModelBanner] = createSignal<string | null>(null)
 
   // Listen for "open-model-manager" custom event from the model selector
   onMount(() => {
@@ -517,6 +518,15 @@ function FullApp(props: {
     const handler = () => setNoModelBanner(true)
     window.addEventListener("no-model-found" as any, handler as any)
     onCleanup(() => window.removeEventListener("no-model-found" as any, handler as any))
+  })
+
+  // Circuit breaker (use-auto-start-llm.ts) gave up auto-retrying a model
+  // that OOM-crashed the app twice in a row — surface it instead of
+  // silently looping forever.
+  onMount(() => {
+    const handler = (e: CustomEvent<{ filename: string }>) => setBlockedModelBanner(e.detail.filename)
+    window.addEventListener("llm-load-blocked" as any, handler as any)
+    onCleanup(() => window.removeEventListener("llm-load-blocked" as any, handler as any))
   })
 
   // Auto-start local LLM when model is selected
@@ -641,6 +651,44 @@ function FullApp(props: {
             </button>
             <button
               onClick={() => setNoModelBanner(false)}
+              style={{
+                padding: "8px", "border-radius": "6px",
+                border: "none", background: "transparent",
+                color: "#64748b", "font-size": "16px", cursor: "pointer",
+                "flex-shrink": "0", "line-height": "1",
+              }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </Show>
+        <Show when={blockedModelBanner()}>
+          <div style={{
+            position: "fixed", bottom: "0", left: "0", right: "0",
+            padding: "14px 16px",
+            background: "rgba(15, 23, 42, 0.97)",
+            "border-top": "1px solid #7f1d1d",
+            display: "flex", "align-items": "center", "justify-content": "space-between",
+            gap: "12px", "z-index": "9999",
+            "font-family": "system-ui, -apple-system, sans-serif",
+          }}>
+            <span style={{ color: "#94a3b8", "font-size": "13px", flex: "1" }}>
+              {blockedModelBanner()} crashed the app repeatedly while loading — likely not enough free RAM. Try a smaller model.
+            </span>
+            <button
+              onClick={() => { setBlockedModelBanner(null); props.onOpenModelManager?.() }}
+              style={{
+                padding: "8px 14px", "border-radius": "8px",
+                border: "1px solid #ef4444", background: "#3f1414",
+                color: "#e5e5e5", "font-size": "13px", cursor: "pointer",
+                "white-space": "nowrap", "flex-shrink": "0",
+              }}
+            >
+              Choose another model
+            </button>
+            <button
+              onClick={() => setBlockedModelBanner(null)}
               style={{
                 padding: "8px", "border-radius": "6px",
                 border: "none", background: "transparent",

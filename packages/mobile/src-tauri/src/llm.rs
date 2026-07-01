@@ -288,6 +288,13 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
 }
 
 /// Load a GGUF model via Kotlin LlamaEngine (file IPC).
+///
+/// The crash-loop circuit breaker for this lives in LlamaEngine.kt::load(),
+/// not here — that function is the single choke point both this command
+/// AND MainActivity's native "auto-load last used model" thread call into,
+/// and tracking crash state only on this Rust/JS side missed the
+/// MainActivity path entirely (confirmed on-device: the breaker never
+/// tripped because most crashes happened via that path, not this one).
 #[tauri::command]
 pub async fn load_llm_model(app: AppHandle, filename: String, _draft_model: Option<String>) -> Result<(), String> {
     crate::validate::validate_filename(&filename).map_err(|e| e.to_string())?;

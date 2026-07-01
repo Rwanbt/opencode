@@ -81,7 +81,16 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
     })
     currentlyLoaded = filename
   } catch (e) {
-    console.error("[AutoLLM] Failed to load model:", e)
+    // The Rust circuit breaker (llm.rs::load_llm_model) tracks OOM
+    // crash-loops via a durable on-disk marker — a WebView localStorage
+    // marker isn't reliable here since the whole app process gets killed
+    // and localStorage writes aren't guaranteed to be flushed by then.
+    const message = e instanceof Error ? e.message : String(e)
+    if (message.startsWith("blocked:")) {
+      window.dispatchEvent(new CustomEvent("llm-load-blocked", { detail: { filename } }))
+    } else {
+      console.error("[AutoLLM] Failed to load model:", e)
+    }
   } finally {
     unlisten()
     window.dispatchEvent(new CustomEvent("llm-loading-progress", { detail: { loading: false } }))

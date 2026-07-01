@@ -333,6 +333,60 @@ describe("ensureLocalLLMLoaded — config localStorage", () => {
 })
 
 // ---------------------------------------------------------------------------
+// ensureLocalLLMLoaded — circuit breaker crash-loop (OOM whole-process kill)
+// ---------------------------------------------------------------------------
+
+describe("ensureLocalLLMLoaded — circuit breaker crash-loop", () => {
+  // The actual crash-loop detection (durable marker + fail count) lives in
+  // Rust now (llm.rs::load_llm_model) — a WebView localStorage marker isn't
+  // reliable here since the whole app process gets OOM-killed and
+  // localStorage writes aren't guaranteed to be flushed by then (confirmed
+  // on-device). JS only needs to react to the "blocked:" error Rust returns.
+
+  test("load_llm_model n'est appelé qu'avec filename et draftModel (pas de tier calculé côté JS)", async () => {
+    setupInvokeWithModels([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+
+    await ensureLocalLLMLoaded("local-llm", "gemma-4")
+
+    const loadCall = mockInvoke.mock.calls.find((c: unknown[]) => c[0] === "load_llm_model")
+    expect(loadCall).toBeDefined()
+    expect((loadCall as unknown[])[1]).toEqual({ filename: "gemma-4.gguf", draftModel: null })
+  })
+
+  test("une erreur 'blocked: ...' dispatche llm-load-blocked au lieu d'un console.error", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+      if (cmd === "load_llm_model") return Promise.reject(new Error("blocked: gemma-4.gguf crashed the app repeatedly while loading"))
+      return Promise.resolve(undefined)
+    })
+
+    const events = await collectWindowEvents(
+      ["llm-load-blocked"],
+      () => ensureLocalLLMLoaded("local-llm", "gemma-4"),
+    )
+
+    const blockedEvent = events.find(e => e.type === "llm-load-blocked")
+    expect(blockedEvent).toBeDefined()
+    expect((blockedEvent as CustomEvent).detail.filename).toBe("gemma-4.gguf")
+  })
+
+  test("une erreur ordinaire ne dispatche pas llm-load-blocked", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+      if (cmd === "load_llm_model") return Promise.reject(new Error("Model not found: gemma-4.gguf"))
+      return Promise.resolve(undefined)
+    })
+
+    const events = await collectWindowEvents(
+      ["llm-load-blocked"],
+      () => ensureLocalLLMLoaded("local-llm", "gemma-4"),
+    )
+
+    expect(events.find(e => e.type === "llm-load-blocked")).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // markLocalLLMUnloaded
 // ---------------------------------------------------------------------------
 

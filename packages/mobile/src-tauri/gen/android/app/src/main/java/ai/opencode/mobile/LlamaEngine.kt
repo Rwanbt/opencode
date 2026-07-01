@@ -10,6 +10,13 @@ object LlamaEngine {
     private const val TAG = "LlamaEngine"
     private var initialized = false
 
+    /** Set by load() when it refuses to (re)load a model that already
+     *  OOM-crashed the app repeatedly — read by startCommandLoop()'s "load"
+     *  case to report a distinct "blocked:" error back through the Rust/JS
+     *  IPC chain instead of a generic failure. */
+    @Volatile
+    var lastLoadWasBlocked = false
+
     private val ELF_MAGIC = byteArrayOf(0x7F, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
 
     /** Store the app ClassLoader so Rust JNI threads can find our classes */
@@ -232,20 +239,26 @@ object LlamaEngine {
      *  - OPENCL Adreno: shared RAM with CPU. Budget scales with total RAM:
      *    - ≤8 GB device (Mi 10 Pro): 35% (~20 layers Gemma-4-E4B) — thrashing at 50%
      *    - >10 GB device (Xiaomi 14 Ultra 12GB+): 45% (~29 layers)
-     *    Also caps per-buffer ≤ 1 GB (Adreno llama.cpp issue #8743). */
-    private fun adaptiveNgl(modelSizeMB: Long, backend: Backend): Int {
+     *    Also caps per-buffer ≤ 1 GB (Adreno llama.cpp issue #8743).
+     *
+     *  downgradeTier: 0 = default (untouched budget), 1/2 = crash-loop circuit
+     *  breaker (use-auto-start-llm.ts) asking for a smaller GPU offload after
+     *  this exact model already OOM-crashed the app on a prior attempt.
+     *  Halves the RAM budget per tier — same shape as the existing thermal
+     *  throttle halving in tryStartServer(), never touched for tier 0. */
+    private fun adaptiveNgl(modelSizeMB: Long, backend: Backend, downgradeTier: Int = 0): Int {
         if (backend == Backend.CPU) return 0
         if (backend == Backend.VULKAN) return 99
         if (backend == Backend.HEXAGON) return 99  // NPU manages its own 2GB pool (HTP0 REPACK)
 
         val totalRamMB = totalSystemRamMB()
-        val budgetPct = if (totalRamMB > 10000) 45 else 35
+        val budgetPct = (if (totalRamMB > 10000) 45 else 35) shr downgradeTier
         val budgetMB = totalRamMB * budgetPct / 100
         // Rough bytes-per-layer estimate: gemma-4-E4B (4.7 GB, 36 layers) ≈ 130 MB/layer Q4_K_M.
         // Use 36 as a safe default layer count — overestimates for bigger models (→ smaller ngl, safer).
         val bytesPerLayerMB = (modelSizeMB / 36L).coerceAtLeast(100L)
         val maxLayers = (budgetMB / bytesPerLayerMB).toInt().coerceIn(8, 99)
-        Log.i(TAG, "Adaptive ngl: totalRam=${totalRamMB}MB, budgetPct=$budgetPct%, budget=${budgetMB}MB, bytesPerLayer=${bytesPerLayerMB}MB → ngl=$maxLayers")
+        Log.i(TAG, "Adaptive ngl: totalRam=${totalRamMB}MB, budgetPct=$budgetPct%, budget=${budgetMB}MB, bytesPerLayer=${bytesPerLayerMB}MB, downgradeTier=$downgradeTier → ngl=$maxLayers")
         return maxLayers
     }
 
@@ -339,7 +352,11 @@ object LlamaEngine {
                                 if (arg.isEmpty()) "error:No model path provided"
                                 else {
                                     val success = load(arg, 4096, 4)
-                                    if (success) "ok" else "error:Failed to load model"
+                                    when {
+                                        success -> "ok"
+                                        lastLoadWasBlocked -> "error:blocked: ${java.io.File(arg).name} crashed the app repeatedly while loading"
+                                        else -> "error:Failed to load model"
+                                    }
                                 }
                             }
                             "unload" -> { unload(); "ok" }
@@ -399,6 +416,50 @@ object LlamaEngine {
     fun load(modelPath: String, contextSize: Int = 4096, threads: Int = 4): Boolean {
         init()  // sets selectedBackend
         stopServer()
+        lastLoadWasBlocked = false
+
+        // Crash-loop circuit breaker — MUST live here, not in Rust/JS: this
+        // function is called from two independent places (MainActivity's
+        // native "auto-load last used model" thread on every cold start, AND
+        // Rust's load_llm_model via the IPC command loop below), and an
+        // earlier attempt to track crash state only in Rust/JS missed the
+        // MainActivity path entirely, so the breaker never tripped in
+        // practice. Android OOM-kills the WHOLE app process when a model
+        // doesn't fit in RAM (not just a child process), so plain
+        // synchronous java.io.File writes are used — they're visible to the
+        // next process immediately, unlike WebView localStorage which
+        // batches writes asynchronously and can lose a marker written just
+        // before the kill (confirmed on-device).
+        val modelFileForBreaker = java.io.File(modelPath)
+        val ipcDir = modelFileForBreaker.parentFile?.parentFile?.let { java.io.File(it, "llm_ipc") }
+        var downgradeTier = 0
+        if (ipcDir != null) {
+            ipcDir.mkdirs()
+            val stateFile = java.io.File(ipcDir, "load_state")
+            val safeName = modelFileForBreaker.name.replace(Regex("[/\\\\]"), "_")
+            val failCountFile = java.io.File(ipcDir, "fail_count_$safeName")
+            var failCount = try {
+                if (failCountFile.exists()) failCountFile.readText().trim().toIntOrNull() ?: 0 else 0
+            } catch (_: Exception) { 0 }
+            // A marker left over from a prior call means the process died before
+            // reaching the cleanup at the end of this function — i.e. an OOM
+            // crash mid-load, not an ordinary failed-but-alive return.
+            val stalePresent = try {
+                stateFile.exists() && stateFile.readText().trim() == modelFileForBreaker.name
+            } catch (_: Exception) { false }
+            if (stalePresent) {
+                failCount += 1
+                try { failCountFile.writeText(failCount.toString()) } catch (_: Exception) {}
+            }
+            if (failCount >= 2) {
+                Log.w(TAG, "Crash-loop circuit breaker: ${modelFileForBreaker.name} crashed $failCount times while loading — blocking auto-retry")
+                lastLoadWasBlocked = true
+                try { stateFile.delete() } catch (_: Exception) {}
+                return false
+            }
+            downgradeTier = failCount
+            try { stateFile.writeText(modelFileForBreaker.name) } catch (_: Exception) {}
+        }
 
         // Guard: refuse to load when device is critically hot. Thermal state
         // CRITICAL/EMERGENCY/SHUTDOWN means the SoC is actively throttling or
@@ -475,9 +536,23 @@ object LlamaEngine {
         }
         Log.i(TAG, "Model: ${modelFile.name} (${modelSizeMB}MB), selectedBackend=$selectedBackend, actual=$backend, openclFriendly=$modelIsOpenclFriendly, hexagonUnfriendly=$modelIsHexagonUnfriendlyArch, adrenoOcl3Plus=$adrenoOcl3Plus")
 
-        // Read config from IPC file (written by Rust backend)
+        // Read config from IPC file (written by Rust backend, when this load()
+        // call came through the load_llm_model Tauri command — absent when
+        // MainActivity's native auto-load thread calls load() directly).
         val config = readLlmConfig(modelPath)
-        return startServer(modelPath, contextSize, backend, config, thermalThrottle)
+        val result = startServer(modelPath, contextSize, backend, config, thermalThrottle, downgradeTier)
+
+        // Reaching here means the process is still alive — success or an
+        // ordinary failure, never the OOM crash the breaker above guards
+        // against (which would have killed the process before this line).
+        if (ipcDir != null) {
+            val safeName = modelFileForBreaker.name.replace(Regex("[/\\\\]"), "_")
+            try { java.io.File(ipcDir, "load_state").delete() } catch (_: Exception) {}
+            if (result) {
+                try { java.io.File(ipcDir, "fail_count_$safeName").delete() } catch (_: Exception) {}
+            }
+        }
+        return result
     }
 
     /** Configuration for llama-server, read from IPC config file.
@@ -579,13 +654,13 @@ object LlamaEngine {
 
     /** Outer entry point: picks effective backend (via circuit breaker) and
      *  falls back to CPU if the GPU backend fails to boot. */
-    private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig(), thermalThrottle: Boolean = false): Boolean {
+    private fun startServer(modelPath: String, ctxSize: Int, backend: Backend = Backend.CPU, config: LlmConfig = LlmConfig(), thermalThrottle: Boolean = false, downgradeTier: Int = 0): Boolean {
         val effective = if (BackendCircuitBreaker.isDisabled(backend)) {
             Log.w(TAG, "Backend $backend temporarily disabled (recent failures) → CPU")
             Backend.CPU
         } else backend
 
-        if (tryStartServer(modelPath, ctxSize, effective, config, thermalThrottle)) return true
+        if (tryStartServer(modelPath, ctxSize, effective, config, thermalThrottle, downgradeTier)) return true
 
         // First attempt failed — record and fall back to CPU if we weren't already.
         BackendCircuitBreaker.recordFailure(effective)
@@ -594,10 +669,10 @@ object LlamaEngine {
             return false
         }
         Log.w(TAG, "Backend $effective failed → retrying with CPU fallback")
-        return tryStartServer(modelPath, ctxSize, Backend.CPU, config, thermalThrottle)
+        return tryStartServer(modelPath, ctxSize, Backend.CPU, config, thermalThrottle, downgradeTier)
     }
 
-    private fun tryStartServer(modelPath: String, ctxSize: Int, backend: Backend, config: LlmConfig, thermalThrottle: Boolean = false): Boolean {
+    private fun tryStartServer(modelPath: String, ctxSize: Int, backend: Backend, config: LlmConfig, thermalThrottle: Boolean = false, downgradeTier: Int = 0): Boolean {
         try {
             // Use nativeLibDir field set by MainActivity, fallback to file
             var libDir = nativeLibDir
@@ -649,7 +724,7 @@ object LlamaEngine {
             val modelSizeMB = java.io.File(modelPath).length() / (1024 * 1024)
             // When device is thermally stressed (SEVERE), halve GPU layers to
             // reduce heat output and prevent kernel-triggered OOM kill.
-            val rawNgl = adaptiveNgl(modelSizeMB, backend)
+            val rawNgl = adaptiveNgl(modelSizeMB, backend, downgradeTier)
             val ngl = if (thermalThrottle && rawNgl > 0) (rawNgl / 2).coerceAtLeast(4) else rawNgl
             if (thermalThrottle && rawNgl != ngl) {
                 Log.w(TAG, "Thermal throttle: ngl $rawNgl → $ngl (device is hot)")
@@ -865,14 +940,21 @@ object LlamaEngine {
             // CPU/Vulkan: explicit ctx for predictability + faster prefill cap.
             val totalRamMB = totalSystemRamMB()
             val totalRamGB = totalRamMB / 1024
-            val adaptiveCtx = when {
-                totalRamGB >= 14 -> 65536  // X14U 16GB → 64K
-                totalRamGB >= 10 -> 32768  // 12GB tier → 32K
-                totalRamGB >= 7  -> 16384  // Mi 10 Pro 8GB → 16K
-                totalRamGB >= 5  -> 8192   // 6GB → 8K
-                else             -> 4096   // <6GB → 4K conservative
+            // Tier table, largest first. ctxDowngradeTier (0 by default, set only
+            // by the JS circuit breaker in use-auto-start-llm.ts after this exact
+            // model already OOM-crashed the app once) steps down N tiers instead
+            // of picking by totalRamGB, floored at the smallest (4096). Default
+            // load (tier 0) is completely unaffected — same lookup as before.
+            val ctxTiers = intArrayOf(65536, 32768, 16384, 8192, 4096)
+            val baseTierIndex = when {
+                totalRamGB >= 14 -> 0  // X14U 16GB → 64K
+                totalRamGB >= 10 -> 1  // 12GB tier → 32K
+                totalRamGB >= 7  -> 2  // Mi 10 Pro 8GB → 16K
+                totalRamGB >= 5  -> 3  // 6GB → 8K
+                else             -> 4  // <6GB → 4K conservative
             }
-            Log.i(TAG, "Adaptive ctx-size: ${adaptiveCtx} tokens (totalRamGB=$totalRamGB, KV ~${(adaptiveCtx * 32) / 1024}MB)")
+            val adaptiveCtx = ctxTiers[(baseTierIndex + downgradeTier).coerceAtMost(ctxTiers.lastIndex)]
+            Log.i(TAG, "Adaptive ctx-size: ${adaptiveCtx} tokens (totalRamGB=$totalRamGB, downgradeTier=$downgradeTier, KV ~${(adaptiveCtx * 32) / 1024}MB)")
             when {
                 backend == Backend.OPENCL && modelIsOpenclFriendly ->
                     args.addAll(listOf("--ctx-size", adaptiveCtx.toString()))
