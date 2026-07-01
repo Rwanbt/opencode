@@ -1,4 +1,5 @@
 import { type Component, For, Show, createSignal } from "solid-js"
+import { Dialog as KobalteDialog } from "@kobalte/core/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
@@ -74,10 +75,34 @@ export const SettingsMobileNav: Component = () => {
 
   return (
     <div class="flex flex-col h-full w-full" data-slot="settings-mobile-nav">
+      <div class="flex items-center gap-2 px-2 py-2 border-b border-border-weak-base shrink-0">
+        <Show
+          when={selectedCategory()}
+          fallback={<span class="flex-1 text-14-medium text-text-strong px-2">{language.t("sidebar.settings")}</span>}
+        >
+          {(category) => (
+            <>
+              <IconButton
+                icon="arrow-left"
+                variant="ghost"
+                onClick={() => setSelected(null)}
+                aria-label={language.t("common.goBack")}
+              />
+              <span class="flex-1 text-14-medium text-text-strong">{category().label}</span>
+            </>
+          )}
+        </Show>
+        <KobalteDialog.CloseButton
+          as={IconButton}
+          icon="close"
+          variant="ghost"
+          aria-label={language.t("ui.common.close")}
+        />
+      </div>
       <Show
         when={selectedCategory()}
         fallback={
-          <div class="flex flex-col h-full w-full overflow-y-auto no-scrollbar" data-slot="settings-mobile-list">
+          <div class="flex-1 min-h-0 overflow-y-auto no-scrollbar" data-slot="settings-mobile-list">
             <For each={categories()}>
               {(category) => (
                 <button
@@ -95,19 +120,8 @@ export const SettingsMobileNav: Component = () => {
         }
       >
         {(category) => (
-          <div class="flex flex-col h-full w-full min-h-0" data-slot="settings-mobile-detail">
-            <div class="flex items-center gap-2 px-2 py-2 border-b border-border-weak-base shrink-0">
-              <IconButton
-                icon="arrow-left"
-                variant="ghost"
-                onClick={() => setSelected(null)}
-                aria-label={language.t("common.goBack")}
-              />
-              <span class="text-14-medium text-text-strong">{category().label}</span>
-            </div>
-            <div class="flex-1 min-h-0 overflow-y-auto no-scrollbar" data-slot="settings-mobile-content">
-              {renderContent(category().value)}
-            </div>
+          <div class="flex-1 min-h-0 overflow-y-auto no-scrollbar" data-slot="settings-mobile-content">
+            {renderContent(category().value)}
           </div>
         )}
       </Show>

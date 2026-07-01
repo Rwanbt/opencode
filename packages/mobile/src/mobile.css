@@ -576,6 +576,36 @@ a:active,
   }
 }
 
+/* ─── 25b. SETTINGS DIALOG — full-screen on portrait ────────────────────── */
+
+/* Settings is the only x-large dialog today; the desktop 960x600 cap looks
+   like a cramped floating card on a phone. Fill the viewport instead —
+   drill-down navigation (settings-mobile-nav.tsx) needs the room, and full
+   height removes the visible backdrop that let users tap-outside to close,
+   hence the explicit close button added to SettingsMobileNav's header.
+
+   The dialog is rendered through Kobalte.Portal straight into document.body
+   (context/dialog.tsx), so it never inherits the safe-area padding applied
+   to #root (index.html). That never mattered while the dialog stayed
+   centered and capped at 600px tall, but now that it spans the full
+   viewport its header sits directly under the status bar. Pad
+   dialog-content (the dialog's own background/card, not the positioning
+   wrapper) the same way #root does, so the card still reaches the screen
+   edges but its content — header, close button, list — stays inside the
+   safe area. */
+@media (max-width: 767px) {
+  [data-component="dialog"][data-size="x-large"] [data-slot="dialog-container"] {
+    width: 100vw !important;
+    height: var(--vvh, 100dvh) !important;
+    max-height: var(--vvh, 100dvh) !important;
+  }
+
+  [data-component="dialog"][data-size="x-large"] [data-slot="dialog-content"] {
+    padding-top: var(--safe-area-top, 0px) !important;
+    padding-bottom: var(--safe-area-bottom, 0px) !important;
+  }
+}
+
 /* ─── 26. CONTEXT MENU / LONG-PRESS ──────────────────────────────────────── */
 
 /* Prevent context menu on long-press for non-text elements */
