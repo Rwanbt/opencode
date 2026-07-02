@@ -574,6 +574,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         using _ = log.time("resolveTools")
         const tools: Record<string, AITool> = {}
+        // Prompt profiler for local models: per-tool token cost, measured on the
+        // EXACT description + JSON schema each tool contributes to the request
+        // (post local-llm skeleton reduction, post z.toJSONSchema conversion —
+        // not an estimate). Answers "which tool is actually eating the budget"
+        // instead of only the aggregate system-prompt count already logged in
+        // llm.ts. Local-llm only: negligible tools count elsewhere makes this
+        // noise for cloud providers.
+        const isLocalLLM = input.model.providerID === "local-llm"
+        const toolTokenBreakdown: Record<string, number> = {}
 
         const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
           sessionID: input.session.id,
@@ -617,6 +626,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           Permission.merge(input.agent.permission, input.session.permission ?? []),
         )) {
           const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+          if (isLocalLLM) {
+            toolTokenBreakdown[item.id] = Token.count(
+              item.description + JSON.stringify(schema),
+              input.model.id,
+            )
+          }
           tools[item.id] = tool({
             id: item.id as any,
             description: item.description,
@@ -651,6 +666,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }),
               )
             },
+          })
+        }
+
+        if (isLocalLLM) {
+          const totalToolTokens = Object.values(toolTokenBreakdown).reduce((a, b) => a + b, 0)
+          // Approximate, not the exact wire format (that's built later via
+          // MessageV2.toModelMessagesEffect) — good enough to see history growth
+          // across turns without duplicating that transform here.
+          const historyTokens = Token.count(JSON.stringify(input.messages), input.model.id)
+          log.info("prompt profile (tools)", {
+            toolCount: Object.keys(toolTokenBreakdown).length,
+            totalToolTokens,
+            perTool: toolTokenBreakdown,
+            historyTokensApprox: historyTokens,
           })
         }
 
@@ -1618,7 +1647,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               throw error
             }
             const maxSteps = agent.steps ?? Infinity
-            const isLastStep = step >= maxSteps
+            // Strictly greater, not >=: `step` has already been incremented for
+            // THIS call, so step === maxSteps is still the last call an agent is
+            // legitimately allowed to make — it must run normally. Using >= here
+            // flagged that final allowed call as "already exceeded", poisoning it
+            // with the MAX_STEPS wrap-up message below. For any agent whose FIRST
+            // call is also its last (e.g. the "chat" agent, steps:1), this fired on
+            // every single message: verified on-device that llama-server hard-rejects
+            // the request outright once a thinking-enabled local model (Gemma-4,
+            // ornith-1.0-9b) sees an assistant-role prefill message ("Assistant
+            // response prefill is incompatible with enable_thinking"), and even
+            // switching that message to role:"user" (see below) just made Gemma
+            // burn its whole reasoning budget trying to "summarize work done so
+            // far" on a session that had done nothing yet.
+            const isLastStep = step > maxSteps
             msgs = yield* insertReminders({ messages: msgs, agent, session })
 
             const msg: MessageV2.Assistant = {
@@ -1731,7 +1773,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   sessionID,
                   parentSessionID: session.parentID,
                   system,
-                  messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+                  // role:"user", not "assistant" — an assistant-role message here acts as a
+                  // response prefill, which llama-server hard-rejects for any thinking-enabled
+                  // local model ("Assistant response prefill is incompatible with enable_thinking").
+                  // See the isLastStep comment above for how this was confirmed.
+                  messages: [...modelMsgs, ...(isLastStep ? [{ role: "user" as const, content: MAX_STEPS }] : [])],
                   tools,
                   model,
                   toolChoice: format.type === "json_schema" ? "required" : undefined,

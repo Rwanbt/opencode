@@ -377,6 +377,80 @@ describe("session.prompt regression", () => {
       server.stop(true)
     }
   })
+
+  test("does not inject the MAX_STEPS wrap-up prefill on an agent's first (and only) allowed step", async () => {
+    // Regression for a bug found 2026-07-02: the "chat" agent has steps:1, so its
+    // very first call was also its "last step" — isLastStep used to fire on that
+    // same call (step >= maxSteps) and inject {role:"assistant", content:MAX_STEPS}
+    // as a response prefill. Confirmed on-device that llama-server hard-rejects
+    // this shape for any thinking-enabled local model ("Assistant response prefill
+    // is incompatible with enable_thinking"), and the fallback wasn't much better —
+    // it made Gemma-4 burn its whole reasoning budget trying to "summarize work
+    // done so far" on a session that had done nothing yet.
+    let capturedBody: any
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 })
+        }
+        capturedBody = await req.json()
+        return new Response(chat("Hey! What's up?"), {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          enabled_providers: ["alibaba"],
+          provider: {
+            alibaba: {
+              options: {
+                apiKey: "test-key",
+                baseURL: `${server.url.origin}/v1`,
+              },
+            },
+          },
+          agent: {
+            chat: {
+              model: "alibaba/qwen-plus",
+            },
+          },
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({ title: "Chat MAX_STEPS regression" })
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "chat",
+            parts: [{ type: "text", text: "hey" }],
+          })
+
+          expect(result.info.role).toBe("assistant")
+          expect(capturedBody).toBeDefined()
+          const messages: Array<{ role: string; content: unknown }> = capturedBody.messages
+          // Catches both halves of the bug: the wrong boundary (step >= maxSteps
+          // firing on the agent's first/only call) AND the wrong role (assistant
+          // prefill vs a normal user turn) — either alone would still poison this
+          // first-ever call, so check for the MAX_STEPS content regardless of role.
+          const hasMaxStepsPrefill = messages.some(
+            (m) => typeof m.content === "string" && m.content.includes("MAXIMUM STEPS REACHED"),
+          )
+          expect(hasMaxStepsPrefill).toBe(false)
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
 })
 
 describe("session.prompt agent variant", () => {
