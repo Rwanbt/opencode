@@ -214,7 +214,52 @@ pub async fn delete_model(app: AppHandle, filename: String) -> Result<(), String
 /// Format: one `key=value` per line. Keys not set as env vars are written
 /// as their string-default value so the Kotlin parser stays simple
 /// (`when (parts[0])` switch with explicit fallbacks per field).
-fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
+/// Common GGUF quantization/precision suffix tokens, checked longest-match-first
+/// isn't needed since each strip is a single trailing segment repeated until
+/// none match — mirrors the family-stripping regex used by the desktop/TS
+/// fuzzy model matcher (`local-llm-server/index.ts`), without a regex dependency.
+const QUANT_SUFFIX_TOKENS: &[&str] = &[
+    "q2_k", "q3_k_s", "q3_k_m", "q3_k_l", "q4_0", "q4_1", "q4_k_s", "q4_k_m", "q5_0", "q5_1",
+    "q5_k_s", "q5_k_m", "q6_k", "q8_0", "iq1_s", "iq1_m", "iq2_xxs", "iq2_xs", "iq2_s", "iq2_m",
+    "iq3_xxs", "iq3_xs", "iq3_s", "iq3_m", "iq4_nl", "iq4_xs", "f16", "bf16", "f32", "fp16", "fp32",
+];
+
+/// Strips trailing quant/precision and "-it" (instruct) segments to get a
+/// model's family stem, e.g. "gemma-4-E4B-it-Q4_K_M" -> "gemma-4-e4b".
+fn model_family_stem(filename: &str) -> String {
+    let mut stem = filename.trim_end_matches(".gguf").to_lowercase();
+    loop {
+        let mut stripped = false;
+        for token in QUANT_SUFFIX_TOKENS {
+            let suffix = format!("-{token}");
+            if let Some(rest) = stem.strip_suffix(&suffix) {
+                stem = rest.to_string();
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped {
+            break;
+        }
+    }
+    stem.strip_suffix("-it").unwrap_or(&stem).to_string()
+}
+
+/// True if an `mmproj-*.gguf` companion belongs to the given model, by
+/// comparing family stems (both sides stripped of quant/precision suffixes).
+/// Without this check, ANY mmproj file present gets attached to ANY model
+/// being loaded (same bug already documented on desktop) — on mobile this
+/// wastes ~990MB of RAM on a device measured with as little as ~1GB free,
+/// and can attach a vision projector to an architecture it was never built
+/// for.
+fn mmproj_matches_model(mmproj_filename: &str, model_filename: &str) -> bool {
+    let lower = mmproj_filename.to_lowercase();
+    let stem = lower.trim_end_matches(".gguf");
+    let mmproj_stem = stem.strip_prefix("mmproj-").unwrap_or(stem);
+    model_family_stem(mmproj_stem) == model_family_stem(model_filename)
+}
+
+fn write_llm_config(app: &AppHandle, model_filename: &str, draft_model: Option<String>) {
     let ipc_dir = runtime_dir(app).join("llm_ipc");
     let _ = fs::create_dir_all(&ipc_dir);
     let config_file = ipc_dir.join("llm_config");
@@ -235,7 +280,9 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
     let temperature = std::env::var("OPENCODE_LLM_TEMPERATURE").unwrap_or_default();
     let system_prompt = std::env::var("OPENCODE_LLM_SYSTEM_PROMPT").unwrap_or_default();
     // Multimodal projector — explicit env override or auto-detect a sibling
-    // mmproj-*.gguf next to the model. Same heuristic as desktop/llm.rs.
+    // mmproj-*.gguf next to the model, SCOPED to this model's family (see
+    // mmproj_matches_model) so loading e.g. ornith doesn't pick up gemma's
+    // projector just because it's the only mmproj file present.
     let mmproj_path = std::env::var("OPENCODE_LLAMA_MMPROJ").ok().filter(|s| !s.is_empty()).or_else(|| {
         let model_dir = runtime_dir(app).join("models");
         std::fs::read_dir(&model_dir)
@@ -244,7 +291,7 @@ fn write_llm_config(app: &AppHandle, draft_model: Option<String>) {
             .filter(|p| {
                 p.file_name()
                     .and_then(|n| n.to_str())
-                    .map(|n| n.starts_with("mmproj") && n.ends_with(".gguf"))
+                    .map(|n| n.starts_with("mmproj") && n.ends_with(".gguf") && mmproj_matches_model(n, model_filename))
                     .unwrap_or(false)
             })
             .min_by_key(|p| {
@@ -309,7 +356,7 @@ pub async fn load_llm_model(app: AppHandle, filename: String, _draft_model: Opti
     let draft_model = find_draft_model(&app, &filename);
 
     // Write config for Kotlin to read before loading
-    write_llm_config(&app, draft_model);
+    write_llm_config(&app, &filename, draft_model);
 
     // Send load command to Kotlin — timeout 240s.
     // Kotlin startServer() now includes a 180s readiness loop polling /v1/models,
@@ -352,6 +399,19 @@ pub async fn unload_llm_model(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn is_llm_loaded(app: AppHandle) -> bool {
     llm_command(&app, "loaded|", 5).map(|r| r.trim() == "true").unwrap_or(false)
+}
+
+/// Filename of the model currently served by llama-server, or "" if none.
+/// Lets the frontend's ensureLocalLLMLoaded() (use-auto-start-llm.ts) check
+/// whether MainActivity's native auto-load already has the right model
+/// running before invoking load_llm_model — a redundant reload always
+/// restarts the whole server (LlamaEngine.kt::load() calls stopServer()
+/// unconditionally) and, per this session's mmproj auto-detect below,
+/// would attach +990MB the native path deliberately skips, on a device
+/// measured with as little as ~1GB RAM headroom after a single model load.
+#[tauri::command]
+pub async fn get_loaded_model_name(app: AppHandle) -> String {
+    llm_command(&app, "model_name|", 5).unwrap_or_default().trim().to_string()
 }
 
 #[tauri::command]
@@ -632,4 +692,53 @@ fn parse_meminfo_value(line: &str) -> u64 {
         .nth(1)
         .and_then(|v| v.parse().ok())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod mmproj_scoping_tests {
+    use super::*;
+
+    // Real filenames observed on-device (Mi 10 Pro, 2026-07-02 investigation):
+    // gemma-4-E4B-it-Q4_K_M.gguf + mmproj-gemma-4-E4B-F16.gguf + ornith-1.0-9b-Q4_K_M.gguf,
+    // where the mmproj auto-detect previously attached the gemma projector to
+    // ANY model being loaded, including ornith (architecture mismatch, +990MB
+    // wasted on a device measured with ~1GB RAM headroom).
+
+    #[test]
+    fn gemma_mmproj_matches_the_gemma_model() {
+        assert!(mmproj_matches_model("mmproj-gemma-4-E4B-F16.gguf", "gemma-4-E4B-it-Q4_K_M.gguf"));
+    }
+
+    #[test]
+    fn gemma_mmproj_does_not_match_ornith() {
+        assert!(!mmproj_matches_model("mmproj-gemma-4-E4B-F16.gguf", "ornith-1.0-9b-Q4_K_M.gguf"));
+    }
+
+    #[test]
+    fn gemma_e4b_mmproj_does_not_match_gemma_e2b() {
+        assert!(!mmproj_matches_model("mmproj-gemma-4-E4B-F16.gguf", "gemma-4-E2B-it-Q4_0.gguf"));
+    }
+
+    #[test]
+    fn gemma_e2b_mmproj_matches_gemma_e2b_model() {
+        assert!(mmproj_matches_model("mmproj-gemma-4-E2B-F16.gguf", "gemma-4-E2B-it-Q4_K_M.gguf"));
+    }
+
+    #[test]
+    fn matching_is_case_insensitive() {
+        assert!(mmproj_matches_model("MMPROJ-Gemma-4-E4B-F16.gguf", "GEMMA-4-E4B-IT-Q4_K_M.gguf"));
+    }
+
+    #[test]
+    fn family_stem_strips_quant_and_instruct_suffixes() {
+        assert_eq!(model_family_stem("gemma-4-E4B-it-Q4_K_M.gguf"), "gemma-4-e4b");
+        assert_eq!(model_family_stem("gemma-4-E4B-it-Q4_0.gguf"), "gemma-4-e4b");
+        assert_eq!(model_family_stem("ornith-1.0-9b-Q4_K_M.gguf"), "ornith-1.0-9b");
+    }
+
+    #[test]
+    fn family_stem_strips_mmproj_precision_suffix() {
+        assert_eq!(model_family_stem("mmproj-gemma-4-E4B-F16.gguf".strip_prefix("mmproj-").unwrap()), "gemma-4-e4b");
+        assert_eq!(model_family_stem("mmproj-gemma-4-E4B-BF16.gguf".strip_prefix("mmproj-").unwrap()), "gemma-4-e4b");
+    }
 }

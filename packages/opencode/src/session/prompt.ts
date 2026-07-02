@@ -103,6 +103,22 @@ async function ensureRagIndexed() {
   } catch {}
 }
 
+/** Local title fallback for providers where an LLM call just for the title
+ *  is prohibitively slow (on-device CPU-bound inference — a title-gen call
+ *  re-prefills the whole prompt from scratch on SWA models like Gemma-4,
+ *  measured at 100+ seconds for zero user-visible value). Mirrors the
+ *  existing LLM-title cleanup: first non-empty line, capped at 100 chars. */
+export function deriveHeuristicTitle(text: string): string | undefined {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = text
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  if (!cleaned) return undefined
+  return cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+}
+
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
@@ -272,6 +288,29 @@ export namespace SessionPrompt {
 
         const subtasks = firstUser.parts.filter((p): p is MessageV2.SubtaskPart => p.type === "subtask")
         const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
+
+        // On-device local models are CPU-bound and (for SWA architectures like
+        // Gemma-4) re-prefill the entire prompt from scratch per call — a full
+        // LLM call spent just on a title measured at 100+ seconds with zero
+        // user-visible benefit. Derive it locally instead.
+        if (input.providerID === "local-llm") {
+          const sourceText = onlySubtasks
+            ? subtasks.map((p) => p.prompt).join("\n")
+            : firstUser.parts
+                .filter((p): p is MessageV2.TextPart => p.type === "text")
+                .map((p) => p.text)
+                .join("\n")
+          const t = deriveHeuristicTitle(sourceText)
+          if (!t) return
+          yield* sessions
+            .setTitle({ sessionID: input.session.id, title: t })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => log.error("failed to set heuristic title", { error: Cause.squash(cause) })),
+              ),
+            )
+          return
+        }
 
         const ag = yield* agents.get("title")
         if (!ag) return

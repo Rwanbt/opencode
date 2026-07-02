@@ -42,6 +42,24 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
 
   if (currentlyLoaded === filename) return
 
+  // MainActivity's native auto-load thread calls LlamaEngine.load() directly
+  // at cold start, independent of this JS session's in-memory `currentlyLoaded`
+  // (which starts null on every fresh WebView load). Without this check, the
+  // first model-selected event of a session always re-triggers load_llm_model
+  // even when the right model is already serving — and every load() call
+  // unconditionally stops and restarts the whole server (LlamaEngine.kt),
+  // this time with llm.rs's mmproj auto-detect attached on top, on a device
+  // that can measure as little as ~1GB RAM headroom after a single load.
+  try {
+    const loadedName = await invoke<string>("get_loaded_model_name")
+    if (loadedName === filename) {
+      currentlyLoaded = filename
+      return
+    }
+  } catch {
+    // Command unavailable or errored — fall through to the normal load path.
+  }
+
   loading = true
   window.dispatchEvent(new CustomEvent("llm-loading-progress", {
     detail: { elapsed_secs: 0, max_secs: 240, filename, loading: true },

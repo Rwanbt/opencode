@@ -17,6 +17,17 @@ object LlamaEngine {
     @Volatile
     var lastLoadWasBlocked = false
 
+    /** Filename of the model currently served by llama-server, or null if
+     *  none is running. Set on a successful load(), cleared by stopServer().
+     *  Read via the Rust `get_loaded_model_name` command so the frontend's
+     *  ensureLocalLLMLoaded() (use-auto-start-llm.ts) can tell whether
+     *  MainActivity's native auto-load already has the right model running
+     *  and skip a redundant reload instead of unconditionally invoking
+     *  load_llm_model — mirrors the desktop TS sidecar's isRunning() skip
+     *  (see Architecture-AdaptiveContext-VRAM-Compaction §6.1). */
+    @Volatile
+    var currentModelName: String? = null
+
     private val ELF_MAGIC = byteArrayOf(0x7F, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
 
     /** Store the app ClassLoader so Rust JNI threads can find our classes */
@@ -26,6 +37,44 @@ object LlamaEngine {
     /** Application context for system service fallbacks (RAM, thermal). Set by MainActivity. */
     @JvmField
     var applicationContext: android.content.Context? = null
+
+    /** Held while llama-server is loaded and expected to answer requests.
+     *  Without this, MIUI freezes the child process's socket the moment the
+     *  screen sleeps mid-request (confirmed on-device 2026-07-02: /health
+     *  went unresponsive — connection accepted, empty reply — the instant
+     *  mWakefulness flipped to Dozing, and did NOT thaw even after waking the
+     *  display back up or re-foregrounding the app; only a force-stop +
+     *  relaunch recovered it). That reproduces the exact "did not become
+     *  ready within 190000ms" error from local-llm-server/index.ts's
+     *  mobile-embedded ensureRunning() health poll. PARTIAL_WAKE_LOCK keeps
+     *  only the CPU awake (not the screen), acquired once the server reports
+     *  ready and released in stopServer(). A generous ceiling timeout is a
+     *  safety net against a leaked lock, not the expected release path. */
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private const val WAKE_LOCK_CEILING_MS = 6 * 60 * 60 * 1000L  // 6h safety net
+
+    private fun acquireInferenceWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val ctx = applicationContext ?: return
+        try {
+            val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            val lock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "OpenCode:LlamaInference")
+            lock.setReferenceCounted(false)
+            lock.acquire(WAKE_LOCK_CEILING_MS)
+            wakeLock = lock
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire inference wake lock: ${e.message}")
+        }
+    }
+
+    private fun releaseInferenceWakeLock() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to release inference wake lock: ${e.message}")
+        }
+        wakeLock = null
+    }
 
     /** Callback interface for streaming tokens during generation */
     interface TokenCallback {
@@ -361,6 +410,7 @@ object LlamaEngine {
                             }
                             "unload" -> { unload(); "ok" }
                             "loaded" -> if (loaded()) "true" else "false"
+                            "model_name" -> currentModelName ?: ""
                             "stop" -> { stop(); "ok" }
                             "generate" -> {
                                 // Protocol: "{max}|{temp}|{prompt}". Prompt is LAST so that
@@ -549,6 +599,7 @@ object LlamaEngine {
         // MainActivity's native auto-load thread calls load() directly).
         val config = readLlmConfig(modelPath)
         val result = startServer(modelPath, contextSize, backend, config, thermalThrottle, downgradeTier)
+        if (result) currentModelName = modelFile.name
 
         // Reaching here means the process is still alive — success or an
         // ordinary failure, never the OOM crash the breaker above guards
@@ -1208,6 +1259,7 @@ object LlamaEngine {
                 return false
             }
             Log.i(TAG, "llama-server ready after ${elapsed}ms (backend=$backend)")
+            acquireInferenceWakeLock()
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start llama-server: ${e.message}")
@@ -1246,6 +1298,8 @@ object LlamaEngine {
         // Delegate kill to LlamaService so its internal reference is cleared too.
         LlamaService.get()?.stopChildProcess()
         serverProcess = null
+        currentModelName = null
+        releaseInferenceWakeLock()
         LlamaService.get()?.updateNotification("OpenCode", "Local AI idle")
     }
 

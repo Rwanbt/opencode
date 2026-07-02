@@ -69,6 +69,15 @@ class MainActivity : TauriActivity() {
     // Request storage permissions
     requestStoragePermission()
 
+    // Request Doze exemption. A WAKE_LOCK alone does not stop MIUI from freezing
+    // the bun sidecar's socket when the screen sleeps mid-request — confirmed
+    // on-device: the app was absent from `dumpsys deviceidle whitelist`, and the
+    // sidecar (port 14096, entry point for every request) stayed unreachable the
+    // whole time the screen was off despite an active WAKE_LOCK. This app runs a
+    // genuine long-lived local inference server, which is the documented
+    // legitimate use case for this exemption (same category as VoIP apps).
+    requestBatteryOptimizationExemption()
+
     // Draw behind the display cutout (notch) on all edges
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       window.attributes.layoutInDisplayCutoutMode =
@@ -185,6 +194,23 @@ class MainActivity : TauriActivity() {
           android.util.Log.e("OpenCode", "Runtime extraction failed: $result")
         }
       }.start()
+    }
+  }
+
+  /** Prompt the system "ignore battery optimizations" dialog when not already
+   *  exempted. Re-checked (and re-prompted if still denied) on every cold start,
+   *  same pattern as requestStoragePermission() below — no throttling, since the
+   *  app cannot function as a background inference server without this grant. */
+  private fun requestBatteryOptimizationExemption() {
+    try {
+      val pm = getSystemService(android.os.PowerManager::class.java)
+      if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        intent.data = Uri.parse("package:$packageName")
+        startActivity(intent)
+      }
+    } catch (e: Exception) {
+      android.util.Log.w("OpenCode", "Battery optimization exemption request failed: ${e.message}")
     }
   }
 

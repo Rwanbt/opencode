@@ -166,6 +166,50 @@ describe("ensureLocalLLMLoaded — déjà chargé", () => {
     expect(secondCalls).not.toContain("load_llm_model")
     expect(firstCallCount).toBeGreaterThan(0)
   })
+
+  test("ne recharge pas si MainActivity a déjà le bon modèle chargé nativement (currentlyLoaded=null)", async () => {
+    // currentlyLoaded démarre à null (reset par markLocalLLMUnloaded en beforeEach) —
+    // simule le tout premier model-selected d'une session fraîche, alors que
+    // l'auto-load natif de MainActivity a déjà démarré le bon serveur en arrière-plan.
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+      if (cmd === "get_loaded_model_name") return Promise.resolve("gemma-4.gguf")
+      return Promise.resolve(undefined)
+    })
+
+    await ensureLocalLLMLoaded("local-llm", "gemma-4")
+
+    const commands = mockInvoke.mock.calls.map((c: unknown[]) => c[0])
+    expect(commands).not.toContain("set_llm_config")
+    expect(commands).not.toContain("load_llm_model")
+  })
+
+  test("recharge quand même si le modèle nativement chargé diffère de celui demandé", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+      if (cmd === "get_loaded_model_name") return Promise.resolve("ornith-1.0-9b.gguf")
+      return Promise.resolve(undefined)
+    })
+
+    await ensureLocalLLMLoaded("local-llm", "gemma-4")
+
+    const loadCall = mockInvoke.mock.calls.find((c: unknown[]) => c[0] === "load_llm_model")
+    expect(loadCall).toBeDefined()
+    expect((loadCall as unknown[])[1]).toMatchObject({ filename: "gemma-4.gguf" })
+  })
+
+  test("recharge quand même si get_loaded_model_name échoue (commande indisponible)", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve([{ filename: "gemma-4.gguf", size: 4_000_000_000 }])
+      if (cmd === "get_loaded_model_name") return Promise.reject(new Error("command not found"))
+      return Promise.resolve(undefined)
+    })
+
+    await ensureLocalLLMLoaded("local-llm", "gemma-4")
+
+    const loadCall = mockInvoke.mock.calls.find((c: unknown[]) => c[0] === "load_llm_model")
+    expect(loadCall).toBeDefined()
+  })
 })
 
 // ---------------------------------------------------------------------------

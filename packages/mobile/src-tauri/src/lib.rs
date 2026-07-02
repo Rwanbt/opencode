@@ -8,7 +8,11 @@ use tauri::Manager;
 #[cfg(any(target_os = "android", test))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod runtime;
-#[cfg(target_os = "android")]
+// llm is Android-only at runtime, but its pure filename/family-matching logic
+// (mmproj_matches_model, model_family_stem) is unit-tested on host machines —
+// same pattern as `runtime`/`proxy` above.
+#[cfg(any(target_os = "android", test))]
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod llm;
 // `validate` is pure Rust (no Android-specific deps) and is now referenced
 // from `speech.rs` (host-compiled). Keep it available on every target — the
@@ -385,6 +389,7 @@ pub fn run() {
             llm::load_llm_model,
             llm::unload_llm_model,
             llm::is_llm_loaded,
+            llm::get_loaded_model_name,
             llm::abort_llm,
             llm::generate_llm,
             llm::check_llm_health,
