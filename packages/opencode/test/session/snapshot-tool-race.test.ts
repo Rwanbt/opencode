@@ -1,15 +1,17 @@
 /**
- * Reproducer for snapshot race condition with instant tool execution.
+ * Reproducer that a bash tool call is visible in the session diff/summary.
  *
- * When the mock LLM returns a tool call response instantly, the AI SDK
- * processes the tool call and executes the tool (e.g. apply_patch) before
- * the processor's start-step handler can capture a pre-tool snapshot.
- * Both the "before" and "after" snapshots end up with the same git tree
- * hash, so computeDiff returns empty and the session summary shows 0 files.
- *
- * This is a real bug: the snapshot system assumes it can capture state
- * before tools run by hooking into start-step, but the AI SDK executes
- * tools internally during multi-step processing before emitting events.
+ * The test used to be skipped as a suspected "snapshot race" (AI SDK runs
+ * the tool before the processor's start-step handler captures a pre-tool
+ * snapshot). That diagnosis was wrong: the failure was the test itself —
+ * the bash command embedded a raw `path.join(dir, "race-test.txt")`, which
+ * on Windows is backslash-separated. Passed unquoted through bash (the
+ * shell `Shell.preferred()` picks on Windows, see shell.ts), every
+ * backslash is stripped as an escape character, so `C:\Users\...\race-
+ * test.txt` collapses into the single garbage filename
+ * `C:UsersraceTestTxt` written to the tool's cwd instead of `dir` — hence
+ * `fileExists` at the intended path was always false. Forward-slashing the
+ * path before it goes into the shell command (see `fwd` below) fixes it.
  */
 import { expect } from "bun:test"
 import { Effect } from "effect"
@@ -52,6 +54,11 @@ import { AppFileSystem } from "../../src/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 
 Log.init({ print: false })
+
+// Bash commands run through a POSIX shell (git-bash on Windows, see
+// shell.ts) — a raw path.join() result with backslashes gets its
+// separators stripped by the shell's own escaping rules.
+const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
 
 const mcp = Layer.succeed(
   MCP.Service,
@@ -186,13 +193,7 @@ const providerCfg = (url: string) => ({
   },
 })
 
-// Skip: known upstream race condition — when the mock LLM returns tool calls
-// instantly, the AI SDK executes the tool before the processor's start-step
-// handler can capture a pre-tool snapshot, so the bash tool never actually
-// creates the file from the test's perspective (fileExists is false).
-// Both snapshots end up with the same hash and session diff shows 0 files.
-// See the file-level docstring for the full explanation.
-it.live.skip("tool execution produces non-empty session diff (snapshot race)", () =>
+it.live("tool execution produces non-empty session diff (snapshot race)", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ dir, llm }) {
       const prompt = yield* SessionPrompt.Service
@@ -204,7 +205,7 @@ it.live.skip("tool execution produces non-empty session diff (snapshot race)", (
       })
 
       // Use bash tool (always registered) to create a file
-      const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
+      const command = `echo 'snapshot race test content' > ${fwd(dir, "race-test.txt")}`
       yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
         command,
         description: "create test file",
