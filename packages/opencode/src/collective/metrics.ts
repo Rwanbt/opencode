@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { generateText } from "ai"
 import { Provider } from "../provider/provider"
 import type { ProviderID, ModelID } from "../provider/schema"
-import { Collective } from "./types"
+import type { Collective } from "./types"
 import { Log } from "../util/log"
 
 export namespace Metrics {

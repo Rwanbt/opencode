@@ -36,7 +36,6 @@ import type { CodeActionPos } from "@/pages/session/code-actions-panel"
  * internal response types. The cast at the call site (`as LspCodeAction[]`
  * below) is the safer boundary to maintain.
  */
-// biome-ignore lint/suspicious/noExplicitAny: SDK generic — see comment above
 interface LspSdkLike {
   client: {
     lsp: {

@@ -3,7 +3,7 @@ import { generateObject } from "ai"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import type { ProviderID, ModelID } from "../provider/schema"
-import { Collective } from "./types"
+import type { Collective } from "./types"
 import { DebateStore } from "./debate-store"
 import { Log } from "../util/log"
 

@@ -106,3 +106,6 @@ graphify-out/
 # Agent workspace + runtime smoke logs (machine-local, never tracked)
 .mavis/
 .smoke/
+
+# CI/debug investigation scratch (gh api dumps, ps1 scripts, logs) — machine-local
+_bench/

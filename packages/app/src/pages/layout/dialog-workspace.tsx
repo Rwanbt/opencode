@@ -15,9 +15,7 @@ import { workspaceKey } from "./helpers"
 // DialogDeleteWorkspace
 // ---------------------------------------------------------------------------
 
-export interface DeleteWorkspaceFn {
-  (root: string, directory: string, leaveDeletedWorkspace?: boolean): Promise<void>
-}
+export type DeleteWorkspaceFn = (root: string, directory: string, leaveDeletedWorkspace?: boolean) => Promise<void>
 
 export function DialogDeleteWorkspace(props: {
   root: string
@@ -95,9 +93,7 @@ export function DialogDeleteWorkspace(props: {
 // DialogResetWorkspace
 // ---------------------------------------------------------------------------
 
-export interface ResetWorkspaceFn {
-  (root: string, directory: string): Promise<void>
-}
+export type ResetWorkspaceFn = (root: string, directory: string) => Promise<void>
 
 export function DialogResetWorkspace(props: {
   root: string

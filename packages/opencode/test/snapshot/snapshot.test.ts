@@ -351,6 +351,9 @@ test("unicode filenames", async () => {
   })
 })
 
+// Skip: inconsistent behavior across OS/filesystem unicode-normalization forms
+// causes CI flakiness (upstream commit 36e8e59fb5). The sibling "unicode
+// filenames" test above (creation only) is stable and stays enabled.
 test.skip("unicode filenames modification and restore", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

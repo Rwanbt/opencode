@@ -82,7 +82,7 @@ export namespace SynthesisJudge {
     const unresolvedCount = result.object.unresolvedConflicts.length
     const fragility = result.object.fragility
     const diversityScore = Metrics.computeDiversityScore(reattributedClaims)
-    const tierCfg = Collective.TIER_CONFIG[input.tier]
+    const _tierCfg = Collective.TIER_CONFIG[input.tier]
 
     const meta: Collective.ReportMeta = {
       fragility,
@@ -155,7 +155,7 @@ export namespace SynthesisJudge {
 
   function buildTraceability(
     claims: Collective.Claim[],
-    participants: Collective.Participant[],
+    _participants: Collective.Participant[],
   ): Collective.Traceability[] {
     const providerClaims = new Map<string, string[]>()
     for (const claim of claims) {

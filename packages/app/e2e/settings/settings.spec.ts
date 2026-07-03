@@ -663,7 +663,7 @@ test("toggling updates startup switch updates localStorage", async ({ page, goto
 
   const isDisabled = await toggleInput.evaluate((el: HTMLInputElement) => el.disabled)
   if (isDisabled) {
-    test.skip()
+    test.skip(true, "auto-update startup toggle is disabled in this build/environment")
     return
   }
 
