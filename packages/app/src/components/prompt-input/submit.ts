@@ -10,7 +10,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
+import { DEFAULT_PROMPT, isPromptEqual, type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { promptProbe } from "@/testing/prompt"
@@ -83,7 +83,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         return false
       }
 
-      await input.client.session.command({
+      const result = await input.client.session.command({
         sessionID: input.draft.sessionID,
         command: cmd,
         arguments: tail.join(" "),
@@ -98,6 +98,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           filename: attachment.filename,
         })),
       })
+      if (result.error) throw result.error
       return true
     } catch (err) {
       setIdle()
@@ -151,7 +152,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
-    await input.client.session.promptAsync({
+    const result = await input.client.session.promptAsync({
       sessionID: input.draft.sessionID,
       agent: input.draft.agent,
       model: input.draft.model,
@@ -160,6 +161,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       variant: input.draft.variant,
       tools: input.draft.tools,
     })
+    if (result.error) throw result.error
     return true
   } catch (err) {
     setIdle()
@@ -413,6 +415,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const restoreInput = () => {
+      // Only restore if the user hasn't typed something new in the meantime —
+      // clearInput() always leaves the store at DEFAULT_PROMPT, so anything
+      // else means the user already started a fresh draft we must not clobber.
+      if (!isPromptEqual(prompt.current(), DEFAULT_PROMPT)) return
       prompt.set(currentPrompt, input.promptLength(currentPrompt))
       input.setMode(mode)
       input.setPopover(null)
