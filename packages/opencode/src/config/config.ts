@@ -670,9 +670,11 @@ export namespace Config {
             log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
           }
 
+          const searchStop = ConfigPaths.searchStop({ worktree: ctx.worktree, vcs: ctx.project.vcs })
+
           if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
             for (const file of yield* Effect.promise(() =>
-              ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
+              ConfigPaths.projectFiles("opencode", ctx.directory, searchStop),
             )) {
               merge(file, yield* loadFile(file), "local")
             }
@@ -682,7 +684,7 @@ export namespace Config {
           result.mode = result.mode || {}
           result.plugin = result.plugin || []
 
-          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
+          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, searchStop))
 
           if (Flag.OPENCODE_CONFIG_DIR) {
             log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })

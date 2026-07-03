@@ -38,7 +38,8 @@ export async function writeCredentials(creds: GitCredentials): Promise<void> {
 }
 
 // Returns env vars to inject into a git process for auth.
-// Caller is responsible for cleaning up `tempKeyPath` if provided.
+// Caller is responsible for cleaning up `tempKeyPath` if provided — it is a
+// private temp DIRECTORY containing the key; remove it recursively.
 export async function buildAuthEnv(
   creds: GitCredentials,
 ): Promise<{ env: Record<string, string>; tempKeyPath?: string }> {
@@ -60,21 +61,26 @@ export async function buildAuthEnv(
     }
   }
 
-  // SSH key: write to a temp file with mode 0o600.
-  const keyPath = path.join(os.tmpdir(), `oc-git-key-${process.pid}`)
-  await fs.writeFile(keyPath, creds.privateKey, { mode: 0o600, encoding: "utf8" })
-
   // SSH_ASKPASS is not available cross-platform; passphrase-protected keys
   // are not yet supported — buildAuthEnv will throw so callers get a clear error.
   if (creds.passphrase) {
     throw new Error("SSH keys with a passphrase are not yet supported. Please use an unencrypted key or HTTPS token auth.")
   }
 
-  const sshCmd = `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o BatchMode=yes`
+  // SSH key: write inside a fresh mkdtemp directory (0o700, random name) —
+  // a fixed path like `oc-git-key-<pid>` is predictable and writeFile would
+  // follow a pre-planted symlink in the world-writable tmpdir.
+  const keyDir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-git-"))
+  const keyPath = path.join(keyDir, "key")
+  await fs.writeFile(keyPath, creds.privateKey, { mode: 0o600, encoding: "utf8" })
+
+  // accept-new (TOFU) instead of disabling host-key checking outright:
+  // first connection stores the host key, a changed key (MITM) still fails.
+  const sshCmd = `ssh -i "${keyPath}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes`
 
   return {
     env: { GIT_SSH_COMMAND: sshCmd },
-    tempKeyPath: keyPath,
+    tempKeyPath: keyDir,
   }
 }
 

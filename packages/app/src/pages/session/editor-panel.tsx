@@ -89,25 +89,20 @@ export function EditorPanel(props: EditorPanelProps) {
   // only re-runs on path changes and would capture the initial (undefined)
   // handle — yielding a getter that always returns "".
   //
-  // IMPORTANT: return a cleanup closure so Solid unregisters the getter
-  // BEFORE re-running the effect on the next path change AND on dispose.
-  // Without this, switching tabs accumulates stale getters in the map.
+  // IMPORTANT: use onCleanup so Solid unregisters the getter BEFORE
+  // re-running the effect on the next path change AND on dispose. A closure
+  // returned from createEffect is NOT a cleanup in Solid (React semantics) —
+  // it would be passed as the previous value and never invoked, so switching
+  // tabs would leave the old path's getter bound to a CM handle that now
+  // displays a different file (cross-file save corruption via close-guard).
   createEffect(() => {
     const p = props.path()
     const h = props.editorHandle
     if (!p) return
     fileStore.setDraftGetter(p, () => h?.getContent() ?? "")
-    // TEMP-DBG (round 3): log every effect run so we can see in the file
-    // whether the createEffect re-fires when CM mounts. Without this we have
-    // no visibility into Solid reactivity at runtime.
-    try {
-      const fs = require("node:fs") as typeof import("node:fs")
-      const line = `[editor-panel ${new Date().toISOString()}] path=${p} handleDefined=${!!h} handleType=${h ? (h.constructor?.name ?? "?") : "undefined"}\n`
-      fs.appendFileSync("D:\\App\\OpenCode\\.build-temp\\editor-panel-debug.log", line)
-    } catch {}
-    return () => {
+    onCleanup(() => {
       fileStore.setDraftGetter(p, undefined)
-    }
+    })
   })
 
   // Guard: hide the pencil for binary files (NUL bytes) and files over 1 MB.

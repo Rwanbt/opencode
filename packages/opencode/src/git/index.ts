@@ -23,6 +23,18 @@ export namespace Git {
 
   const out = (result: { text(): string }) => result.text().trim()
   const nuls = (text: string) => text.split("\0").filter(Boolean)
+
+  // Argv-position safety for user-supplied ref/remote names reaching the git
+  // CLI (these values arrive from HTTP routes with no schema validation).
+  // Git's own check-ref-format still applies afterwards; this guard only
+  // guarantees a value can never be parsed as an option (leading "-"), a
+  // revision range (".."), or contain characters check-ref-format forbids
+  // anyway (whitespace, control chars, ~^:?*[\). Rejecting ":" also rejects
+  // URLs and refspecs: `remote` must be a configured remote NAME — "ext::"
+  // style remote URLs execute arbitrary commands and must never come from
+  // the API.
+  const safeRefArg = (value: string) =>
+    value.length > 0 && value.length <= 255 && !value.startsWith("-") && !/[\s\x00-\x1f\x7f~^:?*[\\]/.test(value) && !value.includes("..")
   const fail = (err: unknown) =>
     ({
       exitCode: 1,
@@ -373,7 +385,10 @@ export namespace Git {
           )
 
       // Push the current branch to remote. Injects auth credentials if configured.
+      // `remote` must be a remote name (not a URL); `branch` a plain branch name.
       const push = Effect.fn("Git.push")(function* (cwd: string, remote = "origin", branch?: string) {
+        if (!safeRefArg(remote) || (branch !== undefined && !safeRefArg(branch)))
+          return { ok: false, error: "invalid remote or branch name" } satisfies PushResult
         const args = branch ? ["push", remote, branch] : ["push", remote]
         const { env, tempKeyPath } = yield* getAuthEnv()
         try {
@@ -384,12 +399,17 @@ export namespace Git {
           } satisfies PushResult
         } finally {
           if (tempKeyPath)
-            yield* Effect.promise(() => fs.rm(tempKeyPath, { force: true })).pipe(Effect.orElseSucceed(() => undefined))
+            yield* Effect.promise(() => fs.rm(tempKeyPath, { recursive: true, force: true })).pipe(
+              Effect.orElseSucceed(() => undefined),
+            )
         }
       })
 
       // Pull from remote. Uses --rebase to keep history linear.
+      // `remote` must be a remote name (not a URL); `branch` a plain branch name.
       const pull = Effect.fn("Git.pull")(function* (cwd: string, remote = "origin", branch?: string) {
+        if (!safeRefArg(remote) || (branch !== undefined && !safeRefArg(branch)))
+          return { ok: false, error: "invalid remote or branch name" } satisfies PullResult
         const args = branch ? ["pull", "--rebase", remote, branch] : ["pull", "--rebase", remote]
         const { env, tempKeyPath } = yield* getAuthEnv()
         try {
@@ -400,7 +420,9 @@ export namespace Git {
           } satisfies PullResult
         } finally {
           if (tempKeyPath)
-            yield* Effect.promise(() => fs.rm(tempKeyPath, { force: true })).pipe(Effect.orElseSucceed(() => undefined))
+            yield* Effect.promise(() => fs.rm(tempKeyPath, { recursive: true, force: true })).pipe(
+              Effect.orElseSucceed(() => undefined),
+            )
         }
       })
 
@@ -489,15 +511,20 @@ export namespace Git {
       })
 
       // Create and switch to a new branch. Optionally specify the start point.
+      // Trailing "--" pins name/from to ref positions (never pathspecs).
       const createBranch = Effect.fn("Git.createBranch")(function* (cwd: string, name: string, from?: string) {
-        const args = from ? ["checkout", "-b", name, from] : ["checkout", "-b", name]
+        if (!safeRefArg(name) || (from !== undefined && !safeRefArg(from))) return false
+        const args = from ? ["checkout", "-b", name, from, "--"] : ["checkout", "-b", name, "--"]
         const result = yield* run(args, { cwd })
         return result.exitCode === 0
       })
 
-      // Switch to an existing local branch.
+      // Switch to an existing local branch. The trailing "--" forces git to
+      // treat `name` as a branch, never a pathspec — `git checkout <file>`
+      // silently reverts uncommitted changes to that file.
       const switchBranch = Effect.fn("Git.switchBranch")(function* (cwd: string, name: string) {
-        const result = yield* run(["checkout", name], { cwd })
+        if (!safeRefArg(name)) return false
+        const result = yield* run(["checkout", name, "--"], { cwd })
         return result.exitCode === 0
       })
 

@@ -247,7 +247,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const diagTotal = createMemo(() => diagnostics.total())
   const diagFiles = createMemo(() => diagnostics.files())
   const plugins = createMemo(() =>
-    (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+    (sync.data.config?.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))

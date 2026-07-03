@@ -103,11 +103,14 @@ const CommandPaletteOverlay: Component = () => {
 
   return (
     <Portal>
-      {/* Backdrop */}
+      {/* Backdrop. NO aria-hidden here: this wrapper CONTAINS the palette
+          panel (role=dialog + focused input) — aria-hidden on an ancestor
+          removes the whole palette from the accessibility tree (screen
+          readers and getByRole can't see it, and hiding a focused element
+          violates aria-hidden semantics). */}
       <div
         class="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[8vh]"
         onClick={close}
-        aria-hidden="true"
       >
         {/* Panel — stop propagation so backdrop click doesn't close when clicking inside */}
         <div

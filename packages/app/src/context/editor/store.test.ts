@@ -377,11 +377,13 @@ describe("editor store — error resilience (network/SDK exceptions)", () => {
     expect(store.get("a.ts")!.missing).toBe(true)
   })
 
-  test("save() with throwing write clears saving flag", async () => {
+  test("save() with throwing write surfaces an error and clears saving flag", async () => {
     const store = createEditorStore(throwingWrite)
     await store.open("a.ts")
     const eff = await store.save("a.ts", "new content")
-    expect(eff).toEqual({ type: "none" })
+    // FORK (fix 8948c02909): a failed transport must surface as "error", not a
+    // silent "none" that shows the user a "Saved" toast over an unwritten file.
+    expect(eff).toEqual({ type: "error" })
     expect(store.get("a.ts")!.saving).toBe(false)
   })
 

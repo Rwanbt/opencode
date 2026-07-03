@@ -110,14 +110,6 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
             // mounted, or tab close-guard fired before the getter effect ran).
             const live =
               fileStore.getDraftContent(p.path) ?? fileStore.get(p.path)?.content ?? ""
-            // TEMP-DBG (round 3, removed in next commit): file-based log so we
-            // can diagnose why the disk isn't being updated when the user
-            // reproduces the flow without DevTools.
-            try {
-              const fs = await import("node:fs")
-              const logLine = `[close-guard ${new Date().toISOString()}] path=${p.path} live.length=${live.length} live.first50=${JSON.stringify(live.slice(0, 50))} getterResult=${JSON.stringify(fileStore.getDraftContent(p.path))?.slice(0, 50)} fallback=${JSON.stringify(fileStore.get(p.path)?.content?.slice(0, 50))}\n`
-              fs.appendFileSync("D:\\App\\OpenCode\\.build-temp\\close-guard-debug.log", logLine)
-            } catch {}
             const eff = await editor.save(p.path, live)
             setSaving(false)
             // FORK (round 3, EC1) — Fix B: never close the tab if save failed.

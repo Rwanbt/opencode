@@ -107,7 +107,10 @@ export default function Layout(props: ParentProps) {
     if (!dir) return { slug, dir: "" }
     return {
       slug,
-      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+      // `path` is transiently undefined while the per-directory child store
+      // bootstraps (e.g. right after a server switch) — this memo re-runs
+      // mid-batch, before the payload lands.
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path?.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))

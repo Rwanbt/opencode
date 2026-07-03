@@ -8,11 +8,22 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
-  export async function projectFiles(name: string, directory: string, worktree: string) {
-    return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
+  /**
+   * Upward-traversal boundary for config discovery. Git projects stop at the
+   * worktree root. Non-git projects set worktree === directory (see
+   * Project.fromDirectory — the mobile file-ops boundary must stay writable),
+   * but config discovery keeps the upstream semantics of walking every
+   * ancestor directory, so parent-dir opencode.json files still merge.
+   */
+  export function searchStop(input: { worktree: string; vcs?: "git" }): string | undefined {
+    return input.vcs === "git" ? input.worktree : undefined
   }
 
-  export async function directories(directory: string, worktree: string) {
+  export async function projectFiles(name: string, directory: string, stop: string | undefined) {
+    return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, stop, { rootFirst: true })
+  }
+
+  export async function directories(directory: string, stop: string | undefined) {
     return [
       Global.Path.config,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
@@ -20,7 +31,7 @@ export namespace ConfigPaths {
             Filesystem.up({
               targets: [".opencode"],
               start: directory,
-              stop: worktree,
+              stop,
             }),
           )
         : []),

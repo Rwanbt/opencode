@@ -222,7 +222,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   // command palette (Mod+Shift+P), reachable via `command.palette`.
   const openFile = () => {
     void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+      // `file`/`sdk` are injected because the dialog renders through
+      // <DialogOutlet /> at RouterRoot, outside SessionProviders and the
+      // directory-scoped SDKProvider.
+      dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} file={file} />)
     })
   }
 
@@ -231,7 +234,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   // "no symbols" until the user opens a file).
   const openSymbols = () => {
     void import("@/components/dialog-select-symbol").then((x) => {
-      dialog.show(() => <x.DialogSelectSymbol />)
+      dialog.show(() => <x.DialogSelectSymbol sdk={sdk} file={file} />)
     })
   }
 
@@ -239,7 +242,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   // enabled (no file scope needed). Reachable from the command palette too.
   const openSearch = () => {
     void import("@/components/dialog-select-search").then((x) => {
-      dialog.show(() => <x.DialogSelectSearch />)
+      dialog.show(() => <x.DialogSelectSearch sdk={sdk} file={file} />)
     })
   }
 
@@ -391,7 +394,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync.data.config.share === "disabled") return []
+    if (sync.data.config?.share === "disabled") return []
     return [
       sessionCommand({
         id: "session.share",

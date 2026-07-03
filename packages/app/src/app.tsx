@@ -1,6 +1,6 @@
 import "@/index.css"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
+import { DialogOutlet, DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/ui/file"
@@ -146,6 +146,14 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
         {props.appChildren}
         {props.children}
       </Suspense>
+      {/* FORK (e2e error-boundary fix): dialog contents render HERE, inside
+          the Router, not where DialogProvider sits (AppBaseProviders, outside
+          the Router). Dialogs calling useNavigate()/useParams()
+          (dialog-select-server, dialog-fork, dialog-select-file) otherwise
+          throw "'use' router primitives can be only used inside a Route"
+          straight into the error boundary. State stays in DialogProvider;
+          only the rendering location moved. */}
+      <DialogOutlet />
     </AppShellProviders>
   )
 }
@@ -165,7 +173,9 @@ export function AppBaseProviders(props: ParentProps) {
         <ModelsProvider>
           <QueryProvider>
             <FallbackSDKForDialogs>
-              <DialogProvider>
+              {/* outlet={false}: dialog contents render via <DialogOutlet />
+                  in RouterRoot so they get Router context (useNavigate). */}
+              <DialogProvider outlet={false}>
                 <MarkedProvider>
                   <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                 </MarkedProvider>

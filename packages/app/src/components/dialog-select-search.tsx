@@ -53,9 +53,14 @@ const asMatch = (item: unknown): MatchData | undefined => {
   return undefined
 }
 
-export function DialogSelectSearch() {
-  const sdk = useSDK()
-  const file = useFile()
+// FileProvider and the directory-scoped SDKProvider are session-route-scoped
+// while dialogs render through <DialogOutlet /> at RouterRoot. Openers on the
+// session route must inject both — the context fallbacks would resolve to a
+// missing FileProvider (throw) and the empty-directory fallback SDK (wrong
+// search root) respectively.
+export function DialogSelectSearch(props: { sdk?: ReturnType<typeof useSDK>; file?: ReturnType<typeof useFile> }) {
+  const sdk = props.sdk ?? useSDK()
+  const file = props.file ?? useFile()
   const language = useLanguage()
   const dialog = useDialog()
   const { tabs, view } = useSessionLayout()

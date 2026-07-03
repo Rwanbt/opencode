@@ -98,41 +98,61 @@ function init() {
   }
 }
 
-export function DialogProvider(props: ParentProps) {
+/* WHY: render the active dialog inside a normal JSX tree below the
+   DialogContext.Provider. The previous implementation used runWithOwner +
+   createRoot to construct the Kobalte subtree in a detached reactive
+   scope, then mounted it later via {active.node}. That detached
+   construction broke Solid's context-owner chain: Kobalte.Portal
+   renders to document.body and propagates context through the owner
+   it captures at call time. With a detached owner, the captured owner
+   no longer reached the DialogContext.Provider provided by the Kobalte
+   root above, and useDialogContext() threw "must be used within a
+   Dialog component" at the first show() call (audit Phase 10,
+   diagnostic #2). Rendering inside a live JSX tree keeps the owner
+   chain intact end-to-end.
+
+   DialogOutlet exists as a separate component so hosts can choose WHERE
+   dialog elements render without moving where dialog STATE lives:
+   dialog contents only see the contexts above the outlet, so a host
+   whose DialogProvider sits outside the Router (app.tsx mounts it in
+   AppBaseProviders) must place <DialogOutlet /> inside the Router or
+   every dialog calling useNavigate()/useParams() throws "'use' router
+   primitives can be only used inside a Route" into the error boundary. */
+export function DialogOutlet() {
+  const ctx = useContext(Context)
+  if (!ctx) throw new Error("DialogOutlet must be used within a DialogProvider")
+  return (
+    <Show when={ctx.active}>
+      {(getActive) => (
+        <div data-component="dialog-stack">
+          <Kobalte
+            modal
+            open={!getActive().closing()}
+            onOpenChange={(open: boolean) => {
+              if (open) return
+              ctx.close()
+            }}
+          >
+            <Kobalte.Portal>
+              <Kobalte.Overlay data-component="dialog-overlay" onClick={() => ctx.close()} />
+              {getActive().element()}
+            </Kobalte.Portal>
+          </Kobalte>
+        </div>
+      )}
+    </Show>
+  )
+}
+
+export function DialogProvider(props: ParentProps & { outlet?: boolean }) {
   const ctx = init()
   return (
     <Context.Provider value={ctx}>
       {props.children}
-      {/* WHY: render the active dialog inside the normal JSX tree of the
-          DialogProvider. The previous implementation used runWithOwner +
-          createRoot to construct the Kobalte subtree in a detached reactive
-          scope, then mounted it later via {active.node}. That detached
-          construction broke Solid's context-owner chain: Kobalte.Portal
-          renders to document.body and propagates context through the owner
-          it captures at call time. With a detached owner, the captured owner
-          no longer reached the DialogContext.Provider provided by the Kobalte
-          root above, and useDialogContext() threw "must be used within a
-          Dialog component" at the first show() call (audit Phase 10,
-          diagnostic #2). Rendering here, inside the Provider's own reactive
-          scope, keeps the owner chain intact end-to-end. */}
-      <Show when={ctx.active}>
-        {(getActive) => (
-          <div data-component="dialog-stack">
-            <Kobalte
-              modal
-              open={!getActive().closing()}
-              onOpenChange={(open: boolean) => {
-                if (open) return
-                ctx.close()
-              }}
-            >
-              <Kobalte.Portal>
-                <Kobalte.Overlay data-component="dialog-overlay" onClick={() => ctx.close()} />
-                {getActive().element()}
-              </Kobalte.Portal>
-            </Kobalte>
-          </div>
-        )}
+      {/* Default: self-render the outlet (standalone hosts, stories, tests).
+          Pass outlet={false} when a <DialogOutlet /> is mounted elsewhere. */}
+      <Show when={props.outlet !== false}>
+        <DialogOutlet />
       </Show>
     </Context.Provider>
   )
