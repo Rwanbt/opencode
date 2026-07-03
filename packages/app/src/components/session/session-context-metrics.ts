@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
+import type { AssistantMessage, Message } from "../../types/sdk-shim"
 
 type Provider = {
   id: string

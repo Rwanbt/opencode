@@ -18,7 +18,7 @@ import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { Installation } from "@/installation"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk-shared"
 
 type RouteEntry = {
   key: symbol

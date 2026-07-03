@@ -62,8 +62,11 @@ describe("mobile.css validation", () => {
   })
 
   test("has settings dialog responsive rules", () => {
-    expect(css).toContain(".settings-dialog")
-    expect(css).toContain("flex-direction: column")
+    // Settings is the only x-large dialog; its full-screen portrait rules
+    // target the dialog size attribute, not the .settings-dialog class
+    // (see mobile.css section 25b).
+    expect(css).toContain('[data-component="dialog"][data-size="x-large"]')
+    expect(css).toContain("height: var(--vvh, 100dvh)")
   })
 
   test("has momentum scrolling", () => {

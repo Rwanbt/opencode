@@ -3,10 +3,32 @@
  * Desktop version — uses __TAURI__ global API.
  */
 
+import { Store } from "@tauri-apps/plugin-store"
+
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
   const tauri = (globalThis as any).__TAURI__
   if (!tauri?.core?.invoke) return Promise.reject("Tauri not available")
   return tauri.core.invoke(cmd, args)
+}
+
+/**
+ * Read the most recently used model from the persisted global store.
+ * The app keeps it in the Tauri store "opencode.global.dat" under key "model"
+ * (JSON string: { user, recent: [{providerID, modelID}], variant }). Used to
+ * decide whether a launch-time local warm-up is actually wanted.
+ */
+async function getActiveModel(): Promise<{ providerID: string; modelID: string } | null> {
+  try {
+    const store = await Store.load("opencode.global.dat")
+    const raw = await store.get<unknown>("model")
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+    const recent = (parsed as { recent?: Array<{ providerID?: string; modelID?: string }> } | null)?.recent
+    const top = Array.isArray(recent) ? recent[0] : undefined
+    if (top?.providerID && top?.modelID) return { providerID: top.providerID, modelID: top.modelID }
+    return null
+  } catch {
+    return null
+  }
 }
 
 let currentlyLoaded: string | null = null
@@ -81,21 +103,33 @@ export async function ensureLocalLLMLoaded(providerID: string | undefined, model
  */
 export async function autoStartLocalLLM() {
   try {
+    // Only warm up a local model when the active (most-recent) model is local.
+    // For cloud providers (e.g. GLM) eagerly loading gemma at launch wastes
+    // CPU/disk/VRAM during the most latency-sensitive moment and slows the app
+    // open. Local models still load on demand via ensureLocalLLMLoaded (the
+    // "model-selected" event), so nothing is lost — it's just deferred.
+    const active = await getActiveModel()
+    if (!active || active.providerID !== "local-llm") {
+      if (active) console.log("[AutoLLM] Skipping launch warm-up — active model is cloud:", active.providerID)
+      return
+    }
+
     const models: Array<{ filename: string; size: number }> = await invokeTauri("list_models")
     if (models.length === 0) return
+
+    // Prefer the GGUF matching the active model; fall back to the first available.
+    const filename = (await findGGUFFile(active.modelID)) ?? models[0].filename
 
     // Check if server is already running
     const healthy: boolean = await invokeTauri("check_llm_health", { port: null }).catch(() => false)
     if (healthy) {
-      currentlyLoaded = models[0].filename
+      currentlyLoaded = filename
       console.log("[AutoLLM] Server already running")
       return
     }
 
-    // Load the first available model
-    const filename = models[0].filename
     const draftModel = getDraftModel()
-    console.log("[AutoLLM] Auto-starting model on launch:", filename, draftModel ? `(draft: ${draftModel})` : "")
+    console.log("[AutoLLM] Auto-starting active local model on launch:", filename, draftModel ? `(draft: ${draftModel})` : "")
     loading = true
     await pushConfigToEnv()
     await invokeTauri("load_llm_model", { filename, draftModel })

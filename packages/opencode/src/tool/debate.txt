@@ -1,0 +1,10 @@
+Launch a multi-model collective intelligence debate. Runs N AI models in parallel on the same question, extracts atomic claims, identifies blind spots (insights only one model noticed), and produces a structured synthesis report.
+
+Use this tool when:
+- The user invokes /debate
+- A question would benefit from multiple AI perspectives
+- You want to surface blind spots that a single model might miss
+
+The tool discovers available AI providers automatically, assigns roles, and runs the full pipeline: Phase 1 (diverge) → Phase 2 (extract + verify) → Phase 3 (converge, if tier allows) → Phase 4 (synthesize). Returns a markdown report with blind spots highlighted.
+
+Requires at least 2 configured AI providers.

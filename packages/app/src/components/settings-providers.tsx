@@ -74,7 +74,7 @@ export const SettingsProviders: Component = () => {
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = globalSync.data.config.provider?.[providerID]
+    const provider = globalSync.data.config?.provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -82,7 +82,7 @@ export const SettingsProviders: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    const before = globalSync.data.config.disabled_providers ?? []
+    const before = globalSync.data.config?.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
     globalSync.set("config", "disabled_providers", next)
 

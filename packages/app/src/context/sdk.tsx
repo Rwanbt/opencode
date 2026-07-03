@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "../types/sdk-shim"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
@@ -14,10 +14,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const globalSDK = useGlobalSDK()
 
     const directory = createMemo(props.directory)
+    // FORK (Phase 4.4 — R-code&conv): the SDK default is now
+    // throwOnError: false (see packages/sdk/js/src/v2/client.ts), so we
+    // omit the explicit flag and let every consumer of `useSDK().client`
+    // inspect `res.data` / `res.error` instead of catching throws.
     const client = createMemo(() =>
       globalSDK.createClient({
         directory: directory(),
-        throwOnError: true,
       }),
     )
 

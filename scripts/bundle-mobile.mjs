@@ -57,8 +57,6 @@ const cmd = [
   join(ROOT, "packages/opencode/src/mobile-entry.ts"),
   "--target=bun",
   `--outdir=${outdir}`,
-  '--external', '@parcel/watcher',
-  '--external', '@parcel/watcher/wrapper',
   '--external', '@opentui/core',
   '--external', '@opentui/solid',
 ].join(" ")

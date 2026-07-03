@@ -10,7 +10,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "../../types/sdk-shim"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -287,7 +287,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("permission", permission.sessionID, [permission])
         break
       }
-      const result = Binary.search(permissions, permission.id, (p) => p.id)
+      const result = Binary.search(permissions, permission.id, (p) => p.id ?? "")
       if (result.found) {
         input.setStore("permission", permission.sessionID, result.index, reconcile(permission))
         break
@@ -305,7 +305,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; requestID: string }
       const permissions = input.store.permission[props.sessionID]
       if (!permissions) break
-      const result = Binary.search(permissions, props.requestID, (p) => p.id)
+      const result = Binary.search(permissions, props.requestID, (p) => p.id ?? "")
       if (!result.found) break
       input.setStore(
         "permission",
@@ -323,7 +323,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("question", question.sessionID, [question])
         break
       }
-      const result = Binary.search(questions, question.id, (q) => q.id)
+      const result = Binary.search(questions, question.id, (q) => q.id ?? "")
       if (result.found) {
         input.setStore("question", question.sessionID, result.index, reconcile(question))
         break
@@ -342,7 +342,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; requestID: string }
       const questions = input.store.question[props.sessionID]
       if (!questions) break
-      const result = Binary.search(questions, props.requestID, (q) => q.id)
+      const result = Binary.search(questions, props.requestID, (q) => q.id ?? "")
       if (!result.found) break
       input.setStore(
         "question",

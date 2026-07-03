@@ -144,6 +144,7 @@ export const createClient = (config: Config = {}): Client => {
           case "stream":
             emptyData = response.body
             break
+          case "json":
           default:
             emptyData = {}
             break

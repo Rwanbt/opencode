@@ -1,7 +1,7 @@
 import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest } from "../types/sdk-shim"
 import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
@@ -55,7 +55,16 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       const directory = decode64(params.dir)
       if (!directory) return false
       const [store] = globalSync.child(directory)
-      return hasPermissionPromptRules(store.config.permission)
+      // WHY optional chaining: bootstrap sets `config` to whatever
+      // `sdk.config.get()` returns, and on a freshly opened folder the
+      // server may return `data: undefined` before the first config load
+      // completes. The State type initializes `config` to `{}` but a
+      // subsequent `setStore("config", undefined)` (no `?? {}` fallback
+      // in bootstrap.ts:228) overwrites it. Without the guard, reading
+      // `.permission` throws "(reading 'permission')" the first time the
+      // user opens a project — surfacing only when the boot-time crash
+      // (fixed separately) is no longer masking it.
+      return hasPermissionPromptRules(store.config?.permission)
     })
 
     const [store, setStore, _, ready] = persisted(
@@ -87,7 +96,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       const directory = decode64(params.dir)
       if (!directory) return
       const [childStore] = globalSync.child(directory)
-      const perm = childStore.config.permission
+      // WHY optional chaining: see permissionsEnabled memo above.
+      const perm = childStore.config?.permission
       if (typeof perm === "string" && perm === "allow") {
         const key = directoryAcceptKey(directory)
         if (store.autoAccept[key] === undefined) {
@@ -124,6 +134,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function respondOnce(permission: PermissionRequest, directory?: string) {
+      if (!permission.id) return
       const now = Date.now()
       const hit = responded.has(permission.id)
       responded.delete(permission.id)
@@ -313,7 +324,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       permissionsEnabled,
       isPermissionAllowAll(directory: string) {
         const [childStore] = globalSync.child(directory)
-        const perm = childStore.config.permission
+        // WHY optional chaining: see permissionsEnabled memo above.
+        const perm = childStore.config?.permission
         return typeof perm === "string" && perm === "allow"
       },
     }

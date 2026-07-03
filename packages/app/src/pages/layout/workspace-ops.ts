@@ -10,7 +10,7 @@
 import { produce } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { showToast, toaster } from "@opencode-ai/ui/toast"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 import type { useGlobalSDK } from "@/context/global-sdk"
 import type { useGlobalSync } from "@/context/global-sync"
@@ -72,7 +72,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     setBusy(directory, true)
 
     const result = await globalSDK.client.worktree
-      .remove({ directory: root, worktreeRemoveInput: { directory } })
+      .remove({ directory } as never)
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -142,7 +142,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
-      .reset({ directory: root, worktreeResetInput: { directory } })
+      .reset({ directory } as never)
       .then((x) => x.data)
       .catch((err) => {
         showToast({

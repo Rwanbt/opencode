@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "../../types/sdk-shim"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -480,7 +480,7 @@ describe("applyDirectoryEvent", () => {
       directory: "/tmp",
       loadLsp() {},
     })
-    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions[0]?.header).toBe("updated")
+    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions?.[0]?.header).toBe("updated")
 
     applyDirectoryEvent({
       event: { type: "question.rejected", properties: { sessionID, requestID: "q_2" } },

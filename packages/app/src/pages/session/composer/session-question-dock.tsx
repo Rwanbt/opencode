@@ -5,13 +5,13 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionInfo, QuestionRequest } from "../../../types/sdk-shim"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -62,13 +62,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const sdk = useSDK()
   const language = useLanguage()
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() => props.request.questions ?? [])
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(props.request.id)
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? ([] as QuestionAnswer[]),
+    answers: cached?.answers ?? ([] as string[][]),
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
@@ -147,7 +147,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (store.customOn[tab] === true) return list.length
     return Math.max(
       0,
-      list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
+      list.findIndex((item: QuestionInfo) => store.answers[tab]?.includes(item.label) ?? false),
     )
   }
 
@@ -205,7 +205,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: string[][]) => sdk.client.question.reply({ requestID: props.request.id!, answers }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -217,7 +217,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
+    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id! }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -230,7 +230,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
-  const reply = async (answers: QuestionAnswer[]) => {
+  const reply = async (answers: string[][]) => {
     if (sending()) return
     await replyMutation.mutateAsync(answers)
   }

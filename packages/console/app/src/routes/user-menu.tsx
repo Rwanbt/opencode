@@ -1,5 +1,6 @@
 import { action } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
+import type { APIEvent } from "@solidjs/start/server"
 import { useAuthSession } from "~/context/auth"
 import { Dropdown } from "~/component/dropdown"
 import { useI18n } from "~/context/i18n"
@@ -9,7 +10,7 @@ import "./user-menu.css"
 const logout = action(async () => {
   "use server"
   const auth = await useAuthSession()
-  const event = getRequestEvent()
+  const event = getRequestEvent() as APIEvent | undefined
   const current = auth.data.current
   if (current)
     await auth.update((val) => {

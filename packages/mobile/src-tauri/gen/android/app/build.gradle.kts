@@ -53,7 +53,7 @@ android {
             }
         }
         getByName("release") {
-            isDebuggable = false
+            isDebuggable = true
             isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true

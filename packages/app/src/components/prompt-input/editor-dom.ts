@@ -159,7 +159,7 @@ export function isNormalizedEditor(root: HTMLElement): boolean {
 
 /** Re-renders the editor DOM from a Prompt parts array. */
 export function renderEditor(root: HTMLElement, parts: Prompt): void {
-  root.innerHTML = ""
+  root.replaceChildren()
   for (const part of parts) {
     if (part.type === "text") {
       root.appendChild(createTextFragment(part.content))

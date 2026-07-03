@@ -1,0 +1,55 @@
+name: sdk-sync
+
+# DEBT: D-20 — every Hono route needs describeRoute() + a regenerated
+# packages/sdk/js. Forgetting the regen ships a route that is invisible to SDK
+# clients, with no signal until someone notices at runtime. This gate
+# regenerates the SDK from the live server spec on every PR and fails if the
+# committed output drifts.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-sync:
+    name: sdk in sync with server
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Regenerate SDK from server spec
+        run: ./script/generate.ts
+
+      - name: Fail if the committed SDK is stale
+        run: |
+          if [ -n "$(git status --porcelain -- packages/sdk)" ]; then
+            echo "::error::packages/sdk is out of sync with the server routes."
+            echo "A route changed without regenerating the SDK. Run:"
+            echo ""
+            echo "    ./script/generate.ts"
+            echo "    git add packages/sdk && git commit"
+            echo ""
+            echo "----- drift (git diff) -----"
+            git --no-pager diff -- packages/sdk
+            git --no-pager status --porcelain -- packages/sdk
+            exit 1
+          fi
+          echo "SDK is in sync with the server."

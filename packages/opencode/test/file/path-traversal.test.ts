@@ -86,6 +86,145 @@ describe("File.read path traversal protection", () => {
   })
 })
 
+/*
+ * D-22 (technical-debt register): the write guard `assertInsideProject` also
+ * has to defend against symlinks planted *inside* the project that resolve to
+ * a target outside it — the textual containment check alone passes for those.
+ * `File.mkdir` is the only mutating operation exposed today; any future
+ * write/rename/move/delete route must reuse this same guard, so we pin its
+ * real-path and mkdir behaviour here before that surface grows.
+ */
+describe("File guard against symlink escapes and mutating ops (D-22)", () => {
+  test("File.read rejects a symlink whose real path escapes the project", async () => {
+    await using outside = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "secret.txt"), "top secret")
+      },
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await fs.symlink(path.join(outside.path, "secret.txt"), path.join(dir, "link.txt"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.read("link.txt")).rejects.toThrow("Access denied: symlink escapes project directory")
+      },
+    })
+  })
+
+  test("File.list rejects a symlinked directory escaping the project", async () => {
+    await using outside = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, "data"), { recursive: true })
+      },
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await fs.symlink(path.join(outside.path, "data"), path.join(dir, "linkdir"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.list("linkdir")).rejects.toThrow("Access denied: symlink escapes project directory")
+      },
+    })
+  })
+
+  test("File.mkdir rejects ../ traversal escaping the project", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.mkdir("../escape-dir")).rejects.toThrow("Access denied: path escapes project directory")
+      },
+    })
+  })
+
+  test("File.mkdir allows a path within the project", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await File.mkdir("nested/created")
+        expect(result.absolute).toContain(path.join("nested", "created"))
+      },
+    })
+  })
+})
+
+/*
+ * ADR-0004: the file write API (write/rename/move/delete) reuses the same
+ * assertInsideProject guard plus a parent-aware variant (assertWritableTarget)
+ * so that creating a NEW file under a symlinked-out directory is also blocked
+ * (AppFileSystem.resolve returns the textual path when the leaf does not exist).
+ */
+describe("File write API path traversal protection (ADR-0004)", () => {
+  test("File.write rejects ../ traversal", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.write({ path: "../escape.txt", content: "x" })).rejects.toThrow(
+          "Access denied: path escapes project directory",
+        )
+      },
+    })
+  })
+
+  test("File.write rejects creating a new file under a symlinked-out directory", async () => {
+    await using outside = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, "data"), { recursive: true })
+      },
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await fs.symlink(path.join(outside.path, "data"), path.join(dir, "linkdir"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.write({ path: "linkdir/new.txt", content: "x" })).rejects.toThrow(
+          "Access denied: symlink escapes project directory",
+        )
+        // and the file must not have been created outside the project
+        expect(await Bun.file(path.join(outside.path, "data", "new.txt")).exists()).toBe(false)
+      },
+    })
+  })
+
+  test("File.rename rejects a destination escaping the project", async () => {
+    await using tmp = await tmpdir({ init: async (dir) => Bun.write(path.join(dir, "a.txt"), "data") })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.rename("a.txt", "../escape.txt")).rejects.toThrow("Access denied: path escapes project directory")
+      },
+    })
+  })
+
+  test("File.remove rejects ../ traversal", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.remove({ path: "../../../etc/passwd" })).rejects.toThrow(
+          "Access denied: path escapes project directory",
+        )
+      },
+    })
+  })
+})
+
 describe("File.list path traversal protection", () => {
   test("rejects ../ traversal attempting to list /etc", async () => {
     await using tmp = await tmpdir()

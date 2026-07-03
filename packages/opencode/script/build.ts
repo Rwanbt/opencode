@@ -60,7 +60,20 @@ const migrations = await Promise.all(
 )
 console.log(`Loaded ${migrations.length} migrations`)
 
-const singleFlag = process.argv.includes("--single")
+// Cross-platform compilation (`Bun.build` with `compile.target` != host) downloads
+// the Bun runtime binary for each target OS/arch from Bun's CDN. On Windows hosts
+// the linux/darwin runtime extractions are unreliable — e.g.
+// `error: Failed to extract executable for 'bun-linux-aarch64-v1.3.11'. The
+// download may be incomplete.` — and the same class of failure applies to
+// linux→darwin and darwin→win32. To keep `bun run build` working on every
+// developer machine, default local builds to the host platform only. The full
+// cross-platform matrix is opt-in for local testing (`--all`) and runs by
+// default in release mode where `OPENCODE_RELEASE` is set (CI publish workflow).
+// Every internal convention (CONTRIBUTING, CLAUDE, ARCHITECTURE, predev hooks,
+// beta script, desktop sidecar docs) already uses `--single`, so this matches
+// the documented developer workflow.
+const allFlag = process.argv.includes("--all")
+const singleFlag = process.argv.includes("--single") || (!allFlag && !Script.release)
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const plugin = createSolidTransformPlugin()

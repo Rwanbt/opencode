@@ -131,8 +131,15 @@ export namespace Permission {
   }
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-    log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
-    return evalRule(permission, pattern, ...rulesets)
+    // WHY only the decision, not `ruleset`: this runs in a hot path (called once per
+    // skill by Skill.available, on every prompt build / /skill / /mcp request). Dumping
+    // the flattened ruleset — which carries one external_directory allow rule per skill,
+    // hundreds of entries — serialized a multi-KB blob per call and ballooned a single
+    // session log to ~1 GB. The synchronous disk writes stalled the sidecar event loop
+    // for minutes (slow app startup / unresponsiveness). Log the small Rule result only.
+    const rule = evalRule(permission, pattern, ...rulesets)
+    log.info("evaluate", { permission, pattern, action: rule.action })
+    return rule
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Permission") {}

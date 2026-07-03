@@ -21,12 +21,24 @@
       }
     },
   },
+  // small_model : modele cheap pour titres/routing. local-llm/Qwen3.5-0.8B = gratuit.
+  // WHY local : ce workspace est local-first (llama-server est la feature coeur).
+  // PRECONDITION : llama-server doit tourner sur :14097, sinon la generation de
+  // titres echoue. Si tu bosses sans llama-server, commente la ligne suivante.
+  "small_model": "local-llm/Qwen3.5-0.8B",
   "permission": {
     "edit": {
       "packages/opencode/migration/*": "deny",
     },
+    // Domaine audio — pas pertinent sur ce repo TypeScript/Rust.
+    // Chargé automatiquement dans les repos audio (Seno, Dynama, Spectra, Materia).
+    "skill": {
+      "audio-validate": "deny",
+      "egui-seno": "deny",
+      "clap-release": "deny",
+      "dual-boot-sync": "deny",
+    },
   },
-  "mcp": {},
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

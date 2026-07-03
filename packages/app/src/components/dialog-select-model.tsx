@@ -146,7 +146,7 @@ export function ModelSelectorPopover(props: {
       placement="top-start"
       gutter={4}
     >
-      <Kobalte.Trigger as={props.triggerAs ?? "div"} {...props.triggerProps}>
+      <Kobalte.Trigger as={(props.triggerAs ?? "div") as any} {...props.triggerProps}>
         {props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>

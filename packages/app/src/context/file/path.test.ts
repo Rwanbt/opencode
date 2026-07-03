@@ -15,10 +15,15 @@ describe("file path helpers", () => {
 
   test("normalizes Windows absolute paths with mixed separators", () => {
     const path = createPathHelpers(() => "C:\\repo")
-    expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+    // WHY forward slash output regardless of input separator: `canonical()`
+    // (canonical.ts:137) invariant is "output never contains `\`". This was
+    // the explicit Phase 1 R2 fix — the IDE bug came from two stores keying
+    // the same file by native `\` vs `/`. Both input shapes collapse to the
+    // canonical forward-slash form.
+    expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src/app.ts")
     expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
-    expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+    expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src/app.ts")
   })
 
   test("keeps query/hash stripping behavior stable", () => {

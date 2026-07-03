@@ -8,6 +8,14 @@ import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+// FORK: editor context (ADR-0005)
+import { EditorProvider, EditorTabCleanup } from "@/context/editor"
+// Phase 5.5: LSP diagnostics store (lives alongside SyncProvider so the listener
+// auto-tears-down on directory change).
+import { LspDiagnosticsProvider } from "@/context/lsp-diagnostics"
+// FileStoreProvider lives at directory scope (sibling of SDKProvider) so EditorProvider
+// (which calls useFileStore) sees it as an ancestor. Fix: pre-flight-0-filestore-scope.
+import { FileStoreProvider } from "@/context/file/store"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -36,7 +44,14 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
     >
-      <LocalProvider>{props.children}</LocalProvider>
+      <LocalProvider>
+        {/* FORK: editor store scoped to the current directory (ADR-0005) */}
+        <EditorProvider>
+          {/* Phase 2.6: drop editor entries when their file tab closes. */}
+          <EditorTabCleanup />
+          {props.children}
+        </EditorProvider>
+      </LocalProvider>
     </DataProvider>
   )
 }
@@ -73,9 +88,13 @@ export default function Layout(props: ParentProps) {
     <Show when={resolved()} keyed>
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
-          <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-          </SyncProvider>
+          <FileStoreProvider>
+            <SyncProvider>
+              <LspDiagnosticsProvider>
+                <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+              </LspDiagnosticsProvider>
+            </SyncProvider>
+          </FileStoreProvider>
         </SDKProvider>
       )}
     </Show>

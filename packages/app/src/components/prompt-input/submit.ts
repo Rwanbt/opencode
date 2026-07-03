@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "../../types/sdk-shim"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
@@ -301,7 +301,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const currentModel = local.model.current()
     const currentAgent = local.agent.current()
     const variant = local.model.variant.current()
-    if (!currentModel || !currentAgent) {
+    if (!currentModel || !currentAgent || !currentAgent.name) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
         description: language.t("prompt.toast.modelAgentRequired.description"),
@@ -352,7 +352,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (sessionDirectory !== projectDirectory) {
         client = sdk.createClient({
           directory: sessionDirectory,
-          throwOnError: true,
         })
         globalSync.child(sessionDirectory)
       }

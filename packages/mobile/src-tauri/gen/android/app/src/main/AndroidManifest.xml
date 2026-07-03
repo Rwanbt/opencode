@@ -27,6 +27,15 @@
          stopChildProcess(). A ForegroundService alone does NOT imply a wake lock. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- A held WAKE_LOCK keeps the CPU from deep-sleeping but does NOT exempt the
+         app from Doze's network restrictions — confirmed on-device 2026-07-02:
+         `dumpsys deviceidle whitelist` did not list this app, and the bun sidecar
+         (opencode-cli.js, port 14096) stayed unreachable for the full Dozing
+         window even with the WAKE_LOCK above actively held. The sidecar is the
+         entry point for every request (including ones that only need llama-server),
+         so this exemption is requested at startup — see MainActivity.requestBatteryOptimizationExemption(). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Speech-to-text: WebView captures mic via getUserMedia; RustWebChromeClient
          forwards the AUDIO_CAPTURE request to the Android permission dialog. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

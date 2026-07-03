@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk-shared"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
@@ -16,7 +16,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() => props.request.questions ?? [])
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)

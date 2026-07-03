@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run build && bun run precopy:sidecar",
     "frontendDist": "../dist"
   },
   "app": {

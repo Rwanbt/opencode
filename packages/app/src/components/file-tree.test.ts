@@ -29,6 +29,12 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/file-icon", () => ({ FileIcon: () => null }))
   mock.module("@opencode-ai/ui/icon", () => ({ Icon: () => null }))
   mock.module("@opencode-ai/ui/tooltip", () => ({ Tooltip: (props: { children?: unknown }) => props.children }))
+  // Stub FileTreeActions — it pulls in Kobalte (ContextMenu/DropdownMenu) which
+  // touch client-only APIs at module load time. The functions under test
+  // (shouldListRoot / shouldListExpanded / dirsToExpand) don't need it.
+  mock.module("@/components/file-tree-actions", () => ({
+    FileTreeActions: (props: { children?: unknown }) => props.children,
+  }))
   const mod = await import("./file-tree")
   shouldListRoot = mod.shouldListRoot
   shouldListExpanded = mod.shouldListExpanded

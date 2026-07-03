@@ -15,7 +15,7 @@ import type {
   TextPart,
   Workspace,
   Config as SdkConfig,
-} from "@opencode-ai/sdk/v2"
+} from "@opencode-ai/sdk-shared"
 import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"

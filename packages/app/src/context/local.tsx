@@ -142,8 +142,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const configuredModel = () => {
-      if (!sync.data.config.model) return
-      const [providerID, modelID] = sync.data.config.model.split("/")
+      // `config` can be transiently undefined while the sync store is being
+      // replaced (server switch) — this memo re-runs mid-batch, before the
+      // new payload lands. Guard the slice, not just the field.
+      const configured = sync.data.config?.model
+      if (!configured) return
+      const [providerID, modelID] = configured.split("/")
       const model = { providerID, modelID }
       if (validModel(model)) return model
     }
@@ -185,18 +189,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         batch(() => {
+          const model = item.model as ModelKey | null
+          const variant = item.variant as string | null
           setStore("current", item.name)
           setStore("last", {
             type: "agent",
             agent: item.name,
-            model: item.model,
-            variant: item.variant ?? null,
+            model,
+            variant,
           })
           const prev = scope()
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
-            variant: item.variant ?? prev?.variant,
+            model: model ?? prev?.model,
+            variant: variant ?? prev?.variant,
           } satisfies State
           const session = id()
           if (session) {

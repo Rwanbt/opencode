@@ -42,7 +42,10 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
-    test("trims whitespace from text content", async () => {
+    test("returns raw text content without trimming", async () => {
+      // Phase 2.2: removing the .trim() that previously corrupted viewer vs
+      // editor rendering (PLAN-EDITEUR-IDE-DEFINITIF R1). Leading/trailing
+      // whitespace is preserved verbatim.
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.txt")
       await fs.writeFile(filepath, "  content with spaces  \n\n", "utf-8")
@@ -51,7 +54,7 @@ describe("file/index Filesystem patterns", () => {
         directory: tmp.path,
         fn: async () => {
           const result = await File.read("test.txt")
-          expect(result.content).toBe("content with spaces")
+          expect(result.content).toBe("  content with spaces  \n\n")
         },
       })
     })
@@ -834,7 +837,7 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           const result = await File.read("file.txt")
           expect(result.type).toBe("text")
-          expect(result.content).toBe("modified content")
+          expect(result.content).toBe("modified content\n")
           expect(result.diff).toBeDefined()
           expect(result.diff).toContain("original content")
           expect(result.diff).toContain("modified content")
@@ -875,7 +878,7 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           const result = await File.read("clean.txt")
           expect(result.type).toBe("text")
-          expect(result.content).toBe("unchanged")
+          expect(result.content).toBe("unchanged\n")
           expect(result.diff).toBeUndefined()
           expect(result.patch).toBeUndefined()
         },
@@ -939,6 +942,69 @@ describe("file/index Filesystem patterns", () => {
           expect(results).toContain("after.ts")
           const stale = await File.search({ query: "before", type: "file" })
           expect(stale).not.toContain("before.ts")
+        },
+      })
+    })
+  })
+
+  // WHY (R2 in PLAN-EDITEUR-IDE-DEFINITIF): the backend must publish the same
+  // canonical key the frontend store uses. toCanonicalRelative is the single
+  // conversion point — tested here so the contract is locked.
+  describe("File.toCanonicalRelative", () => {
+    test("absolute native path → relative forward-slash key", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const filePath = path.join(dir, "src", "app.ts")
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          expect(File.toCanonicalRelative(filePath)).toBe(
+            path.join("src", "app.ts").split(path.sep).join("/"),
+          )
+        },
+      })
+    })
+
+    test("key is always forward-slash, never a backslash (R2 regression)", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const filePath = path.join(dir, "src", "deep", "file.ts")
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const key = File.toCanonicalRelative(filePath)
+          // The canonical key is forward-slash on EVERY platform (on posix it
+          // legitimately contains "/", which is also path.sep there — so we
+          // assert the meaningful invariant: no native-Windows backslash ever
+          // leaks into the key). Also pin the exact forward-slash shape.
+          expect(key).not.toContain("\\")
+          expect(key).toBe(["src", "deep", "file.ts"].join("/"))
+        },
+      })
+    })
+
+    test("key is identical whether the input uses native or forward-slash separators", async () => {
+      await using tmp = await tmpdir()
+      const dir = tmp.path
+      const real = path.join(dir, "src", "app.ts")
+      await fs.mkdir(path.dirname(real), { recursive: true })
+
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const fromNative = File.toCanonicalRelative(real)
+          // Reference the same file with all-forward-slash separators (what the
+          // watcher emits on posix; on win32 path.relative accepts "/" too).
+          // Building the "opposite" as forward-slash — rather than backslash —
+          // keeps the input parseable on posix, where "\" is a filename char,
+          // not a separator. The canonical key must be identical either way.
+          const forward = real.split(path.sep).join("/")
+          const fromForward = File.toCanonicalRelative(forward)
+          expect(fromForward).toBe(fromNative)
         },
       })
     })

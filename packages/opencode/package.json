@@ -105,6 +105,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk-shared": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.3.3",
     "@opentui/core": "0.1.96",

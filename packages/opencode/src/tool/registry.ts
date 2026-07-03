@@ -13,7 +13,7 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
-import type { Permission } from "../permission"
+import { Permission } from "../permission"
 import type { Tool } from "./tool"
 import { Config } from "../config/config"
 import path from "node:path"
@@ -29,6 +29,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { TeamTool } from "./team"
+import { DebateTool } from "./debate"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "node:url"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -157,6 +158,7 @@ export namespace ToolRegistry {
       const lsp = yield* build(LspTool)
       const batch = yield* build(BatchTool)
       const plan = yield* build(PlanExitTool)
+      const debate = yield* build(DebateTool)
 
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
@@ -182,6 +184,7 @@ export namespace ToolRegistry {
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [lsp] : []),
           ...(cfg.experimental?.batch_tool === true ? [batch] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [plan] : []),
+          debate,
           ...custom,
         ]
       })
@@ -237,6 +240,12 @@ export namespace ToolRegistry {
               (r) => r.permission === tool.id && r.action === "allow",
             )
             if (!LOCAL_TOOLS.has(tool.id) && !isExplicitlyAllowed) return false
+            // Skip sending a tool's schema when the active agent's permission ruleset
+            // denies it outright (e.g. the "chat" agent's "*": "deny" default). The
+            // model could never successfully call it anyway — llm.ts::resolveTools()
+            // blocks execution via this same Permission.disabled() check — so omitting
+            // the schema costs no capability, only saves wasted prefill tokens.
+            if (Permission.disabled([tool.id], permission ?? []).has(tool.id)) return false
             if (tool.id === "websearch" || tool.id === "webfetch") {
               // Privacy strict: require an explicit rule named after the tool.
               // Do NOT trust wildcard "*": "allow" from the build agent defaults.

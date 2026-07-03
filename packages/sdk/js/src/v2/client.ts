@@ -46,7 +46,7 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
 export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
-            req.timeout = false
+      req.timeout = false
       return fetch(req)
     }
     config = {
@@ -69,7 +69,19 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
     }
   }
 
-  const client = createClient(config)
+  // FORK (Phase 4.4 — R-code&conv): default the global SDK client to
+  // throwOnError: false so every caller gets the {data, response} shape and
+  // must surface errors explicitly. The previous default (no throwOnError
+  // flag) made the SDK's createConfig return an undefined value, but
+  // downstream app code set throwOnError:true in 5 places, which collapsed
+  // every non-2xx (incl. 409 conflicts) to "not-found" — see the comment in
+  // context/editor.tsx for the 409 case.
+  //
+  // Callers that still need throws can opt-in per-call via
+  // `{ throwOnError: true }` on the request options, but the new default
+  // forces every consumer to inspect `res.data` / `res.error` before
+  // trusting the result.
+  const client = createClient({ throwOnError: false, ...config })
   client.interceptors.request.use((request) =>
     rewrite(request, {
       directory: config?.directory,

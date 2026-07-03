@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Agent } from "@opencode-ai/sdk/v2/client"
+import type { Agent } from "../../types/sdk-shim"
 import { normalizeAgentList } from "./utils"
 
 const agent = (name = "build") =>
@@ -8,7 +8,7 @@ const agent = (name = "build") =>
     mode: "primary",
     permission: {},
     options: {},
-  }) as Agent
+  }) as unknown as Agent
 
 describe("normalizeAgentList", () => {
   test("keeps array payloads", () => {

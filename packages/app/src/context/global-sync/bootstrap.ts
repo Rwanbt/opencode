@@ -1,4 +1,5 @@
 import type {
+  Command,
   Config,
   OpencodeClient,
   Path,
@@ -9,7 +10,7 @@ import type {
   QuestionRequest,
   Session,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "../../types/sdk-shim"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { retry } from "@opencode-ai/util/retry"
@@ -88,17 +89,21 @@ export async function bootstrapGlobal(input: {
   formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
 }) {
+  // A failed request resolves with `data: undefined` (openapi-fetch shape) —
+  // writing that into the store wipes an initialized slice and every memo
+  // reading it throws mid-batch (error boundary on /session during server
+  // switch). Never overwrite a slice with undefined.
   const fast = [
     () =>
       retry(() =>
         input.globalSDK.global.config.get().then((x) => {
-          input.setGlobalStore("config", x.data!)
+          if (x.data) input.setGlobalStore("config", x.data)
         }),
       ),
     () =>
       retry(() =>
         input.globalSDK.provider.list().then((x) => {
-          input.setGlobalStore("provider", normalizeProviderList(x.data!))
+          if (x.data) input.setGlobalStore("provider", normalizeProviderList(x.data))
         }),
       ),
   ]
@@ -107,7 +112,7 @@ export async function bootstrapGlobal(input: {
     () =>
       retry(() =>
         input.globalSDK.path.get().then((x) => {
-          input.setGlobalStore("path", x.data!)
+          if (x.data) input.setGlobalStore("path", x.data)
         }),
       ),
     () =>
@@ -222,23 +227,25 @@ export async function bootstrapDirectory(input: {
   input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
+  // A failed request resolves with `data: undefined` — never overwrite an
+  // initialized slice with undefined (see the same guard in bootstrapGlobal).
   const fast = [
     () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
-    () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
-    () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+    () => retry(() => input.sdk.config.get().then((x) => x.data && input.setStore("config", x.data))),
+    () => retry(() => input.sdk.session.status().then((x) => x.data && input.setStore("session_status", x.data))),
   ]
 
   const slow = [
     () =>
       seededProject
         ? Promise.resolve()
-        : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
+        : retry(() => input.sdk.project.current()).then((x) => x.data && input.setStore("project", x.data.id)),
     () =>
       seededPath
         ? Promise.resolve()
         : retry(() =>
             input.sdk.path.get().then((x) => {
-              input.setStore("path", x.data!)
+              if (x.data) input.setStore("path", x.data)
               const next = projectID(x.data?.directory ?? input.directory, input.global.project)
               if (next) input.setStore("project", next)
             }),
@@ -251,14 +258,15 @@ export async function bootstrapDirectory(input: {
           if (next) input.vcsCache.setStore("value", next)
         }),
       ),
-    () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
+    () =>
+      retry(() =>
+        input.sdk.command.list().then((x) => input.setStore("command", (x.data ?? []) as Command[])),
+      ),
     () =>
       retry(() =>
         input.sdk.permission.list().then((x) => {
-          const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession(
-            (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
-          )
+          const ids = (x.data ?? []).map((perm) => perm.sessionID)
+          const grouped = groupBySession(x.data ?? [])
           return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
             batch(() => {
               for (const sessionID of Object.keys(input.store.permission)) {
@@ -282,8 +290,8 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.question.list().then((x) => {
-          const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+          const ids = (x.data ?? []).map((question) => question.sessionID)
+          const grouped = groupBySession(x.data ?? [])
           return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
             batch(() => {
               for (const sessionID of Object.keys(input.store.question)) {
@@ -308,7 +316,8 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.mcp.status().then((x) => {
-          input.setStore("mcp", x.data!)
+          if (!x.data) return
+          input.setStore("mcp", x.data)
           input.setStore("mcp_ready", true)
         }),
       ),
@@ -344,7 +353,8 @@ export async function bootstrapDirectory(input: {
   void retry(() => input.sdk.provider.list())
     .then((x) => {
       if (providerRev.get(input.directory) !== rev) return
-      input.setStore("provider", normalizeProviderList(x.data!))
+      if (!x.data) return
+      input.setStore("provider", normalizeProviderList(x.data))
       input.setStore("provider_ready", true)
     })
     .catch((err) => {

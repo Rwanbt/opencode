@@ -20,12 +20,21 @@ export interface SoundSettings {
 
 export interface Settings {
   general: {
+    // FORK: ADR-0005 + PLAN-EDITEUR-IDE-DEFINITIF Phase 3.1 — split `autoSave`
+    // (legacy: boolean, semantics = "format on save") into two independent
+    // booleans: `autoSave` (autosave with debounce, Phase 3.2) and
+    // `formatOnSave` (format on every save). Migration at load:
+    //   legacy { autoSave: true } → { autoSave: false, formatOnSave: true }
+    // New defaults: both off — users opt in.
     autoSave: boolean
+    formatOnSave: boolean
     releaseNotes: boolean
     followup: "queue" | "steer"
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    // FORK: ADR-0005 dual-mode Agent ⇄ IDE
+    viewMode: "agent" | "ide"
   }
   updates: {
     startup: boolean
@@ -86,12 +95,14 @@ export function sansFontFamily(font: string | undefined) {
 
 const defaultSettings: Settings = {
   general: {
-    autoSave: true,
+    autoSave: false,
+    formatOnSave: false,
     releaseNotes: true,
     followup: "steer",
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    viewMode: "agent" as "agent" | "ide",
   },
   updates: {
     startup: true,
@@ -124,10 +135,43 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+// FORK (Phase 3.1): migrate legacy settings where `autoSave: true` meant
+// "format on save" — that semantic moves to `formatOnSave: true`. The new
+// `autoSave` (debounced autosave) defaults to false; existing users with
+// `autoSave: false` already had no autosave, no change.
+//
+// Pure function — exported for the migration test (settings.migration.test.ts).
+// Idempotent: running twice yields the same result.
+export function migrateAutoSave(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null) return raw
+  const obj = raw as Record<string, unknown>
+  const general = obj.general
+  if (typeof general !== "object" || general === null) return raw
+  const g = general as Record<string, unknown>
+  // Already migrated (or fresh install): `formatOnSave` is present.
+  // Leave untouched — preserves any user override of `autoSave`.
+  if ("formatOnSave" in g) return raw
+  // Legacy: `autoSave: true` ⇒ re-interpreted as "format on save".
+  if (g.autoSave === true) {
+    return {
+      ...obj,
+      general: { ...g, autoSave: false, formatOnSave: true },
+    }
+  }
+  // Legacy: `autoSave: false` (or absent) ⇒ just add `formatOnSave: false`.
+  return {
+    ...obj,
+    general: { ...g, formatOnSave: false },
+  }
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted(
+      { key: "settings.v3", migrate: migrateAutoSave },
+      createStore<Settings>(defaultSettings),
+    )
 
     createEffect(() => {
       if (typeof document === "undefined") return
@@ -150,6 +194,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
+        },
+        formatOnSave: withFallback(
+          () => store.general?.formatOnSave,
+          defaultSettings.general.formatOnSave,
+        ),
+        setFormatOnSave(value: boolean) {
+          setStore("general", "formatOnSave", value)
         },
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
@@ -182,6 +233,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        viewMode: withFallback(
+          () => store.general?.viewMode,
+          defaultSettings.general.viewMode,
+        ),
+        setViewMode(value: "agent" | "ide") {
+          setStore("general", "viewMode", value)
         },
       },
       updates: {

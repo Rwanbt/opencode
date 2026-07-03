@@ -1,8 +1,11 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useEditor } from "@/context/editor"
+import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { createFileOpDeps } from "@/context/file/operations"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
@@ -15,7 +18,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "../../types/sdk-shim"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
@@ -46,6 +49,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const layout = useLayout()
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
+  const guard = useEditorCloseGuard()
+  const editor = useEditor()
 
   const info = () => {
     const id = params.id
@@ -212,16 +217,56 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       )
   }
 
+  // Quick Open (Ctrl+P) — files-only mode. Opens a fuzzy file picker with
+  // recent tabs pinned at the top. The same dialog in `mode="all"` is the
+  // command palette (Mod+Shift+P), reachable via `command.palette`.
   const openFile = () => {
     void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+      // `file`/`sdk` are injected because the dialog renders through
+      // <DialogOutlet /> at RouterRoot, outside SessionProviders and the
+      // directory-scoped SDKProvider.
+      dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} file={file} />)
+    })
+  }
+
+  // Go-to-symbol (Mod+Shift+O) — LSP-backed palette scoped to the active file.
+  // Empty when no file tab is active (the modal still renders, just shows
+  // "no symbols" until the user opens a file).
+  const openSymbols = () => {
+    void import("@/components/dialog-select-symbol").then((x) => {
+      dialog.show(() => <x.DialogSelectSymbol sdk={sdk} file={file} />)
+    })
+  }
+
+  // Global search (Mod+Shift+F) — project-wide ripgrep palette. Always
+  // enabled (no file scope needed). Reachable from the command palette too.
+  const openSearch = () => {
+    void import("@/components/dialog-select-search").then((x) => {
+      dialog.show(() => <x.DialogSelectSearch sdk={sdk} file={file} />)
     })
   }
 
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
-    tabs().close(tab)
+    // FORK (Phase 3.4): route through the dirty-close guard so a dirty
+    // file tab pauses for Save/Don't save/Cancel before closing.
+    void guard.close(tab)
+  }
+
+  // FORK (Phase 3.5): discard local edits for the active file tab and
+  // reload from disk. EditorPanel's reactive effect watches the entry
+  // and applies the new baseline content to CM (setContent is idempotent
+  // on equal bytes). No keybind — palette only — because mod+shift+r is
+  // already taken by review.toggle.
+  const revertFile = () => {
+    const tab = activeFileTab()
+    if (!tab) return
+    const p = file.pathFromTab(tab)
+    if (!p) return
+    const entry = editor.get(p)
+    if (!entry) return
+    void editor.revert(p)
   }
 
   const addSelection = () => {
@@ -349,7 +394,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync.data.config.share === "disabled") return []
+    if (sync.data.config?.share === "disabled") return []
     return [
       sessionCommand({
         id: "session.share",
@@ -414,14 +459,42 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const newFile = () => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="file" parentDir="" deps={createFileOpDeps(sdk, file)} />)
+    })
+  }
+
+  const newFolder = () => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir="" deps={createFileOpDeps(sdk, file)} />)
+    })
+  }
+
   const fileCmds = () => [
     fileCommand({
       id: "file.open",
       title: language.t("command.file.open"),
       description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
+      // Quick Open (VS Code convention): plain Mod+P. The chord `mod+k,mod+p`
+      // is kept discoverable via the command palette for muscle memory.
+      keybind: "mod+p",
       slash: "open",
       onSelect: openFile,
+    }),
+    fileCommand({
+      id: "file.new",
+      title: language.t("command.file.new"),
+      description: language.t("command.file.new.description"),
+      keybind: "mod+n",
+      onSelect: newFile,
+    }),
+    fileCommand({
+      id: "file.newFolder",
+      title: language.t("command.file.newFolder"),
+      description: language.t("command.file.newFolder.description"),
+      keybind: "mod+shift+n",
+      onSelect: newFolder,
     }),
     fileCommand({
       id: "tab.close",
@@ -429,6 +502,33 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+w",
       disabled: !closableTab(),
       onSelect: closeTab,
+    }),
+    fileCommand({
+      id: "file.revert",
+      title: language.t("command.file.revert"),
+      description: language.t("command.file.revert.description"),
+      // No keybind: mod+shift+r is taken by review.toggle. Reachable via
+      // command palette only. VS Code convention is the same — palette,
+      // no default chord.
+      disabled: !activeFileTab(),
+      onSelect: revertFile,
+    }),
+    fileCommand({
+      id: "editor.symbols",
+      title: language.t("command.editor.symbols"),
+      description: language.t("command.editor.symbols.description"),
+      // Go-to-symbol — VS Code convention.
+      keybind: "mod+shift+o",
+      disabled: !activeFileTab(),
+      onSelect: openSymbols,
+    }),
+    fileCommand({
+      id: "editor.search",
+      title: language.t("command.editor.search"),
+      description: language.t("command.editor.search.description"),
+      // Global search — VS Code convention.
+      keybind: "mod+shift+f",
+      onSelect: openSearch,
     }),
   ]
 

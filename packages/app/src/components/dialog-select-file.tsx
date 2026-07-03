@@ -260,11 +260,19 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
+export function DialogSelectFile(props: {
+  mode?: DialogSelectFileMode
+  onOpenFile?: (path: string) => void
+  // FileProvider is session-route-scoped while dialogs render through
+  // <DialogOutlet /> at RouterRoot (outside SessionProviders). Openers on
+  // the session route must inject their `useFile()` — the context fallback
+  // only works for callers rendered below a FileProvider.
+  file?: ReturnType<typeof useFile>
+}) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
-  const file = useFile()
+  const file = props.file ?? useFile()
   const dialog = useDialog()
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()

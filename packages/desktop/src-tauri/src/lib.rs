@@ -109,7 +109,13 @@ async fn await_initialization(
 ) -> Result<ServerReadyData, String> {
     let mut rx = init_state.current.clone();
 
-    let stream = async {
+    // Stream InitStep progress in the BACKGROUND. The UI must not block on
+    // InitStep::Done — that step only fires after the sidecar health check,
+    // which can take up to 30s on a slow/misconfigured sidecar. Credentials are
+    // available the moment the sidecar is spawned, so we return them immediately
+    // and let the SDK connection retry until the server is healthy. The progress
+    // events keep flowing for any listener (e.g. the loading window).
+    tauri::async_runtime::spawn(async move {
         let e = *rx.borrow();
         let _ = events.send(e);
 
@@ -121,20 +127,16 @@ async fn await_initialization(
                 break;
             }
         }
-    };
+    });
 
-    // Wait for sidecar credentials (available immediately after spawn, before health check)
-    let data = async {
-        state
-            .inner()
-            .0
-            .clone()
-            .await
-            .map_err(|_| "Failed to get sidecar data".to_string())
-    };
-
-    let (result, _) = futures::future::join(data, stream).await;
-    result
+    // Return sidecar credentials as soon as they are available (immediate,
+    // before the health check completes).
+    state
+        .inner()
+        .0
+        .clone()
+        .await
+        .map_err(|_| "Failed to get sidecar data".to_string())
 }
 
 #[tauri::command]

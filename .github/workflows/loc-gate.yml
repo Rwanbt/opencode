@@ -1,0 +1,32 @@
+name: loc-gate
+
+# D-03/D-05 guardrail (docs/TECHNICAL-DEBT.md §4.1, ADR-0003): block new god
+# files in the fork's own domain (packages/app/src). Fails if any file exceeds
+# 1500 LOC. Upstream packages are out of scope (see docs/loc-debt-upstream.md).
+
+on:
+  pull_request:
+    paths:
+      - "packages/app/src/**"
+      - "scripts/loc-gate.mjs"
+      - ".github/workflows/loc-gate.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  loc-gate:
+    name: app LOC budget
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run LOC gate
+        run: node scripts/loc-gate.mjs

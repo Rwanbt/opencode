@@ -16,7 +16,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../types/sdk-shim"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce } from "solid-js/store"
@@ -107,7 +107,10 @@ export default function Layout(props: ParentProps) {
     if (!dir) return { slug, dir: "" }
     return {
       slug,
-      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+      // `path` is transiently undefined while the per-directory child store
+      // bootstraps (e.g. right after a server switch) — this memo re-runs
+      // mid-batch, before the payload lands.
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path?.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))

@@ -1,4 +1,4 @@
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "../../types/sdk-shim"
 
 type WatcherEvent = {
   type: string
@@ -26,28 +26,28 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   const path = ops.normalize(rawPath)
   if (!path) return
-  if (path.startsWith(".git/")) return
+  // WHY: backend paths can use native separators ("\\" on win32); match either.
+  if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
   if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)
   }
 
   if (kind === "change") {
-    const dir = (() => {
-      if (path === "") return ""
-      const node = ops.node(path)
-      if (node?.type !== "directory") return
-      return path
-    })()
-    if (dir === undefined) return
-    if (!ops.isDirLoaded(dir)) return
-    ops.refreshDir(dir)
+    const node = ops.node(path)
+    if (node?.type === "directory") {
+      if (ops.isDirLoaded(path)) ops.refreshDir(path)
+    } else {
+      // WHY: backend paths can use native separators ("\\" on win32); split on
+      // either so the parent path is computed correctly instead of "" (which
+      // would trigger a full root refresh).
+      const parent = path.split(/[/\\]/).slice(0, -1).join("/")
+      if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
+    }
     return
   }
   if (kind !== "add" && kind !== "unlink") return
 
-  const parent = path.split("/").slice(0, -1).join("/")
-  if (!ops.isDirLoaded(parent)) return
-
-  ops.refreshDir(parent)
+  const parent = path.split(/[/\\]/).slice(0, -1).join("/")
+  if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
 }

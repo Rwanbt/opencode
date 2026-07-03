@@ -3,6 +3,8 @@ import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import z from "zod"
 import { createHash } from "node:crypto"
+import fs_native from "node:fs/promises"
+import os from "node:os"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -22,6 +24,8 @@ import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
+import { LspRoutes } from "./routes/lsp"
+import { GitRoutes } from "./routes/git"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
@@ -31,6 +35,7 @@ import { WsEventRoutes } from "./routes/ws-event"
 import { Presence } from "./presence"
 import { AgentSkillRoutes } from "./routes/agent-skills"
 import { GdprRoutes } from "./routes/gdpr"
+import { DebateRoutes } from "./routes/debate"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -60,6 +65,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
+    .route("/debate", DebateRoutes())
     .get(
       "/presence",
       describeRoute({
@@ -118,6 +124,45 @@ export const InstanceRoutes = (app?: Hono) =>
       async (c) => {
         await Instance.dispose()
         return c.json(true)
+      },
+    )
+    // FORK: Stretch — disk space quota check (warns when < 500 MB)
+    .get(
+      "/disk",
+      describeRoute({
+        summary: "Get disk space",
+        description: "Returns available and total disk space for the working directory.",
+        operationId: "disk.get",
+        responses: {
+          200: {
+            description: "Disk space info",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    available: z.number().describe("Available bytes"),
+                    total: z.number().describe("Total bytes"),
+                    path: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        try {
+          // On Android, Instance.directory may be "/" (rootfs, read-only → 0 available).
+          // Fall back to HOME so the quota reflects the actual data partition.
+          const dir = Instance.directory === "/" ? os.homedir() : Instance.directory
+          const stats = await (fs_native as any).statfs(dir)
+          const available = stats.bsize * stats.bavail
+          const total = stats.bsize * stats.blocks
+          return c.json({ available, total, path: dir })
+        } catch {
+          // statfs not available (Windows, old Node) — return sentinel values
+          return c.json({ available: -1, total: -1, path: Instance.directory })
+        }
       },
     )
     .get(
@@ -277,6 +322,54 @@ export const InstanceRoutes = (app?: Hono) =>
         return c.json(skills)
       },
     )
+    // FORK: Stretch Phase 5 — install skill via URL (direct SKILL.md or discovery index)
+    .post(
+      "/skill/install",
+      describeRoute({
+        summary: "Install a skill",
+        description:
+          "Install a skill from a URL. Accepts a direct SKILL.md URL or a discovery index URL. The skill is saved to the global ~/.claude/skills/ directory and immediately available.",
+        operationId: "app.skillInstall",
+        responses: {
+          200: {
+            description: "Installed skill info",
+            content: { "application/json": { schema: resolver(Skill.Info) } },
+          },
+          400: { description: "Bad request" },
+          422: { description: "Install failed" },
+        },
+      }),
+      validator("json", z.object({ url: z.string().url() })),
+      async (c) => {
+        const { url } = c.req.valid("json")
+        try {
+          const info = await Skill.install(url)
+          return c.json(info)
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          return c.json({ error: message }, 422)
+        }
+      },
+    )
+    // FORK: Stretch Phase 5 — uninstall a globally-installed skill
+    .delete(
+      "/skill/:name",
+      describeRoute({
+        summary: "Uninstall a skill",
+        description: "Remove a globally-installed skill by name. Only skills under ~/.claude/skills/ can be removed.",
+        operationId: "app.skillUninstall",
+        responses: {
+          200: { description: "Success" },
+          400: { description: "Bad request" },
+        },
+      }),
+      validator("param", z.object({ name: z.string().min(1) })),
+      async (c) => {
+        const { name } = c.req.valid("param")
+        await Skill.uninstall(name)
+        return c.json({ ok: true })
+      },
+    )
     .get(
       "/lsp",
       describeRoute({
@@ -298,6 +391,10 @@ export const InstanceRoutes = (app?: Hono) =>
         return c.json(await LSP.status())
       },
     )
+    // FORK: Phase 2 LSP routes — diagnostics/hover/definition/references/documentSymbol
+    .route("/lsp", LspRoutes())
+    // FORK: Phase 3 Git write routes — add/reset/commit/push/pull/log/blame/branches
+    .route("/git", GitRoutes())
     .get(
       "/formatter",
       describeRoute({

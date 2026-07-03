@@ -4,7 +4,7 @@ import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } fro
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@opencode-ai/sdk-shared"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
@@ -152,6 +152,8 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   const { theme } = useTheme()
 
+  const always = createMemo(() => props.request.always ?? [])
+
   return (
     <Switch>
       <Match when={store.stage === "always"}>
@@ -159,14 +161,14 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           title="Always allow"
           body={
             <Switch>
-              <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
+              <Match when={always().length === 1 && always()[0] === "*"}>
                 <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
                   <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
                   <box>
-                    <For each={props.request.always}>
+                    <For each={always()}>
                       {(pattern) => (
                         <text fg={theme.text}>
                           {"- "}
@@ -371,7 +373,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
               const raw = parent ?? filepath ?? derived
               const dir = normalizePath(raw)
-              const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
+              const patterns = (props.request.patterns ?? []).filter((p: unknown): p is string => typeof p === "string")
 
               return {
                 icon: "←",

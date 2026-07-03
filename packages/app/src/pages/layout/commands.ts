@@ -10,7 +10,7 @@ import type { useCommand, CommandOption } from "@/context/command"
 import type { useLayout } from "@/context/layout"
 import type { useLanguage } from "@/context/language"
 import type { useTheme, ColorScheme } from "@opencode-ai/ui/theme/context"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 
 export interface LayoutCommandsDeps {

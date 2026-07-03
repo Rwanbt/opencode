@@ -4,8 +4,7 @@ import { render } from "solid-js/web"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrent as getCurrentDeepLink, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import {
-  AppBaseProviders,
-  AppInterface,
+  AppProviders,
   PlatformProvider,
   ServerConnection,
   checkServerReachable,
@@ -18,8 +17,56 @@ import { ModelManager } from "./components/model-manager"
 import { createPlatform, setPrivateServerFp } from "./platform"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
+import { NotificationBridge } from "./notifications"
 
 const root = document.getElementById("root")
+
+// opencode://open?file=<path>&project=<dir>
+// Dispatches `ide-open-file` CustomEvent so the IDE panel can navigate.
+// Returns true if the URL was recognized and handled.
+function applyOpenDeepLink(raw: string): boolean {
+  let parsed: URL
+  try { parsed = new URL(raw) } catch { return false }
+  if (parsed.protocol !== "opencode:") return false
+  const command = parsed.hostname || parsed.pathname.replace(/^\/+/, "")
+  if (command !== "open") return false
+
+  const file = parsed.searchParams.get("file")
+  const project = parsed.searchParams.get("project")
+  if (!file && !project) return false
+
+  window.dispatchEvent(
+    new CustomEvent("ide-open-file", {
+      detail: {
+        file: file ? decodeURIComponent(file) : undefined,
+        project: project ? decodeURIComponent(project) : undefined,
+      },
+    }),
+  )
+  return true
+}
+
+// opencode://session?id=<sessionId>
+// Dispatches `navigate-to-session` CustomEvent so the app can jump to a session.
+// Returns true if the URL was recognized and handled.
+function applySessionDeepLink(raw: string): boolean {
+  let parsed: URL
+  try { parsed = new URL(raw) } catch { return false }
+  if (parsed.protocol !== "opencode:") return false
+  const command = parsed.hostname || parsed.pathname.replace(/^\/+/, "")
+  if (command !== "session") return false
+
+  const id = parsed.searchParams.get("id")
+  if (!id || id.length > 256) return false
+
+  window.dispatchEvent(new CustomEvent("navigate-to-session", { detail: { sessionId: id } }))
+  return true
+}
+
+// Build marker — visible in chrome://inspect console + logcat (debuggable build).
+// The date is baked at COMPILE time so it identifies which dist is running.
+const BUILD_STAMP = "__BUILD_2026_07_01_P8__"
+console.warn(`[BOOT] frontend=${BUILD_STAMP}`)
 
 // Hide the static loading indicator
 const loadingEl = document.getElementById("loading")
@@ -249,22 +296,27 @@ function App() {
   })
 
   onMount(() => {
+    // Try handlers in priority order; stop at the first recognized command.
+    function handleDeepLink(url: string) {
+      if (applyPairingDeepLink(url)) return
+      if (applyOpenDeepLink(url)) return
+      applySessionDeepLink(url)
+    }
+
     // Cold-start: the app may have been launched *by* a deep link intent.
     void getCurrentDeepLink()
       .then((urls) => {
         if (!urls) return
-        for (const u of urls) if (applyPairingDeepLink(u)) break
+        for (const u of urls) { handleDeepLink(u); break }
       })
       .catch(() => undefined)
 
     // Warm-start: the app was already running when the intent fired.
     let unlisten: (() => void) | undefined
     void onOpenUrl((urls) => {
-      for (const u of urls) if (applyPairingDeepLink(u)) break
+      for (const u of urls) { handleDeepLink(u); break }
     })
-      .then((fn) => {
-        unlisten = fn
-      })
+      .then((fn) => { unlisten = fn })
       .catch(() => undefined)
     onCleanup(() => unlisten?.())
   })
@@ -445,6 +497,7 @@ function FullApp(props: {
 }) {
   const [llmLoading, setLlmLoading] = createSignal<LLMLoadingState>({ loading: false })
   const [noModelBanner, setNoModelBanner] = createSignal(false)
+  const [blockedModelBanner, setBlockedModelBanner] = createSignal<string | null>(null)
 
   // Listen for "open-model-manager" custom event from the model selector
   onMount(() => {
@@ -467,6 +520,15 @@ function FullApp(props: {
     onCleanup(() => window.removeEventListener("no-model-found" as any, handler as any))
   })
 
+  // Circuit breaker (use-auto-start-llm.ts) gave up auto-retrying a model
+  // that OOM-crashed the app twice in a row — surface it instead of
+  // silently looping forever.
+  onMount(() => {
+    const handler = (e: CustomEvent<{ filename: string }>) => setBlockedModelBanner(e.detail.filename)
+    window.addEventListener("llm-load-blocked" as any, handler as any)
+    onCleanup(() => window.removeEventListener("llm-load-blocked" as any, handler as any))
+  })
+
   // Auto-start local LLM when model is selected
   onMount(() => {
     const handler = (e: CustomEvent) => {
@@ -484,6 +546,32 @@ function FullApp(props: {
     initSpeechListeners()
     onCleanup(cleanupSpeechListeners)
   })
+
+  // SSE → native notifications when the app is backgrounded.
+  // NotificationBridge subscribes to the server event stream and fires
+  // system notifications for session.updated and llm.status events.
+  onMount(() => {
+    const bridge = new NotificationBridge(props.serverInfo.url)
+    void bridge.connect()
+    onCleanup(() => bridge.disconnect())
+  })
+
+  // Notify the user when the local model finishes loading while backgrounded.
+  onMount(() => {
+    let wasLoading = false
+    const handler = (e: CustomEvent<LLMLoadingState>) => {
+      const { loading, filename } = e.detail
+      if (loading) {
+        wasLoading = true
+      } else if (wasLoading && filename) {
+        wasLoading = false
+        void props.platform.notify?.("Model Ready", `${filename} loaded and ready.`)
+      }
+    }
+    window.addEventListener("llm-loading-progress" as any, handler as any)
+    onCleanup(() => window.removeEventListener("llm-loading-progress" as any, handler as any))
+  })
+
   const connection = (): ServerConnection.Any => {
     if (props.serverInfo.variant === "embedded") {
       return {
@@ -511,11 +599,10 @@ function FullApp(props: {
 
   return (
     <PlatformProvider value={props.platform}>
-      <AppBaseProviders>
-        <AppInterface
-          defaultServer={defaultKey()}
-          servers={servers()}
-        />
+      <AppProviders
+        defaultServer={defaultKey()}
+        servers={servers()}
+      >
         <Show when={llmLoading().loading}>
           <div style={{
             position: "fixed", bottom: "0", left: "0", right: "0",
@@ -527,7 +614,7 @@ function FullApp(props: {
             "font-family": "system-ui, -apple-system, sans-serif",
           }}>
             <div style={{
-              width: "14px", height: "14px", border: "2px solid #334155",
+              width: "14px", height: "14px", "border": "2px solid #334155",
               "border-top-color": "#3b82f6", "border-radius": "50%",
               animation: "spin 1s linear infinite", "flex-shrink": "0",
             }} />
@@ -576,7 +663,45 @@ function FullApp(props: {
             </button>
           </div>
         </Show>
-      </AppBaseProviders>
+        <Show when={blockedModelBanner()}>
+          <div style={{
+            position: "fixed", bottom: "0", left: "0", right: "0",
+            padding: "14px 16px",
+            background: "rgba(15, 23, 42, 0.97)",
+            "border-top": "1px solid #7f1d1d",
+            display: "flex", "align-items": "center", "justify-content": "space-between",
+            gap: "12px", "z-index": "9999",
+            "font-family": "system-ui, -apple-system, sans-serif",
+          }}>
+            <span style={{ color: "#94a3b8", "font-size": "13px", flex: "1" }}>
+              {blockedModelBanner()} crashed the app repeatedly while loading — likely not enough free RAM. Try a smaller model.
+            </span>
+            <button
+              onClick={() => { setBlockedModelBanner(null); props.onOpenModelManager?.() }}
+              style={{
+                padding: "8px 14px", "border-radius": "8px",
+                border: "1px solid #ef4444", background: "#3f1414",
+                color: "#e5e5e5", "font-size": "13px", cursor: "pointer",
+                "white-space": "nowrap", "flex-shrink": "0",
+              }}
+            >
+              Choose another model
+            </button>
+            <button
+              onClick={() => setBlockedModelBanner(null)}
+              style={{
+                padding: "8px", "border-radius": "6px",
+                border: "none", background: "transparent",
+                color: "#64748b", "font-size": "16px", cursor: "pointer",
+                "flex-shrink": "0", "line-height": "1",
+              }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </Show>
+      </AppProviders>
     </PlatformProvider>
   )
 }

@@ -16,7 +16,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { createSessionHistoryWindow } from "@/pages/session/session-history-window"
 import type { useSync } from "@/context/sync"
-import type { UserMessage, Message } from "@opencode-ai/sdk/v2"
+import type { UserMessage, Message } from "../../types/sdk-shim"
 
 interface ScrollState {
   overflow: boolean

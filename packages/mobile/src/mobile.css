@@ -576,29 +576,33 @@ a:active,
   }
 }
 
-/* ─── 25b. SETTINGS DIALOG — narrow sidebar on portrait ────────────────── */
+/* ─── 25b. SETTINGS DIALOG — full-screen on portrait ────────────────────── */
 
-/* On narrow screens the 150/200px vertical tab list is too wide.
-   Shrink it, but keep the native vertical layout — switching to
-   horizontal tabs broke content visibility on Android WebView.       */
+/* Settings is the only x-large dialog today; the desktop 960x600 cap looks
+   like a cramped floating card on a phone. Fill the viewport instead —
+   drill-down navigation (settings-mobile-nav.tsx) needs the room, and full
+   height removes the visible backdrop that let users tap-outside to close,
+   hence the explicit close button added to SettingsMobileNav's header.
+
+   The dialog is rendered through Kobalte.Portal straight into document.body
+   (context/dialog.tsx), so it never inherits the safe-area padding applied
+   to #root (index.html). That never mattered while the dialog stayed
+   centered and capped at 600px tall, but now that it spans the full
+   viewport its header sits directly under the status bar. Pad
+   dialog-content (the dialog's own background/card, not the positioning
+   wrapper) the same way #root does, so the card still reaches the screen
+   edges but its content — header, close button, list — stays inside the
+   safe area. */
 @media (max-width: 767px) {
-  .settings-dialog {
-    flex-direction: column !important;
+  [data-component="dialog"][data-size="x-large"] [data-slot="dialog-container"] {
+    width: 100vw !important;
+    height: var(--vvh, 100dvh) !important;
+    max-height: var(--vvh, 100dvh) !important;
   }
 
-  .settings-dialog > [data-slot="tabs-list"] {
-    width: 110px !important;
-    min-width: 110px !important;
-  }
-
-  /* Hide section titles to save space */
-  .settings-dialog [data-slot="tabs-section-title"] {
-    display: none !important;
-  }
-
-  /* Hide version info */
-  .settings-dialog > [data-slot="tabs-list"] .text-12-medium.text-text-weak {
-    display: none !important;
+  [data-component="dialog"][data-size="x-large"] [data-slot="dialog-content"] {
+    padding-top: var(--safe-area-top, 0px) !important;
+    padding-bottom: var(--safe-area-bottom, 0px) !important;
   }
 }
 
@@ -796,6 +800,36 @@ a,
   /* Annotation slot — more padding on mobile */
   [data-annotation-slot] {
     padding: 8px !important;
+  }
+}
+
+/* ─── 33. CODE EDITOR (CodeMirror) — mobile ─────────────────────────────── */
+
+/* Text selection inside the CM editor must work on touch (contenteditable). */
+.cm-opencode [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+}
+
+/* On narrow screens, hide the line-number gutter to reclaim ~2.5rem of
+   horizontal space. The file path in the tab header is sufficient context. */
+@media (max-width: 767px) {
+  .cm-opencode .cm-gutters {
+    display: none !important;
+  }
+  /* Bump font size slightly for readability on small screens. */
+  .cm-opencode .cm-editor {
+    font-size: 14px !important;
+  }
+}
+
+/* Editor banners — enlarge buttons to 36 px tap targets on touch screens. */
+@media (max-width: 767px) {
+  .cm-editor-banners button {
+    min-height: 36px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
   }
 }
 

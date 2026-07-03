@@ -14,6 +14,7 @@ import { Git } from "@/git"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
 import { Config } from "../config/config"
+import { File } from "./index"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
 import { Log } from "../util/log"
@@ -98,9 +99,14 @@ export namespace FileWatcher {
             const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
               if (err) return
               for (const evt of evts) {
-                if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-                if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-                if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+                // WHY (R2): native parcel paths are absolute and use the
+                // platform separator — we must funnel through the same
+                // canonical key the rest of the bus uses, otherwise the
+                // frontend store sees a divergent key for the same file.
+                const key = File.toCanonicalRelative(evt.path)
+                if (evt.type === "create") Bus.publish(Event.Updated, { file: key, event: "add" })
+                if (evt.type === "update") Bus.publish(Event.Updated, { file: key, event: "change" })
+                if (evt.type === "delete") Bus.publish(Event.Updated, { file: key, event: "unlink" })
               }
             })
 

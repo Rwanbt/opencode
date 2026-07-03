@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "../types/sdk-shim"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -231,7 +231,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const sdk = createSdkForServer({
       server: server.current.http,
       fetch: platform.fetch,
-      throwOnError: true,
+      // FORK (Phase 4.4 — R-code&conv): the global SDK client is now
+      // non-throwing by default (see packages/sdk/js/src/v2/client.ts).
+      // We omit throwOnError here so it inherits the new default — every
+      // consumer of `useGlobalSDK().client` must inspect `res.data` /
+      // `res.error` instead of catching throws.
     })
 
     return {

@@ -19,6 +19,7 @@ import PROMPT_TESTER from "./prompt/tester.txt"
 import PROMPT_DOCUMENTER from "./prompt/documenter.txt"
 import PROMPT_LEARNER from "./prompt/learner.txt"
 import { Permission } from "@/permission"
+import { createDebateAgent } from "../collective/debate-agent"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "node:path"
@@ -292,6 +293,7 @@ export namespace Agent {
               mode: "subagent",
               native: true,
             },
+            debate: createDebateAgent(defaults, user),
             compaction: {
               name: "compaction",
               mode: "primary",

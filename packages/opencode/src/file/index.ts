@@ -3,18 +3,25 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
+import { createHash } from "node:crypto"
+import { mkdir as fsMkdir, open as fsOpen, rename as fsRename, rm as fsRm } from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
+import { Bus } from "../bus"
+import { Format } from "../format"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
+import { LSP } from "../lsp"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+import { FileTime } from "./time"
+import { FileWatcher } from "./watcher"
 
 export namespace File {
   export const Info = z
@@ -321,6 +328,51 @@ export namespace File {
     return [...visible, ...hiddenItems]
   }
 
+  // Guard against symlink escapes: Instance.containsPath is a *textual* check on
+  // the joined path, so a symlink planted at `project/docs/evil` pointing to
+  // `/etc` would still pass. Resolve the real path and re-check containment. For
+  // paths that do not exist yet, the canonical form falls back to the textual
+  // path — use assertWritableTarget for write/create targets.
+  // Module-scope so both the Effect service (read/list/mkdir) and the file write
+  // API (write/rename/move/delete) share one guard. See ADR-0004.
+  function assertInsideProject(full: string) {
+    if (!Instance.containsPath(full)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    try {
+      const real = AppFileSystem.resolve(full)
+      if (!Instance.containsPath(real)) {
+        throw new Error("Access denied: symlink escapes project directory")
+      }
+    } catch (e: any) {
+      if (typeof e?.message === "string" && e.message.startsWith("Access denied")) {
+        throw e
+      }
+      // Missing path or permission issue — the textual check already passed.
+    }
+  }
+
+  // FORK: file write API (ADR-0004) — parent-aware escape guard.
+  // For a target that may not exist yet (write/create, rename/move destination),
+  // AppFileSystem.resolve(full) returns the textual path, so a symlinked parent
+  // pointing outside the project would slip through assertInsideProject. Resolve
+  // the nearest EXISTING ancestor and re-check containment against its realpath.
+  function assertWritableTarget(full: string) {
+    assertInsideProject(full)
+    let ancestor = path.dirname(full)
+    while (ancestor && ancestor !== path.dirname(ancestor)) {
+      if (Filesystem.stat(ancestor)) {
+        const real = AppFileSystem.resolve(ancestor)
+        if (!Instance.containsPath(real)) {
+          throw new Error("Access denied: symlink escapes project directory")
+        }
+        return
+      }
+      ancestor = path.dirname(ancestor)
+    }
+  }
+  // END FORK
+
   interface State {
     cache: Entry
   }
@@ -365,7 +417,17 @@ export namespace File {
           const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
           const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
           const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-          const top = yield* appFs.readDirectoryEntries(Instance.directory).pipe(Effect.orElseSucceed(() => []))
+          const top = yield* appFs.readDirectoryEntries(Instance.directory).pipe(
+            // DEBT: D-10 — don't swallow scan failures silently; an unreadable
+            // top dir means an incomplete listing, which must be observable.
+            Effect.catchCause((cause) => {
+              log.warn("readDirectoryEntries failed; listing may be incomplete", {
+                dir: Instance.directory,
+                cause: Cause.pretty(cause),
+              })
+              return Effect.succeed([])
+            }),
+          )
 
           for (const entry of top) {
             if (entry.type !== "directory") continue
@@ -373,7 +435,16 @@ export namespace File {
             dirs.add(entry.name + "/")
 
             const base = path.join(Instance.directory, entry.name)
-            const children = yield* appFs.readDirectoryEntries(base).pipe(Effect.orElseSucceed(() => []))
+            const children = yield* appFs.readDirectoryEntries(base).pipe(
+              // DEBT: D-10 — log rather than silently dropping a subtree.
+              Effect.catchCause((cause) => {
+                log.warn("readDirectoryEntries failed; subtree skipped", {
+                  dir: base,
+                  cause: Cause.pretty(cause),
+                })
+                return Effect.succeed([])
+              }),
+            )
             for (const child of children) {
               if (child.type !== "directory") continue
               if (shouldIgnoreNested(child.name)) continue
@@ -404,11 +475,17 @@ export namespace File {
         s.cache = next
       })
 
-      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
+      // DEBT: D-11 — a failed scan used to invalidate the cache silently. Log
+      // the cause so a stale or empty file cache is diagnosable.
+      const scanLoggingCause = (cause: Cause.Cause<unknown>) => {
+        log.warn("file scan failed; cache may be stale", { cause: Cause.pretty(cause) })
+        return Effect.void
+      }
+      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(scanLoggingCause)))
 
       const ensure = Effect.fn("File.ensure")(function* () {
         yield* cachedScan
-        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
+        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(scanLoggingCause)))
       })
 
       const init = Effect.fn("File.init")(function* () {
@@ -510,29 +587,6 @@ export namespace File {
         })
       })
 
-      // Guard against symlink escapes: Instance.containsPath is a *textual*
-      // check on the joined path, so a symlink planted at `projet/docs/evil`
-      // that points to `/etc` would still pass. Resolve the real path and
-      // re-check containment. For paths that do not exist yet (mkdir), fall
-      // back to the parent directory so we still block obviously-escaping
-      // canonical forms.
-      function assertInsideProject(full: string) {
-        if (!Instance.containsPath(full)) {
-          throw new Error("Access denied: path escapes project directory")
-        }
-        try {
-          const real = AppFileSystem.resolve(full)
-          if (!Instance.containsPath(real)) {
-            throw new Error("Access denied: symlink escapes project directory")
-          }
-        } catch (e: any) {
-          if (typeof e?.message === "string" && e.message.startsWith("Access denied")) {
-            throw e
-          }
-          // Missing path or permission issue — the textual check already passed.
-        }
-      }
-
       const read = Effect.fn("File.read")(function* (file: string) {
         using _ = log.time("read", { file })
         const full = path.join(Instance.directory, file)
@@ -575,10 +629,33 @@ export namespace File {
           }
         }
 
-        const content = yield* appFs.readFileString(full).pipe(
-          Effect.map((s) => s.trim()),
-          Effect.catch(() => Effect.succeed("")),
-        )
+// Delegate to readRaw() so the editor (readRaw) and viewer (read)
+// share a single source of truth on disk bytes. Phase 2.3 — keeps the
+// empty-string contract on missing/directory paths via Effect.catch.
+//
+// REGRESSION FIX 2026-06-27: the previous Effect.catch swallowed ALL
+// errors (incl. genuine readRaw failures) into an empty-content stub.
+// Symptom: viewer panel showed empty even when the editor's CM buffer
+// held the fresh bytes — the bug "the file is empty in read mode but
+// full in edit mode" the user reported. Now we only fall back to ""
+// when the file genuinely does not exist on disk (ENOENT); other
+// errors propagate so the route handler turns them into 5xx and the
+// frontend can react.
+        let raw: RawContent
+        try {
+          raw = yield* Effect.promise(() => readRaw(file))
+        } catch (e) {
+          if (e instanceof PathNotFoundError) {
+            raw = { content: "", stamp: { hash: "", mtime: undefined, size: undefined } }
+          } else {
+            // FORK (REGRESSION FIX 2026-06-27): propagate genuine readRaw
+            // failures (transport, AV-blocked, FS cache stale, etc.) so
+            // the route handler can return a 5xx and the frontend can
+            // react, instead of silently showing an empty viewer.
+            throw e
+          }
+        }
+        const content = raw.content
 
         if (Instance.project.vcs === "git") {
           return yield* Effect.promise(async (): Promise<File.Content> => {
@@ -624,7 +701,16 @@ export namespace File {
         const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
         assertInsideProject(resolved)
 
-        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(Effect.orElseSucceed(() => []))
+        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(
+          // DEBT: D-10 — surface scan failures instead of returning an empty list.
+          Effect.catchCause((cause) => {
+            log.warn("readDirectoryEntries failed; listing may be incomplete", {
+              dir: resolved,
+              cause: Cause.pretty(cause),
+            })
+            return Effect.succeed([])
+          }),
+        )
 
         const nodes: File.Node[] = []
         for (const entry of entries) {
@@ -685,7 +771,13 @@ export namespace File {
         // symlink on the parent chain would itself be detected because
         // AppFileSystem.resolve walks existing segments.
         assertInsideProject(resolved)
-        yield* appFs.ensureDir(resolved).pipe(Effect.catch(() => Effect.void))
+        // DEBT: D-11 — a swallowed mkdir failure looked like success; log it.
+        yield* appFs.ensureDir(resolved).pipe(
+          Effect.catch((err) => {
+            log.warn("ensureDir failed", { dir: resolved, error: String(err) })
+            return Effect.void
+          }),
+        )
         return { absolute: resolved }
       })
 
@@ -721,4 +813,290 @@ export namespace File {
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
     return runPromise((svc) => svc.search(input))
   }
+
+  // FORK: file write API for the human editor (ADR-0004) — write/rename/move/delete.
+  // Implemented as plain async namespace functions (not through the Effect service)
+  // because they orchestrate other runPromise-backed APIs (FileTime.withLock, LSP,
+  // Bus) imperatively. Conflict = content sha256 (stateless, robust on Android FUSE
+  // where mtime is unreliable). Writes are atomic (temp + fsync + rename). Text-only;
+  // format-on-save lives in the editor frontend (PR 1b).
+
+  export interface Stamp {
+    hash: string
+    mtime: number | undefined
+    size: number | undefined
+  }
+
+  export interface RawContent {
+    content: string
+    stamp: Stamp
+  }
+
+  // 409 — file changed on disk since the client read it (or precondition stale).
+  export class ConflictError extends Error {
+    constructor(
+      readonly file: string,
+      message: string,
+    ) {
+      super(message)
+      this.name = "FileConflictError"
+    }
+  }
+  // 404 — operation target does not exist.
+  export class PathNotFoundError extends Error {
+    constructor(readonly file: string) {
+      super(`File not found: ${file}`)
+      this.name = "FilePathNotFoundError"
+    }
+  }
+  // 409 — destination already exists (best-effort no-clobber).
+  export class TargetExistsError extends Error {
+    constructor(readonly file: string) {
+      super(`Destination already exists: ${file}`)
+      this.name = "FileTargetExistsError"
+    }
+  }
+
+  function hashContent(content: string): string {
+    return createHash("sha256").update(content, "utf8").digest("hex")
+  }
+
+  function stampOf(content: string, info: ReturnType<typeof Filesystem.stat>): Stamp {
+    const size = info?.size
+    return {
+      hash: hashContent(content),
+      mtime: info?.mtimeMs !== undefined ? Math.floor(Number(info.mtimeMs)) : undefined,
+      size: size !== undefined ? Number(size) : undefined,
+    }
+  }
+
+  async function diskStamp(full: string): Promise<Stamp> {
+    const content = await Filesystem.readText(full)
+    return stampOf(content, Filesystem.stat(full))
+  }
+
+  // Atomic write: temp file in the same directory, fsync, then rename. Never
+  // leaves a truncated target on crash / process kill / sdcard-full / FUSE glitch.
+  async function atomicWrite(full: string, content: string): Promise<void> {
+    const dir = path.dirname(full)
+    await fsMkdir(dir, { recursive: true })
+    const tmp = path.join(dir, `.${path.basename(full)}.${process.pid}.${Date.now()}.tmp`)
+    const handle = await fsOpen(tmp, "w")
+    try {
+      await handle.writeFile(content, "utf8")
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    try {
+      await fsRename(tmp, full)
+    } catch (e) {
+      await fsRm(tmp, { force: true }).catch(() => {})
+      throw e
+    }
+    // FORK (BUG-A Phase 8 diagnostic — REGRESSION FIX 2026-06-27):
+    // On Windows + antivirus/FUSE/OneDrive, the rename can succeed at the API
+    // level but the FS still serves cached old bytes until next flush. The
+    // previous behaviour logged a warning and continued — the route handler
+    // then returned 200 with the new content, the frontend showed "Saved",
+    // and the on-disk file kept its old bytes. User-visible symptom: "I typed
+    // coucou, hit Ctrl+S, toast Saved, reopened the file — coucou is gone."
+    //
+    // Retry the read-back a few times to absorb transient FS-cache lag, then
+    // throw if the bytes still don't match. The error propagates through the
+    // route handler as a 500 and the frontend now surfaces "SaveFailed".
+    //
+    // REGRESSION FIX 2026-06-27 (round 2): extended to 10×200ms (2 s total).
+    // On heavily-loaded Windows hosts with aggressive antivirus the FS cache
+    // can take >250 ms to flush — the previous 5×50ms budget surfaced false
+    // positives where the cache hadn't caught up yet but would have on the
+    // next read.
+    const RETRIES = 10
+    const DELAY_MS = 200
+    let lastSeen: string | undefined
+    for (let i = 0; i < RETRIES; i++) {
+      try {
+        lastSeen = await Filesystem.readText(full)
+        if (lastSeen === content) return
+      } catch (e) {
+        log.warn("atomicWrite post-rename read-back failed", {
+          full,
+          attempt: i,
+          error: String(e),
+        })
+      }
+      if (i < RETRIES - 1) await new Promise((r) => setTimeout(r, DELAY_MS))
+    }
+    throw new Error(
+      `atomicWrite: post-rename read-back mismatch for ${full} ` +
+        `after ${RETRIES} retries (expected ${content.length} bytes, last seen ${
+          lastSeen?.length ?? "?"
+        } bytes). The filesystem is likely serving stale cached bytes — ` +
+        `an antivirus, backup agent, or remote-sync daemon is interfering with the write.`,
+    )
+  }
+
+  async function notifyWrite(full: string, kind: "add" | "change") {
+    const key = toCanonicalRelative(full)
+    Bus.publish(Event.Edited, { file: key })
+    await Bus.publish(FileWatcher.Event.Updated, { file: key, event: kind })
+    // LSP refresh is best-effort in 1a; the editor consumes diagnostics in Phase 2.
+    // LSP.touchFile still takes the absolute path — its own internal contract.
+    await LSP.touchFile(full, false).catch(() => {})
+  }
+
+  async function notifyDelete(full: string) {
+    const key = toCanonicalRelative(full)
+    Bus.publish(Event.Edited, { file: key })
+    await Bus.publish(FileWatcher.Event.Updated, { file: key, event: "unlink" })
+    await LSP.touchFile(full, false).catch(() => {})
+  }
+
+  // WHY (R2 in PLAN-EDITEUR-IDE-DEFINITIF): the frontend FileStore keys file
+  // content by the canonical key produced by
+  // packages/app/src/context/file/canonical.ts — forward-slash, no `file://`,
+  // no query/hash, no git quoting, relative to the project root. Publishing
+  // that exact shape from the backend makes the contract structural: the
+  // client never has to defensively re-normalize. Native parcel/watcher
+  // callbacks and our own writes produce absolute native paths
+  // ("D:\\repo\\src\\app.ts" on win32). This function is the ONE place that
+  // converts absolute → relative-canonical for event payloads.
+  // LSP and other consumers that need an absolute path must keep using `full`.
+  export function toCanonicalRelative(full: string): string {
+    const rel = path.relative(Instance.directory, full)
+    return rel.split(path.sep).join("/")
+  }
+
+  // Result of a write: the FINAL on-disk content (may differ from the sent
+  // content when format=true reformatted it) + its stamp, so the editor can
+  // reconcile its buffer and keep the next save's hash precondition correct.
+  export interface WriteResult {
+    content: string
+    stamp: Stamp
+    formatted: boolean
+  }
+
+  /**
+   * Write text content to a file, guarded by a content-hash precondition.
+   * - expectedHash present: overwrite only if the on-disk content still hashes to it (else 409).
+   * - expectedHash absent: create only if the file does not exist (else 409 — no blind overwrite).
+   * - format: after writing the raw content, run Format.file best-effort (it never
+   *   throws, rewrites in place), under the same lock = atomic write→format→reread.
+   *   Returns the final on-disk content; `formatted` indicates the formatter changed it.
+   */
+  export async function write(input: {
+    path: string
+    content: string
+    expectedHash?: string
+    format?: boolean
+  }): Promise<WriteResult> {
+    // FORK (BUG-A Phase 8): refuse absolute paths. On win32, `path.join(root, abs)`
+    // silently truncates to `abs`, hiding cross-project writes. Frontend must send
+    // project-relative paths via canonical().
+    if (path.isAbsolute(input.path)) {
+      throw new Error(
+        `File.write: input.path must be relative to project root, got absolute: ${input.path}`,
+      )
+    }
+    const full = path.join(Instance.directory, input.path)
+    assertWritableTarget(full)
+    return FileTime.withLock(full, async () => {
+      const exists = await Filesystem.exists(full)
+      if (exists) {
+        if (input.expectedHash === undefined) {
+          throw new ConflictError(input.path, "expectedHash is required to overwrite an existing file")
+        }
+        const current = await diskStamp(full)
+        if (current.hash !== input.expectedHash) {
+          throw new ConflictError(input.path, "File changed on disk since it was last read")
+        }
+      } else if (input.expectedHash !== undefined) {
+        throw new ConflictError(input.path, "File no longer exists (a hash precondition was supplied)")
+      }
+      // Write the raw content first — it is always safely on disk even if a
+      // later format step is interrupted (no data loss).
+      await atomicWrite(full, input.content)
+      let finalContent = input.content
+      let formatted = false
+      if (input.format) {
+        await Format.file(full).catch(() => {})
+        finalContent = await Filesystem.readText(full)
+        formatted = finalContent !== input.content
+      }
+      await notifyWrite(full, exists ? "change" : "add")
+      return { content: finalContent, stamp: stampOf(finalContent, Filesystem.stat(full)), formatted }
+    })
+  }
+
+  /** Read raw (untrimmed) text + stamp, so the editor can round-trip the exact bytes for hashing. */
+  export async function readRaw(file: string): Promise<RawContent> {
+    // FORK (BUG-A Phase 8): same defensive check as write() — refuse absolute.
+    if (path.isAbsolute(file)) {
+      throw new Error(
+        `File.readRaw: file must be relative to project root, got absolute: ${file}`,
+      )
+    }
+    const full = path.join(Instance.directory, file)
+    assertInsideProject(full)
+    if (!(await Filesystem.exists(full))) throw new PathNotFoundError(file)
+    if (await Filesystem.isDir(full)) throw new PathNotFoundError(file)
+    const content = await Filesystem.readText(full)
+    return { content, stamp: stampOf(content, Filesystem.stat(full)) }
+  }
+
+  async function relocate(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    const fromFull = path.join(Instance.directory, from)
+    const toFull = path.join(Instance.directory, to)
+    if (fromFull === toFull) throw new Error("Source and destination are the same path")
+    assertInsideProject(fromFull)
+    assertWritableTarget(toFull)
+    const [first, second] = [fromFull, toFull].sort()
+    return FileTime.withLock(first, () =>
+      FileTime.withLock(second, async () => {
+        if (!(await Filesystem.exists(fromFull))) throw new PathNotFoundError(from)
+        if (expectedHash !== undefined) {
+          const current = await diskStamp(fromFull)
+          if (current.hash !== expectedHash) {
+            throw new ConflictError(from, "Source changed on disk since it was last read")
+          }
+        }
+        // Best-effort no-clobber: POSIX rename(2) overwrites and there is no atomic
+        // cross-platform no-replace primitive in Node/Bun (ADR-0004).
+        if (await Filesystem.exists(toFull)) throw new TargetExistsError(to)
+        await fsMkdir(path.dirname(toFull), { recursive: true })
+        await fsRename(fromFull, toFull)
+        await notifyDelete(fromFull)
+        await notifyWrite(toFull, "add")
+        return diskStamp(toFull)
+      }),
+    )
+  }
+
+  export function rename(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    return relocate(from, to, expectedHash)
+  }
+
+  export function move(from: string, to: string, expectedHash?: string): Promise<Stamp> {
+    return relocate(from, to, expectedHash)
+  }
+
+  /** Delete a file or directory. 404 if absent; optional source-hash precondition (files only). */
+  export async function remove(input: { path: string; expectedHash?: string }): Promise<void> {
+    const full = path.join(Instance.directory, input.path)
+    assertInsideProject(full)
+    return FileTime.withLock(full, async () => {
+      if (!(await Filesystem.exists(full))) throw new PathNotFoundError(input.path)
+      const isDirectory = await Filesystem.isDir(full)
+      if (isDirectory) throw new Error("Access denied: cannot remove a directory")
+      if (input.expectedHash !== undefined) {
+        const current = await diskStamp(full)
+        if (current.hash !== input.expectedHash) {
+          throw new ConflictError(input.path, "File changed on disk since it was last read")
+        }
+      }
+      await fsRm(full, { recursive: isDirectory, force: false })
+      await notifyDelete(full)
+    })
+  }
+  // END FORK
 }

@@ -8,6 +8,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useFileStore } from "./file/store"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -58,6 +59,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
     const layout = useLayout()
+    const fileStore = useFileStore()
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
@@ -163,24 +165,49 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const key = `${directory}\n${file}`
       ensure(file)
 
-      const current = store.file[file]
-      if (!options?.force && current?.loaded) return Promise.resolve()
+      // Phase 2.4e: skip-when-clean gate now consults FileStore, not the local
+      // viewer cache. Reason: editor.save() / editor.reload() update FileStore
+      // atomically (markClean), so a freshly-cleaned FileDoc is proof we just
+      // saw the bytes — no need to re-read. `force: true` still bypasses this
+      // for callers that genuinely need a fresh fetch (tab activation, agent
+      // finish, watcher hot path). The viewer cache's `loaded` flag is no
+      // longer the source of truth; it stays as a render hint for the spinner.
+      if (!options?.force && fileStore.get(file)?.status === "clean") return Promise.resolve()
 
       const pending = inflight.get(key)
       if (pending) return pending
 
       setLoading(file)
 
-      const promise = sdk.client.file
-        .read({ path: file })
-        .then((x) => {
+      const promise = Promise.all([
+        sdk.client.file.read({ path: file }),
+        sdk.client.file.readRaw({ path: file }),
+      ])
+        .then(([read, raw]) => {
           if (scope() !== directory) return
-          const content = x.data
+          const content = read.data
           setLoaded(file, content)
 
           if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
+
+          // Phase 2.4b: also populate FileStore so viewer + editor share one
+          // source of truth (R1 in PLAN-EDITEUR-IDE-DEFINITIF). readRaw returns
+          // the disk stamp used by editor.save() to detect 409 conflicts. The
+          // viewer cache above stays for loading/error flags + VCS payload
+          // (diff/patch); 2.4c wires editor.tsx to read from FileStore too.
+          //
+          // Phase 2.4d: if the editor has flagged this path as "conflict"
+          // (dirty buffer + external write), DO NOT overwrite that — the
+          // conflict is sticky until the user resolves it via Save (force
+          // overwrite) or Discard. Otherwise a viewer-driven re-read races
+          // the editor and silently clears the warning.
+          const rawData = raw.data
+          if (rawData && fileStore.get(file)?.status !== "conflict") {
+            const vcs = content.diff || content.patch ? { diff: content.diff, patch: content.patch } : undefined
+            fileStore.markClean(file, rawData.content, rawData.stamp, vcs)
+          }
         })
         .catch((e) => {
           if (scope() !== directory) return

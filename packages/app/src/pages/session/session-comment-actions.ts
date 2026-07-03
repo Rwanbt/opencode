@@ -3,8 +3,12 @@
  * Extracted from session.tsx to keep that file under the 1500-LOC budget.
  */
 import { createMemo } from "solid-js"
-import type { FileSelection, SelectedLineRange } from "@/context/file"
-import { selectionFromLines } from "@/context/file"
+// Import the pure selection helpers from the lightweight types module rather
+// than the heavy `@/context/file` coordinator barrel: this factory has no need
+// for the FileProvider's runtime graph, and decoupling it keeps the module
+// unit-testable (the barrel transitively pulls @solidjs/router). (D-08)
+import type { FileSelection, SelectedLineRange } from "@/context/file/types"
+import { selectionFromLines } from "@/context/file/types"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import type { useFile } from "@/context/file"
 import type { useComments } from "@/context/comments"

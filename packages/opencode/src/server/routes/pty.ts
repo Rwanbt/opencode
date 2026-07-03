@@ -131,6 +131,32 @@ export const PtyRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    // FORK: Phase 4 stretch — problem matchers
+    .get(
+      "/:ptyID/tail",
+      describeRoute({
+        summary: "Get PTY tail (plain text)",
+        description: "Return the last N characters of a PTY session's output with ANSI escape codes stripped, for problem matcher analysis.",
+        operationId: "pty.tail",
+        responses: {
+          200: {
+            description: "Plain text output",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ text: z.string() }).meta({ ref: "PtyTail" })),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ ptyID: PtyID.zod })),
+      validator("query", z.object({ maxChars: z.coerce.number().int().positive().optional() })),
+      async (c) => {
+        const text = await Pty.tail(c.req.valid("param").ptyID, c.req.valid("query").maxChars)
+        return c.json({ text })
+      },
+    )
     .get(
       "/:ptyID/connect",
       describeRoute({

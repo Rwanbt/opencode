@@ -11,7 +11,7 @@ import {
 } from "./global-sync/session-prefetch"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "../types/sdk-shim"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -179,7 +179,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       if (!directory || directory === sdk.directory) return current()
       return globalSync.child(directory)
     }
-    const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
+    // `path` is transiently undefined while the child store bootstraps
+    // (server switch) — fall back to empty so callers get a relative path
+    // instead of an "undefined/…" string or a mid-batch throw.
+    const absolute = (path: string) => ((current()[0].path?.directory ?? "") + "/" + path).replace("//", "/")
     const initialMessagePageSize = 80
     const historyMessagePageSize = 200
     const inflight = new Map<string, Promise<void>>()
@@ -612,7 +615,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       absolute,
       get directory() {
-        return current()[0].path.directory
+        // Transiently undefined during child-store bootstrap (server switch).
+        return current()[0].path?.directory ?? ""
       },
     }
   },

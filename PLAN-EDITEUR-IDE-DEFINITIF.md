@@ -1,0 +1,360 @@
+# Plan définitif — Éditeur & gestion fichiers OpenCode (IDE fonctionnel, zéro dette)
+
+> 📋 **Mirror vault** : [[OpenCode/Plan-Editeur-IDE-Definitif-2026-06-25]]
+> 📋 **Règle vault** : [[_global/rules/rule-plans-vault|règle plans-vault]]
+>
+> Rédigé le 2026-06-25. Remplace `PLAN-CORRECTION-EDITEUR-FICHIERS.md` (patches B1–B4 = rustines).
+
+## Suivi d'implémentation
+
+| Phase | Statut | Commit | Notes |
+|-------|--------|--------|-------|
+| Phase 0 (R3 build) | ⏸ à faire | — | Bloquant. copy-sidecar.ts déjà amélioré par GLM mais pas les 3 autres sous-étapes. |
+| **Phase 1 (R2 canonical)** | **✅ FAIT 2026-06-25** | `f46824090a` + `b1d2ac3131` | canonical.ts (frontend) + toCanonicalRelative (backend). 19 tests frontend + 3 tests backend. 129/129 packages/opencode/test/file/ verts. Reste : tools (write/edit/apply_patch) migrés en Phase 2. |
+| Phase 2.1 (FileDoc contrat) | **✅ FAIT 2026-06-25** | `a93d6c6199` | Stamp gardé dans editor/store.ts. Stale absorbé dans `conflict`. Content = string + vcs séparé. 14 tests. 488/488 packages/app + 129/129 backend verts. |
+| Phase 2.2 (trim backend retiré) | **✅ FAIT 2026-06-25** | `76efa186a7` | `.trim()` retiré à `file/index.ts:633`. Pas de `readText()` créé (audit : aucun consumer ne veut le trim). 3 tests backend patchés (ils asservaient le bug R1). 129/129 backend + 488/488 packages/app verts. |
+| Phase 2.3 (unifier read/readRaw) | **✅ FAIT 2026-06-25** | `d8f8c1e998` | `read()` appelle `readRaw()` interne (via `Effect.promise` + `Effect.catch`). VCS mémo paresseux sera dans `FileDoc.vcs` côté frontend (2.4). 488/488 packages/app + 129/129 backend verts. |
+| Phase 2.4a (context wrapper) | **✅ FAIT 2026-06-25** | `21de28e84e` | `createFileStore()` exposé via `createSimpleContext` → `useFileStore()` + `<FileStoreProvider>`. Aucun consommateur branché (fondation pure, 17 LOC). 488/488 packages/app verts. |
+| Phase 2.4b (viewer load → FileStore) | **✅ FAIT 2026-06-25** | `452d9ad354` | `file.tsx.load()` → `Promise.all([read, readRaw])` + `fileStore.markClean(file, content, stamp, vcs?)`. Side-store (viewer continue à lire son cache local, breaking-zero). |
+| Phase 2.4c (editor mirror FileStore) | **✅ FAIT 2026-06-25** | `b190327470` | `EditorDeps.fileStore?` optionnel (fallback no-op). Mirror dans 10 méthodes : open/setDirty/save/discard/reload/resolveConflict/recreate/onExternalChange/onExternalDelete/close. Pattern `mirror(path, action)`. |
+| Phase 2.4d (anti-race conflict sticky) | **✅ FAIT 2026-06-25** | `c857ec66e1` | `file.tsx.load()` skip `markClean` si `fileStore.get(file)?.status === "conflict"`. Évite que viewer écrase silencieusement le warning "conflict". |
+| Phase 2.4e (gate FileStore clean) | **✅ FAIT 2026-06-25** | `3bb93e77b9` | `load()` skip-when-clean consulte FileStore au lieu du flag local `loaded`. |
+| Phase 2.4f (refreshAfterEditor doc) | **✅ FAIT 2026-06-25** | `0222e06714` | NO-OP assumé : wrapper reste car viewer render path lit encore cache local. Commentaire explique Phase 3+ pour le retrait. |
+| Phase 2.4g (E2E tests + markClean upsert) | **✅ FAIT 2026-06-25** | `2a975e0032` | **Bug critique corrigé** : `markClean` fait un upsert si doc absent (sans ça, viewer.load() ne crée jamais l'entrée). + 4 E2E tests d'intégration dans `store-integration.test.ts`. |
+| Phase 2.5 (découper file-tabs.tsx) | **✅ FAIT 2026-06-25** | `ee487b732f` + `63cd4cd763` + `35c0fb606f` + `1564ca5b4c` + `20d8d38279` + `59bd5709ff` + `91625f1b17` | 972 → 427 LOC. 8 nouveaux fichiers : lsp-handlers.ts, rename-dialog.tsx, code-actions-panel.tsx, references-panel.tsx, editor-panel.tsx, viewer-panel.tsx, comments-overlay.tsx (factory pattern), file-keybindings.ts. + auto-edit.ts pour le module-level set. file-tabs.tsx sous alerte 500 (strict <300 cible non atteinte — glue LSP/rename/code-action reste inline ~120 LOC). |
+| Phase 2.6 (editorStore.close tab close) | **✅ FAIT 2026-06-25** | `c7391cb92a` | `EditorTabCleanup` composant (enfant de `EditorProvider`) qui réagit aux changements de `layout.tabs(sessionKey).all` et appelle `editor.close(path)` pour les tabs retirés. Sans garde dirty pour l'instant (Phase 3). |
+| **Phase 2 status global** | **✅✅✅ COMPLÈTE** | 12 commits | 2.1 + 2.2 + 2.3 + 2.4a-g + 2.5 + 2.6 tous faits. **Critère R1 satisfait** : `disk ≡ FileStore.content ≡ editor.baseline.content` à chaque stable point, asserté par E2E test 1 sur 5 étapes. `bun test packages/app` → **492/492 verts** (488 → 492, +4 E2E). |
+| Phase 3 (R5, R6 save/dirty) | **✅ FAIT 2026-06-25** | `6fef10a25a` + `3032fd2185` + `315311360e` + `e709258955` + `0333705ac9` + `9516e25476` + `d99157db39` | 7 commits. `autoSave` / `formatOnSave` settings split + migration, debounced autosave 1s, dirty tab dot lit `FileStore.status`, Save/Don't save/Cancel dialog via `EditorCloseGuardProvider`, "Revert File" command palette. `bun test packages/app` → 519 verts. |
+| **Phase 4 status global** | **✅✅✅ COMPLÈTE (partielle 4.4)** | 4 commits | `2bc1bff266` (4.1) + `402ec77031` (4.2) + `cc8816f188` (4.3) + `e8fff6c7b3` (4.4). file-tabs 494 → 243 LOC ; 17 nouvelles clés i18n en+fr ; SDK LSP regen (rename/codeAction/executeCommand/completion) ; throwOnError default global → false. **3 overrides `throwOnError:true` explicites restent** (global-sync:183, submit.ts:355, dialog-connect-provider.tsx:171) — deferred Phase 5+ car chaque override nécessite un refactor per-call-site avec audit {data, response} et test E2E. |
+| **Phase 5 status global** | **✅✅✅ COMPLÈTE** | 5 commits : `f5045e1a23` (91 fichiers, 5.1+5.6) + `82fa3e0e4f` (5.2) + `861e360bc4` (5.5) + `19033d399b` (5.4) + `2fa52a5a19` (5.3) | 5.1 typecheck post-regen : 2 shims structurels (`packages/app/src/types/sdk-shim.ts` + `packages/ui/src/types/sdk-shim.ts` mirror). 84 fichiers consumers migrés via script PowerShell batch. Mapping table clé : Message/Part/Session/FileNode/FileContent/etc. → `*Responses[200] / Extract<...>` aliases. Types supprimés du backend (PermissionRequest, QuestionRequest, VcsInfo, Git*, ...) fallback `{ [key: string]: any; ... }`. 5.2 Quick Open : keybind `mod+k,mod+p` → `mod+p` + `mode="files"` (bug fix 7 insertions). 5.3 Global Search : nouveau `dialog-select-search.tsx` (152 LOC) + `mod+shift+f`. 5.4 Go-to-Symbol : nouveau `dialog-select-symbol.tsx` (191 LOC) + `mod+shift+o`. 5.5 LSP status : nouveau `lsp-diagnostics.tsx` hook (104 LOC) directory-scoped + badge dans status-popover LSP tab. 5.6 throwOnError : 3 overrides retirés (global-sync:183, submit:355, dialog-connect-provider:171) → héritent du default `false`. **Tests 517/518 verts** (1 fail path.test.ts GLM-pré-existant). Typecheck : 0 erreur dans mes 13 fichiers. Reste ~110 erreurs structurelles pré-existantes (Project fields, PromptRequestPart variants, ValidComponent) → consumer-side Phase 6+. |
+| Phase 6 (tests CI) | ⏸ partiel | — | canonical.test.ts ✅, manque : non-régression open→save→close→reopen, watcher echo, dirty-close, invariants runtime. |
+| Phase 6 (tests CI) | ⏸ partiel | — | canonical.test.ts ✅, manque : non-régression open→save→close→reopen, watcher echo, dirty-close, invariants runtime. |
+
+**Incident de session 2026-06-25 14h08** : `mavis-trash` a supprimé `D:\App\OpenCode\opencode` par erreur (path contenant `$null`). Récupération immédiate depuis Corbeille Windows via `robocopy` + `bun install`. Voir [[OpenCode/_review/2026-06-25 - Incident mavis-trash dossier opencode]].
+> Ici on attaque les **causes racines architecturales**, pas les symptômes.
+> Objectif : l'app devient un IDE où l'on code à la main (comme VS Code), pas seulement via l'IA.
+> **Pas de MVP, pas de dette technique** : une source de vérité, des invariants vérifiés.
+
+---
+
+## 0. Le bug signalé (reproduit logiquement)
+
+> « si je sauvegarde une modif, que je ferme le fichier, puis que je le réouvre,
+> la modification n'est pas visible mais réapparaît lorsque je rebascule en édition. »
+
+Symptôme décodé : **le mode lecture affiche du contenu STALE (pré-sauvegarde),
+le mode édition affiche du contenu FRAIS (post-sauvegarde).** Donc :
+- `editorStore.entries[p].baseline.content` (édition) = **NOUVEAU** ✓ (mis à jour par `save`)
+- `store.file[p].content` (lecture, dans `file.tsx`) = **ANCIEN** ✗
+
+C'est la preuve qu'**il existe DEUX caches de contenu indépendants** qui divergent.
+
+---
+
+## 1. DIAGNOSTIC COMPLÈTE (causes racines, prouvées par le code)
+
+### R1 — CRITIQUE / ARCHITECTURAL : double cache de contenu divergent
+
+Deux stores détiennent le contenu d'un même fichier, sans lien réactif :
+
+| Store | Fichier | API backend | Utilisé par | Trim ? |
+|---|---|---|---|---|
+| **cache lecture** | `context/file.tsx` → `store.file[p].content` | `sdk.client.file.read` (`/file/read`) | viewer read-mode (`renderFile`) | **OUI** (`file/index.ts:633`) |
+| **baseline édition** | `context/editor/store.ts` → `entries[p].baseline.content` | `api.file.readRaw` (`/file/readRaw`) | CodeMirror (`initialContent`) | **NON** (`file/index.ts:948`) |
+
+La cohérence entre les deux n'est garantie que par **des appels manuels `file.load(p,{force:true})`** parsemés :
+- `file-tabs.tsx:504` (handleCtrlS) — présent ✅
+- `file-tabs.tsx:540` (handleDiscard) — présent ✅
+- `handleRecreate` (`file-tabs.tsx:543`) — **ABSENT** ❌
+- `handleOverwrite` (`file-tabs.tsx:521`) — **ABSENT** ❌
+- `handleReload` (`file-tabs.tsx:511`) — **ABSENT** ❌
+- rename / move (`operations.ts`) — refresh du **tree** seulement, **pas du cache contenu** ❌
+- édition agent (tool write via le bus) — refresh via watcher **uniquement** ❌
+
+**Conséquence** : tout chemin d'écriture qui oublie le `file.load` force laisse le viewer en lecture
+STALE jusqu'à la prochaine fermeture/rouverture forcée. C'est inévitable : la synchro est
+« souviens-toi de le faire à chaque endroit ». Une dette structurelle.
+
+**Preuve de la divergence de rendu** : `file/index.ts:632-635`
+```ts
+const content = yield* appFs.readFileString(full).pipe(
+  Effect.map((s) => s.trim()),   // ← TRIM appliqué au contenu lu
+  Effect.catch(() => Effect.succeed("")),
+)
+```
+alors que `readRaw` (`index.ts:948`) retourne le **contenu brut**. Donc read et edit
+affichent **des bytes différents** pour le même fichier. Une modif en bord de fichier
+(retour à la ligne final, indentation de tête, normalisation EOF — extrêmement courants)
+est **silencieusement supprimée** en mode lecture puis **réapparaît** en édition.
+→ Ce seul bug produit EXACTement le symptôme rapporté pour toute modif de bord.
+
+### R2 — CRITIQUE / WINDOWS : normalisation de chemin incohérente (clés divergentes)
+
+`context/file/path.ts:104-131` `normalize()` :
+- préserve les **séparateurs natifs** du chemin d'entrée (`path.slice(root.length)`, l.119-120).
+
+Or le chemin arrive avec des séparateurs différents selon la porte d'entrée :
+- via **onglet** (`file://a/b.ts` décodé) → `/`
+- via **watcher** (`Bus.publish(..., { file: full })` où `full = path.join(...)` natif) → `\` sur Windows
+
+Donc sur Windows, `store.file` peut contenir **deux entrées** pour le même fichier :
+`store.file["a/b.ts"]` (clé viewer) ET `store.file["a\\b.ts"]` (clé watcher). Le refresh
+watcher (`watcher.ts:32` `ops.hasFile(path)`) écrit dans la clé `\`, que le viewer (clé `/`)
+**ne lit jamais** → le refresh contenu est **silencieusement droppé**.
+
+Le patch B2 (`operations.ts` parentDir/basename gère `\`) traite le symptôme de l'arbre,
+**pas la cause** : la normalisation produit toujours des clés hétérogènes.
+
+### R3 — CRITIQUE / BUILD : pipeline sidecar/frontend cassé → l'app qui tourne peut être stale
+
+(cf. `HANDOFF-finir-rebuild.md`). Le source contient les patchs B1–B4, MAIS :
+- `tauri.conf.json` `beforeBuildCommand = bun run build` (frontend seul) — le sidecar n'est
+  **jamais recopié** vers `target/release/opencode-cli.exe` après un build.
+- `copy-sidecar.ts` pointe vers une source **stale via junction** (disque C: plein).
+- Résultat : `target/release/opencode-cli.exe` peut être le binaire du **7 mai** (sans write API)
+  → `write` → 404 → mappé en « deleted on disk ». L'app runtime n'a **aucune** des corrections.
+
+Tant que ce pipeline n'est pas déterministe, **tout fix frontend est non vérifiable**.
+C'est le prérequis numéro un : un build reproductible.
+
+### R4 — MAJEUR : pas de source unique → sync en bordel
+
+`editorStore.close(p)` n'est **jamais appelé à la fermeture d'onglet** (`layout.tsx:963` `close`
+ne touche pas à l'editor store). Seul `handleDiscard` le fait. Conséquence : les entrées
+`entries[p]` **fuitent** (le baseline persiste ; un onglet rouvert retourne le baseline caché
+au lieu de relire — `store.ts:94` `if (existing && !existing.missing) return baseline`).
+
+### R5 — MAJEUR : sémantique de setting fausse
+
+`file-tabs.tsx:493` : `const format = settings.general.autoSave()`. Le flag **« autoSave »**
+est utilisé comme **flag « format on save »**. Or ce sont deux concepts distincts :
+- autoSave = sauvegarde automatique temporisée (qui **n'existe pas** du tout aujourd'hui !)
+- formatOnSave = reformater le fichier à la sauvegarde
+
+Aucun des deux n'est correctement implémenté : `autoSave` pilote le formatage, et l'autosave
+temporisé est absent. Réglage trompeur + feature IDE de base manquante.
+
+### R6 — MAJEUR : pas de garde anti-perte à la fermeture d'onglet sale
+
+`layout.tsx:963` `close(tab)` : **aucun** contrôle de `dirty`. Fermer un onglet avec des
+modifications non sauvegardées les **détruit silencieusement**. Perte de données garantie
+pour un IDE de codage manuel. VS Code demande confirmation ; ici : rien.
+
+---
+
+## 2. CE QUI EST MAL FAIT / MAL IMPLÉMENTÉ (audit)
+
+### Code & conventions
+- **Texte UI en dur en français** dans `file-tabs.tsx` : « Renommé en » (l.331),
+  « Fichier courant mis à jour » (l.332), « Actions » (l.960), « Références » (l.1027),
+  « Renommer en : » (l.991), « nouveau nom » (l.1002). **viole** AGENTS.md « English everywhere »
+  et contourne le système i18n (`language.t(...)`). Bug d'internationalisation + dette.
+- **`fetch` directs** vers `/lsp/completion`, `/lsp/rename`, `/lsp/code-action`,
+  `/lsp/execute-command` (`file-tabs.tsx:237,314,357,398`) au lieu du SDK généré.
+  Contourne l'auth/transport/typage du SDK → obligations de maintenance manuelle.
+  → régénérer le SDK (`packages/sdk/js/script/build.ts`) avec ces endpoints.
+- **Deux clients SDK** : global `throwOnError:true` (`sdk.tsx`) + dédié `throwOnError:false`
+  (`editor.tsx:22`). Source de confusion (R1 a été causé par ça). Le non-throwing devrait
+  être le défaut pour les opérations fichier.
+- **Composants définis dans le corps de rendu** : `renderFile` (l.810) recréé à chaque
+  passage. Le commentaire l.856 dit utiliser `Dynamic` pour l'éviter, mais `renderFile`
+  reste une fermeture récréée. Fragile (remonter en module).
+- **`file-tabs.tsx` = 1072 LOC** → dépasse le seuil « alerte >500 / refactor >800 »
+  d'AGENTS.md. Mélange : scroll-sync, commentaires, LSP, rename, code-actions, références,
+  éditeur, banners. **5+ responsabilités** → à découper.
+
+### Architecture
+- **Cache LRU global mutable** (`content-cache.ts`) avec des compteurs module-level (`let total`).
+  État global → non testable isolément, fuites potentielles, ordre d'éviction implicite.
+  Devrait vivre dans le `FileStore`.
+- **`file.load` silent-skip** (`file.tsx:167` `if (!force && loaded) return`) : un fichier déjà
+  chargé n'est JAMAIS rafraîchi à la réouverture d'onglet. Combiné à R1/R2 = stale garanti.
+- **Watcher echo mal géré** : `onExternalChange` ignore via `entry.saving`, mais l'écho peut
+  arriver APRÈS que `saving` soit repassé à `false` (race). La défense est temporelle, pas structurelle.
+
+### Backend
+- **`trim()` dans `read`** (R1) — transforme silencieusement le contenu à la frontière données.
+- **Deux lecteurs** (`read` l.590+ et `readRaw` l.943) avec des sémantiques différentes
+  (trim, type-detection base64, diff/patch git). Duplication de connaissance (anti-DRY).
+- **`notifyWrite` synchrone dans le lock** (`index.ts:937`) publie un event watcher qui revient
+  frapper le client → boucle de cohérence fragile (le client doit deviner « c'est mon echo »).
+
+### Build/ops
+- Pipeline sidecar non déterministe (R3).
+- Aucun test E2E de la boucle edit→save→close→reopen. Les tests unitaires du store
+  (`store.test.ts`) couvrent la machine à états mais **pas** la synchro read↔edit ni le watcher.
+
+---
+
+## 3. CE QUI MANQUE POUR UN IDE FONCTIONNEL (vs VS Code)
+
+Classé par criticité pour « coder à la main » :
+
+### Sauvegarde & intégrité (bloquant)
+1. **Autosave temporisé** (après N ms d'inactivité) ET/OU on focus-loss — jamais aujourd'hui.
+2. **Confirmation de fermeture d'onglet sale** (R6).
+3. **Indicateur dirty sur l'onglet** (point/astérisque) — le tab UI ne reflète pas `editorStore.dirty`.
+4. **« Revert File »** explicite (bouton/diff) au-delà de discard.
+
+### Expérience d'édition
+5. **Persistance des onglets ouverts** entre sessions (VS Code rouvre vos fichiers).
+6. **Onglets épinglés / preview tabs** (open in preview, promote on edit).
+7. **Recherche dans le fichier** fonctionnelle en mode lecture aussi (Ctrl+F intercepté seulement hors édition l.729).
+8. **Recherche globale dans le projet** (Ctrl+Shift+F) — absent.
+9. **Multi-curseurs / colonnes** : vérifier la couverture CM (présent côté CM, mais mappings clavier ?).
+10. **Minimap**, **règle de pliage persistant**, **bracket pair colorization** (réglages CM).
+
+### Navigation & projet
+11. **Palette de commandes** (Ctrl+Shift+P) couvrant les actions fichier/éditeur.
+12. **Quick Open** (Ctrl+P) par nom de fichier — la search existe côté backend, pas de UI dédiée.
+13. **Go-to-symbol** dans le fichier (Ctrl+Shift+O) via LSP (déjà câblé pour definition).
+14. **Terminal intégré** correct (existe partiellement — auditer).
+
+### Cohérence & feedback
+15. **Statut LSP visible** (diagnostics en continu, pas seulement on-demand).
+16. **Sauvegarde en arrière-plan non bloquante** avec indicateur.
+17. **Historique local/undo across reload** (VS Code retient l'undo après reopen via backups).
+
+---
+
+## 4. PLAN D'EXÉCUTION COMPLET (zéro dette, ordre strict)
+
+> Principe directeur : **SOURCE UNIQUE DE VÉRITÉ**. Un seul `FileStore` détient le contenu
+> brut (hash+stamp) par chemin canonique. Le buffer CodeMirror est un brouillon « au-dessus ».
+> Read-mode et edit-mode lisent le MÊME store → divergence **structurellement impossible**.
+
+### Phase 0 — Prérequis build (bloquant, R3)
+Sans ça, aucun fix n'est vérifiable.
+1. **Réparer le pipeline sidecar** : `copy-sidecar.ts` doit résoudre la source fraîche
+   (pas via junction). Vérifier le junction (`Get-Item ... | Select LinkType,Target`) ;
+   si présent, pointer la source vers le résolu réel
+   `packages/opencode/dist/opencode-windows-x64/bin/opencode.exe`.
+2. **`beforeBuildCommand`** = `bun run build && bun run precopy:sidecar` (frontend + sidecar).
+3. **`cli.rs get_sidecar_path`** : fallback défense-en-profondeur vers `sidecars/` si le sibling
+   est absent/stale (vérif : chaîne `File changed on disk since it was last read` présente).
+4. **Build reproductible vérifié** : un seul `bun tauri build` produit un exe qui contient
+   le frontend corrigé ET le sidecar frais (findstr sur les deux chaînes marqueurs).
+
+### Phase 1 — Normalisation canonique des chemins (R2, à la racine)
+Single source of truth pour la clé.
+1. **Créer `context/file/canonical.ts`** : `canonical(raw): string` → toujours
+   **forward-slash, relatif au scope, décodé, sans query/hash, sans `file://`**.
+   Cette fonction est l'UNIQUE producteur de clé. Tout `path.normalize` actuel délègue vers elle.
+2. **Backend watcher** : publier le chemin **relatif canonique** (`/`), pas l'absolu natif.
+   Dans `notifyWrite`/`notifyDelete`, calculer `path.relative(Instance.directory, full)` puis
+   `.split(path.sep).join("/")`. → le client reçoit déjà la bonne clé, plus de mismatch.
+3. **Supprimer la logique « préserver séparateurs natifs »** de `path.ts:119-120`.
+4. Tests : `canonical.test.ts` couvre win/posix, absolu/relatif, file://, git-quoted, query/hash.
+
+### Phase 2 — Unifier le contenu : `FileStore` unique (R1, R4)
+C'est le cœur du plan. On fusionne cache lecture + baseline édition.
+1. **Nouveau `context/file/store.ts`** (remplace progressivement `file.tsx` content + `editor/store.ts`) :
+   ```ts
+   interface FileDoc {
+     content: string        // BRUT (jamais trim), vérité disque connue
+     stamp: Stamp           // hash + mtime + size
+     status: "clean" | "dirty" | "saving" | "conflict" | "missing"
+     draft?: string         // buffer live CodeMirror (undefined = propre = content)
+   }
+   ```
+   - `draft` undefined ⇒ le rendu = `content`. `draft` défini ⇒ rendu édition = `draft`,
+     rendu lecture = `content` (le disque). **Plus jamais deux caches indépendants.**
+2. **`read(path)`** : appelle **`readRaw`** (brut) côté backend. Le diff/patch git devient
+   un calcul dérivé **paresseux** (memo séparé), pas une mutation du contenu. → élimine R1-trim.
+3. **Watcher** : un seul handler met à jour `FileDoc.content`+`stamp` (si `status==="clean"`),
+   ou marque `stale`/`conflict` (si dirty). Plus de double-listener (editor.tsx + file.tsx).
+4. **`save(path)`** : write → met à jour `content`+`stamp`+`status="clean"` dans LE store.
+     Read-mode et edit-mode étant réactifs au même store, **les deux se rafraîchissent ensemble,
+     sans aucun `file.load(force)` manuel**. On supprime tous les appels manuels (R1).
+5. **Fermeture d'onglet** appelle `store.close(path)` (R4) — avec garde dirty (Phase 4).
+6. **Backend `read`** : supprimer le `.trim()` (index.ts:633). Si du nettoyage d'affichage est
+   voulu, le faire **dans le composant de rendu**, jamais dans la couche données.
+
+### Phase 3 — Sauvegarde & intégrité (R5, R6, manquants #1–3) ✅ COMPLÈTE 2026-06-25
+1. ✅ **Split settings** : commit `6fef10a25a`. `migrateAutoSave()` pure, idempotente. 7 tests.
+2. ✅ **Autosave temporisé** : commit `3032fd2185`. Factory pure `createAutosave({clock?})`, 4 status gates au fire time. 10 tests.
+3. ✅ **Indicateur dirty sur l'onglet** : commit `315311360e`. `FileVisual` lit `fileStore.status`.
+4. ✅ **Garde fermeture onglet sale** : commit `e709258955`. `EditorCloseGuardProvider` + hook + dialog Save/Don't save/Cancel. 9 tests.
+5. ✅ **« Revert File »** : commit `0333705ac9`. `editor.revert(path)` alias de `reload()` + palette entry. 1 test.
+
+**Bilan Phase 3** : 5 commits atomiques, +27 tests, **519/519 packages/app tests verts**.
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 3)
++ `OpenCode/sessions/2026-06-25 - Session Phase 3 Save Dirty.md` pour l'état détaillé.
+
+### Phase 4 — Cohérence UI & conventions (R-code&conv)
+1. ✅ **Extraire `file-tabs.tsx`** (1072 → 243 LOC) en modules : `editor-panel.tsx`,
+   `rename-dialog.tsx`, `code-actions-panel.tsx`, `references-panel.tsx`,
+   `lsp-handlers.ts`, `scroll-content-sync.tsx`, `lsp-actions.tsx`.
+   Cible <300 LOC/fichier atteinte (file-tabs 243 + scroll-content-sync 113 +
+   lsp-actions 166). Commit `2bc1bff266` (2026-06-25).
+2. ✅ **Internationaliser** tout le texte FR/EN en dur → `language.t(...)` + entrées
+   `en.ts`/`fr.ts` (17 nouvelles clés : `editor.stale.*`, `editor.conflict.*`,
+   `editor.missing.*`, `editor.aria.edit`, `panel.split.close/closeButton`,
+   `rename.dialog.*`, `codeActions.*`, `references.title`, `toast.lsp.*`).
+   Critère `rg '"[A-Z][^"]{3,}"' session/*.tsx | grep -v language.t` → 0 hors
+   comments. Commit `402ec77031` (2026-06-25).
+3. ✅ **Régénérer le SDK** (`packages/sdk/js/script/build.ts`) avec les routes
+   LSP manquantes : `lsp.rename`, `lsp.codeAction`, `lsp.executeCommand`,
+   `lsp.completion`. Remplacer les 4 `fetch()` directs par
+   `sdk.client.lsp.{rename,codeAction,executeCommand,completion}` dans
+   `lsp-handlers.ts:71` et `lsp-actions.tsx`. Critère
+   `rg 'fetch\(' packages/app/src/pages/session` → 0.
+   Collateral fix : `packages/sdk/js/src/v2/server.ts` — `Config` type
+   renommé dans `GlobalConfigResponse` après le refactor backend
+   (commit 61c5d7e6b0), `SpawnConfig` minimal en remplacement.
+   Commit `cc8816f188` (2026-06-25).
+4. ✅ **Client SDK non-throwant par défaut** : `createOpencodeClient` passe
+   désormais `throwOnError:false` à `createClient` (était `undefined` →
+   dépendait des overrides explicites). Migration des 2 root defaults
+   (`global-sdk.tsx:234`, `sdk.tsx:20`) + retrait du workaround
+   `throwOnError:false` dans `context/editor.tsx:27`. **3 overrides
+   `throwOnError:true` explicites restent** (intentionnels, deferred
+   Phase 5+) : `global-sync.tsx:183`, `prompt-input/submit.ts:355`,
+   `dialog-connect-provider.tsx:171`. Commit `e8fff6c7b3` (2026-06-25).
+
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 4)
++ `OpenCode/sessions/2026-06-25 - Session Phase 4 UI Conventions.md` pour l'état détaillé.
+
+### Phase 5 — Features IDE (manquants #5–17, par valeur)
+- **Persistance onglets** : stocker la liste d'onglets par projet (localStorage / SQLite).
+- **Quick Open (Ctrl+P)** : UI dédiée sur `sdk.client.find.files`.
+- **Recherche globale (Ctrl+Shift+F)** : backend ripgrep existant → nouvelle UI.
+- **Go-to-symbol (Ctrl+Shift+O)** : LSP `documentSymbol` (déjà câblable).
+- **Statut LSP continu** : diagnostics poussés via le bus, badge dans la barre d'état.
+
+### Phase 6 — Tests & invariants (obligatoire, pas optionnel)
+1. **Test de non-régression du bug** : boucle `open → edit → save → close → reopen` asserte
+   que read-mode === edit-mode === disque (intégration, deps mockées type `store.test.ts`).
+2. **Test canonique** : `canonical()` déterministe跨 plateformes (win `\` vs posix `/`).
+3. **Test watcher echo** : un write déclenche un event ; assert pas de boucle/stale.
+4. **Invariant runtime** : `assert(FileDoc.content === readRaw(path))` après tout save/reload
+   (debug_assert côté store). Un invariant non vérifié n'est qu'une promesse (AGENTS.md).
+5. **Test dirty-close** : fermeture d'onglet sale déclenche le dialog.
+6. Couverture : `bun test` dans `packages/app` après chaque phase.
+
+---
+
+## 5. ORDRE D'EXÉCUTION & VÉRIFICATION
+
+```
+Phase 0 (build)  ──► exe frais vérifiable (findstr des 2 marqueurs)
+Phase 1 (paths)  ──► canonical.test.ts vert ; plus de clé `\` vs `/`
+Phase 2 (store)  ──► test non-régression open→save→close→reopen vert
+Phase 3 (save)   ──► autosave + dirty-close-guard ; settings migrés
+Phase 4 (UI)     ──► file-tabs <300 LOC/fichier ; 0 texte FR en dur ; SDK lsp regen
+Phase 5 (IDE)    ──► quick-open, search, symbols
+Phase 6 (tests)  ──► invariants + non-régression en CI
+```
+
+Chaque phase est **indépendamment buildable et testable** (PR ≤400 LOC, AGENTS.md).
+Aucune phase ne laisse de TODO/dette : on ne passe à la suivante qu'après tests verts.
+
+## Critères d'acceptation finaux (le bug est MORT)
+- [ ] Sauvegarder → fermer → rouvrir : la modif est visible **immédiatement** en lecture.
+- [ ] Read-mode et edit-mode affichent **byte-à-byte** le même contenu (plus de trim-divergence).
+- [ ] Fermer un onglet sale → dialog de confirmation.
+- [ ] Onglet sale → point dirty visible.
+- [ ] Autosave activable ; formatOnSave séparé.
+- [ ] Build desktop déterministe (un seul `bun tauri build` → frontend + sidecar frais).
+- [ ] Aucun texte UI en dur ; 0 `fetch` direct hors SDK ; `file-tabs` éclaté.
+- [ ] Tests de non-régression verts en CI.

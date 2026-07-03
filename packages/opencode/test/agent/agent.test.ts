@@ -63,6 +63,23 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
   })
 })
 
+test("plan agent has no step limit (unaffected by the MAX_STEPS prefill bug fixed for chat)", async () => {
+  // The MAX_STEPS wrap-up injection (see prompt.test.ts's MAX_STEPS regression
+  // test) only fires when agent.steps is a finite number and the loop reaches
+  // it. "chat" was the one native agent with steps:1, which made its FIRST call
+  // trigger it. "plan" has no `steps` field at all, so `agent.steps ?? Infinity`
+  // never reaches the isLastStep threshold — locking that in here.
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const plan = await Agent.get("plan")
+      expect(plan).toBeDefined()
+      expect(plan?.steps).toBeUndefined()
+    },
+  })
+})
+
 test("explore agent denies edit and write", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -705,14 +722,30 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
         build: { disable: true },
         chat: { disable: true },
         plan: { disable: true },
+        debate: { disable: true },
       },
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
+      // all primary non-hidden agents are disabled, no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
+    },
+  })
+})
+
+test("chat agent denies all tools by default (websearch gated by the session-level web toggle, not baked into the agent)", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const chat = await Agent.get("chat")
+      expect(chat).toBeDefined()
+      expect(evalPerm(chat, "bash")).toBe("deny")
+      expect(evalPerm(chat, "edit")).toBe("deny")
+      expect(evalPerm(chat, "write")).toBe("deny")
+      expect(evalPerm(chat, "websearch")).toBe("deny")
     },
   })
 })

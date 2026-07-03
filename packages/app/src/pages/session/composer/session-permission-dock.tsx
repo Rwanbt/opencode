@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "../../../types/sdk-shim"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -59,7 +59,7 @@ export function SessionPermissionDock(props: {
         </div>
       </Show>
 
-      <Show when={props.request.patterns.length > 0}>
+      <Show when={(props.request.patterns ?? []).length > 0}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-patterns">

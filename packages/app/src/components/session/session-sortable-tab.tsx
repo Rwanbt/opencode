@@ -7,10 +7,22 @@ import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { getFilename } from "@opencode-ai/util/path"
 import { useFile } from "@/context/file"
+import { useFileStore } from "@/context/file/store"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
+  // UX (consensus 4-IA review 2026-06-24): a dirty file is shown with an amber
+  // dot prefix on the tab. Same on desktop + mobile — VS Code convention.
+  //
+  // FORK (Phase 3.3): read from the shared FileStore instead of the editor
+  // store. FileStore is the single source of truth for `status` (PLAN-EDITEUR-
+  // IDE-DEFINITIF Phase 2, R1); the editor store mirrors into it via
+  // editor.setDirty() / save(). Reading directly from FileStore means the
+  // dot reflects the exact same value the viewer / save button / autosave
+  // factory see — no skew between components.
+  const fileStore = useFileStore()
+  const dirty = createMemo(() => fileStore.get(props.path)?.status === "dirty")
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
       <Show
@@ -21,6 +33,13 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
           <FileIcon node={{ path: props.path, type: "file" }} class="absolute inset-0 size-4 tab-fileicon-color" />
           <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
         </span>
+      </Show>
+      <Show when={dirty()}>
+        <span
+          class="size-1.5 md:size-1.5 rounded-full bg-amber-500 shrink-0"
+          aria-label="Unsaved changes"
+          data-dirty-dot
+        />
       </Show>
       <span class="text-14-medium truncate">{getFilename(props.path)}</span>
     </div>

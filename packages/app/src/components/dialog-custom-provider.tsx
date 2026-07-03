@@ -107,7 +107,7 @@ export function DialogCustomProvider(props: Props) {
     const output = validateCustomProvider({
       form,
       t: language.t,
-      disabledProviders: globalSync.data.config.disabled_providers ?? [],
+      disabledProviders: globalSync.data.config?.disabled_providers ?? [],
       existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
     })
     batch(() => {
@@ -120,13 +120,13 @@ export function DialogCustomProvider(props: Props) {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
-      const disabledProviders = globalSync.data.config.disabled_providers ?? []
+      const disabledProviders = globalSync.data.config?.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
       if (result.key) {
         await globalSDK.client.auth.set({
           providerID: result.providerID,
-          auth: {
+          body: {
             type: "api",
             key: result.key,
           },

@@ -33,6 +33,13 @@ if (existsSync(envFile)) {
 if (!process.env.HOME) process.env.HOME = pathJoin(runtimeDir, "home")
 const homeDir = process.env.HOME!
 
+// P6-1: chdir into HOME so process.cwd() resolves correctly.
+// libmusl_linker.so doesn't forward Rust's Command::current_dir() to Bun,
+// same way it doesn't forward env vars (see .env_vars workaround above).
+// Without this, server/router.ts:30 falls back to process.cwd()="/" (EROFS)
+// whenever the x-opencode-directory header is missing or empty.
+try { process.chdir(homeDir) } catch {}
+
 // Ensure HOME dirs exist
 try { mkdirSync(pathJoin(homeDir, ".opencode"), { recursive: true }) } catch {}
 try { mkdirSync(pathJoin(homeDir, ".config", "opencode"), { recursive: true }) } catch {}

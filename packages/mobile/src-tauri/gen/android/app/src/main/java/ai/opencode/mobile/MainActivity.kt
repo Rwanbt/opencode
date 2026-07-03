@@ -69,6 +69,15 @@ class MainActivity : TauriActivity() {
     // Request storage permissions
     requestStoragePermission()
 
+    // Request Doze exemption. A WAKE_LOCK alone does not stop MIUI from freezing
+    // the bun sidecar's socket when the screen sleeps mid-request — confirmed
+    // on-device: the app was absent from `dumpsys deviceidle whitelist`, and the
+    // sidecar (port 14096, entry point for every request) stayed unreachable the
+    // whole time the screen was off despite an active WAKE_LOCK. This app runs a
+    // genuine long-lived local inference server, which is the documented
+    // legitimate use case for this exemption (same category as VoIP apps).
+    requestBatteryOptimizationExemption()
+
     // Draw behind the display cutout (notch) on all edges
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       window.attributes.layoutInDisplayCutoutMode =
@@ -133,14 +142,31 @@ class MainActivity : TauriActivity() {
       try {
         val modelsDir = File(runtimeDir, "models")
         if (modelsDir.exists()) {
-          val ggufFiles = modelsDir.listFiles()?.filter { it.name.endsWith(".gguf") } ?: emptyList()
+          // Exclude multimodal projector companions (always named "mmproj-*.gguf"
+          // by model-manager.tsx's downloadModel(catalog.mmprojUrl, catalog.mmprojFilename),
+          // downloaded right after their paired main model so they carry a LATER
+          // mtime). Without this filter, "most recently modified .gguf" picks the
+          // projector itself as the model to load — llama-server correctly refuses
+          // ("CLIP cannot be used as main model"), dies at startup, port 14097 never
+          // opens, and the sidecar times out with a generic "did not become ready".
+          val ggufFiles = modelsDir.listFiles()
+            ?.filter { it.name.endsWith(".gguf") && !it.name.startsWith("mmproj-", ignoreCase = true) }
+            ?: emptyList()
           if (ggufFiles.isNotEmpty()) {
             // Load the first (or most recently modified) model
             val model = ggufFiles.maxByOrNull { it.lastModified() }
             if (model != null) {
               android.util.Log.i("OpenCode", "Auto-loading model (JNI/GPU): ${model.name}")
               val ok = LlamaEngine.load(model.absolutePath)
-              android.util.Log.i("OpenCode", "Model loaded: $ok")
+              // Distinguish a circuit-breaker block from an ordinary failure: the
+              // block writes a durable marker read by the sidecar (fail-fast in
+              // LocalLLMServer.ensureRunning), and logging the reason here makes it
+              // trivially visible in logcat during on-device verification.
+              when {
+                ok -> android.util.Log.i("OpenCode", "Model loaded: ${model.name}")
+                LlamaEngine.lastLoadWasBlocked -> android.util.Log.w("OpenCode", "Model auto-load BLOCKED by crash-loop circuit breaker: ${model.name} (blocked marker written for sidecar)")
+                else -> android.util.Log.w("OpenCode", "Model auto-load failed (not blocked): ${model.name}")
+              }
             }
           }
         }
@@ -168,6 +194,23 @@ class MainActivity : TauriActivity() {
           android.util.Log.e("OpenCode", "Runtime extraction failed: $result")
         }
       }.start()
+    }
+  }
+
+  /** Prompt the system "ignore battery optimizations" dialog when not already
+   *  exempted. Re-checked (and re-prompted if still denied) on every cold start,
+   *  same pattern as requestStoragePermission() below — no throttling, since the
+   *  app cannot function as a background inference server without this grant. */
+  private fun requestBatteryOptimizationExemption() {
+    try {
+      val pm = getSystemService(android.os.PowerManager::class.java)
+      if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        intent.data = Uri.parse("package:$packageName")
+        startActivity(intent)
+      }
+    } catch (e: Exception) {
+      android.util.Log.w("OpenCode", "Battery optimization exemption request failed: ${e.message}")
     }
   }
 

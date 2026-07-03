@@ -8,18 +8,28 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { FileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiff } from "../../types/sdk-shim"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { showToast } from "@opencode-ai/ui/toast"
+import type { FileNode } from "../../types/sdk-shim"
 import FileTree from "@/components/file-tree"
+import { requestAutoEdit } from "@/pages/session/file-tabs"
+import { SourceControl } from "@/components/source-control"
+import { TaskPanel } from "@/components/task-panel"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
+import { createFileOpDeps } from "@/context/file/operations"
+import { useEditorCloseGuard } from "@/context/editor/close-guard"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
+import { useTerminal } from "@/context/terminal"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -40,11 +50,14 @@ export function SessionSidePanel(props: {
   size: Sizing
 }) {
   const layout = useLayout()
+  const guard = useEditorCloseGuard()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
   const platform = usePlatform()
+  const sdk = useSDK()
+  const terminal = useTerminal()
   const { sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -152,8 +165,80 @@ export function SessionSidePanel(props: {
 
   const fileTreeTab = () => layout.fileTree.tab()
 
+  const handleNewFile = (parentDir: string) => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileCreate
+          mode="file"
+          parentDir={parentDir}
+          deps={createFileOpDeps(sdk, file)}
+          onCreated={(path) => openTab(file.tab(path))}
+        />
+      ))
+    })
+  }
+
+  const handleNewFolder = (parentDir: string) => {
+    void import("@/components/dialog-file-create").then((x) => {
+      dialog.show(() => <x.DialogFileCreate mode="folder" parentDir={parentDir} deps={createFileOpDeps(sdk, file)} />)
+    })
+  }
+
+  const handleRename = (node: FileNode) => {
+    void import("@/components/dialog-file-rename").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileRename
+          node={node}
+          deps={createFileOpDeps(sdk, file)}
+          onRenamed={(oldPath, newPath) => {
+            tabs().close(file.tab(oldPath))
+            openTab(file.tab(newPath))
+          }}
+        />
+      ))
+    })
+  }
+
+  const handleDelete = (node: FileNode) => {
+    void import("@/components/dialog-file-delete").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileDelete
+          node={node}
+          deps={createFileOpDeps(sdk, file)}
+          onDeleted={(path) => tabs().close(file.tab(path))}
+        />
+      ))
+    })
+  }
+
+  const handleMove = (node: FileNode) => {
+    void import("@/components/dialog-file-move").then((x) => {
+      dialog.show(() => (
+        <x.DialogFileMove
+          node={node}
+          deps={createFileOpDeps(sdk, file)}
+          onMoved={(oldPath, newPath) => {
+            tabs().close(file.tab(oldPath))
+            openTab(file.tab(newPath))
+          }}
+        />
+      ))
+    })
+  }
+
+  const handleCopyPath = (path: string) => {
+    void navigator.clipboard.writeText(path).then(() => {
+      showToast({ title: language.t("toast.file.pathCopied") })
+    })
+  }
+
+  const handleFileDblClick = (node: FileNode) => {
+    requestAutoEdit(node.path)
+    openTab(file.tab(node.path))
+  }
+
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
+    if (value !== "changes" && value !== "all" && value !== "git" && value !== "tasks") return
     layout.fileTree.setTab(value)
   }
 
@@ -293,7 +378,7 @@ export function SessionSidePanel(props: {
                         </Tabs.Trigger>
                       </Show>
                       <SortableProvider ids={openedTabs()}>
-                        <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
+                        <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={guard.close} />}</For>
                       </SortableProvider>
                       <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                         <TooltipKeybind
@@ -308,7 +393,9 @@ export function SessionSidePanel(props: {
                             class="!rounded-md"
                             onClick={() => {
                               void import("@/components/dialog-select-file").then((x) => {
-                                dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+                                dialog.show(() => (
+                                  <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} file={file} />
+                                ))
                               })
                             }}
                             aria-label={language.t("command.file.open")}
@@ -347,8 +434,76 @@ export function SessionSidePanel(props: {
                     </Tabs.Content>
                   </Show>
 
+                  {/* FORK: Stretch Phase 6 — split pane (Ctrl+\) */}
                   <Show when={activeFileTab()} keyed>
-                    {(tab) => <FileTabContent tab={tab} />}
+                    {(tab) => (
+                      <Show
+                        when={view().editorSplit.tab()}
+                        fallback={<FileTabContent tab={tab} />}
+                      >
+                        {(splitTab) => {
+                          // Drag state for the split divider
+                          let splitRatio = view().editorSplit.ratio()
+                          let dragging = false
+                          let containerRef: HTMLDivElement | undefined
+
+                          const startDrag = (e: PointerEvent) => {
+                            dragging = true
+                            ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                          }
+                          const onDrag = (e: PointerEvent) => {
+                            if (!dragging || !containerRef) return
+                            const rect = containerRef.getBoundingClientRect()
+                            splitRatio = Math.max(0.25, Math.min(0.75, (e.clientX - rect.left) / rect.width))
+                            containerRef.style.setProperty("--split-ratio", String(splitRatio))
+                          }
+                          const endDrag = (e: PointerEvent) => {
+                            if (!dragging) return
+                            dragging = false
+                            ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+                            view().editorSplit.setRatio(splitRatio)
+                          }
+
+                          return (
+                            <div
+                              ref={containerRef}
+                              class="flex h-full w-full"
+                              style={{ "--split-ratio": String(view().editorSplit.ratio()) }}
+                            >
+                              {/* Left pane */}
+                              <div
+                                class="relative min-w-0 overflow-hidden"
+                                style={{ width: `calc(var(--split-ratio) * 100%)` }}
+                              >
+                                <FileTabContent tab={tab} />
+                              </div>
+
+                              {/* Drag divider */}
+                              <div
+                                class="w-[3px] shrink-0 bg-border-weak-base hover:bg-accent-primary/60 active:bg-accent-primary cursor-col-resize relative z-10 transition-colors"
+                                onPointerDown={startDrag}
+                                onPointerMove={onDrag}
+                                onPointerUp={endDrag}
+                              />
+
+                              {/* Right pane */}
+                              <div class="flex-1 relative min-w-0 overflow-hidden border-l border-border-weak-base">
+{/* Close split button */}
+                              <button
+                                type="button"
+                                class="absolute top-2 right-2 z-20 text-text-weaker hover:text-text-base text-10-regular bg-background-stronger/80 rounded px-1.5 py-0.5 backdrop-blur"
+                                onClick={() => view().editorSplit.close()}
+                                title={language.t("panel.split.close", { keybind: "Ctrl+\\" })}
+                              >
+                                {language.t("panel.split.closeButton")}
+                              </button>
+                                <FileTabContent tab={splitTab()} override />
+                              </div>
+                            </div>
+                          )
+                        }}
+                      </Show>
+                    )}
                   </Show>
                 </Tabs>
                 <DragOverlay>
@@ -400,6 +555,13 @@ export function SessionSidePanel(props: {
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="git" class="flex-1" classes={{ button: "w-full" }}>
+                    Git
+                  </Tabs.Trigger>
+                  {/* FORK: ADR-0005 Phase 4 — task runner tab */}
+                  <Tabs.Trigger value="tasks" class="flex-1" classes={{ button: "w-full" }}>
+                    Tasks
+                  </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
@@ -428,18 +590,65 @@ export function SessionSidePanel(props: {
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                  <div class="flex items-center justify-between px-1 pt-2 pb-1">
+                    <span class="text-11-medium text-text-weaker uppercase tracking-wide">
+                      {language.t("session.files.all")}
+                    </span>
+                    <DropdownMenu gutter={4} placement="bottom-end">
+                      <DropdownMenu.Trigger as={IconButton} icon="plus-small" variant="ghost" size="small" />
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content>
+                          <DropdownMenu.Item onSelect={() => handleNewFile("")}>
+                            <DropdownMenu.ItemLabel>{language.t("fileOps.newFile")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => handleNewFolder("")}>
+                            <DropdownMenu.ItemLabel>{language.t("fileOps.newFolder")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
+                  </div>
                   <Switch>
                     <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                     <Match when={true}>
                       <FileTree
                         path=""
-                        class="pt-3"
+                        class="pt-1"
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
+                        onFileDblClick={handleFileDblClick}
+                        onNewFile={handleNewFile}
+                        onNewFolder={handleNewFolder}
+                        onRename={handleRename}
+                        onDelete={handleDelete}
+                        onMove={handleMove}
+                        onCopyPath={handleCopyPath}
+                        onCopyRelativePath={handleCopyPath}
                       />
                     </Match>
                   </Switch>
+                </Tabs.Content>
+                <Tabs.Content value="git" class="bg-background-stronger h-full overflow-y-auto">
+                  <Show when={fileTreeTab() === "git"}>
+                    <SourceControl
+                      directory={sdk.directory}
+                      onOpenFile={(path) => openTab(file.tab(path))}
+                    />
+                  </Show>
+                </Tabs.Content>
+                {/* FORK: ADR-0005 Phase 4 — task runner content */}
+                <Tabs.Content value="tasks" class="bg-background-stronger h-full">
+                  <Show when={fileTreeTab() === "tasks"}>
+                    <TaskPanel
+                      directory={sdk.directory}
+                      onRunTask={(command, title) => {
+                        const id = terminal.newWithCommand(command, title)
+                        view().terminal.open()
+                        return id
+                      }}
+                    />
+                  </Show>
                 </Tabs.Content>
               </Tabs>
             </div>

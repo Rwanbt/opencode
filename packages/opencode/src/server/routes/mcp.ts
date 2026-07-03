@@ -221,5 +221,31 @@ export const McpRoutes = lazy(() =>
         await MCP.disconnect(name)
         return c.json(true)
       },
+    )
+    // FORK: ADR-0005 Phase 5 — remove server from runtime + config
+    .delete(
+      "/:name",
+      describeRoute({
+        summary: "Remove MCP server",
+        description: "Remove a Model Context Protocol (MCP) server from the configuration and disconnect it.",
+        operationId: "mcp.remove",
+        responses: {
+          200: {
+            description: "MCP server removed",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.literal(true) })),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ name: z.string() })),
+      async (c) => {
+        const { name } = c.req.valid("param")
+        await MCP.remove(name)
+        return c.json({ success: true as const })
+      },
     ),
 )

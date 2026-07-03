@@ -18,8 +18,13 @@ const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {
   const globalSync = useGlobalSync()
-  const params = useParams()
-  const dir = createMemo(() => decode64(params.dir) ?? "")
+  let dir = createMemo(() => "")
+  try {
+    const params = useParams()
+    dir = createMemo(() => decode64(params.dir) ?? "")
+  } catch {
+    // Outside Router context (dialog portal) — fall back to global providers
+  }
   const providers = () => {
     if (dir()) {
       const [projectStore] = globalSync.child(dir())

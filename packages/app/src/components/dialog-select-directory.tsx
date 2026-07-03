@@ -278,7 +278,8 @@ function useDirectorySearch(args: {
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
-  const layout = useLayout()
+  let layout: ReturnType<typeof useLayout> | undefined
+  try { layout = useLayout() } catch {}
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
@@ -338,7 +339,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   })
 
   const recentProjects = createMemo(() => {
-    const projects = layout.projects.list()
+    const projects = layout?.projects.list() ?? []
     const byProject = new Map<string, number>()
 
     for (const project of projects) {
@@ -430,14 +431,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     setCreateError(null)
     try {
       const target = base.endsWith("/") ? base + name : base + "/" + name
-      // Call POST /file/mkdir directly via the server URL since the typed SDK
-      // hasn't been regenerated yet for this new endpoint.
+      // Scope the mkdir to the parent directory so assertInsideProject accepts it.
       const baseUrl = sdk.url.replace(/\/+$/, "")
-      const resp = await (platform.fetch ?? fetch)(baseUrl + "/file/mkdir", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: target }),
-      })
+      const resp = await (platform.fetch ?? fetch)(
+        baseUrl + "/file/mkdir?directory=" + encodeURIComponent(base),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: name }),
+        },
+      )
       if (!resp.ok) {
         const text = await resp.text().catch(() => "")
         throw new Error(text || `HTTP ${resp.status}`)

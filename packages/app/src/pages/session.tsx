@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { FileDiff, Project, UserMessage } from "../types/sdk-shim"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -42,6 +42,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { KeyboardHintsBar } from "@/components/keyboard-hints-bar"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { createCommentActions } from "@/pages/session/session-comment-actions"
@@ -57,6 +58,7 @@ import { createSessionMutations } from "@/pages/session/session-mutations"
 import { Persist, persisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { useViewMode } from "@/hooks/use-view-mode"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -77,6 +79,8 @@ export default function Page() {
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
+  useViewMode()
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -149,6 +153,8 @@ export default function Page() {
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
+    // FORK: Stretch Phase 6 — editor focus mode collapses the chat panel
+    if (isDesktop() && layout.editorFocus.enabled() && desktopSidePanelOpen()) return "0px"
     if (!desktopSidePanelOpen()) return "100%"
     if (isMobileDevice()) return "50%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
@@ -241,7 +247,11 @@ export default function Page() {
     if (!tab) return
 
     const path = file.pathFromTab(tab)
-    if (path) file.load(path)
+    // Force: between two activations of the same tab the file may have
+    // changed (external edit, another session, save-then-close-then-reopen).
+    // Without force, the cache hit at file.tsx:166 returns the stale
+    // pre-change content. Cost: one file.read per tab activation.
+    if (path) file.load(path, { force: true })
   })
 
   createEffect(
@@ -436,7 +446,7 @@ export default function Page() {
   const sessionEmptyKey = createMemo(() => {
     const project = sync.project
     if (project && !project.vcs) return "session.review.noVcs"
-    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
+    if (sync.data.config?.snapshot === false) return "session.review.noSnapshot"
     return "session.review.empty"
   })
 
@@ -602,7 +612,7 @@ export default function Page() {
   })
 
   const fileTreeTab = () => layout.fileTree.tab()
-  const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
+  const setFileTreeTab = (value: "changes" | "all" | "git" | "tasks") => layout.fileTree.setTab(value)
 
   createSessionSyncEffects({
     sdk,
@@ -615,7 +625,6 @@ export default function Page() {
     vcsMode,
     wantsReview,
     composer,
-    isDesktop,
     loadVcs,
     refreshVcs,
     activeFileTab,
@@ -1015,6 +1024,9 @@ export default function Page() {
           size={size}
         />
       </div>
+
+      {/* FORK: Stretch Phase 6 — keyboard hints bar (tablet + hardware keyboard) */}
+      <KeyboardHintsBar />
 
       <TerminalPanel />
     </div>
