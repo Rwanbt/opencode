@@ -967,7 +967,7 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
-    test("key never contains the platform separator (R2 regression)", async () => {
+    test("key is always forward-slash, never a backslash (R2 regression)", async () => {
       await using tmp = await tmpdir()
       const dir = tmp.path
       const filePath = path.join(dir, "src", "deep", "file.ts")
@@ -977,12 +977,17 @@ describe("file/index Filesystem patterns", () => {
         directory: dir,
         fn: async () => {
           const key = File.toCanonicalRelative(filePath)
-          expect(key).not.toContain(path.sep)
+          // The canonical key is forward-slash on EVERY platform (on posix it
+          // legitimately contains "/", which is also path.sep there — so we
+          // assert the meaningful invariant: no native-Windows backslash ever
+          // leaks into the key). Also pin the exact forward-slash shape.
+          expect(key).not.toContain("\\")
+          expect(key).toBe(["src", "deep", "file.ts"].join("/"))
         },
       })
     })
 
-    test("key is identical regardless of the input's separator style", async () => {
+    test("key is identical whether the input uses native or forward-slash separators", async () => {
       await using tmp = await tmpdir()
       const dir = tmp.path
       const real = path.join(dir, "src", "app.ts")
@@ -992,12 +997,14 @@ describe("file/index Filesystem patterns", () => {
         directory: dir,
         fn: async () => {
           const fromNative = File.toCanonicalRelative(real)
-          // Simulate the same file referenced with the OPPOSITE separator
-          // (mimics what parcel/watcher does cross-platform: native on win32,
-          // forward on posix). The key must be identical.
-          const opposite = real.split(path.sep).join(path.sep === "/" ? "\\" : "/")
-          const fromOpposite = File.toCanonicalRelative(opposite)
-          expect(fromNative).toBe(fromOpposite)
+          // Reference the same file with all-forward-slash separators (what the
+          // watcher emits on posix; on win32 path.relative accepts "/" too).
+          // Building the "opposite" as forward-slash — rather than backslash —
+          // keeps the input parseable on posix, where "\" is a filename char,
+          // not a separator. The canonical key must be identical either way.
+          const forward = real.split(path.sep).join("/")
+          const fromForward = File.toCanonicalRelative(forward)
+          expect(fromForward).toBe(fromNative)
         },
       })
     })
