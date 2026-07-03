@@ -95,7 +95,7 @@ describeVcs("Vcs", () => {
   })
 
   // File watcher for .git/HEAD is unreliable on Windows (NTFS notification delay)
-  test.skipIf(process.platform === "win32")("publishes BranchUpdated when .git/HEAD changes", async () => {
+  test("publishes BranchUpdated when .git/HEAD changes", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
@@ -111,7 +111,7 @@ describeVcs("Vcs", () => {
     })
   })
 
-  test.skipIf(process.platform === "win32")("branch() reflects the new branch after HEAD change", async () => {
+  test("branch() reflects the new branch after HEAD change", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
