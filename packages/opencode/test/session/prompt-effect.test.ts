@@ -1061,7 +1061,22 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+
+        // Poll until the shell tool part is actually running before forking
+        // the loop below. A fixed sleep only guesses that the runner has left
+        // Idle state by then — on a loaded CI runner it can still be Idle,
+        // which races the loop straight into "Running" instead of queueing
+        // behind the shell as "ShellThenRun" (see effect/runner.ts), making
+        // the assertions below flaky depending on scheduling.
+        const deadline = Date.now() + 5000
+        while (true) {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const taskMsg = msgs.find((item) => item.info.role === "assistant")
+          const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+          if (tool?.state.status === "running") break
+          if (Date.now() > deadline) throw new Error("timed out waiting for shell to start running")
+          yield* Effect.sleep(20)
+        }
 
         const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         yield* Effect.sleep(50)
