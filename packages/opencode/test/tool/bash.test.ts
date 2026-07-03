@@ -807,7 +807,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
-            command: `rm -rf ${path.join(tmp.path, "nested")}`,
+            command: `rm -rf ${path.join(tmp.path, "nested").replaceAll("\\", "/")}`,
             description: "Remove nested dir",
           },
           capture(requests),
@@ -929,14 +929,19 @@ describe("tool.bash abort", () => {
     })
   }, 15_000)
 
-  test("terminates command on timeout", async () => {
+  each("terminates command on timeout", async (item) => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
+        const command = PS.has(item.label)
+          ? "Write-Output started; Start-Sleep -Seconds 60"
+          : item.label === "cmd"
+            ? "echo started & ping 127.0.0.1 -n 61 > nul"
+            : "echo started && sleep 60"
         const result = await bash.execute(
           {
-            command: `echo started && sleep 60`,
+            command,
             description: "Timeout test",
             timeout: 500,
           },
@@ -946,16 +951,21 @@ describe("tool.bash abort", () => {
         expect(result.output).toContain("bash tool terminated command after exceeding timeout")
       },
     })
-  }, 15_000)
+  })
 
-  test.skipIf(process.platform === "win32")("captures stderr in output", async () => {
+  each("captures stderr in output", async (item) => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
+        const command = PS.has(item.label)
+          ? "Write-Output stdout_msg; [Console]::Error.WriteLine('stderr_msg')"
+          : item.label === "cmd"
+            ? "echo stdout_msg & echo stderr_msg 1>&2"
+            : "printf 'stdout_msg\\n'; printf 'stderr_msg\\n' >&2"
         const result = await bash.execute(
           {
-            command: `echo stdout_msg && echo stderr_msg >&2`,
+            command,
             description: "Stderr test",
           },
           ctx,
