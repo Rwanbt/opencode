@@ -11,9 +11,15 @@ import { Vcs } from "../../src/project/vcs"
 // Previously also skipped whenever process.env.CI was set, on the assumption
 // that the native @parcel/watcher binding wasn't reliably available in CI.
 // The real GitHub Actions unit(linux) junit artifact shows no binding-load
-// failure and 3/3 stable runs under a local CI=true simulation — the
-// assumption was stale. Only gate on whether the binding actually loaded.
-const describeVcs = FileWatcher.hasNativeBinding() ? describe : describe.skip
+// failure — that assumption was stale. The real constraint, confirmed via a
+// real unit(windows) CI run: test.yml sets OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true
+// on Windows CI specifically, which makes FileWatcher.init() a no-op
+// (watcher.ts:79) — so .git/HEAD change events can never fire there, not a
+// timing/NTFS-delay issue at all. Gate on the actual runtime precondition.
+const describeVcs =
+  FileWatcher.hasNativeBinding() && process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER !== "true"
+    ? describe
+    : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers

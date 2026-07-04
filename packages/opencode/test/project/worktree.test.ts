@@ -140,10 +140,16 @@ describe("Worktree", () => {
       const info = await withInstance(tmp.path, () => Worktree.makeWorktreeInfo("from-info-test"))
       await withInstance(tmp.path, () => Worktree.createFromInfo(info))
 
-      // Worktree should exist in git (normalize slashes for Windows)
+      // Worktree should exist in git. Real Windows CI runners can resolve the
+      // same directory as either its 8.3 short name (RUNNER~1) or its long
+      // name (runneradmin) depending on which env var supplied the root —
+      // git's own listing uses whichever form it resolved internally, which
+      // doesn't necessarily match ours, so compare through realpath instead
+      // of raw strings (confirmed via a real unit(windows) CI failure).
       const list = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
       const normalizedList = list.replace(/\\/g, "/")
-      const normalizedDir = info.directory.replace(/\\/g, "/")
+      const realDir = await fs.realpath(info.directory)
+      const normalizedDir = realDir.replace(/\\/g, "/")
       expect(normalizedList).toContain(normalizedDir)
 
       // Cleanup
