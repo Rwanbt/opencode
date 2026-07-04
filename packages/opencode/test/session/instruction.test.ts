@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "../../src/global"
+import { Config } from "../../src/config/config"
+import { AppFileSystem } from "../../src/filesystem"
 import { tmpdir } from "../fixture/fixture"
+
+function mockHttpClient(handler: (request: HttpClientRequest.HttpClientRequest) => Response) {
+  const client = HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, handler(request))))
+  return Layer.succeed(HttpClient.HttpClient, client)
+}
 
 function loaded(filepath: string): MessageV2.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
@@ -183,7 +192,27 @@ describe("Instruction.resolve", () => {
     })
   })
 
-  test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
+  test("fetches remote instructions from config URLs via HttpClient", async () => {
+    await using tmp = await tmpdir({
+      config: { instructions: ["https://example.com/AGENTS.md"] },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const layer = Instruction.layer.pipe(
+          Layer.provide(mockHttpClient(() => new Response("# Remote Instructions"))),
+          Layer.provide(AppFileSystem.defaultLayer),
+          Layer.provide(Config.defaultLayer),
+        )
+
+        const result = await Effect.runPromise(
+          Instruction.Service.use((svc) => svc.system()).pipe(Effect.provide(layer)),
+        )
+
+        expect(result).toEqual(["Instructions from: https://example.com/AGENTS.md\n# Remote Instructions"])
+      },
+    })
+  })
 })
 
 describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {
