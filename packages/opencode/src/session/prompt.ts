@@ -1780,7 +1780,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   messages: [...modelMsgs, ...(isLastStep ? [{ role: "user" as const, content: MAX_STEPS }] : [])],
                   tools,
                   model,
-                  toolChoice: format.type === "json_schema" ? "required" : undefined,
+                  // "required" only forces *some* tool call — Google's ANY mode lets the
+                  // model satisfy it with any other resolved tool, so Gemini can finish a
+                  // step without ever calling StructuredOutput. Force the exact tool name;
+                  // AI SDK translates this to Google's allowedFunctionNames restriction,
+                  // and other providers already treat { type: "tool" } equivalently to a
+                  // constrained "required".
+                  toolChoice:
+                    format.type === "json_schema" ? { type: "tool" as const, toolName: "StructuredOutput" } : undefined,
                 })
 
                 if (structured !== undefined) {
