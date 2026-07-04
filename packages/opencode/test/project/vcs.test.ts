@@ -8,8 +8,12 @@ import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
 import { Vcs } from "../../src/project/vcs"
 
-// Skip in CI — native @parcel/watcher binding needed
-const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+// Previously also skipped whenever process.env.CI was set, on the assumption
+// that the native @parcel/watcher binding wasn't reliably available in CI.
+// The real GitHub Actions unit(linux) junit artifact shows no binding-load
+// failure and 3/3 stable runs under a local CI=true simulation — the
+// assumption was stale. Only gate on whether the binding actually loaded.
+const describeVcs = FileWatcher.hasNativeBinding() ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers

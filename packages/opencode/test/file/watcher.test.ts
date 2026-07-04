@@ -10,8 +10,12 @@ import { File } from "../../src/file"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 
-// Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
-const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+// Previously also skipped whenever process.env.CI was set, on the assumption
+// that the native @parcel/watcher binding wasn't reliably available in CI.
+// The real GitHub Actions unit(linux) junit artifact shows no binding-load
+// failure and 3/3 stable runs under a local CI=true simulation — the
+// assumption was stale. Only gate on whether the binding actually loaded.
+const describeWatcher = FileWatcher.hasNativeBinding() ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers
