@@ -80,8 +80,16 @@ export namespace Shell {
     if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
     const git = which("git")
     if (!git) return
-    const file = path.join(git, "..", "..", "bin", "bash.exe")
-    if (Filesystem.stat(file)?.size) return file
+    // git.exe can live at <root>/cmd, <root>/mingw64/bin, or <root>/usr/bin
+    // depending on which copy PATH resolves first (e.g. running from inside
+    // Git Bash itself puts mingw64/bin ahead of cmd) — walk up from whichever
+    // one was found instead of assuming a fixed depth to the Git root.
+    let dir = path.dirname(git)
+    for (let i = 0; i < 4; i++) {
+      const file = path.join(dir, "bin", "bash.exe")
+      if (Filesystem.stat(file)?.size) return file
+      dir = path.dirname(dir)
+    }
   }
 
   function fallback() {
