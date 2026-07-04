@@ -77,6 +77,7 @@ describe("Worktree", () => {
   describe("create + remove lifecycle", () => {
     test("create returns worktree info and remove cleans up", async () => {
       await using tmp = await tmpdir({ git: true })
+      const ready = waitReady()
 
       const info = await withInstance(tmp.path, () => Worktree.create())
 
@@ -84,8 +85,7 @@ describe("Worktree", () => {
       expect(info.branch).toStartWith("opencode/")
       expect(info.directory).toBeDefined()
 
-      // Wait for bootstrap to complete
-      await Bun.sleep(1000)
+      await ready
 
       const ok = await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
       expect(ok).toBe(true)
@@ -152,12 +152,6 @@ describe("Worktree", () => {
       const normalizedDir = realDir.replace(/\\/g, "/")
       expect(normalizedList).toContain(normalizedDir)
 
-      // Cleanup — dispose the worktree's own instance first so anything it
-      // opened (FileWatcher, LSP, etc.) releases its handles before removal;
-      // otherwise Windows can fail the directory removal with EBUSY (see
-      // the "create returns after setup" test above, which does the same).
-      await withInstance(info.directory, () => Instance.dispose())
-      await Bun.sleep(100)
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
   })
