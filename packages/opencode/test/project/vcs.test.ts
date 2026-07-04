@@ -10,16 +10,20 @@ import { Vcs } from "../../src/project/vcs"
 
 // Previously also skipped whenever process.env.CI was set, on the assumption
 // that the native @parcel/watcher binding wasn't reliably available in CI.
-// The real GitHub Actions unit(linux) junit artifact shows no binding-load
-// failure — that assumption was stale. The real constraint, confirmed via a
-// real unit(windows) CI run: test.yml sets OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true
-// on Windows CI specifically, which makes FileWatcher.init() a no-op
-// (watcher.ts:79) — so .git/HEAD change events can never fire there, not a
-// timing/NTFS-delay issue at all. Gate on the actual runtime precondition.
+// That specific assumption was stale on Windows: test.yml sets
+// OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true there, which makes
+// FileWatcher.init() a no-op (watcher.ts:79) regardless of the binding, so
+// .git/HEAD change events can never fire on Windows CI — confirmed via a
+// real unit(windows) CI run. Whether hasNativeBinding() itself succeeds on
+// unit(linux) CI specifically is still unverified (watcher.ts logs load
+// failures through the app's Log module, which test files silence via
+// Log.init({ print: false }) — so absence of an error in past CI logs was
+// not actually evidence of anything). console.error bypasses that here so
+// a real failure is visible if this suite still shows fully skipped.
+const nativeBindingAvailable = FileWatcher.hasNativeBinding()
+if (!nativeBindingAvailable) console.error("[vcs.test.ts] FileWatcher.hasNativeBinding() returned false")
 const describeVcs =
-  FileWatcher.hasNativeBinding() && process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER !== "true"
-    ? describe
-    : describe.skip
+  nativeBindingAvailable && process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER !== "true" ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers

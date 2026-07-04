@@ -79,7 +79,10 @@ jobs:
           # network calls (a mocked LLM can't validate the provider actually
           # honours our JSON-schema constraints). Google's free tier avoids
           # per-call billing; the secret is optional — tests skip if unset.
+          # @ai-sdk/google only reads GOOGLE_GENERATIVE_AI_API_KEY itself, so
+          # set both names from the same secret.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Publish unit reports
         if: always()
