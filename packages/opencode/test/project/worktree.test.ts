@@ -152,7 +152,12 @@ describe("Worktree", () => {
       const normalizedDir = realDir.replace(/\\/g, "/")
       expect(normalizedList).toContain(normalizedDir)
 
-      // Cleanup
+      // Cleanup — dispose the worktree's own instance first so anything it
+      // opened (FileWatcher, LSP, etc.) releases its handles before removal;
+      // otherwise Windows can fail the directory removal with EBUSY (see
+      // the "create returns after setup" test above, which does the same).
+      await withInstance(info.directory, () => Instance.dispose())
+      await Bun.sleep(100)
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
   })
