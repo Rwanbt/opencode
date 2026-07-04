@@ -23,6 +23,8 @@ import { InstanceState } from "@/effect/instance-state"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
+  const REMOVE_MAX_RETRIES = 10
+  const REMOVE_RETRY_DELAY_MS = 100
 
   export const Event = {
     Ready: BusEvent.define(
@@ -352,7 +354,12 @@ export namespace Worktree {
       function cleanDirectory(target: string) {
         return Effect.promise(() =>
           import("node:fs/promises")
-            .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+            .then((fsp) => fsp.rm(target, {
+              recursive: true,
+              force: true,
+              maxRetries: REMOVE_MAX_RETRIES,
+              retryDelay: REMOVE_RETRY_DELAY_MS,
+            }))
             .catch((error) => {
               const message = errorMessage(error)
               throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
