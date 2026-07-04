@@ -25,6 +25,7 @@ export namespace Worktree {
   const log = Log.create({ service: "worktree" })
   const REMOVE_MAX_RETRIES = 10
   const REMOVE_RETRY_DELAY_MS = 100
+  const REMOVE_RETRYABLE_ERRORS = new Set(["EBUSY", "ENOTEMPTY", "EPERM", "EMFILE", "ENFILE"])
 
   export const Event = {
     Ready: BusEvent.define(
@@ -352,19 +353,22 @@ export namespace Worktree {
       }
 
       function cleanDirectory(target: string) {
-        return Effect.promise(() =>
-          import("node:fs/promises")
-            .then((fsp) => fsp.rm(target, {
-              recursive: true,
-              force: true,
-              maxRetries: REMOVE_MAX_RETRIES,
-              retryDelay: REMOVE_RETRY_DELAY_MS,
-            }))
-            .catch((error) => {
-              const message = errorMessage(error)
-              throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
-            }),
-        )
+        return Effect.promise(async () => {
+          const fsp = await import("node:fs/promises")
+          for (let attempt = 0; attempt <= REMOVE_MAX_RETRIES; attempt++) {
+            try {
+              await fsp.rm(target, { recursive: true, force: true })
+              return
+            } catch (error) {
+              const code = error instanceof Error && "code" in error ? String(error.code) : ""
+              if (!REMOVE_RETRYABLE_ERRORS.has(code) || attempt === REMOVE_MAX_RETRIES) {
+                const message = errorMessage(error)
+                throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+              }
+              await Bun.sleep(REMOVE_RETRY_DELAY_MS * (attempt + 1))
+            }
+          }
+        })
       }
 
       const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
