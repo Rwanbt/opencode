@@ -318,7 +318,7 @@ export namespace Snapshot {
 
                 const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                   log.info("reverting", { file: op.file, hash: op.hash })
-                  const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
+                  const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.rel])], {
                     cwd: state.worktree,
                   })
                   if (result.code === 0) return
@@ -355,7 +355,7 @@ export namespace Snapshot {
                   }
 
                   const tree = yield* git(
-                    [...core, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
+                    [...quote, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
                     {
                       cwd: state.worktree,
                     },
@@ -384,7 +384,7 @@ export namespace Snapshot {
                   if (list.length) {
                     log.info("reverting", { hash: first.hash, files: list.length })
                     const result = yield* git(
-                      [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
+                      [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.rel)])],
                       {
                         cwd: state.worktree,
                       },

@@ -11,6 +11,10 @@ import { tmpdir } from "../fixture/fixture"
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+const canonical = (value: string) => {
+  const normalized = path.resolve(value).normalize("NFC").replaceAll("\\", "/")
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+}
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -351,10 +355,7 @@ test("unicode filenames", async () => {
   })
 })
 
-// Skip: inconsistent behavior across OS/filesystem unicode-normalization forms
-// causes CI flakiness (upstream commit 36e8e59fb5). The sibling "unicode
-// filenames" test above (creation only) is stable and stays enabled.
-test.skip("unicode filenames modification and restore", async () => {
+test("unicode filenames modification and restore", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -372,8 +373,9 @@ test.skip("unicode filenames modification and restore", async () => {
       await Filesystem.write(cyrillicFile, "modified cyrillic")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(chineseFile)
-      expect(patch.files).toContain(cyrillicFile)
+      const changed = new Set(patch.files.map(canonical))
+      expect(changed.has(canonical(chineseFile))).toBe(true)
+      expect(changed.has(canonical(cyrillicFile))).toBe(true)
 
       await Snapshot.revert([patch])
 
@@ -484,10 +486,9 @@ test("file permissions and ownership changes", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      // Change permissions multiple times
-      await $`chmod 600 ${tmp.path}/a.txt`.quiet()
-      await $`chmod 755 ${tmp.path}/a.txt`.quiet()
-      await $`chmod 644 ${tmp.path}/a.txt`.quiet()
+      await fs.chmod(`${tmp.path}/a.txt`, 0o600)
+      await fs.chmod(`${tmp.path}/a.txt`, 0o755)
+      await fs.chmod(`${tmp.path}/a.txt`, 0o644)
 
       const patch = await Snapshot.patch(before!)
       // Note: git doesn't track permission changes on existing files by default
