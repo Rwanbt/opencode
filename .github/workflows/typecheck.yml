@@ -18,6 +18,20 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Stub generated models snapshot
+        # src/provider/models.ts statically imports ./models-snapshot.js, which is
+        # gitignored and normally produced by `bun run build` (script/build.ts) from
+        # a live fetch of models.dev. At runtime the import is wrapped in a
+        # .catch(), so its absence never breaks tests — but `tsgo --noEmit` still
+        # needs the module to resolve. A previous run on a persistent Blacksmith
+        # runner had left this file on disk, silently masking the fact that a
+        # clean checkout never generates it before typecheck. Content doesn't
+        # matter for typechecking, only the shape.
+        run: |
+          mkdir -p packages/opencode/src/provider
+          printf '// @ts-nocheck\n// CI stub for typecheck only - see script/build.ts for the real generator\nexport const snapshot = {}\n' > packages/opencode/src/provider/models-snapshot.js
+          printf '// CI stub for typecheck only - see script/build.ts for the real generator\nexport declare const snapshot: Record<string, unknown>\n' > packages/opencode/src/provider/models-snapshot.d.ts
+
       - name: Run typecheck
         run: bun typecheck
 
