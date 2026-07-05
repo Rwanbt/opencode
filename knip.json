@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": ["sst.config.ts", "turbo.json", "scripts/**/*.{ts,js,sh}"],
+      "entry": ["sst.config.ts", "turbo.json", "script/**/*.{ts,js,sh}"],
       "project": ["*.ts", "*.js"]
     },
     "packages/opencode": {
@@ -71,6 +71,7 @@
       "ignore": ["src/gen/**", "src/v2/gen/**"]
     }
   },
+  "ignoreWorkspaces": ["packages/console/app", "packages/console/core", "packages/enterprise"],
   "ignore": [
     "**/dist/**",
     "**/ts-dist/**",
@@ -79,25 +80,22 @@
     "**/src-tauri/**",
     "packages/console/**",
     "packages/slack/**",
-    "packages/script/**",
     "packages/web/**",
     "packages/storybook/**",
     "packages/desktop-electron/**",
-    "packages/enterprise/**",
-    "packages/function/**",
-    "infra/**",
-    "nix/**",
-    "install/**",
-    "patches/**",
-    "sdks/**",
-    "specs/**",
-    "docs/**"
+    "packages/function/**"
   ],
+  "ignoreBinaries": [
+    "gh",
+    "opencode",
+    "tar",
+    "sha256sum",
+    "ulimit",
+    "^HEAD$",
+    "^to$"
+  ],
+  "ignoreUnresolved": ["^\\.git$", "^\\.tar\\.gz$", "^\\.zip$", "^\\./script/build\\.ts$", "^\\./script/format\\.ts$", "^\\./packages/sdk/js/script/build\\.ts$"],
   "ignoreDependencies": [
-    "prettier",
-    "husky",
-    "typescript",
-    "sst",
     "turbo",
     "glob",
     "semver",
@@ -135,10 +133,7 @@
     "why-is-node-running",
     "vite-plugin-icons-spritesheet",
     "semver",
-    "dompurify",
-    "@playwright/test",
     "storybook",
-    "storybook/.*",
     "opencode-web-ui.gen.ts"
   ],
   "ignoreExportsUsedInFile": true
