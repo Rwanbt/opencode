@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 
 const echoInput = {
   command: process.execPath,
-  args: ["-e", "process.stdin.pipe(process.stdout)"],
+  args: ["-e", 'process.stdout.write("READY\\n"); process.stdin.pipe(process.stdout)'],
 }
 
 async function waitUntil(condition: () => boolean, timeoutMs = 3000, intervalMs = 10) {
@@ -43,6 +43,7 @@ describe("pty", () => {
 
           // Connect "a" first with ws.
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => outA.join("").includes("READY"))
 
           // Now "reuse" the same ws object for another connection.
           ws.data = { events: { connection: "b" } }
@@ -50,6 +51,7 @@ describe("pty", () => {
             outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
           }
           Pty.connect(b.id, ws as any)
+          await waitUntil(() => outB.join("").includes("READY"))
 
           // Clear connect metadata writes.
           outA.length = 0
@@ -92,6 +94,7 @@ describe("pty", () => {
 
           // Connect "a" first.
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => outA.join("").includes("READY"))
           outA.length = 0
 
           // Simulate Bun reusing the same websocket object for another
@@ -135,6 +138,7 @@ describe("pty", () => {
           }
 
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => out.join("").includes("READY"))
           out.length = 0
 
           // Mutating fields on ws.data should not look like a new

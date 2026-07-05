@@ -687,7 +687,7 @@ test("patch detects changes in secondary worktree", async () => {
     })
   } finally {
     await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
-    await $`rm -rf ${worktreePath}`.quiet()
+    await fs.rm(worktreePath, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
 
@@ -730,7 +730,7 @@ test("revert only removes files in invoking worktree", async () => {
     expect(await fs.readFile(primaryFile, "utf-8")).toBe("primary content")
   } finally {
     await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
-    await $`rm -rf ${worktreePath}`.quiet()
+    await fs.rm(worktreePath, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     await $`rm -f ${tmp.path}/worktree.txt`.quiet()
   }
 })
@@ -767,7 +767,7 @@ test("diff reports worktree-only/shared edits and ignores primary-only", async (
     })
   } finally {
     await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
-    await $`rm -rf ${worktreePath}`.quiet()
+    await fs.rm(worktreePath, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     await $`rm -f ${tmp.path}/shared.txt`.quiet()
     await $`rm -f ${tmp.path}/primary-only.txt`.quiet()
   }
