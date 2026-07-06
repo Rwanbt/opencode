@@ -72,7 +72,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     setBusy(directory, true)
 
     const result = await globalSDK.client.worktree
-      .remove({ query_directory: root, body_directory: directory })
+      .remove({ directory: root, worktreeRemoveInput: { directory } })
       .then((x) => {
         if (x.error) throw x.error
         return x.data
@@ -145,7 +145,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
-      .reset({ query_directory: root, body_directory: directory })
+      .reset({ directory: root, worktreeResetInput: { directory } })
       .then((x) => {
         if (x.error) throw x.error
         return x.data
