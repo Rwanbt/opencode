@@ -109,7 +109,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
-    toolChoice?: "auto" | "required" | "none"
+    toolChoice?: "auto" | "required" | "none" | { type: "tool"; toolName: string }
   }
 
   export type StreamRequest = StreamInput & {

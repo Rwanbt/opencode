@@ -4,7 +4,6 @@ import z from "zod"
 import { Provider } from "../provider/provider"
 import { Auth } from "../auth"
 import { ProviderID, ModelID } from "../provider/schema"
-import { Collective } from "./types"
 import { Log } from "../util/log"
 
 export namespace ProviderDiscovery {
@@ -162,7 +161,6 @@ export namespace ProviderDiscovery {
               modelID: ModelID.make(mid),
               authMethod: "cli_subprocess",
             })
-            continue
           }
         }
       }

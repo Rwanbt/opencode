@@ -329,7 +329,7 @@ export namespace Orchestrator {
           }
 
           // ── Red Team (conditional) ────────────────────────────────
-          let redTeamAttacks: RedTeam.Attack[] = []
+          let _redTeamAttacks: RedTeam.Attack[] = []
           const consensusRatio = RedTeam.computeConsensusRatio(claims)
           const redTeamSetting = config.redTeam ?? tierCfg.redTeam
 
@@ -351,7 +351,7 @@ export namespace Orchestrator {
               attackerProviderID: cheapestP.providerID,
               attackerModelID: cheapestP.modelID,
             })
-            redTeamAttacks = attacks
+            _redTeamAttacks = attacks
             budget.record("red_team", cheapestP.providerID, rtTokens.input, rtTokens.output)
           }
 
@@ -373,7 +373,6 @@ export namespace Orchestrator {
           })
 
           const {
-            synthesis,
             markdown,
             adjustedClaims,
             unresolvedConflicts,

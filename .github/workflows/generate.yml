@@ -5,12 +5,20 @@ on:
     branches:
       - dev
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   generate:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write
+    env:
+      OPENCODE_APP_ID: ${{ vars.OPENCODE_APP_ID }}
+      OPENCODE_APP_SECRET: ${{ secrets.OPENCODE_APP_SECRET }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,11 +27,18 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Setup git committer
+        if: env.OPENCODE_APP_ID != '' && env.OPENCODE_APP_SECRET != ''
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          opencode-app-id: ${{ env.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ env.OPENCODE_APP_SECRET }}
+
+      - name: Setup fallback git committer
+        if: env.OPENCODE_APP_ID == '' || env.OPENCODE_APP_SECRET == ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Generate
         run: ./script/generate.ts

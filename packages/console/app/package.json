@@ -24,7 +24,7 @@
     "@smithy/util-utf8": "4.2.0",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
-    "@solidjs/start": "catalog:",
+    "@solidjs/start": "2.0.0-alpha.3",
     "@stripe/stripe-js": "8.6.1",
     "chart.js": "4.5.1",
     "nitro": "3.0.1-alpha.1",

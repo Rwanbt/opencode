@@ -14,7 +14,7 @@
 // mutations — when the file store updates content via produce(), the
 // `source()` getter returns the new string and Dynamic re-evaluates.
 
-import { Match, Show, Switch } from "solid-js"
+import { Match, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useFileComponent } from "@opencode-ai/ui/context/file"

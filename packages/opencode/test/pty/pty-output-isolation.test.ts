@@ -1,23 +1,31 @@
 import { describe, expect, test } from "bun:test"
-
-// PTY tests on Windows CI receive ConPTY escape sequences instead of raw text,
-// causing assertions like expect(output).toContain("AAA") to fail.
-// These tests are covered by unit (linux). Skip on Windows CI.
-const skipOnWindowsCI = process.env.CI === "true" && process.platform === "win32"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
 
-describe.skipIf(skipOnWindowsCI)("pty", () => {
+const echoInput = {
+  command: process.execPath,
+  args: ["-e", 'process.stdout.write("READY\\n"); process.stdin.pipe(process.stdout)'],
+}
+
+async function waitUntil(condition: () => boolean, timeoutMs = 3000, intervalMs = 10) {
+  const deadline = Date.now() + timeoutMs
+  while (!condition()) {
+    if (Date.now() >= deadline) return
+    await sleep(intervalMs)
+  }
+}
+
+describe("pty", () => {
   test("does not leak output when websocket objects are reused", async () => {
     await using dir = await tmpdir({ git: true })
 
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
-        const b = await Pty.create({ command: "cat", title: "b" })
+        const a = await Pty.create({ ...echoInput, title: "a" })
+        const b = await Pty.create({ ...echoInput, title: "b" })
         try {
           const outA: string[] = []
           const outB: string[] = []
@@ -35,6 +43,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
 
           // Connect "a" first with ws.
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => outA.join("").includes("READY"))
 
           // Now "reuse" the same ws object for another connection.
           ws.data = { events: { connection: "b" } }
@@ -42,6 +51,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
             outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
           }
           Pty.connect(b.id, ws as any)
+          await waitUntil(() => outB.join("").includes("READY"))
 
           // Clear connect metadata writes.
           outA.length = 0
@@ -66,7 +76,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
+        const a = await Pty.create({ ...echoInput, title: "a" })
         try {
           const outA: string[] = []
           const outB: string[] = []
@@ -84,6 +94,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
 
           // Connect "a" first.
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => outA.join("").includes("READY"))
           outA.length = 0
 
           // Simulate Bun reusing the same websocket object for another
@@ -110,7 +121,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
+        const a = await Pty.create({ ...echoInput, title: "a" })
         try {
           const out: string[] = []
 
@@ -127,6 +138,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
           }
 
           Pty.connect(a.id, ws as any)
+          await waitUntil(() => out.join("").includes("READY"))
           out.length = 0
 
           // Mutating fields on ws.data should not look like a new
@@ -134,7 +146,7 @@ describe.skipIf(skipOnWindowsCI)("pty", () => {
           ctx.connId = 2
 
           Pty.write(a.id, "AAA\n")
-          await sleep(100)
+          await waitUntil(() => out.join("").includes("AAA"))
 
           expect(out.join("")).toContain("AAA")
         } finally {

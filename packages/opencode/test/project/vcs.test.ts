@@ -8,8 +8,22 @@ import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
 import { Vcs } from "../../src/project/vcs"
 
-// Skip in CI — native @parcel/watcher binding needed
-const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+// Previously also skipped whenever process.env.CI was set, on the assumption
+// that the native @parcel/watcher binding wasn't reliably available in CI.
+// That specific assumption was stale on Windows: test.yml sets
+// OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=true there, which makes
+// FileWatcher.init() a no-op (watcher.ts:79) regardless of the binding, so
+// .git/HEAD change events can never fire on Windows CI — confirmed via a
+// real unit(windows) CI run. Whether hasNativeBinding() itself succeeds on
+// unit(linux) CI specifically is still unverified (watcher.ts logs load
+// failures through the app's Log module, which test files silence via
+// Log.init({ print: false }) — so absence of an error in past CI logs was
+// not actually evidence of anything). console.error bypasses that here so
+// a real failure is visible if this suite still shows fully skipped.
+const nativeBindingAvailable = FileWatcher.hasNativeBinding()
+if (!nativeBindingAvailable) console.error("[vcs.test.ts] FileWatcher.hasNativeBinding() returned false")
+const describeVcs =
+  nativeBindingAvailable && process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER !== "true" ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,7 +109,7 @@ describeVcs("Vcs", () => {
   })
 
   // File watcher for .git/HEAD is unreliable on Windows (NTFS notification delay)
-  test.skipIf(process.platform === "win32")("publishes BranchUpdated when .git/HEAD changes", async () => {
+  test("publishes BranchUpdated when .git/HEAD changes", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
@@ -111,7 +125,7 @@ describeVcs("Vcs", () => {
     })
   })
 
-  test.skipIf(process.platform === "win32")("branch() reflects the new branch after HEAD change", async () => {
+  test("branch() reflects the new branch after HEAD change", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()

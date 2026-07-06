@@ -1,7 +1,6 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 
-const wintest = process.platform !== "win32" ? test : test.skip
 import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../../src/project/instance"
@@ -78,6 +77,7 @@ describe("Worktree", () => {
   describe("create + remove lifecycle", () => {
     test("create returns worktree info and remove cleans up", async () => {
       await using tmp = await tmpdir({ git: true })
+      const ready = waitReady()
 
       const info = await withInstance(tmp.path, () => Worktree.create())
 
@@ -85,8 +85,7 @@ describe("Worktree", () => {
       expect(info.branch).toStartWith("opencode/")
       expect(info.directory).toBeDefined()
 
-      // Wait for bootstrap to complete
-      await Bun.sleep(1000)
+      await ready
 
       const ok = await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
       expect(ok).toBe(true)
@@ -135,19 +134,24 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    wintest("creates and bootstraps git worktree", async () => {
+    test("creates and bootstraps git worktree", async () => {
       await using tmp = await tmpdir({ git: true })
 
       const info = await withInstance(tmp.path, () => Worktree.makeWorktreeInfo("from-info-test"))
       await withInstance(tmp.path, () => Worktree.createFromInfo(info))
 
-      // Worktree should exist in git (normalize slashes for Windows)
+      // Worktree should exist in git. Real Windows CI runners can resolve the
+      // same directory as either its 8.3 short name (RUNNER~1) or its long
+      // name (runneradmin) depending on which env var supplied the root —
+      // git's own listing uses whichever form it resolved internally, which
+      // doesn't necessarily match ours, so compare through realpath instead
+      // of raw strings (confirmed via a real unit(windows) CI failure).
       const list = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
       const normalizedList = list.replace(/\\/g, "/")
-      const normalizedDir = info.directory.replace(/\\/g, "/")
+      const realDir = await fs.realpath(info.directory)
+      const normalizedDir = realDir.replace(/\\/g, "/")
       expect(normalizedList).toContain(normalizedDir)
 
-      // Cleanup
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
   })

@@ -1,10 +1,11 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Schedule } from "effect"
 import path from "path"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
+import { GlobalBus } from "../../src/bus/global"
 import { Config } from "../../src/config/config"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
@@ -14,6 +15,7 @@ import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
+import { SessionRetry } from "../../src/session/retry"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
@@ -449,57 +451,40 @@ it.live("session.processor effect tests retry recognized structured json errors"
   ),
 )
 
-// NOTE: a 503 from the transport is consumed by the AI SDK's internal retry
-// policy before reaching SessionRetry.policy, so no "retry" SessionStatus is
-// emitted here (only "busy"). Use a structured JSON error (see the 429 case
-// above) to observe a SessionRetry-driven retry status. Skipped until the
-// test is rewritten against a SessionRetry-visible error path.
-it.live.skip("session.processor effect tests publish retry status updates", () =>
+it.live("session.retry policy publishes status for structured json errors", () =>
   provideTmpdirServer(
-    ({ dir, llm }) =>
+    () =>
       Effect.gen(function* () {
-        const { processors, session, provider } = yield* boot()
-        const bus = yield* Bus.Service
+    const status = yield* SessionStatus.Service
+    const session = yield* Session.Service
+    const chat = yield* session.create({})
+    const states: number[] = []
+    const onEvent = ({ payload }: { payload: { type: string; properties: unknown } }) => {
+      if (payload.type !== SessionStatus.Event.Status.type) return
+      const properties = payload.properties as { sessionID: SessionID; status: SessionStatus.Info }
+      if (properties.sessionID !== chat.id || properties.status.type !== "retry") return
+      states.push(properties.status.attempt)
+    }
+    GlobalBus.on("event", onEvent)
 
-        yield* llm.error(503, { error: "boom" })
-        yield* llm.text("")
+    const error = {
+      data: { message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }) },
+    } as SessionRetry.Err
+    const step = yield* Schedule.toStepWithMetadata(
+      SessionRetry.policy({
+        parse: (value) => value as SessionRetry.Err,
+        set: (info) =>
+          status.set(chat.id, {
+            type: "retry",
+            attempt: info.attempt,
+            message: info.message,
+            next: info.next,
+          }),
+      }),
+    )
+    yield* step(error)
+    GlobalBus.off("event", onEvent)
 
-        const chat = yield* session.create({})
-        const parent = yield* user(chat.id, "retry")
-        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
-        const states: number[] = []
-        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
-          if (evt.properties.sessionID !== chat.id) return
-          if (evt.properties.status.type === "retry") states.push(evt.properties.status.attempt)
-        })
-        const handle = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: chat.id,
-          model: mdl,
-        })
-
-        const value = yield* handle.process({
-          user: {
-            id: parent.id,
-            sessionID: chat.id,
-            role: "user",
-            time: parent.time,
-            agent: parent.agent,
-            model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies MessageV2.User,
-          sessionID: chat.id,
-          model: mdl,
-          agent: agent(),
-          system: [],
-          messages: [{ role: "user", content: "retry" }],
-          tools: {},
-        })
-
-        off()
-
-        expect(value).toBe("continue")
-        expect(yield* llm.calls).toBe(2)
         expect(states).toStrictEqual([1])
       }),
     { git: true, config: (url) => providerCfg(url) },

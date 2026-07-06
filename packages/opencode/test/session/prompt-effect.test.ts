@@ -57,7 +57,7 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
       const prev = process.env.SHELL
-      process.env.SHELL = "/bin/sh"
+      process.env.SHELL = process.platform === "win32" ? Shell.gitbash() : "/bin/sh"
       Shell.preferred.reset()
       return prev
     }),
@@ -74,6 +74,20 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
 function toolPart(parts: MessageV2.Part[]) {
   return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 }
+function waitForRunningShell(sessionID: SessionID) {
+  return Effect.gen(function* () {
+    const deadline = Date.now() + 5000
+    while (true) {
+      const messages = yield* MessageV2.filterCompactedEffect(sessionID)
+      const assistant = messages.find((item) => item.info.role === "assistant")
+      const tool = assistant ? toolPart(assistant.parts) : undefined
+      if (tool?.state.status === "running") return
+      if (Date.now() > deadline) throw new Error("timed out waiting for shell to start running")
+      yield* Effect.sleep(20)
+    }
+  })
+}
+
 
 type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
 type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
@@ -192,7 +206,6 @@ function makeHttp() {
 }
 
 const it = testEffect(makeHttp())
-const unix = process.platform !== "win32" ? it.live : it.live.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so Provider.getModel("test", "test-model") succeeds inside the loop.
@@ -913,7 +926,7 @@ it.live(
   30_000,
 )
 
-unix("shell captures stdout and stderr in completed tool output", () =>
+it.live("shell captures stdout and stderr in completed tool output", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -938,7 +951,7 @@ unix("shell captures stdout and stderr in completed tool output", () =>
   ),
 )
 
-unix("shell completes a fast command on the preferred shell", () =>
+it.live("shell completes a fast command on the preferred shell", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -954,15 +967,19 @@ unix("shell completes a fast command on the preferred shell", () =>
         if (!tool) return
 
         expect(tool.state.input.command).toBe("pwd")
-        expect(tool.state.output).toContain(dir)
-        expect(tool.state.metadata.output).toContain(dir)
+        // Git Bash on Windows can have /tmp permanently mounted onto the
+        // real temp folder (see /etc/fstab's usertemp option), so `pwd`
+        // reports the POSIX mount alias rather than the literal Windows
+        // path — compare the basename, which survives either form.
+        expect(tool.state.output).toContain(path.basename(dir))
+        expect(tool.state.metadata.output).toContain(path.basename(dir))
         yield* prompt.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
 )
 
-unix("shell lists files from the project directory", () =>
+it.live("shell lists files from the project directory", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -972,14 +989,14 @@ unix("shell lists files from the project directory", () =>
         const result = yield* prompt.shell({
           sessionID: chat.id,
           agent: "build",
-          command: "command ls",
+          command: "dir",
         })
 
         expect(result.info.role).toBe("assistant")
         const tool = completedTool(result.parts)
         if (!tool) return
 
-        expect(tool.state.input.command).toBe("command ls")
+        expect(tool.state.input.command).toBe("dir")
         expect(tool.state.output).toContain("README.md")
         expect(tool.state.metadata.output).toContain("README.md")
         yield* prompt.assertNotBusy(chat.id)
@@ -988,7 +1005,7 @@ unix("shell lists files from the project directory", () =>
   ),
 )
 
-unix("shell captures stderr from a failing command", () =>
+it.live("shell captures stderr from a failing command", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -1011,7 +1028,7 @@ unix("shell captures stderr from a failing command", () =>
   ),
 )
 
-unix(
+it.live(
   "shell updates running metadata before process exit",
   () =>
     withSh(() =>
@@ -1061,7 +1078,14 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+
+        // Poll until the shell tool part is actually running before forking
+        // the loop below. A fixed sleep only guesses that the runner has left
+        // Idle state by then — on a loaded CI runner it can still be Idle,
+        // which races the loop straight into "Running" instead of queueing
+        // behind the shell as "ShellThenRun" (see effect/runner.ts), making
+        // the assertions below flaky depending on scheduling.
+        yield* waitForRunningShell(chat.id)
 
         const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         yield* Effect.sleep(50)
@@ -1123,7 +1147,7 @@ it.live(
   30_000,
 )
 
-unix(
+it.live(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>
@@ -1135,7 +1159,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
+            yield* waitForRunningShell(chat.id)
 
             yield* prompt.cancel(chat.id)
 
@@ -1160,7 +1184,7 @@ unix(
   30_000,
 )
 
-unix(
+it.live(
   "cancel persists aborted shell result when shell ignores TERM",
   () =>
     withSh(() =>
@@ -1172,7 +1196,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
               .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
+            yield* waitForRunningShell(chat.id)
 
             yield* prompt.cancel(chat.id)
 
@@ -1192,7 +1216,7 @@ unix(
   30_000,
 )
 
-unix(
+it.live(
   "cancel interrupts loop queued behind shell",
   () =>
     provideTmpdirInstance(
@@ -1203,7 +1227,7 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* Effect.sleep(50)
+          yield* waitForRunningShell(chat.id)
 
           const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* Effect.sleep(50)
@@ -1220,7 +1244,7 @@ unix(
   30_000,
 )
 
-unix(
+it.live(
   "shell rejects when another shell is already running",
   () =>
     withSh(() =>

@@ -156,11 +156,21 @@ describe("Format", () => {
         config: {
           formatter: {
             first: {
-              command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
+              command: [
+                process.execPath,
+                "-e",
+                'setTimeout(() => require("node:fs").appendFileSync(process.argv.at(-1), "A"), 50)',
+                "$FILE",
+              ],
               extensions: [".seq"],
             },
             second: {
-              command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
+              command: [
+                process.execPath,
+                "-e",
+                'require("node:fs").appendFileSync(process.argv.at(-1), "B")',
+                "$FILE",
+              ],
               extensions: [".seq"],
             },
           },

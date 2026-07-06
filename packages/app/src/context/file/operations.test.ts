@@ -304,16 +304,36 @@ describe("createFileOpDeps", () => {
     const sdk = {
       client: {
         file: {
-          write: (arg: unknown) => (calls.push({ op: "write", arg }), Promise.resolve("w")),
-          mkdir: (arg: unknown) => (calls.push({ op: "mkdir", arg }), Promise.resolve("m")),
-          rename: (arg: unknown) => (calls.push({ op: "rename", arg }), Promise.resolve("r")),
-          move: (arg: unknown) => (calls.push({ op: "move", arg }), Promise.resolve("mv")),
-          delete: (arg: unknown) => (calls.push({ op: "delete", arg }), Promise.resolve("d")),
+          write: (arg: unknown) => {
+            calls.push({ op: "write", arg })
+            return Promise.resolve("w")
+          },
+          mkdir: (arg: unknown) => {
+            calls.push({ op: "mkdir", arg })
+            return Promise.resolve("m")
+          },
+          rename: (arg: unknown) => {
+            calls.push({ op: "rename", arg })
+            return Promise.resolve("r")
+          },
+          move: (arg: unknown) => {
+            calls.push({ op: "move", arg })
+            return Promise.resolve("mv")
+          },
+          delete: (arg: unknown) => {
+            calls.push({ op: "delete", arg })
+            return Promise.resolve("d")
+          },
         },
       },
     }
     const file = {
-      tree: { refresh: (arg: unknown) => (calls.push({ op: "refresh", arg }), Promise.resolve()) },
+      tree: {
+        refresh: (arg: unknown) => {
+          calls.push({ op: "refresh", arg })
+          return Promise.resolve()
+        },
+      },
     }
     return { sdk, file, calls }
   }

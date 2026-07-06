@@ -72,8 +72,11 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     setBusy(directory, true)
 
     const result = await globalSDK.client.worktree
-      .remove({ directory } as never)
-      .then((x) => x.data)
+      .remove({ directory: root, worktreeRemoveInput: { directory } })
+      .then((x) => {
+        if (x.error) throw x.error
+        return x.data
+      })
       .catch((err) => {
         showToast({
           title: language.t("workspace.delete.failed.title"),
@@ -142,8 +145,11 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps) {
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
-      .reset({ directory } as never)
-      .then((x) => x.data)
+      .reset({ directory: root, worktreeResetInput: { directory } })
+      .then((x) => {
+        if (x.error) throw x.error
+        return x.data
+      })
       .catch((err) => {
         showToast({
           title: language.t("workspace.reset.failed.title"),

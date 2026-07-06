@@ -1,16 +1,33 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import path from "path"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-// Skip tests if no API key is available
-const hasApiKey = !!process.env.ANTHROPIC_API_KEY
+// Uses Gemini's free tier (no per-call billing) rather than a paid provider,
+// since this suite makes real network calls against the live API to verify
+// structured-output behavior a mocked LLM can't catch.
+const model = { providerID: ProviderID.make("google"), modelID: ModelID.make("gemini-2.5-flash") }
+const realApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_API_KEY
+const hasApiKey = !!realApiKey
+
+// test/preload.ts deletes GOOGLE_GENERATIVE_AI_API_KEY/GOOGLE_API_KEY from process.env for
+// every test file, to keep unrelated unit tests from seeing a real provider as configured.
+// @ai-sdk/google reads ONLY that exact env var (never GEMINI_API_KEY) at request time, so
+// this suite's real network calls need it restored — scoped to this file's lifetime so
+// later test files still see the clean state preload.ts intends.
+beforeAll(() => {
+  if (realApiKey) process.env.GOOGLE_GENERATIVE_AI_API_KEY = realApiKey
+})
+afterAll(() => {
+  delete process.env.GOOGLE_GENERATIVE_AI_API_KEY
+})
 
 // Helper to run test within Instance context
 async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
@@ -29,6 +46,7 @@ describe("StructuredOutput Integration", () => {
 
         const result = await SessionPrompt.prompt({
           sessionID: session.id,
+          model,
           parts: [
             {
               type: "text",
@@ -77,6 +95,7 @@ describe("StructuredOutput Integration", () => {
 
         const result = await SessionPrompt.prompt({
           sessionID: session.id,
+          model,
           parts: [
             {
               type: "text",
@@ -140,6 +159,7 @@ describe("StructuredOutput Integration", () => {
 
         const result = await SessionPrompt.prompt({
           sessionID: session.id,
+          model,
           parts: [
             {
               type: "text",
@@ -176,6 +196,7 @@ describe("StructuredOutput Integration", () => {
 
         await SessionPrompt.prompt({
           sessionID: session.id,
+          model,
           parts: [
             {
               type: "text",

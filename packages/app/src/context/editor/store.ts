@@ -92,7 +92,7 @@ export function createEditorStore(deps: EditorDeps) {
   // Each branch must call this with the FINAL state so a 409 from write()
   // does NOT silently re-clear conflict on a stale save.
   const mirror = (
-    path: string,
+    _path: string,
     action: (fs: FileStore) => void,
   ) => {
     if (!deps.fileStore) return

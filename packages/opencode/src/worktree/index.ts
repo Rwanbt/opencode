@@ -23,6 +23,9 @@ import { InstanceState } from "@/effect/instance-state"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
+  const REMOVE_MAX_RETRIES = 10
+  const REMOVE_RETRY_DELAY_MS = 100
+  const REMOVE_RETRYABLE_ERRORS = new Set(["EBUSY", "ENOTEMPTY", "EPERM", "EMFILE", "ENFILE"])
 
   export const Event = {
     Ready: BusEvent.define(
@@ -350,14 +353,22 @@ export namespace Worktree {
       }
 
       function cleanDirectory(target: string) {
-        return Effect.promise(() =>
-          import("node:fs/promises")
-            .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
-            .catch((error) => {
-              const message = errorMessage(error)
-              throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
-            }),
-        )
+        return Effect.promise(async () => {
+          const fsp = await import("node:fs/promises")
+          for (let attempt = 0; attempt <= REMOVE_MAX_RETRIES; attempt++) {
+            try {
+              await fsp.rm(target, { recursive: true, force: true })
+              return
+            } catch (error) {
+              const code = error instanceof Error && "code" in error ? String(error.code) : ""
+              if (!REMOVE_RETRYABLE_ERRORS.has(code) || attempt === REMOVE_MAX_RETRIES) {
+                const message = errorMessage(error)
+                throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+              }
+              await Bun.sleep(REMOVE_RETRY_DELAY_MS * (attempt + 1))
+            }
+          }
+        })
       }
 
       const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
@@ -378,14 +389,17 @@ export namespace Worktree {
         if (!entry?.path) {
           const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
           if (directoryExists) {
+            yield* Effect.promise(() => Instance.disposeDirectory(directory))
             yield* stopFsmonitor(directory)
             yield* cleanDirectory(directory)
           }
           return true
         }
 
-        yield* stopFsmonitor(entry.path)
-        const removed = yield* git(["worktree", "remove", "--force", entry.path], { cwd: Instance.worktree })
+        const worktreePath = entry.path
+        yield* Effect.promise(() => Instance.disposeDirectory(worktreePath))
+        yield* stopFsmonitor(worktreePath)
+        const removed = yield* git(["worktree", "remove", "--force", worktreePath], { cwd: Instance.worktree })
         if (removed.code !== 0) {
           const next = yield* git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
           if (next.code !== 0) {

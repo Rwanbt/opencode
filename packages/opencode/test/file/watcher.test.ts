@@ -10,8 +10,18 @@ import { File } from "../../src/file"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 
-// Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
-const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+// Previously also skipped whenever process.env.CI was set, on the assumption
+// that the native @parcel/watcher binding wasn't reliably available in CI.
+// That specific assumption was stale (see vcs.test.ts for the real Windows
+// constraint). Whether hasNativeBinding() itself succeeds on unit(linux) CI
+// is still unverified — watcher.ts logs load failures through the app's Log
+// module, which other test files in the same bun test process silence via
+// Log.init({ print: false }), so absence of an error in past CI logs wasn't
+// actually evidence either way. console.error bypasses that here so a real
+// failure is visible if this suite still shows fully skipped.
+const nativeBindingAvailable = FileWatcher.hasNativeBinding()
+if (!nativeBindingAvailable) console.error("[watcher.test.ts] FileWatcher.hasNativeBinding() returned false")
+const describeWatcher = nativeBindingAvailable ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -19,7 +19,7 @@
     "@pierre/diffs": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
-    "@solidjs/start": "catalog:",
+    "@solidjs/start": "2.0.0-alpha.3",
     "aws4fetch": "^1.0.20",
     "hono": "catalog:",
     "hono-openapi": "catalog:",

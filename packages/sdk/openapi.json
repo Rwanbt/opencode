@@ -1435,6 +1435,75 @@
         ]
       }
     },
+    "/pty/{ptyID}/tail": {
+      "get": {
+        "operationId": "pty.tail",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ptyID",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "maxChars",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "summary": "Get PTY tail (plain text)",
+        "description": "Return the last N characters of a PTY session's output with ANSI escape codes stripped, for problem matcher analysis.",
+        "responses": {
+          "200": {
+            "description": "Plain text output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyTail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.tail({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty/{ptyID}/connect": {
       "get": {
         "operationId": "pty.connect",
@@ -6570,6 +6639,847 @@
         ]
       }
     },
+    "/debate": {
+      "post": {
+        "operationId": "debate.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Start debate",
+        "description": "Start a new collective intelligence debate. Returns the debate report when complete.",
+        "responses": {
+          "200": {
+            "description": "Debate report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^dbt_.*"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": ["free", "quick", "standard", "deep"]
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "roles": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "cost": {
+                      "type": "number"
+                    },
+                    "durationMs": {
+                      "type": "number"
+                    },
+                    "consensus": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "claimId": {
+                            "type": "string",
+                            "pattern": "^clm_.*"
+                          },
+                          "sourceId": {
+                            "type": "string"
+                          },
+                          "sourceProvider": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "security",
+                              "performance",
+                              "maintainability",
+                              "correctness",
+                              "ux",
+                              "architecture",
+                              "other",
+                              "out_of_role"
+                            ]
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "evidenceRefs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "confidenceSelf": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "noveltyMarker": {
+                            "type": "string",
+                            "enum": ["unique", "minority", "consensus"]
+                          },
+                          "isActionable": {
+                            "type": "boolean"
+                          },
+                          "verificationHint": {
+                            "type": "string"
+                          },
+                          "isExistenceClaim": {
+                            "type": "boolean"
+                          },
+                          "jargonRisk": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "isRecovered": {
+                            "type": "boolean"
+                          },
+                          "supportedBy": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "contradictedBy": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "claimId",
+                          "sourceId",
+                          "sourceProvider",
+                          "category",
+                          "content",
+                          "confidenceSelf",
+                          "noveltyMarker",
+                          "isActionable",
+                          "supportedBy",
+                          "contradictedBy"
+                        ]
+                      }
+                    },
+                    "blindSpots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "claimId": {
+                            "type": "string",
+                            "pattern": "^clm_.*"
+                          },
+                          "sourceId": {
+                            "type": "string"
+                          },
+                          "sourceProvider": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "security",
+                              "performance",
+                              "maintainability",
+                              "correctness",
+                              "ux",
+                              "architecture",
+                              "other",
+                              "out_of_role"
+                            ]
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "evidenceRefs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "confidenceSelf": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "noveltyMarker": {
+                            "type": "string",
+                            "enum": ["unique", "minority", "consensus"]
+                          },
+                          "isActionable": {
+                            "type": "boolean"
+                          },
+                          "verificationHint": {
+                            "type": "string"
+                          },
+                          "isExistenceClaim": {
+                            "type": "boolean"
+                          },
+                          "jargonRisk": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "isRecovered": {
+                            "type": "boolean"
+                          },
+                          "supportedBy": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "contradictedBy": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "claimId",
+                          "sourceId",
+                          "sourceProvider",
+                          "category",
+                          "content",
+                          "confidenceSelf",
+                          "noveltyMarker",
+                          "isActionable",
+                          "supportedBy",
+                          "contradictedBy"
+                        ]
+                      }
+                    },
+                    "unresolvedConflicts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "topic": {
+                            "type": "string"
+                          },
+                          "positions": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["topic", "positions"]
+                      }
+                    },
+                    "traceability": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "claimIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["provider", "claimIds"]
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "fragility": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "haltingAnalysis": {
+                          "type": "string"
+                        },
+                        "canaryDetected": {
+                          "type": "boolean"
+                        },
+                        "diversityScore": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["fragility"]
+                    },
+                    "valueMetrics": {
+                      "type": "object",
+                      "properties": {
+                        "blindSpotCount": {
+                          "type": "number"
+                        },
+                        "coverageDimensionality": {
+                          "type": "number"
+                        },
+                        "hallucinationReduction": {
+                          "type": "number"
+                        },
+                        "costPerValidInsight": {
+                          "type": "number"
+                        },
+                        "userActionRate": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["blindSpotCount", "coverageDimensionality"]
+                    },
+                    "tokenUsage": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "number"
+                        },
+                        "byPhase": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        },
+                        "byProvider": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": ["total", "byPhase", "byProvider"]
+                    },
+                    "markdown": {
+                      "type": "string"
+                    },
+                    "shadowBaselineDelta": {
+                      "type": "object",
+                      "properties": {
+                        "blindSpotDelta": {
+                          "type": "number"
+                        },
+                        "coverageDelta": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["blindSpotDelta", "coverageDelta"]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "prompt",
+                    "timestamp",
+                    "tier",
+                    "providers",
+                    "roles",
+                    "cost",
+                    "durationMs",
+                    "consensus",
+                    "blindSpots",
+                    "unresolvedConflicts",
+                    "traceability",
+                    "tokenUsage",
+                    "markdown"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "context": {
+                    "type": "string"
+                  },
+                  "tier": {
+                    "default": "quick",
+                    "type": "string",
+                    "enum": ["free", "quick", "standard", "deep"]
+                  },
+                  "participants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "maxTotalTokens": {
+                        "default": 500000,
+                        "type": "number"
+                      },
+                      "maxCostUsd": {
+                        "default": 2,
+                        "type": "number"
+                      },
+                      "warnAtPercent": {
+                        "default": 80,
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "judgeProviderID": {
+                    "type": "string"
+                  },
+                  "judgeModelID": {
+                    "type": "string"
+                  },
+                  "redTeam": {
+                    "default": "auto",
+                    "type": "string",
+                    "enum": ["off", "auto", "always"]
+                  },
+                  "enableMeta": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "enableCanary": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "enableShadowBaseline": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "noMemory": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "maxRounds": {
+                    "default": 2,
+                    "type": "number"
+                  },
+                  "roles": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["question"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.start({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "debate.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List debates",
+        "description": "List past debates, most recent first.",
+        "responses": {
+          "200": {
+            "description": "List of debates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {}
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/estimate": {
+      "post": {
+        "operationId": "debate.estimate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Estimate debate cost",
+        "description": "Estimate the token and cost budget for a debate configuration.",
+        "responses": {
+          "200": {
+            "description": "Budget estimate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "estimatedTokens": {
+                      "type": "number"
+                    },
+                    "estimatedCostUsd": {
+                      "type": "number"
+                    },
+                    "breakdown": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string"
+                          },
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "costUsd": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["phase", "providerID", "modelID", "inputTokens", "outputTokens", "costUsd"]
+                      }
+                    }
+                  },
+                  "required": ["estimatedTokens", "estimatedCostUsd", "breakdown"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "context": {
+                    "type": "string"
+                  },
+                  "tier": {
+                    "default": "quick",
+                    "type": "string",
+                    "enum": ["free", "quick", "standard", "deep"]
+                  },
+                  "participants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "maxTotalTokens": {
+                        "default": 500000,
+                        "type": "number"
+                      },
+                      "maxCostUsd": {
+                        "default": 2,
+                        "type": "number"
+                      },
+                      "warnAtPercent": {
+                        "default": 80,
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "judgeProviderID": {
+                    "type": "string"
+                  },
+                  "judgeModelID": {
+                    "type": "string"
+                  },
+                  "redTeam": {
+                    "default": "auto",
+                    "type": "string",
+                    "enum": ["off", "auto", "always"]
+                  },
+                  "enableMeta": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "enableCanary": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "enableShadowBaseline": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "noMemory": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "maxRounds": {
+                    "default": 2,
+                    "type": "number"
+                  },
+                  "roles": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["question"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.estimate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/{id}": {
+      "get": {
+        "operationId": "debate.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "summary": "Get debate",
+        "description": "Get a debate by ID, including its report if completed.",
+        "responses": {
+          "200": {
+            "description": "Debate record",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/{id}/feedback": {
+      "post": {
+        "operationId": "debate.feedback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "summary": "Submit claim feedback",
+        "description": "Record that a user acted on (or dismissed) specific claims. Used to compute user_action_rate metric.",
+        "responses": {
+          "200": {
+            "description": "Feedback recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "claimId": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": ["acted", "dismissed", "bookmarked"]
+                        }
+                      },
+                      "required": ["claimId", "action"]
+                    }
+                  }
+                },
+                "required": ["actions"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.feedback({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/presence": {
       "get": {
         "operationId": "collab.presence",
@@ -7106,6 +8016,69 @@
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.list({\n  ...\n})"
           }
         ]
+      },
+      "delete": {
+        "operationId": "file.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Delete file",
+        "description": "Delete a file. 404 if absent; rejects (409) if the file changed since expectedHash.",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["deleted"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "expectedHash": {
+                    "type": "string"
+                  }
+                },
+                "required": ["path"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.delete({\n  ...\n})"
+          }
+        ]
       }
     },
     "/file/content": {
@@ -7259,6 +8232,313 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.mkdir({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/file/raw": {
+      "get": {
+        "operationId": "file.readRaw",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read raw file",
+        "description": "Read raw (untrimmed) text content plus a content stamp for round-trip editing.",
+        "responses": {
+          "200": {
+            "description": "Raw content + stamp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "stamp": {
+                      "type": "object",
+                      "properties": {
+                        "hash": {
+                          "type": "string"
+                        },
+                        "mtime": {
+                          "type": "number"
+                        },
+                        "size": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["hash"]
+                    }
+                  },
+                  "required": ["content", "stamp"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.readRaw({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/file/write": {
+      "post": {
+        "operationId": "file.write",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Write file",
+        "description": "Write text content to a file. Rejects (409) if the file changed on disk since expectedHash. With format=true, runs the formatter and returns the final content.",
+        "responses": {
+          "200": {
+            "description": "Final content + stamp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "stamp": {
+                      "type": "object",
+                      "properties": {
+                        "hash": {
+                          "type": "string"
+                        },
+                        "mtime": {
+                          "type": "number"
+                        },
+                        "size": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["hash"]
+                    },
+                    "formatted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["content", "stamp", "formatted"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "expectedHash": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["path", "content"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.write({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/file/rename": {
+      "post": {
+        "operationId": "file.rename",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Rename file",
+        "description": "Rename a file within the project. Rejects (409) if the destination exists or source changed.",
+        "responses": {
+          "200": {
+            "description": "Content stamp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hash": {
+                      "type": "string"
+                    },
+                    "mtime": {
+                      "type": "number"
+                    },
+                    "size": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["hash"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "expectedHash": {
+                    "type": "string"
+                  }
+                },
+                "required": ["from", "to"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.rename({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/file/move": {
+      "post": {
+        "operationId": "file.move",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Move file",
+        "description": "Move a file within the project. Rejects (409) if the destination exists or source changed.",
+        "responses": {
+          "200": {
+            "description": "Content stamp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hash": {
+                      "type": "string"
+                    },
+                    "mtime": {
+                      "type": "number"
+                    },
+                    "size": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["hash"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "expectedHash": {
+                    "type": "string"
+                  }
+                },
+                "required": ["from", "to"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.file.move({\n  ...\n})"
           }
         ]
       }
@@ -7817,6 +9097,72 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.disconnect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/{name}": {
+      "delete": {
+        "operationId": "mcp.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Remove MCP server",
+        "description": "Remove a Model Context Protocol (MCP) server from the configuration and disconnect it.",
+        "responses": {
+          "200": {
+            "description": "MCP server removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": ["success"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.remove({\n  ...\n})"
           }
         ]
       }
@@ -8555,6 +9901,61 @@
         ]
       }
     },
+    "/disk": {
+      "get": {
+        "operationId": "disk.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get disk space",
+        "description": "Returns available and total disk space for the working directory.",
+        "responses": {
+          "200": {
+            "description": "Disk space info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "description": "Available bytes",
+                      "type": "number"
+                    },
+                    "total": {
+                      "description": "Total bytes",
+                      "type": "number"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["available", "total", "path"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.disk.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/path": {
       "get": {
         "operationId": "path.get",
@@ -8837,6 +10238,130 @@
         ]
       }
     },
+    "/skill/install": {
+      "post": {
+        "operationId": "app.skillInstall",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Install a skill",
+        "description": "Install a skill from a URL. Accepts a direct SKILL.md URL or a discovery index URL. The skill is saved to the global ~/.claude/skills/ directory and immediately available.",
+        "responses": {
+          "200": {
+            "description": "Installed skill info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["name", "description", "location", "content"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "422": {
+            "description": "Install failed"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": ["url"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.skillInstall({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/skill/{name}": {
+      "delete": {
+        "operationId": "app.skillUninstall",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Uninstall a skill",
+        "description": "Remove a globally-installed skill by name. Only skills under ~/.claude/skills/ can be removed.",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.skillUninstall({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/lsp": {
       "get": {
         "operationId": "lsp.status",
@@ -8877,6 +10402,1477 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/diagnostics": {
+      "get": {
+        "operationId": "lsp.diagnostics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter to this file path"
+          }
+        ],
+        "summary": "Get LSP diagnostics",
+        "description": "Return all diagnostics from connected LSP servers. Pass ?file= to filter to a single file path.",
+        "responses": {
+          "200": {
+            "description": "Map of file path → diagnostic list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/LspDiagnosticEntry"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.diagnostics({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/hover": {
+      "post": {
+        "operationId": "lsp.hover",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP hover",
+        "description": "Get type / documentation hover information at a position in a file.",
+        "responses": {
+          "200": {
+            "description": "Hover result or null when unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LspHoverResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["file", "line", "character"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.hover({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/definition": {
+      "post": {
+        "operationId": "lsp.definition",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP go-to-definition",
+        "description": "Return source location(s) for the definition of the symbol at the given position.",
+        "responses": {
+          "200": {
+            "description": "List of definition locations (empty when not found)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LspLocation"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["file", "line", "character"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.definition({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/references": {
+      "post": {
+        "operationId": "lsp.references",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP find references",
+        "description": "Return all references to the symbol at the given position.",
+        "responses": {
+          "200": {
+            "description": "List of reference locations (empty when not found)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LspLocation"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["file", "line", "character"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.references({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/rename": {
+      "post": {
+        "operationId": "lsp.rename",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP rename symbol",
+        "description": "Rename a symbol at the given position across the workspace. Returns a WorkspaceEdit.",
+        "responses": {
+          "200": {
+            "description": "WorkspaceEdit — map of file URI → TextEdit[]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LspWorkspaceEdit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "newName": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["file", "line", "character", "newName"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.rename({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/code-action": {
+      "post": {
+        "operationId": "lsp.codeAction",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP code actions",
+        "description": "Return code actions (quick fixes, refactors, source actions) available at the given range.",
+        "responses": {
+          "200": {
+            "description": "List of CodeAction objects (may include WorkspaceEdit and/or Command)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LspCodeActions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "endLine": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "endCharacter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["file", "line", "character", "endLine", "endCharacter"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.codeAction({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/execute-command": {
+      "post": {
+        "operationId": "lsp.executeCommand",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP execute command",
+        "description": "Execute a workspace command returned by a code action that has no WorkspaceEdit.",
+        "responses": {
+          "200": {
+            "description": "Command result (opaque — varies per LSP server)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "command": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "commandArgs": {
+                    "type": "array",
+                    "items": {}
+                  }
+                },
+                "required": ["file", "line", "character", "command"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.executeCommand({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/completion": {
+      "post": {
+        "operationId": "lsp.completion",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "LSP completion",
+        "description": "Return completion items at the given position (for autocomplete).",
+        "responses": {
+          "200": {
+            "description": "List of completion items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LspCompletionItems"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "description": "Absolute path to the file",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Zero-based line number",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "character": {
+                    "description": "Zero-based character offset",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "triggerCharacter": {
+                    "type": "string"
+                  }
+                },
+                "required": ["file", "line", "character"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.completion({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/lsp/document-symbol": {
+      "get": {
+        "operationId": "lsp.documentSymbol",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Absolute path to the file"
+          }
+        ],
+        "summary": "LSP document symbols",
+        "description": "Return all symbols (functions, classes, variables, etc.) defined in a file. Pass ?file= as an absolute path; the route converts it to a file:// URI internally.",
+        "responses": {
+          "200": {
+            "description": "List of document symbols (DocumentSymbol or flat Symbol)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/DocumentSymbol"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Symbol"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.lsp.documentSymbol({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/working-status": {
+      "get": {
+        "operationId": "git.workingStatus",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get working tree status",
+        "description": "Return the working tree status as parsed `git status --porcelain=v1` entries. Each entry includes the XY code so the UI can distinguish staged vs unstaged changes: index (X) is not a space/? → staged; worktree (Y) is not a space/? → unstaged.",
+        "responses": {
+          "200": {
+            "description": "Working tree status entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitWorkingStatusEntry"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.workingStatus({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/add": {
+      "post": {
+        "operationId": "git.add",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Stage files",
+        "description": "Run `git add` on the given files. Pass an empty `files` array to stage all modified/untracked files (`git add -A`).",
+        "responses": {
+          "200": {
+            "description": "Whether staging succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "description": "Relative paths to stage; empty = all",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.add({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/reset": {
+      "post": {
+        "operationId": "git.reset",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Unstage files",
+        "description": "Run `git reset HEAD` on the given files. Pass an empty `files` array to unstage everything.",
+        "responses": {
+          "200": {
+            "description": "Whether unstaging succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "description": "Relative paths to unstage; empty = all",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.reset({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/commit": {
+      "post": {
+        "operationId": "git.commit",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create a commit",
+        "description": "Run `git commit -m <message>`. Returns the short hash of the new commit on success. Returns a 400 if there is nothing to commit or git rejects the operation.",
+        "responses": {
+          "200": {
+            "description": "Short hash of the new commit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hash": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["hash"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "description": "Commit message",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.commit({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/push": {
+      "post": {
+        "operationId": "git.push",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Push to remote",
+        "description": "Run `git push <remote> [<branch>]`. Uses system credential helpers — SSH/token auth UI is a separate sub-project. The `ok` field is false and `error` is populated when git exits non-zero.",
+        "responses": {
+          "200": {
+            "description": "Push result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpResult"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "remote": {
+                    "description": "Remote name",
+                    "default": "origin",
+                    "type": "string"
+                  },
+                  "branch": {
+                    "description": "Branch to push (default: current)",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.push({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/pull": {
+      "post": {
+        "operationId": "git.pull",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Pull from remote",
+        "description": "Run `git pull --rebase <remote> [<branch>]`. Rebases the local branch on top of the remote — keeps history linear. Returns `ok: false` and `error` on failure (e.g. conflicts).",
+        "responses": {
+          "200": {
+            "description": "Pull result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpResult"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "remote": {
+                    "description": "Remote name",
+                    "default": "origin",
+                    "type": "string"
+                  },
+                  "branch": {
+                    "description": "Branch to pull (default: upstream tracking)",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.pull({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/log": {
+      "get": {
+        "operationId": "git.log",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Maximum number of commits to return"
+          }
+        ],
+        "summary": "Get commit history",
+        "description": "Return the last N commits in newest-first order. Default limit: 50.",
+        "responses": {
+          "200": {
+            "description": "Commit history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitCommitEntry"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.log({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/blame": {
+      "get": {
+        "operationId": "git.blame",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Relative path to the file"
+          }
+        ],
+        "summary": "Get blame info for a file",
+        "description": "Return per-line blame information using `git blame --porcelain`.",
+        "responses": {
+          "200": {
+            "description": "Blame entries (one per line, 1-indexed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitBlameEntry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.blame({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/branches": {
+      "get": {
+        "operationId": "git.branches",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List branches",
+        "description": "Return all local and remote-tracking branches with current-branch marker.",
+        "responses": {
+          "200": {
+            "description": "Branch list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitBranchEntry"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.branches({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/branch": {
+      "post": {
+        "operationId": "git.branch",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create or switch branch",
+        "description": "Pass `create: true` to run `git checkout -b <name> [<from>]`. Pass `create: false` (default) to switch to an existing local branch via `git checkout <name>`.",
+        "responses": {
+          "200": {
+            "description": "Whether the operation succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "description": "Branch name",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "create": {
+                    "description": "Create new branch if true, switch if false",
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "from": {
+                    "description": "Start point for new branch (only used when create: true)",
+                    "type": "string"
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.branch({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/git/credentials": {
+      "get": {
+        "operationId": "git.getCredentials",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get git credentials (masked)",
+        "description": "Returns current git auth configuration with sensitive values masked.",
+        "responses": {
+          "200": {
+            "description": "Masked credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.getCredentials({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "git.setCredentials",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Set git credentials",
+        "description": "Saves git auth configuration. Accepts none, https-token, or ssh-key.",
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid payload"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "none"
+                      }
+                    },
+                    "required": ["type"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "https-token"
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "username": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "token"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "ssh-key"
+                      },
+                      "privateKey": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "passphrase": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "privateKey"]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.git.setCredentials({\n  ...\n})"
           }
         ]
       }
@@ -9811,25 +12807,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": ["file"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.file.watcher.updated": {
         "type": "object",
         "properties": {
@@ -9861,6 +12838,25 @@
               }
             },
             "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["file"]
           }
         },
         "required": ["type", "properties"]
@@ -9943,6 +12939,390 @@
               }
             },
             "required": ["sessionID", "todos"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.started": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.started"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["free", "quick", "standard", "deep"]
+              },
+              "providers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["debateID", "tier", "providers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.phase_changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.phase_changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": ["debateID", "phase"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.started": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.started"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "provider"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.completed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.completed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "tokens": {
+                "type": "number"
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "provider", "tokens", "durationMs"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "provider", "error"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.claim.extracted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.claim.extracted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "claimId": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "novelty": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "claimId", "category", "novelty"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.cost.update": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.cost.update"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "spent": {
+                "type": "number"
+              },
+              "budget": {
+                "type": "number"
+              },
+              "percent": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "spent", "budget", "percent"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.redteam.activated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.redteam.activated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "reason"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.convergence.round": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.convergence.round"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "round": {
+                "type": "number"
+              },
+              "claimsResubmitted": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "round", "claimsResubmitted"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.canary.result": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.canary.result"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "detected": {
+                "type": "boolean"
+              }
+            },
+            "required": ["debateID", "detected"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.halting": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.halting"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "marginalGain": {
+                "type": "number"
+              },
+              "marginalCost": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "reason", "marginalGain", "marginalCost"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.completed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.completed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "blindSpotCount": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "blindSpotCount", "cost", "durationMs"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "error"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.budget_warning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.budget_warning"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "percentUsed": {
+                "type": "number"
+              },
+              "tokensUsed": {
+                "type": "number"
+              },
+              "tokenLimit": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "percentUsed", "tokensUsed", "tokenLimit"]
           }
         },
         "required": ["type", "properties"]
@@ -10592,6 +13972,38 @@
               }
             },
             "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.shadow.divergence": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.shadow.divergence"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "critical"]
+              },
+              "shadowResponse": {
+                "type": "string"
+              },
+              "divergenceReason": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
           }
         },
         "required": ["type", "properties"]
@@ -12039,10 +15451,10 @@
             "$ref": "#/components/schemas/Event.session.compacted"
           },
           {
-            "$ref": "#/components/schemas/Event.file.edited"
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
+            "$ref": "#/components/schemas/Event.file.edited"
           },
           {
             "$ref": "#/components/schemas/Event.workspace.ready"
@@ -12052,6 +15464,48 @@
           },
           {
             "$ref": "#/components/schemas/Event.todo.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.started"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.phase_changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.started"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.completed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.claim.extracted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.cost.update"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.redteam.activated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.convergence.round"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.canary.result"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.halting"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.completed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.budget_warning"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -12103,6 +15557,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.shadow.divergence"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -13926,6 +17383,82 @@
                   }
                 },
                 "required": ["url", "api_key"]
+              },
+              "collective": {
+                "description": "Collective Intelligence / Blind Spot Hunter configuration",
+                "type": "object",
+                "properties": {
+                  "default_tier": {
+                    "description": "Default debate tier when not specified",
+                    "default": "quick",
+                    "type": "string",
+                    "enum": ["free", "quick", "standard", "deep"]
+                  },
+                  "max_budget_usd": {
+                    "description": "Global cost cap per debate in USD",
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "red_team": {
+                    "description": "Red team activation policy",
+                    "default": "auto",
+                    "type": "string",
+                    "enum": ["off", "auto", "always"]
+                  },
+                  "enable_canary": {
+                    "description": "Enable canary injection on Deep tier",
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "enable_shadow_baseline": {
+                    "description": "Enable single-model comparison",
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "enable_memory": {
+                    "description": "Seed new debates with past blind spots",
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "shadow_daemon": {
+                    "description": "Continuous shadow debate daemon (P7)",
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "description": "Enable continuous Ollama background analysis",
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "ollama_host": {
+                        "description": "Ollama host URL (default: http://localhost:11434)",
+                        "type": "string"
+                      },
+                      "model": {
+                        "description": "Ollama model for shadow analysis (default: llama3.2)",
+                        "type": "string"
+                      },
+                      "divergence_threshold": {
+                        "description": "Keyword divergence ratio to trigger alert",
+                        "default": 0.3,
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    }
+                  },
+                  "ab_mode": {
+                    "description": "Enable silent A/B testing on 10% of Tier 2+ debates",
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "retention_days": {
+                    "description": "Days to retain debate history before GC",
+                    "default": 90,
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
               }
             }
           }
@@ -14017,6 +17550,15 @@
           }
         },
         "required": ["name", "data"]
+      },
+      "PtyTail": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["text"]
       },
       "Model": {
         "type": "object",
@@ -15298,6 +18840,246 @@
           }
         },
         "required": ["id", "name", "root", "status"]
+      },
+      "LspRange": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "number"
+              },
+              "character": {
+                "type": "number"
+              }
+            },
+            "required": ["line", "character"]
+          },
+          "end": {
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "number"
+              },
+              "character": {
+                "type": "number"
+              }
+            },
+            "required": ["line", "character"]
+          }
+        },
+        "required": ["start", "end"]
+      },
+      "LspDiagnosticEntry": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "$ref": "#/components/schemas/LspRange"
+          },
+          "severity": {
+            "description": "1=Error 2=Warning 3=Information 4=Hint",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["range", "message"]
+      },
+      "LspHoverResult": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "contents": {},
+              "range": {
+                "$ref": "#/components/schemas/LspRange"
+              }
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "LspLocation": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/LspRange"
+          }
+        },
+        "required": ["uri", "range"]
+      },
+      "LspWorkspaceEdit": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "range": {
+                    "$ref": "#/components/schemas/LspRange"
+                  },
+                  "newText": {
+                    "type": "string"
+                  }
+                },
+                "required": ["range", "newText"]
+              }
+            }
+          }
+        },
+        "required": ["changes"]
+      },
+      "LspCodeActions": {
+        "type": "array",
+        "items": {}
+      },
+      "LspCompletionItems": {
+        "type": "array",
+        "items": {}
+      },
+      "DocumentSymbol": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "number"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          },
+          "selectionRange": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "required": ["name", "kind", "range", "selectionRange"]
+      },
+      "GitWorkingStatusEntry": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "code": {
+            "description": "Two-character XY status code from git status --porcelain=v1",
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
+          }
+        },
+        "required": ["file", "code", "status"]
+      },
+      "GitOpResult": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["ok"]
+      },
+      "GitCommitEntry": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string"
+          },
+          "shortHash": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": ["hash", "shortHash", "author", "email", "timestamp", "subject"]
+      },
+      "GitBlameEntry": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "author": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["hash", "line", "author", "timestamp", "content"]
+      },
+      "GitBranchEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "remote": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "current", "remote"]
       },
       "FormatterStatus": {
         "type": "object",

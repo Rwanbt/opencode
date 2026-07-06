@@ -143,6 +143,18 @@ export const Instance = {
     cache.delete(directory)
     emit(directory)
   },
+  async disposeDirectory(input: string) {
+    const directory = Filesystem.resolve(input)
+    const existing = cache.get(directory)
+    if (!existing) return
+
+    const ctx = await existing
+    if (cache.get(directory) !== existing) return
+
+    await context.provide(ctx, async () => {
+      await Instance.dispose()
+    })
+  },
   async disposeAll() {
     if (disposal.all) return disposal.all
 

@@ -26,6 +26,13 @@ let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+const MOCK_DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
+
+let promptStore: Prompt = promptValue
+const promptSetCalls: Array<{ prompt: Prompt; cursor?: number }> = []
+
+let promptAsyncResult: { data?: unknown; error?: unknown } = { data: undefined }
+let commandResult: { data?: unknown; error?: unknown } = { data: undefined }
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
@@ -45,8 +52,8 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
-      promptAsync: async () => ({ data: undefined }),
-      command: async () => ({ data: undefined }),
+      promptAsync: async () => promptAsyncResult,
+      command: async () => commandResult,
       abort: async () => ({ data: undefined }),
     },
     worktree: {
@@ -104,10 +111,18 @@ beforeAll(async () => {
   }))
 
   mock.module("@/context/prompt", () => ({
+    DEFAULT_PROMPT: MOCK_DEFAULT_PROMPT,
+    isPromptEqual: (a: Prompt, b: Prompt) =>
+      a.length === b.length && a.every((part, i) => JSON.stringify(part) === JSON.stringify(b[i])),
     usePrompt: () => ({
-      current: () => promptValue,
-      reset: () => undefined,
-      set: () => undefined,
+      current: () => promptStore,
+      reset: () => {
+        promptStore = MOCK_DEFAULT_PROMPT
+      },
+      set: (next: Prompt, cursor?: number) => {
+        promptStore = next
+        promptSetCalls.push({ prompt: next, cursor })
+      },
       context: {
         add: () => undefined,
         remove: () => undefined,
@@ -213,8 +228,14 @@ beforeEach(() => {
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  promptStore = promptValue
+  promptSetCalls.length = 0
+  promptAsyncResult = { data: undefined }
+  commandResult = { data: undefined }
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 describe("prompt submit worktree selection", () => {
   test("reads the latest worktree accessor value per submit", async () => {
@@ -241,6 +262,7 @@ describe("prompt submit worktree selection", () => {
 
     await submit.handleSubmit(event)
     selected = "/repo/worktree-b"
+    promptStore = promptValue // simulate the user typing a new draft before the second submit
     await submit.handleSubmit(event)
 
     expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
@@ -342,5 +364,66 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+})
+
+describe("prompt submit restore on failure", () => {
+  const submitInput = () => ({
+    info: () => ({ id: "session-1" }),
+    imageAttachments: () => [],
+    commentCount: () => 0,
+    autoAccept: () => false,
+    mode: () => "normal" as const,
+    working: () => false,
+    editor: () => undefined,
+    queueScroll: () => undefined,
+    promptLength: (value: Prompt) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+    addToHistory: () => undefined,
+    resetHistoryNavigation: () => undefined,
+    setMode: () => undefined,
+    setPopover: () => undefined,
+    onSubmit: () => undefined,
+  })
+
+  test("restores the composer input after a failed send", async () => {
+    params = { id: "session-1" }
+    promptAsyncResult = { error: { message: "boom" } }
+
+    const submit = createPromptSubmit(submitInput())
+    const event = { preventDefault: () => undefined } as unknown as Event
+    await submit.handleSubmit(event)
+    await flush()
+
+    expect(promptSetCalls).toHaveLength(1)
+    expect(promptStore).toEqual(promptValue)
+  })
+
+  test("does not restore the composer input after a successful send", async () => {
+    params = { id: "session-1" }
+    promptAsyncResult = { data: undefined }
+
+    const submit = createPromptSubmit(submitInput())
+    const event = { preventDefault: () => undefined } as unknown as Event
+    await submit.handleSubmit(event)
+    await flush()
+
+    expect(promptSetCalls).toHaveLength(0)
+    expect(promptStore).toEqual(MOCK_DEFAULT_PROMPT)
+  })
+
+  test("does not clobber a freshly typed draft when a stale failure restores late", async () => {
+    params = { id: "session-1" }
+    promptAsyncResult = { error: { message: "boom" } }
+
+    const submit = createPromptSubmit(submitInput())
+    const event = { preventDefault: () => undefined } as unknown as Event
+    await submit.handleSubmit(event)
+
+    const freshDraft: Prompt = [{ type: "text", content: "new draft", start: 0, end: 9 }]
+    promptStore = freshDraft
+    await flush()
+
+    expect(promptSetCalls).toHaveLength(0)
+    expect(promptStore).toEqual(freshDraft)
   })
 })

@@ -8,13 +8,11 @@
 // only owns the cross-module wiring — path → state → contents, active-tab
 // resolution, and the restore-scroll effect.
 
-import { createEffect, createMemo, createSignal, lazy, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
-import { sampledChecksum } from "@opencode-ai/util/encode"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useFile, type SelectedLineRange } from "@/context/file"
-import { getSessionHandoff } from "@/pages/session/handoff"
+import { useFile } from "@/context/file"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 // FORK: editor (ADR-0005)
@@ -34,12 +32,6 @@ import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { createScrollSync } from "@/pages/session/scroll-content-sync"
 import { createLspActions } from "@/pages/session/lsp-actions"
 
-// Lazy-load CodeMirror so the ~400 KB CM bundle is excluded from the initial
-// chunk — only fetched when the user first enters edit mode.
-const CodeMirrorEditor = lazy(() =>
-  import("@opencode-ai/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
-)
-
 // Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
 // (session-side-panel.tsx) keep their import path stable.
 export const requestAutoEdit = _requestAutoEdit
@@ -48,7 +40,7 @@ export const requestAutoEdit = _requestAutoEdit
 // system so the component can be shown in the split-pane right panel.
 export function FileTabContent(props: { tab: string; override?: boolean }) {
   const file = useFile()
-  const { sessionKey, tabs, view } = useSessionLayout()
+  const { tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
@@ -68,25 +60,6 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     return file.get(p)
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
-  const cacheKey = createMemo(() => sampledChecksum(contents()))
-  // WHY: <Match when={state()?.loaded}>{renderFile(contents())}</Match> only
-  // calls renderFile ONCE (when `loaded` flips false→true). When the
-  // store's .content is mutated via produce() (e.g. on force-refetch),
-  // the JSX is not re-rendered because the call to contents() inside
-  // renderFile was captured at first render. viewerSource wraps the
-  // content in a fresh object on every change, and the `keyed` prop
-  // re-mounts the child whenever the object identity differs.
-  const viewerSource = createMemo(() => {
-    const s = state()
-    if (!s?.loaded) return null
-    return { content: s.content?.content ?? "" }
-  })
-  const selectedLines = createMemo<SelectedLineRange | null>(() => {
-    const p = path()
-    if (!p) return null
-    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
-    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
-  })
 
   // Reactive pointer to the store entry for this file (proxy — tracks fine-grained
   // property changes like `conflict`, `stale`, `missing` in JSX).

@@ -3,11 +3,9 @@ import type {
   Config,
   OpencodeClient,
   Path,
-  PermissionRequest,
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
-  QuestionRequest,
   Session,
   Todo,
 } from "../../types/sdk-shim"

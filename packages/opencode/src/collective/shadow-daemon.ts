@@ -1,10 +1,7 @@
 import { Effect } from "effect"
-import { generateText } from "ai"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "../bus"
 import z from "zod"
-import { Provider } from "../provider/provider"
-import { ProviderID, ModelID } from "../provider/schema"
 import { Log } from "../util/log"
 
 export namespace ShadowDaemon {

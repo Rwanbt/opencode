@@ -11,7 +11,7 @@
 // code-actions-panel apply edits through it), and the save/reload/overwrite/
 // discard/recreate callbacks (they own the SDK + toast coordination).
 
-import { createEffect, createMemo, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js"
+import { createEffect, createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { useEditor } from "@/context/editor"
 import { useFileStore } from "@/context/file/store"
 import { useLanguage } from "@/context/language"
