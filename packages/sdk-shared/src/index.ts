@@ -22,3 +22,67 @@
 
 export * from "@opencode-ai/sdk/v2/client"
 export * from "./types/sdk-shim.js"
+
+// The SDK v2 regen of 2026-07-06 started emitting top-level component types
+// (Project, Session, Provider, ...) that now share names with this shim's
+// structural aliases (see types/sdk-shim.ts header). Both are `export *`,
+// so TS can't pick a winner on its own (TS2308) — list the shim's versions
+// explicitly so they keep taking precedence, preserving existing consumer
+// behavior unchanged. Once the shim is retired (see its "when to delete"
+// note), this block goes with it.
+export type {
+  Agent,
+  AgentPart,
+  AgentPartInput,
+  AssistantMessage,
+  Command,
+  CompactionPart,
+  Config,
+  Event,
+  EventMessagePartDelta,
+  EventMessagePartUpdated,
+  EventSessionError,
+  FileContent,
+  FileDiff,
+  FileNode,
+  FilePart,
+  FilePartInput,
+  FormatterStatus,
+  GitBranchEntry,
+  GitCommitEntry,
+  GitOpResult,
+  GitWorkingStatusEntry,
+  LspStatus,
+  McpResource,
+  McpStatus,
+  Message,
+  Model,
+  Part,
+  PatchPart,
+  Path,
+  PermissionRequest,
+  Project,
+  Provider,
+  ProviderAuthAuthorization,
+  ProviderAuthMethod,
+  QuestionAnswer,
+  QuestionInfo,
+  QuestionRequest,
+  ReasoningPart,
+  RetryPart,
+  Session,
+  SessionStatus,
+  SnapshotPart,
+  StepFinishPart,
+  StepStartPart,
+  SubtaskPart,
+  TextPart,
+  TextPartInput,
+  Todo,
+  ToolPart,
+  ToolStatePending,
+  ToolStateRunning,
+  UserMessage,
+  VcsInfo,
+  Workspace,
+} from "./types/sdk-shim.js"
