@@ -212,36 +212,6 @@ function App() {
   }
 
   onMount(() => {
-    // Auto-trigger the local connect at boot. The legacy selector (Local /
-    // Remote) was a development-time convenience; in normal use the user
-    // always picks Local, and on Android MIUI we cannot inject the click
-    // via `adb shell input` (security policy blocks INJECT_EVENTS unless a
-    // hidden devsetting toggle is on). Auto-connecting at mount removes
-    // that interaction entirely. To force the selector, set
-    // `localStorage.setItem("openCodeShowSelector","1")` from the WebView
-    // dev console before reload.
-    void (async () => {
-      try {
-        if (localStorage.getItem("openCodeShowSelector") === "1") return
-      } catch {}
-      // Fresh install / not-yet-extracted runtime: route through
-      // ExtractionProgress so install_extended_env runs (Alpine rootfs +
-      // toolchain wrappers). Without this, start_embedded_server fires
-      // before rootfs extraction and the cargo/rustc/python wrappers come
-      // up empty (rootfs missing).
-      try {
-        const { checkRuntime } = await import("./runtime")
-        const info = await checkRuntime()
-        if (!info.ready || !info.extended_env) {
-          setMode("extracting")
-          return
-        }
-      } catch {}
-      void handleLocalConnect()
-    })()
-  })
-
-  onMount(() => {
     // A.4-part1: pause/resume detection via visibilitychange.
     // On background: notify Rust (placeholder for foreground-service keepalive).
     // On resume: health-check and emit reload event if server died.
