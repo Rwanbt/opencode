@@ -669,12 +669,64 @@ function ViewerShell(props: {
 }
 
 // ---------------------------------------------------------------------------
+// Subgrid row-collapse workaround (Android WebView)
+// ---------------------------------------------------------------------------
+
+// WHY: @pierre/diffs lays out [data-gutter]/[data-content] with
+// `grid-template-rows: subgrid`, inheriting row tracks from their
+// [data-code] parent — which never declares explicit tracks and relies on
+// implicit row generation. On Android WebView (Chrome Mobile, confirmed on
+// Chrome 149 despite `CSS.supports('grid-template-rows', 'subgrid')`
+// reporting true), that combination collapses to a single implicit row
+// instead of one per line: every [data-line] renders at the same position
+// and only the last one paints. Verified live via DevTools — giving each
+// container its own explicit `repeat(N, auto)` track list (bypassing the
+// subgrid inheritance) fixes it immediately. Desktop Chrome is unaffected by
+// this rewrite since `auto` sizing resolves the same way per-row when rows
+// don't wrap; only wrapped multi-line rows in `overflow: wrap` mode can lose
+// the subgrid's cross-column row-height matching (known limitation).
+function fixSubgridLineRowCollapse(root: ShadowRoot) {
+  const containers = root.querySelectorAll<HTMLElement>("[data-gutter], [data-content]")
+  for (const container of containers) {
+    // WHY children.length, not querySelectorAll("[data-line]"): the gutter's
+    // row items carry [data-column-number], not [data-line] — only the
+    // content side uses that attribute. Counting DOM children instead
+    // works for both, since each row is always a direct child.
+    const rowCount = container.children.length
+    if (rowCount === 0) continue
+    const rows = `repeat(${rowCount}, auto)`
+    if (container.style.gridTemplateRows === rows) continue
+    container.style.gridTemplateRows = rows
+  }
+}
+
+// WHY a persistent observer instead of a one-shot fix in onReady:
+// @pierre/diffs can re-render its shadow DOM more than once per file open
+// (e.g. once the file's initial DOM is inserted, and again as reactive
+// props/derived state settle a tick or two later) — each re-render rebuilds
+// the [data-gutter]/[data-content] children and wipes any inline style
+// applied earlier. A fix applied only in onReady only "sticks" if that
+// happened to be the LAST render, which is unreliable on a genuinely fresh
+// (first) open — confirmed live: a fresh open left both containers on
+// `subgrid` with the one-shot version, while a reopen (second mount) picked
+// up the fix fine. Watching the shadow root and re-applying on every
+// mutation removes that timing dependency entirely.
+function watchSubgridLineRowCollapse(root: ShadowRoot | undefined): () => void {
+  if (!root || typeof MutationObserver === "undefined") return () => {}
+  fixSubgridLineRowCollapse(root)
+  const observer = new MutationObserver(() => fixSubgridLineRowCollapse(root))
+  observer.observe(root, { childList: true, subtree: true })
+  return () => observer.disconnect()
+}
+
+// ---------------------------------------------------------------------------
 // TextViewer
 // ---------------------------------------------------------------------------
 
 function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
   let viewer!: Viewer
+  let stopSubgridWatch: (() => void) | undefined
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -823,6 +875,8 @@ function TextViewer<T>(props: TextFileProps<T>) {
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
+        stopSubgridWatch?.()
+        stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
@@ -878,6 +932,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     instance?.cleanUp()
     instance = undefined
     virtuals.cleanup()
+    stopSubgridWatch?.()
   })
 
   return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
@@ -892,6 +947,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   let dragSide: DiffSelectionSide | undefined
   let dragEndSide: DiffSelectionSide | undefined
   let viewer!: Viewer
+  let stopSubgridWatch: (() => void) | undefined
 
   const [local, others] = splitProps(props, diffKeys)
 
@@ -1013,6 +1069,8 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       isReady: (root) => root.querySelector("[data-line]") != null,
       settleFrames: 1,
       onReady: () => {
+        stopSubgridWatch?.()
+        stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
         done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
@@ -1079,6 +1137,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     virtuals.cleanup()
     dragSide = undefined
     dragEndSide = undefined
+    stopSubgridWatch?.()
   })
 
   return <ViewerShell mode="diff" viewer={viewer} class={local.class} classList={local.classList} />
