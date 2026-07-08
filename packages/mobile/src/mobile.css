@@ -766,9 +766,16 @@ a,
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    height: var(--vvh, 100dvh) !important;
     z-index: 30 !important;
     border-top: none !important;
+  }
+
+  /* Height only forced open when the panel is actually open — this must
+     NOT be unconditional: it's `!important`, so it would otherwise beat
+     terminal-panel.tsx's inline `height: 0px` closed state (which has no
+     !important) and the panel could never close. */
+  #terminal-panel.mobile-side-panel:not([aria-hidden="true"]) {
+    height: var(--vvh, 100dvh) !important;
   }
 }
 
