@@ -317,17 +317,24 @@ export function EditorPanel(props: EditorPanelProps) {
             disabled={props.editorEntry()?.saving}
             data-testid="editor-save-button"
             aria-label={language.t("common.save")}
+            title={language.t("common.save")}
             classList={{
-              "h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-12-medium border transition-colors": true,
+              "h-8 w-8 flex items-center justify-center rounded-md border transition-colors": true,
               "border-accent bg-accent text-background": props.editorEntry()?.dirty,
               "border-border-base text-text-weak hover:text-text-base hover:bg-surface-base-hover": !props.editorEntry()?.dirty,
               "opacity-50 pointer-events-none": !!props.editorEntry()?.saving,
             }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M3 7.5L5.5 10L11 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" />
+              <path
+                d="M2.5 2h7L11.5 4v7.5a.5.5 0 0 1-.5.5H2.5a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5Z"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linejoin="round"
+              />
+              <path d="M4.5 2v3h4V2.6" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+              <rect x="4.3" y="7.3" width="5.4" height="3.7" rx="0.3" stroke="currentColor" stroke-width="1.3" />
             </svg>
-            <span>{language.t("common.save")}</span>
           </button>
         </div>
       </Show>
