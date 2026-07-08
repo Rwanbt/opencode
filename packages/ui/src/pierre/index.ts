@@ -164,7 +164,10 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     theme: "OpenCode",
     themeType: "system",
     disableLineNumbers: false,
-    overflow: "wrap",
+    // Matches the editor (CodeMirror never wraps — no EditorView.lineWrapping
+    // extension — and scrolls horizontally instead): long lines should
+    // scroll, not wrap, in the read-only viewer too.
+    overflow: "scroll",
     diffStyle: style ?? "unified",
     diffIndicators: "bars",
     lineHoverHighlight: "both",
