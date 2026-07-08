@@ -352,15 +352,20 @@ export function TerminalPanel() {
         "border-t border-border-weak-base": opened(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
           !size.active(),
+        // Mobile: full-height overlay over the session content, matching
+        // the file viewer/explorer panel (session-side-panel.tsx) — see
+        // #terminal-panel's mobile rule in mobile.css for the position:
+        // absolute treatment this class name is targeted by.
+        "mobile-side-panel": isMobile(),
       }}
-      style={{ height: opened() ? `${pane()}px` : "0px" }}
+      style={{ height: opened() ? (isMobile() ? "100%" : `${pane()}px`) : "0px" }}
     >
       <div
         class="absolute inset-x-0 top-0 flex flex-col"
         classList={{
           "pointer-events-none": !opened(),
         }}
-        style={{ height: `${pane()}px` }}
+        style={{ height: isMobile() ? "100%" : `${pane()}px` }}
       >
         <div class="hidden md:block" onPointerDown={() => size.start()}>
           <ResizeHandle

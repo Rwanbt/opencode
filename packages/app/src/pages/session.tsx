@@ -1023,12 +1023,16 @@ export default function Page() {
           reviewSnap={ui.reviewSnap}
           size={size}
         />
+
+        {/* Sibling of SessionSidePanel (not the outer header/keyboard-hints
+            level) so its mobile full-height overlay (mobile.css
+            #terminal-panel.mobile-side-panel) covers the session content
+            without covering SessionHeader — matching SessionSidePanel. */}
+        <TerminalPanel />
       </div>
 
       {/* FORK: Stretch Phase 6 — keyboard hints bar (tablet + hardware keyboard) */}
       <KeyboardHintsBar />
-
-      <TerminalPanel />
     </div>
   )
 }

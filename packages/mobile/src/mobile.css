@@ -10,6 +10,14 @@
      3. Safe-area awareness in both portrait and landscape
      4. Minimum 12px labels, 14px body text
      5. Native-mobile feel (spacing, scrolling, feedback)
+
+   Every `@media` query in this file uses
+   `(max-width: 767px), (max-height: 767px)` — NOT max-width alone. In
+   landscape, phone CSS width commonly exceeds 767px (e.g. ~780px on a
+   Mi 10 Pro) while height stays well under it, so a width-only query
+   silently stops applying every mobile override the moment the device
+   rotates. This file is mobile-only (imported only by the mobile
+   entry.tsx), so the broader OR condition is always safe here.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ─── 0. GLOBAL ANIMATIONS ──────────────────────────────────────────────── */
@@ -161,7 +169,7 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 /* ─── 7. SEARCH BAR + HEADER GRID — portrait responsive ───────────────────── */
 
 /* En portrait, la colonne centrale devient flexible (remplace "auto" du grid) */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   header.h-10 {
     grid-template-columns: auto 1fr auto !important;
   }
@@ -399,7 +407,7 @@ nav button,
 /* ─── 18. GAP OVERRIDES — prevent cramped layouts ────────────────────────── */
 
 /* Very tight gaps that make tapping hard */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   .gap-1 {
     gap: 6px !important;
   }
@@ -511,9 +519,12 @@ a:active,
 
 /* ─── 24. TERMINAL PANEL ─────────────────────────────────────────────────── */
 
+/* No max-height cap: terminal-panel.tsx already computes its own mobile
+   ceiling (92% of viewport, see `max()`/`pane()`) so it can dominate the
+   screen like the file viewer/explorer panel — this used to re-cap it back
+   down to a leftover 40/50dvh half-sheet size underneath that. */
 #terminal-panel {
   min-height: 120px;
-  max-height: 40dvh !important;
 }
 
 /* Terminal text — keep readable */
@@ -536,13 +547,6 @@ a:active,
   min-height: 40px !important;
 }
 
-/* In landscape, terminal can take more space */
-@media (orientation: landscape) {
-  #terminal-panel {
-    max-height: 50dvh !important;
-  }
-}
-
 /* ─── 25. DIFF VIEW — scrollable code blocks ─────────────────────────────── */
 
 [data-slot="diff-view"],
@@ -553,7 +557,7 @@ a:active,
 }
 
 /* Diff file headers — more compact on mobile */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-slot="diff-view"] [data-slot="diff-header"] {
     padding: 8px 12px !important;
     font-size: 12px !important;
@@ -596,7 +600,7 @@ a:active,
    wrapper) the same way #root does, so the card still reaches the screen
    edges but its content — header, close button, list — stays inside the
    safe area. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-component="dialog"][data-size="x-large"] [data-slot="dialog-container"] {
     width: 100vw !important;
     height: var(--vvh, 100dvh) !important;
@@ -622,7 +626,7 @@ a,
 /* ─── 27. NEW SESSION VIEW — mobile-friendly ────────────────────────────── */
 
 /* The "new session" empty state centered content */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-component="new-session-view"] {
     padding: 16px !important;
   }
@@ -635,7 +639,7 @@ a,
 /* ─── 28. SESSION COMPOSER — mobile improvements ────────────────────────── */
 
 /* Docks (followup, question, todo, revert, permission) — full width */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-component="session-dock"] {
     width: 100% !important;
     max-width: 100% !important;
@@ -665,7 +669,7 @@ a,
 
 /* ─── 29. MESSAGE TIMELINE — mobile spacing ─────────────────────────────── */
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   /* Messages: tighter horizontal padding */
   [data-component="message-timeline"] {
     padding-left: 8px !important;
@@ -688,7 +692,7 @@ a,
 /* ─── 30. MOBILE TAB SWITCHER — session/changes tabs ────────────────────── */
 
 /* Make the session/changes tab switcher more prominent */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-component="mobile-tabs"] [role="tablist"] {
     border-bottom: 1px solid var(--border-weaker-base, #333) !important;
   }
@@ -705,7 +709,7 @@ a,
 /* On mobile (<768px), the review/file-tree panel becomes a vertical sheet
    that slides down between the header and the session content, instead of
    appearing as a side column that would be too narrow. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   #review-panel.mobile-side-panel {
     position: absolute !important;
     top: 0 !important;
@@ -747,12 +751,31 @@ a,
   #file-tree-panel[aria-hidden="true"] {
     display: none !important;
   }
+
+  /* Terminal panel: same full-height overlay treatment as the review/
+     file-tree panel above, so it can dominate the screen instead of
+     squeezing into the flex layout (which left the composer visible,
+     overlapping on top of it — see terminal-panel.tsx's height:100%).
+     Height is pinned to `--vvh` (see "KEYBOARD AVOIDANCE" above) instead
+     of trusting the inline `height:100%` to resolve correctly through the
+     ancestor chain — same reasoning as #root: percentage/dvh heights
+     don't reliably shrink when the soft keyboard opens on MIUI WebView,
+     which left the terminal squeezed to near-zero height under the IME. */
+  #terminal-panel.mobile-side-panel {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: var(--vvh, 100dvh) !important;
+    z-index: 30 !important;
+    border-top: none !important;
+  }
 }
 
 /* ─── 31. LINE COMMENTS — touch-friendly on mobile ─────────────────────── */
 
 /* Comment button — bigger touch target */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   [data-component="line-comment"] [data-slot="line-comment-button"] {
     width: 32px !important;
     height: 32px !important;
@@ -823,7 +846,7 @@ a,
    the user explicitly asked for. */
 
 /* Editor banners — enlarge buttons to 36 px tap targets on touch screens. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   .cm-editor-banners button {
     min-height: 36px !important;
     padding-left: 10px !important;
@@ -833,7 +856,7 @@ a,
 
 /* ─── 32. WORKSPACE SIDEBAR — touch-friendly on mobile ─────────────────── */
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 767px) {
   /* Workspace header — bigger touch target */
   [data-component="workspace-header"],
   [data-slot="sidebar-workspace-header"] {
