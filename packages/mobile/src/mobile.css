@@ -346,8 +346,11 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 
 /* ─── 13. FILE TREE PANEL — full height, scrollable ──────────────────────── */
 
+/* No max-height cap: on mobile #file-tree-panel is a flex child of
+   #review-panel.mobile-side-panel (height: 100% — see that panel's fullscreen
+   comment below), so it should stretch to fill it, not stay at a leftover
+   half-sheet height from before that panel went fullscreen. */
 #file-tree-panel {
-  max-height: 50dvh !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
 }
