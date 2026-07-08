@@ -812,17 +812,12 @@ a,
   touch-action: manipulation;
 }
 
-/* On narrow screens, hide the line-number gutter to reclaim ~2.5rem of
-   horizontal space. The file path in the tab header is sufficient context. */
-@media (max-width: 767px) {
-  .cm-opencode .cm-gutters {
-    display: none !important;
-  }
-  /* Bump font size slightly for readability on small screens. */
-  .cm-opencode .cm-editor {
-    font-size: 14px !important;
-  }
-}
+/* Line numbers and font size are intentionally NOT overridden here anymore —
+   edit mode must match the read-only file viewer (@pierre/diffs) visually
+   (line numbers, font, size — see code-mirror.css), which also shows line
+   numbers on mobile. A previous version of this rule hid the gutter and
+   forced 14px on narrow screens to save space; that traded away the parity
+   the user explicitly asked for. */
 
 /* Editor banners — enlarge buttons to 36 px tap targets on touch screens. */
 @media (max-width: 767px) {

@@ -14,6 +14,11 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  /* Visual parity with the read-only file viewer (@pierre/diffs), which uses
+     these exact tokens (see packages/ui/src/pierre/index.ts styleVariables).
+     openCodeTheme (code-mirror.tsx) already sets these, but that theme is a
+     runtime <style> dropped by the CSP on mobile — see WHY above. */
+  font-size: var(--font-size-small, 13px);
 }
 
 /* WHY .cm-content (not just .cm-editor): .cm-content is the actual
@@ -32,8 +37,11 @@
      blocks from applying — hence the near-zero left indent seen on device
      despite that rule existing in the compiled theme text. This static rule
      is the one that actually renders. */
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
+  /* Matches @pierre/diffs' [data-line] padding-inline: 1ch (view mode) —
+     reduced from the earlier 1.5rem now that view/edit parity is the goal. */
+  padding-left: 1ch;
+  padding-right: 1ch;
+  caret-color: var(--text-base, currentColor);
   /* Restores CodeMirror's baseTheme flex sizing for .cm-content (also
      dropped by the CSP issue above). Without it, .cm-content is a plain
      block-level div that stacks BELOW .cm-gutters instead of beside it
@@ -59,6 +67,10 @@
   align-items: flex-start;
   overflow: auto;
   position: relative;
+  /* Matches @pierre/diffs' --diffs-font-family / --diffs-line-height (view
+     mode uses the exact same tokens — see pierre/index.ts styleVariables). */
+  font-family: var(--font-family-mono);
+  line-height: 24px;
 }
 
 /* Same dropped-baseTheme issue: gutters must not shrink and must span the
@@ -68,6 +80,19 @@
   display: flex;
   height: 100%;
   box-sizing: border-box;
+  /* Visual parity with the view mode's gutter (--diffs-fg-number: a muted
+     mix of foreground/background) — CodeMirror has no equivalent token, so
+     this reuses the app's own muted-text token for the same effect. */
+  color: var(--text-weak, rgba(127, 127, 127, 0.45));
+  user-select: none;
+}
+
+.cm-opencode .cm-lineNumbers .cm-gutterElement {
+  /* Matches @pierre/diffs' [data-column-number] (padding-left: 2ch) and
+     --diffs-min-number-column-width: 4ch (view mode). */
+  padding: 0 1ch 0 2ch;
+  min-width: 4ch;
+  text-align: right;
 }
 
 .cm-opencode .cm-gutter {
