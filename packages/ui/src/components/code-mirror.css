@@ -1,9 +1,19 @@
 /* FORK: CodeMirror 6 container reset (ADR-0005) */
 
-/* Ensure the CM editor element fills its container div. */
+/* Ensure the CM editor element fills its container div.
+   WHY display/flex-direction/position here: CodeMirror's own baseTheme sets
+   these on the editor root via a runtime <style> tag (style-mod). This app's
+   CSP (style-src-elem) silently drops that tag (see .cm-content comment
+   below) — confirmed via CDP: the <style> element exists in the DOM with the
+   correct text, but none of its rules take effect. Without `display: flex`
+   here, .cm-editor falls back to block layout, which cascades into the
+   .cm-scroller/.cm-content stacking bug described below. */
 .cm-opencode .cm-editor {
   height: 100%;
   outline: none;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 
 /* WHY .cm-content (not just .cm-editor): .cm-content is the actual
@@ -24,9 +34,47 @@
      is the one that actually renders. */
   padding-left: 1.5rem;
   padding-right: 1.5rem;
+  /* Restores CodeMirror's baseTheme flex sizing for .cm-content (also
+     dropped by the CSP issue above). Without it, .cm-content is a plain
+     block-level div that stacks BELOW .cm-gutters instead of beside it
+     (.cm-scroller's `display: flex` is restored below, but a flex row still
+     needs its children sized correctly). In short containers — e.g. the
+     editor pane in landscape orientation — this pushed the actual text
+     entirely out of the visible/clipped area, leaving only line numbers
+     visible (discovered 2026-07-08). */
+  flex-grow: 2;
+  flex-shrink: 0;
+  min-height: 100%;
 }
 
-/* Give the content area a small left indent consistent with the file viewer. */
+/* Give the content area a small left indent consistent with the file viewer.
+   WHY display/overflow/position here: same dropped-baseTheme issue as above.
+   `.cm-scroller` must be a flex row so `.cm-gutters` (line numbers) and
+   `.cm-content` (text) render side by side instead of stacked, and it must
+   scroll (`overflow: auto`) so content taller than the visible pane is
+   reachable instead of silently clipped by an ancestor further up. */
 .cm-opencode .cm-scroller {
   padding-top: 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  overflow: auto;
+  position: relative;
+}
+
+/* Same dropped-baseTheme issue: gutters must not shrink and must span the
+   full editor height, or the flex row above collapses them. */
+.cm-opencode .cm-gutters {
+  flex-shrink: 0;
+  display: flex;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.cm-opencode .cm-gutter {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  min-height: 100%;
+  overflow: hidden;
 }
