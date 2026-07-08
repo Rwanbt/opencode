@@ -6,6 +6,26 @@
   outline: none;
 }
 
+/* WHY .cm-content (not just .cm-editor): .cm-content is the actual
+   contenteditable that receives DOM focus, and Chromium's UA default gives
+   it `outline: auto` (its own native focus ring, ignoring any outline value
+   set via a runtime-injected <style>/EditorView.theme() — confirmed live via
+   CDP that this app's CSP (style-src-elem) blocks dynamically-created
+   <style> elements from taking effect at all, even though the element still
+   ends up in the DOM with the right text). A rule in this static,
+   build-time-linked stylesheet is not subject to that restriction. */
+.cm-opencode .cm-content {
+  outline: none;
+  /* Small horizontal breathing room so text doesn't sit flush against the
+     screen edge. CodeMirror's own .cm-line padding is set via
+     EditorView.theme() (a runtime <style>), which this app's CSP silently
+     blocks from applying — hence the near-zero left indent seen on device
+     despite that rule existing in the compiled theme text. This static rule
+     is the one that actually renders. */
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
 /* Give the content area a small left indent consistent with the file viewer. */
 .cm-opencode .cm-scroller {
   padding-top: 0.5rem;

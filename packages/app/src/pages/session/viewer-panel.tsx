@@ -75,7 +75,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
   // the file component. A plain string value would be captured at first
   // render and never refresh.
   const renderFile = (source: () => string) => (
-    <div class="relative overflow-hidden pb-40">
+    <div class="relative overflow-hidden px-6 pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
