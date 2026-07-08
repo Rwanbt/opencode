@@ -380,9 +380,9 @@ export async function createPlatform(): Promise<Platform> {
       // done before this point when needed. No action here.
 
       const port = info.port
+      const savedPw = await settings.getItem("localServerPassword")
 
       if (info.server_running) {
-        const savedPw = await settings.getItem("localServerPassword")
         await writeDebugLog(`server_running=true savedPw=${savedPw ? savedPw.slice(0,8)+"..." : "null"}`)
         if (savedPw) {
           await writeDebugLog(`returning cached: url=http://127.0.0.1:${port} pw=${savedPw.slice(0,8)}...`)
@@ -392,7 +392,9 @@ export async function createPlatform(): Promise<Platform> {
         try { await stopLocal(port) } catch {}
       }
 
-      const password = crypto.randomUUID()
+      // Preserve credentials across a crash recovery so the already-mounted
+      // SDK clients can reconnect without rebuilding the whole application.
+      const password = savedPw ?? crypto.randomUUID()
       await writeDebugLog(`fresh start: port=${port} pw=${password.slice(0,8)}...`)
       // Save password BEFORE starting server to avoid race conditions
       await settings.setItem("localServerPassword", password)
@@ -429,3 +431,4 @@ export async function createPlatform(): Promise<Platform> {
     },
   }
 }
+
