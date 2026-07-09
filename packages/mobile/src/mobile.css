@@ -532,6 +532,17 @@ a:active,
   font-size: 13px !important;
 }
 
+/* ghostty-web's hidden input textarea (used to capture keyboard/IME input)
+   sets opacity:0 + clip-path:inset(50%) to hide itself, but never sets
+   caret-color — on this Android WebView the native text-caret can still
+   paint at the textarea's (0,0) position despite the visual hiding,
+   producing a second cursor blinking out of sync with ghostty's own
+   canvas-rendered one. Do NOT use visibility:hidden/display:none here —
+   both would break the textarea's ability to receive focus/IME input. */
+#terminal-panel textarea {
+  caret-color: transparent !important;
+}
+
 /* Terminal tabs — touch-friendly */
 #terminal-panel [data-slot="tabs-list"] {
   min-height: 40px !important;
