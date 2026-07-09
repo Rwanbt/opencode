@@ -30,29 +30,37 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onSend?: (fn: ((data: string) => void) | undefined) => void
 }
 
-let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty | undefined }> | undefined
+let sharedModule: Promise<typeof import("ghostty-web")> | undefined
 
-const loadGhostty = () => {
-  if (shared) return shared
-  console.info("[terminal] loading ghostty-web module, wasm url:", ghosttyWasmUrl)
-  shared = import("ghostty-web")
-    .then(async (mod) => {
-      // Try loading WASM backend; fall back to canvas-only rendering on mobile/unsupported environments
-      let ghostty: Ghostty | undefined
-      try {
-        ghostty = await mod.Ghostty.load(ghosttyWasmUrl)
-        console.info("[terminal] ghostty WASM loaded successfully")
-      } catch (err) {
-        console.warn("[terminal] Ghostty WASM unavailable, using canvas renderer:", err)
-      }
-      return { mod, ghostty }
-    })
-    .catch((err) => {
-      console.error("[terminal] failed to import ghostty-web module:", err)
-      shared = undefined
-      throw err
-    })
-  return shared
+const loadGhosttyModule = () => {
+  if (sharedModule) return sharedModule
+  sharedModule = import("ghostty-web").catch((err) => {
+    console.error("[terminal] failed to import ghostty-web module:", err)
+    sharedModule = undefined
+    throw err
+  })
+  return sharedModule
+}
+
+// Each terminal tab gets its own Ghostty WASM instance (own linear memory).
+// A single shared instance across tabs meant a later tab's WASM memory
+// growth (memory.grow(), e.g. opening a 2nd/3rd terminal) detached the
+// ArrayBuffer views an earlier tab's renderer was still reading cells
+// from, corrupting its on-screen glyphs into garbage (observed: random
+// CJK/tofu characters appearing in an already-open tab right after
+// opening a new one). The JS module import above is still shared/cached —
+// only the WASM instantiation (real memory) is isolated per terminal.
+const loadGhostty = async () => {
+  const mod = await loadGhosttyModule()
+  console.info("[terminal] loading ghostty-web WASM instance, wasm url:", ghosttyWasmUrl)
+  let ghostty: Ghostty | undefined
+  try {
+    ghostty = await mod.Ghostty.load(ghosttyWasmUrl)
+    console.info("[terminal] ghostty WASM loaded successfully")
+  } catch (err) {
+    console.warn("[terminal] Ghostty WASM unavailable, using canvas renderer:", err)
+  }
+  return { mod, ghostty }
 }
 
 type TerminalColors = {
