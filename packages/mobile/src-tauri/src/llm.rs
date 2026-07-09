@@ -468,6 +468,11 @@ pub async fn llm_idle_tick() -> Result<(), String> {
 /// Backwards-compatible: every field is optional. New fields (accelerator,
 /// threads, n_batch, cache_reuse, top_k, top_p, temperature, system_prompt)
 /// are read by LlamaEngine.kt on the next load_llm_model() call.
+// Each parameter mirrors one independently-optional field of the frontend's
+// `invoke("set_llm_config", {...})` IPC contract; grouping into a struct would
+// require a matching breaking change on the frontend call site, out of scope
+// for a lint fix.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn set_llm_config(
     kv_cache_type: Option<String>,
