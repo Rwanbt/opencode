@@ -186,7 +186,7 @@ export const PtyRoutes = lazy(() =>
           return parsed
         })()
         let handler: Awaited<ReturnType<typeof Pty.connect>>
-        if (!(await Pty.get(id))) throw new Error("Session not found")
+        if (!(await Pty.get(id))) throw new NotFoundError({ message: "Session not found" })
 
         type Socket = {
           readyState: number
