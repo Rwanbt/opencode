@@ -555,6 +555,25 @@ export const GithubRunCommand = cmd({
           const tag = m[0]
           const url = m[1]
           const start = m.index
+
+          // Defense-in-depth: the regexes above already anchor url to the
+          // literal prefix https://github.com/user-attachments/, so an
+          // attacker can't redirect this request to an arbitrary host —
+          // but re-validate the parsed origin here too, right before the
+          // network call, so a future loosening of either regex can't
+          // silently reopen this to SSRF against an attacker-chosen host.
+          let parsedUrl: URL
+          try {
+            parsedUrl = new URL(url)
+          } catch {
+            console.error("Rejected attachment URL: unparseable")
+            continue
+          }
+          if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "github.com") {
+            console.error("Rejected attachment URL: unexpected host")
+            continue
+          }
+
           const filename = path.basename(url)
 
           // Download image
@@ -565,7 +584,12 @@ export const GithubRunCommand = cmd({
             },
           })
           if (!res.ok) {
-            console.error(`Failed to download image: ${url}`)
+            // WHY replace() here: url comes from a GitHub comment body
+            // (untrusted input) and the regex above still allows raw
+            // control characters in its path segment — strip them before
+            // logging so a crafted comment can't forge fake log lines
+            // (CWE-117) in CI output.
+            console.error(`Failed to download image: ${url.replace(/[\x00-\x1f\x7f]/g, "")}`)
             continue
           }
 
