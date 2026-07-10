@@ -24,7 +24,7 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 
 ## Core, API/UI et tests
 
-- [x] TraceContext explicite et ULID (lifecycle same spanId encore à intégrer).
+- [x] TraceContext explicite et ULID (lifecycle same spanId intégré pour LLM via session/llm.ts ET pour tools via session/processor.ts : started/finished/failed/aborted).
 - [ ] Queue 500/64 MiB, overflow priority-aware, counters.
 - [ ] Sanitizer borné, binaire/PDF/image court-circuit.
 - [x] HMAC-SHA256 et secret local crypto-safe (fingerprints à intégrer au classifier).

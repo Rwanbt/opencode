@@ -1366,13 +1366,14 @@ Estimation révisée:
 
 ### Implémentation core
 
-- [ ] ULID generator.
-- [ ] explicit `TraceContext`.
-- [ ] local HMAC secret file + permissions.
+- [x] ULID generator.
+- [x] explicit `TraceContext`.
+- [x] local HMAC secret file + permissions.
 - [ ] bounded sanitizer + binary short-circuit.
-- [ ] queue 500/64MiB + priority overflow.
-- [ ] `RecordResult`.
-- [ ] lifecycle LLM/tools.
+- [x] queue 500/64MiB + priority overflow.
+- [x] `RecordResult`.
+- [x] lifecycle LLM (session/llm.ts: started/finished/failed/aborted, same spanId, non-blocking, gated by experimental.observability.enabled).
+- [x] lifecycle tools (session/processor.ts: started on tool-call → running, finished/failed from tool-result/tool-error, aborted from cleanup() for spans still open; toolKind clear, errorKind bounded, no raw error text).
 - [ ] session delete purge hook.
 
 ### Tests
