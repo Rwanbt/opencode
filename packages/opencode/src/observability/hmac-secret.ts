@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { randomBytes } from "node:crypto"
 import { Global } from "../global"
+import { lazy } from "../util/lazy"
 
 const FILE_NAME = "observability_hmac.key"
 const SECRET_BYTES = 32
@@ -27,3 +28,9 @@ export async function loadOrCreateSecret(configDirectory = Global.Path.config): 
     return new Uint8Array(secret)
   }
 }
+
+// ADR-1027: the secret lives at a fixed global config path, independent of
+// the active project instance, so a single process-wide lazy load is correct
+// (not per-instance state, and not a mutable singleton).
+export const secret = lazy(() => loadOrCreateSecret())
+
