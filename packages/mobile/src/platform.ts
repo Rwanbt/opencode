@@ -196,7 +196,42 @@ export async function createPlatform(): Promise<Platform> {
     }
   }
 
+  // WHY no localStorage fallback here (unlike makeStorage above): this key
+  // holds the embedded server's auth password in clear text. Tauri's Store
+  // plugin writes it to the app's sandboxed private storage (not reachable
+  // by other apps/webviews); localStorage is a browser-origin API with a
+  // materially wider, less controlled exposure surface, which is exactly
+  // what CodeQL's js/clear-text-storage-of-sensitive-data flags. If the
+  // Store plugin genuinely isn't available, don't persist the password at
+  // all — startLocalServer()'s existing "no saved password, restarting"
+  // path already handles that by generating a fresh one, so this only
+  // costs a server restart in that already-degraded scenario, never a
+  // crash or lost functionality.
+  function makeCredentialStore(store: ReturnType<typeof createStore>) {
+    if (!store) {
+      return {
+        async getItem() { return null },
+        async setItem() {},
+        async removeItem() {},
+      }
+    }
+    return {
+      async getItem(key: string) {
+        return (await store.get<string>(key)) ?? null
+      },
+      async setItem(key: string, value: string) {
+        await store.set(key, value)
+        await store.save()
+      },
+      async removeItem(key: string) {
+        await store.delete(key)
+        await store.save()
+      },
+    }
+  }
+
   const settings = makeStorage(settingsStore)
+  const credentials = makeCredentialStore(settingsStore)
 
   // Capture la référence fetch une seule fois, exactement comme l'original.
   // Cela préserve le binding et le contexte du plugin Tauri HTTP.
@@ -395,7 +430,7 @@ export async function createPlatform(): Promise<Platform> {
       // done before this point when needed. No action here.
 
       const port = info.port
-      const savedPw = await settings.getItem("localServerPassword")
+      const savedPw = await credentials.getItem("localServerPassword")
 
       if (info.server_running) {
         await writeDebugLog(`server_running=true savedPw=${savedPw ? savedPw.slice(0,8)+"..." : "null"}`)
@@ -412,7 +447,7 @@ export async function createPlatform(): Promise<Platform> {
       const password = savedPw ?? crypto.randomUUID()
       await writeDebugLog(`fresh start: port=${port} pw=${password.slice(0,8)}...`)
       // Save password BEFORE starting server to avoid race conditions
-      await settings.setItem("localServerPassword", password)
+      await credentials.setItem("localServerPassword", password)
       await settings.setItem("localServerPort", String(port))
 
       try {
@@ -441,7 +476,7 @@ export async function createPlatform(): Promise<Platform> {
       if (os !== "android") return
       const portStr = await settings.getItem("localServerPort")
       const port = portStr ? Number(portStr) : 14096
-      const password = (await settings.getItem("localServerPassword")) ?? undefined
+      const password = (await credentials.getItem("localServerPassword")) ?? undefined
       try { await stopLocal(port, password) } catch {}
     },
   }
