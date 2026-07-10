@@ -265,6 +265,48 @@ const useTerminalUiBindings = (input: {
   // pointermove-driven swipe gesture that scrolls the scrollback in place.
   const MOBILE_SWIPE_THRESHOLD_PX = 8
 
+  // Ghostty's own `scrollLines` clamps at the buffer's live bottom (viewportY
+  // 0) — dragging further has no effect, so the last prompt is stuck at the
+  // bottom edge of the panel even when the on-screen keyboard covers most of
+  // it. Fake "scrolling past the end" by translating the (already fully
+  // rendered) canvas upward via CSS once the real scrollback is exhausted —
+  // `getCanvasOffset()`/hit-testing inside ghostty-web reads
+  // `canvas.getBoundingClientRect()`, which already reflects a CSS
+  // transform, so tap/selection coordinates stay correct while overscrolled.
+  const MAX_OVERSCROLL_FACTOR = 0.5
+  let overscrollPx = 0
+  const canvasEl = input.container.querySelector("canvas")
+
+  const applyOverscroll = () => {
+    if (!canvasEl) return
+    canvasEl.style.transform = overscrollPx > 0 ? `translateY(-${overscrollPx}px)` : ""
+  }
+
+  // Overscroll is deliberately persistent — it must survive both incoming
+  // shell output and the user's own typing, since the whole point is keeping
+  // the last prompt visible above the on-screen keyboard while working. It
+  // only changes via the drag-to-unwind path in onTouchMoveCapture below.
+  //
+  // The keyboard opening/closing still resizes `container` (via the
+  // --vv-top/--vvh compensation), which re-fits the terminal grid. Since
+  // `overscrollPx` is stored as an absolute pixel amount computed against
+  // `container`'s height at drag time, if the keyboard then shrinks that
+  // container, the same absolute offset becomes disproportionately large
+  // relative to the new (smaller) height. Re-clamp it live so it never
+  // exceeds MAX_OVERSCROLL_FACTOR of whatever the container's current height
+  // is — this is the only thing that adjusts the offset outside a drag.
+  const clampOverscrollToContainer = () => {
+    const maxOverscrollPx = input.container.clientHeight * MAX_OVERSCROLL_FACTOR
+    if (overscrollPx <= maxOverscrollPx) return
+    overscrollPx = Math.max(0, maxOverscrollPx)
+    applyOverscroll()
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    const overscrollResizeObserver = new ResizeObserver(clampOverscrollToContainer)
+    overscrollResizeObserver.observe(input.container)
+    input.cleanups.push(() => overscrollResizeObserver.disconnect())
+  }
+
   type TouchMode = "pending" | "swipe"
   let currentTouch: { id: number; x: number; y: number; mode: TouchMode; scrollApplied: number } | null = null
   // Chromium fires `pointerup` before `touchend` for the same gesture
@@ -275,6 +317,36 @@ const useTerminalUiBindings = (input: {
   // — the swipe check never matched and scrolling always opened the
   // keyboard. Capture the verdict before nulling so touchend can still see it.
   let lastGestureWasSwipe = false
+
+  // Safety net: if a real pointerup/pointercancel is ever missed for the
+  // tracked pointer (observed as a risk, not directly reproduced: Android can
+  // drop a touch sequence without delivering either event to the WebView
+  // when the view hierarchy resizes mid-touch, e.g. the keyboard showing or
+  // hiding during a drag), `currentTouch` would otherwise stay non-null
+  // forever. Combined with `blockTouchEndIfSwipe`'s `|| currentTouch` guard
+  // below, a stuck `currentTouch` permanently stops Ghostty's own touchend
+  // handler from ever firing again for this terminal instance — the tab
+  // would look like it silently stopped accepting taps/keyboard focus, with
+  // no way to recover short of creating a new tab. Auto-clear it if no
+  // pointer activity refreshes this watchdog for a second; a real gesture
+  // always finishes (or keeps moving) well within that window.
+  const STUCK_TOUCH_TIMEOUT_MS = 1000
+  let stuckTouchTimer: ReturnType<typeof setTimeout> | undefined
+  const armStuckTouchWatchdog = () => {
+    if (stuckTouchTimer !== undefined) clearTimeout(stuckTouchTimer)
+    stuckTouchTimer = setTimeout(() => {
+      stuckTouchTimer = undefined
+      if (!currentTouch) return
+      lastGestureWasSwipe = currentTouch.mode === "swipe"
+      currentTouch = null
+    }, STUCK_TOUCH_TIMEOUT_MS)
+  }
+  const disarmStuckTouchWatchdog = () => {
+    if (stuckTouchTimer === undefined) return
+    clearTimeout(stuckTouchTimer)
+    stuckTouchTimer = undefined
+  }
+  input.cleanups.push(disarmStuckTouchWatchdog)
 
   const mobileCharHeight = () => {
     const rows = input.term.rows || 24
@@ -314,10 +386,12 @@ const useTerminalUiBindings = (input: {
   const onTouchDownCapture = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || currentTouch) return
     currentTouch = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: "pending", scrollApplied: 0 }
+    armStuckTouchWatchdog()
   }
 
   const onTouchMoveCapture = (e: PointerEvent) => {
     if (!currentTouch || e.pointerId !== currentTouch.id) return
+    armStuckTouchWatchdog()
     const dy = e.clientY - currentTouch.y
 
     if (currentTouch.mode === "pending") {
@@ -331,14 +405,40 @@ const useTerminalUiBindings = (input: {
     e.stopPropagation()
     // Drag-down = walking back in history = scroll UP (negative delta).
     const targetRowsFromStart = Math.round(-dy / mobileCharHeight())
-    const delta = targetRowsFromStart - currentTouch.scrollApplied
-    if (delta === 0) return
-    input.term.scrollLines(delta)
+    const totalDelta = targetRowsFromStart - currentTouch.scrollApplied
     currentTouch.scrollApplied = targetRowsFromStart
+    if (totalDelta === 0) return
+
+    const charHeight = mobileCharHeight()
+    let delta = totalDelta
+    if (delta < 0 && overscrollPx > 0) {
+      // Dragging back toward history: unwind the fake overscroll first so
+      // the gesture feels continuous instead of jumping straight into real
+      // scrollback while the canvas is still shifted up.
+      const rowsToUnwind = Math.min(-delta, overscrollPx / charHeight)
+      overscrollPx = Math.max(0, overscrollPx - rowsToUnwind * charHeight)
+      delta += rowsToUnwind
+      applyOverscroll()
+    }
+    if (delta === 0) return
+
+    const beforeY = input.term.getViewportY()
+    input.term.scrollLines(delta)
+    if (delta > 0 && input.term.getViewportY() === 0) {
+      // Requested more "toward the bottom" scroll than the real buffer had
+      // left (already at viewportY 0) — the leftover becomes overscroll.
+      const unusedRows = delta - (beforeY - input.term.getViewportY())
+      if (unusedRows > 0) {
+        const maxOverscrollPx = input.container.clientHeight * MAX_OVERSCROLL_FACTOR
+        overscrollPx = Math.min(maxOverscrollPx, overscrollPx + unusedRows * charHeight)
+        applyOverscroll()
+      }
+    }
   }
 
   const onTouchEndOrCancel = (e: PointerEvent) => {
     if (!currentTouch || e.pointerId !== currentTouch.id) return
+    disarmStuckTouchWatchdog()
     lastGestureWasSwipe = currentTouch.mode === "swipe"
     currentTouch = null
     // DO NOT preventDefault/stopPropagation here — Ghostty's native
