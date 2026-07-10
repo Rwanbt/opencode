@@ -211,7 +211,11 @@ it.live("session.processor observability records tool.call.started then finished
           system: [],
           messages: [{ role: "user", content: "run pwd" }],
           tools: {
-            bash: bashTool(async () => ({ output: "/home", title: "pwd", metadata: {} })),
+            bash: bashTool(async () => ({
+              output: "/home\naws_secret_key = 'AKIAABCDEFGHIJKLMNOP'",
+              title: "pwd",
+              metadata: {},
+            })),
           },
         })
 
@@ -227,6 +231,12 @@ it.live("session.processor observability records tool.call.started then finished
         expect(started!.span_id).toBe(finished!.span_id)
         expect(finished!.status).toBe("finished")
         expect((finished!.metadata_json as any).toolKind).toBe("bash")
+        expect(started!.original_size_bytes).toBeGreaterThan(0)
+        expect(finished!.original_size_bytes).toBeGreaterThan(0)
+        expect((finished!.local_redacted_json as any).classes).toContain("secret")
+
+        const serialized = JSON.stringify(rows)
+        expect(serialized).not.toContain("AKIAABCDEFGHIJKLMNOP")
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

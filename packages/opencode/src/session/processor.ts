@@ -25,6 +25,7 @@ import { resolveCapturePolicy } from "@/observability/capture-policy"
 import { ObservabilityRuntime } from "@/observability/runtime"
 import type { ObservabilityService } from "@/observability/service"
 import type { TraceContext } from "@/observability/trace-context"
+import { sanitizeText } from "@/observability/sanitizer"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
@@ -221,9 +222,14 @@ export namespace SessionProcessor {
               if (observability && turnTraceId) {
                 const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID })
                 ctx.toolSpans[value.toolCallId] = { trace: started.trace, startedAtMs: started.event.tsMs }
+                const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
                 observability.record(started.trace, {
                   ...started.event,
                   metadata: { toolKind: value.toolName },
+                  originalSizeBytes: argsClassification.originalSizeBytes,
+                  payloadTruncated: argsClassification.payloadTruncated,
+                  redactionStatus: argsClassification.redactionStatus,
+                  localRedacted: { classes: argsClassification.classes },
                 })
               }
 
@@ -343,7 +349,19 @@ export namespace SessionProcessor {
               const finishedSpan = ctx.toolSpans[value.toolCallId]
               if (observability && finishedSpan) {
                 const terminal = finishTool(finishedSpan.trace, "finished", finishedSpan.startedAtMs)
-                observability.record(terminal.context, { ...terminal.event, metadata: { toolKind: toolName } })
+                const outputClassification = sanitizeText({ text: value.output.output })
+                observability.record(terminal.context, {
+                  ...terminal.event,
+                  metadata: {
+                    toolKind: toolName,
+                    outputFileKind: outputClassification.fileKind,
+                    outputMime: outputClassification.mime,
+                  },
+                  originalSizeBytes: outputClassification.originalSizeBytes,
+                  payloadTruncated: outputClassification.payloadTruncated,
+                  redactionStatus: outputClassification.redactionStatus,
+                  localRedacted: { classes: outputClassification.classes },
+                })
                 delete ctx.toolSpans[value.toolCallId]
               }
               return

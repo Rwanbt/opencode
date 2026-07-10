@@ -36,10 +36,15 @@ const MetadataSchema = z.object({
   skillHmac: Hmac.optional(),
   pathHmac: Hmac.optional(),
   mcpHmac: Hmac.optional(),
+  outputFileKind: OptionalSmallString,
+  outputMime: OptionalSmallString,
 }).strict()
 
+export const RedactedClassSchema = z.enum(["secret", "path", "email", "username", "binary"])
+export type RedactedClass = z.infer<typeof RedactedClassSchema>
+
 const RedactedSchema = z.object({
-  classes: z.array(z.enum(["secret", "path", "email", "username", "binary"])).max(16).default([]),
+  classes: z.array(RedactedClassSchema).max(16).default([]),
   contentFingerprintHmac: Hmac.optional(),
   errorMessageHmac: Hmac.optional(),
 }).strict()
