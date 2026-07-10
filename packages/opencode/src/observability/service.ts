@@ -1,4 +1,4 @@
-import type { ObservabilityEvent } from "./event-schema"
+import type { ObservabilityEvent, ObservabilityEventInput } from "./event-schema"
 import { parseObservabilityEvent } from "./event-schema"
 import { ObservabilityId } from "./id"
 import { BoundedEventQueue, type QueuePriority } from "./queue"
@@ -19,11 +19,18 @@ export class ObservabilityService {
 
   constructor(private readonly writer: ObservabilityWriter) {}
 
-  record(context: TraceContext, input: Omit<ObservabilityEvent, "context" | "eventId" | "enqueueSeq">): RecordResult {
+  record(
+    context: TraceContext,
+    input: Omit<ObservabilityEventInput, "context" | "eventId" | "enqueueSeq">,
+  ): RecordResult {
     if (!parseTraceContext(context).success) return { ok: false, reason: "invalid_context" }
     if (this.#circuitOpen) return { ok: false, reason: "circuit_open" }
-    const event = { ...input, context, eventId: ObservabilityId.create(), enqueueSeq: 1 }
-    if (!parseObservabilityEvent(event).success) return { ok: false, reason: "invalid_event" }
+    // Enqueue the Zod-validated, defaulted result (parsed.data) — not the raw
+    // input — so NOT NULL columns like redaction_status are never undefined
+    // when a caller relies on schema defaults instead of repeating them.
+    const parsed = parseObservabilityEvent({ ...input, context, eventId: ObservabilityId.create(), enqueueSeq: 1 })
+    if (!parsed.success) return { ok: false, reason: "invalid_event" }
+    const event = parsed.data
     const priority: QueuePriority = event.status === "started" ? "low" : "high"
     const queued = this.#queue.enqueue(event, JSON.stringify(event).length, priority)
     if (!queued.accepted) return { ok: false, reason: "queue_full" }

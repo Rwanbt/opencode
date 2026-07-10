@@ -20,6 +20,15 @@ import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { Token } from "@/util/token"
+import { Session } from "."
+import { ObservabilityId } from "@/observability/id"
+import { finishLlm, startLlm } from "@/observability/lifecycle"
+import { resolveCapturePolicy, type CapturePolicy } from "@/observability/capture-policy"
+import { ObservabilityRuntime } from "@/observability/runtime"
+import type { ObservabilityService } from "@/observability/service"
+import type { TraceContext } from "@/observability/trace-context"
+import { hmacSha256 } from "@/observability/hmac"
+import { secret as observabilitySecret } from "@/observability/hmac-secret"
 
 function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise
@@ -31,6 +40,35 @@ function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
       (v) => { signal.removeEventListener("abort", onAbort); resolve(v) },
       (e) => { signal.removeEventListener("abort", onAbort); reject(e) },
     )
+  })
+}
+
+// Records llm.call.failed without ever throwing into the LLM error path.
+// error_message_hmac is gated to captureMode=local_redacted per the Phase 1
+// privacy matrix (ADR-1022); error_kind is safe at local_metadata since it is
+// a bounded class name, never message content.
+async function recordLlmFailure(
+  observability: ObservabilityService,
+  trace: TraceContext,
+  startedAtMs: number,
+  error: unknown,
+  captureLevel: CapturePolicy["level"],
+) {
+  const terminal = finishLlm(trace, "failed", startedAtMs)
+  const errorKind = (error instanceof Error ? error.name : typeof error).slice(0, 128)
+  let errorMessageHmac: string | undefined
+  if (captureLevel === "local_redacted") {
+    const message = error instanceof Error ? error.message : String(error)
+    try {
+      errorMessageHmac = hmacSha256(await observabilitySecret(), message)
+    } catch {
+      // Never let a missing/unreadable secret affect the LLM error path.
+    }
+  }
+  observability.record(terminal.context, {
+    ...terminal.event,
+    metadata: { errorKind },
+    localRedacted: errorMessageHmac ? { classes: [], errorMessageHmac } : { classes: [] },
   })
 }
 
@@ -174,6 +212,8 @@ export namespace LLM {
       ]),
       input.abort,
     )
+
+    const capturePolicy = resolveCapturePolicy(cfg.experimental?.observability)
 
     // ── Provider fallback (Sprint 5 item 2) ─────────────────────────────────
     // Opt-in: experimental.provider.fallback = "local" | "cloud" | null.
@@ -413,11 +453,54 @@ export namespace LLM {
       }
     }
 
+    const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
+    const llmStartedAtMs = Date.now()
+    const llmSpan = observability
+      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID }, llmStartedAtMs)
+      : undefined
+    if (observability && llmSpan) {
+      observability.record(llmSpan.trace, {
+        ...llmSpan.event,
+        metadata: { modelProvider: input.model.providerID, modelId: input.model.id },
+      })
+    }
+
     return streamText({
-      onError(error) {
+      async onError(error) {
         l.error("stream error", {
           error,
         })
+        // The AI SDK awaits onError before continuing stream processing
+        // (see DefaultStreamTextResult's eventProcessor), so awaiting here
+        // guarantees the failed event is queued before the caller observes
+        // stream completion.
+        if (observability && llmSpan) {
+          await recordLlmFailure(observability, llmSpan.trace, llmStartedAtMs, error.error, capturePolicy.level)
+        }
+      },
+      onFinish(event) {
+        if (!observability || !llmSpan) return
+        const usage = Session.getUsage({ model: input.model, usage: event.usage, metadata: event.providerMetadata })
+        const terminal = finishLlm(llmSpan.trace, "finished", llmStartedAtMs)
+        observability.record(terminal.context, {
+          ...terminal.event,
+          metadata: {
+            modelProvider: input.model.providerID,
+            modelId: input.model.id,
+            inputTokens: usage.tokens.input,
+            outputTokens: usage.tokens.output,
+            cacheReadTokens: usage.tokens.cache.read,
+            cacheWriteTokens: usage.tokens.cache.write,
+          },
+          costNanoUsd: Math.max(0, Math.round(usage.cost * 1_000_000_000)),
+          pricingSource: "Session.getUsage",
+          costComputedAtMs: Date.now(),
+        })
+      },
+      onAbort() {
+        if (!observability || !llmSpan) return
+        const terminal = finishLlm(llmSpan.trace, "aborted", llmStartedAtMs)
+        observability.record(terminal.context, terminal.event)
       },
       async experimental_repairToolCall(failed) {
         // Step 1: lowercase tool name normalization

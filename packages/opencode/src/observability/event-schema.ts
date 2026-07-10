@@ -71,6 +71,11 @@ export const ObservabilityEventSchema = z.object({
 
 export type ObservabilityEvent = z.infer<typeof ObservabilityEventSchema>
 
+// Pre-default shape: lets record() callers omit fields Zod fills in
+// (redactionStatus, payloadTruncated, metadata, localRedacted, schemaVersion)
+// instead of repeating Phase 1 defaults at every call site.
+export type ObservabilityEventInput = z.input<typeof ObservabilityEventSchema>
+
 export function parseObservabilityEvent(input: unknown) {
   return ObservabilityEventSchema.safeParse(input)
 }

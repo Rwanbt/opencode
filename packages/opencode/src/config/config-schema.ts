@@ -698,6 +698,21 @@ export const Info = z
           .boolean()
           .optional()
           .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+        observability: z
+          .object({
+            enabled: z
+              .boolean()
+              .optional()
+              .describe("Enable native local observability event capture (default: false). See ADR-1020 through 1031."),
+            captureMode: z
+              .enum(["local_metadata", "local_redacted"])
+              .optional()
+              .describe(
+                "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
+              ),
+          })
+          .optional()
+          .describe("Native local observability: metadata-only event capture, no prompts/responses, no network."),
         primary_tools: z
           .array(z.string())
           .optional()
