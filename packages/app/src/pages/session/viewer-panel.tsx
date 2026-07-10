@@ -79,6 +79,12 @@ export function ViewerPanel(props: ViewerPanelProps) {
       <Dynamic
         component={fileComponent}
         mode="text"
+        // WHY: overrides createDefaultOptions' "scroll" default — this viewer
+        // always wires line-commenting (commentsUi below), and the
+        // popover/tools bar isn't scoped to absorb the viewer's own
+        // horizontal scroll under "scroll" mode, so it pushes the outer
+        // .scroll-view__viewport wider instead of staying contained.
+        overflow="wrap"
         file={{
           name: props.path() ?? "",
           contents: source(),
