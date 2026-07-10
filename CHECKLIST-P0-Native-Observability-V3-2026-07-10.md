@@ -26,8 +26,8 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 
 - [x] TraceContext explicite et ULID (lifecycle same spanId intégré pour LLM via session/llm.ts ET pour tools via session/processor.ts : started/finished/failed/aborted).
 - [ ] Queue 500/64 MiB, overflow priority-aware, counters.
-- [ ] Sanitizer borné, binaire/PDF/image court-circuit.
-- [x] HMAC-SHA256 et secret local crypto-safe (fingerprints à intégrer au classifier).
+- [x] Sanitizer borné, binaire/PDF/image court-circuit (field-classifier.ts + sanitizer.ts, câblé dans session/processor.ts pour args/output tool ; jamais de contenu brut retourné, fail-closed testé).
+- [x] HMAC-SHA256 et secret local crypto-safe (`fingerprintContent()` disponible et testé, pas encore appelé par un site d'appel réel — classes/fileKind seuls câblés pour l'instant).
 - [ ] Routes events/detail/settings/summary/health/delete avec auth/ownership.
 - [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy.
 - [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network.

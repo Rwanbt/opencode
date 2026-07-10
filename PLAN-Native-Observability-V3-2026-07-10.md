@@ -1369,7 +1369,7 @@ Estimation révisée:
 - [x] ULID generator.
 - [x] explicit `TraceContext`.
 - [x] local HMAC secret file + permissions.
-- [ ] bounded sanitizer + binary short-circuit.
+- [x] bounded sanitizer + binary short-circuit (field-classifier.ts + sanitizer.ts: 4KiB chunked scan, PNG/JPEG/GIF/PDF/ZIP/WEBP signature + base64 short-circuit, path/email/secret/entropy detection, fail-closed on exception; wired into tool.call.started/finished args+output classification; fingerprintContent() ready but not yet called by a real site).
 - [x] queue 500/64MiB + priority overflow.
 - [x] `RecordResult`.
 - [x] lifecycle LLM (session/llm.ts: started/finished/failed/aborted, same spanId, non-blocking, gated by experimental.observability.enabled).
