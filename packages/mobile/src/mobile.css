@@ -314,11 +314,24 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
    it doesn't always update when the softkeyboard opens via a programmatic
    focus, leaving the TerminalPanel (bottom of the flex-col) pushed under
    the keyboard. `--vvh` is refreshed on every `visualViewport.resize`,
-   which fires reliably on IME toggle, orientation change, and scroll. */
+   which fires reliably on IME toggle, orientation change, and scroll.
+
+   `translateY(--vv-top)` compensates for `visualViewport.offsetTop`:
+   on this WebView the visible viewport can shift down relative to the
+   layout viewport (confirmed on-device: offsetTop reaching 127px on IME
+   focus) without the page scrolling `#root` along with it. Height alone
+   leaves `#root`'s top content pushed off-screen above the visible area
+   and a matching gap above the keyboard. Shifting `#root` DOWN by
+   `offsetTop` moves it from layout-viewport [0, vvh] to [offsetTop,
+   offsetTop + vvh], which is exactly where the visible window sits —
+   verified on-device: negating this (translateY(-offsetTop)) makes the
+   gap worse (content pushed further off-screen), the positive value
+   makes the whole app render flush with the keyboard, no gap. */
 #root {
   height: var(--vvh, 100dvh) !important;
   max-height: var(--vvh, 100dvh) !important;
   overflow: hidden !important;
+  transform: translateY(var(--vv-top, 0px)) !important;
 }
 
 /* The main scrollable area should fill remaining space */

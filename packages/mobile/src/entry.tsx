@@ -249,11 +249,22 @@ function App() {
     // partially or fully hidden under the keyboard. `visualViewport` is
     // the authoritative source and fires `resize` reliably on all touch
     // flows we care about.
+    //
+    // `--vv-top` (visualViewport.offsetTop) is exposed for the same reason:
+    // on this WebView the visible viewport can shift down relative to the
+    // layout viewport (confirmed on-device: offsetTop reaching 127px while
+    // focusing the terminal's hidden IME textarea) without #root moving
+    // with it — height alone shrinks correctly, but #root stays anchored
+    // at the old top, pushing its top content off-screen above the visible
+    // area and leaving a gap of exactly `offsetTop` px above the keyboard.
+    // #root's `transform` (mobile.css) reads this to track the shift.
     if (typeof window === "undefined") return
     const vp = window.visualViewport
     const sync = () => {
       const h = vp?.height ?? window.innerHeight
+      const top = vp?.offsetTop ?? 0
       document.documentElement.style.setProperty("--vvh", `${h}px`)
+      document.documentElement.style.setProperty("--vv-top", `${top}px`)
     }
     sync()
     if (vp) {

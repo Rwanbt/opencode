@@ -216,7 +216,7 @@ const useTerminalUiBindings = (input: {
   container: HTMLDivElement
   term: Term
   cleanups: VoidFunction[]
-  handlePointerDown: () => void
+  handlePointerDown: (e: PointerEvent) => void
   handleLinkClick: (event: MouseEvent) => void
 }) => {
   const handleCopy = (event: ClipboardEvent) => {
@@ -267,11 +267,49 @@ const useTerminalUiBindings = (input: {
 
   type TouchMode = "pending" | "swipe"
   let currentTouch: { id: number; x: number; y: number; mode: TouchMode; scrollApplied: number } | null = null
+  // Chromium fires `pointerup` before `touchend` for the same gesture
+  // (confirmed on-device: ~0.2ms apart, consistently pointerup-first across
+  // every touch sequence captured). `onTouchEndOrCancel` used to null
+  // `currentTouch` on pointerup, so by the time `blockTouchEndIfSwipe` ran
+  // on the later touchend, `currentTouch?.mode` always read as `undefined`
+  // — the swipe check never matched and scrolling always opened the
+  // keyboard. Capture the verdict before nulling so touchend can still see it.
+  let lastGestureWasSwipe = false
 
   const mobileCharHeight = () => {
     const rows = input.term.rows || 24
     return Math.max(8, input.container.clientHeight / rows)
   }
+
+  // Ghostty registers `canvas.addEventListener("mousedown", () => …focus())`
+  // unconditionally (no button check) — meant for desktop mouse clicks, but
+  // Chromium also synthesizes a compatibility `mousedown` from an unhandled
+  // touch sequence for legacy web compat. `preventDefault` on `touchstart` is
+  // the standard way to suppress that synthesis; kept as defense in depth,
+  // though it turned out NOT to be the actual cause of scroll reopening the
+  // keyboard (see below).
+  //
+  // Root cause, confirmed on-device: dismissing the keyboard (back button /
+  // tap outside) never actually calls `.blur()` on the hidden textarea — it
+  // only hides the IME UI. `document.activeElement` stays the textarea
+  // (verified: `vvHeight` back to full/no-keyboard while `activeElement` is
+  // still the terminal's textarea). Android's InputMethodManager can then
+  // re-show the keyboard on the NEXT touch of that still-focused view
+  // entirely at the platform level — independent of touchend, mousedown, or
+  // any `preventDefault()`, which is why blocking those JS events alone never
+  // stopped it. Blurring on every touchstart removes DOM focus before that
+  // native reshow can act; Ghostty's own touchend handler still calls
+  // `.focus()` for a genuine tap (mode never reaches "swipe"), so tap-to-open
+  // is unaffected — only scrolling now stays blurred throughout.
+  const suppressSyntheticMouseEvents = (e: TouchEvent) => {
+    e.preventDefault()
+    input.term.textarea?.blur()
+  }
+  const touchStartOptions: AddEventListenerOptions = { capture: true, passive: false }
+  input.container.addEventListener("touchstart", suppressSyntheticMouseEvents, touchStartOptions)
+  input.cleanups.push(() =>
+    input.container.removeEventListener("touchstart", suppressSyntheticMouseEvents, touchStartOptions),
+  )
 
   const onTouchDownCapture = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || currentTouch) return
@@ -301,6 +339,7 @@ const useTerminalUiBindings = (input: {
 
   const onTouchEndOrCancel = (e: PointerEvent) => {
     if (!currentTouch || e.pointerId !== currentTouch.id) return
+    lastGestureWasSwipe = currentTouch.mode === "swipe"
     currentTouch = null
     // DO NOT preventDefault/stopPropagation here — Ghostty's native
     // touchend handler on the canvas must still fire so the IME attaches
@@ -327,9 +366,23 @@ const useTerminalUiBindings = (input: {
   // softkeyboard state. For taps (mode stays "pending"), we let touchend
   // bubble to the canvas so Ghostty attaches the Android IME normally.
   // This conditional block is safe where the v3.2 attempt (unconditional
-  // stopImmediatePropagation on touchend) was not.
+  // stopImmediatePropagation on touchend) was not. Reads `lastGestureWasSwipe`
+  // (captured synchronously in onTouchEndOrCancel's pointerup/pointercancel
+  // handler) rather than `currentTouch?.mode`, which is always already null
+  // by the time this touchend handler runs.
+  //
+  // Also blocks while `currentTouch` is still non-null (another pointer is
+  // still actively tracked): confirmed on-device that Android reports a
+  // second, ~4ms-lived pointer (its own distinct pointerId) partway through
+  // a real one-finger scroll. `onTouchDownCapture` already ignores that
+  // second pointerdown (`if (... || currentTouch) return`), so its matching
+  // pointerup never reaches `onTouchEndOrCancel` either (pointerId mismatch)
+  // and `lastGestureWasSwipe` is never updated for it — leaving this touchend
+  // to fall through on a stale value from whatever gesture came before.
+  // Any touchend arriving while a swipe is still in progress is spurious by
+  // definition (a real tap-to-focus never overlaps another active touch).
   const blockTouchEndIfSwipe = (e: TouchEvent) => {
-    if (currentTouch?.mode === "swipe") {
+    if (lastGestureWasSwipe || currentTouch) {
       e.stopPropagation()
     }
   }
@@ -564,11 +617,22 @@ export const Terminal = (props: TerminalProps) => {
     t.textarea?.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
-  const handlePointerDown = () => {
+  const handlePointerDown = (e: PointerEvent) => {
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
       activeElement.blur()
     }
+    // Root cause of "scroll reopens the keyboard" (confirmed on-device):
+    // this fired unconditionally on every pointerdown, calling
+    // `t.textarea?.focus()` before the swipe-vs-tap gesture below had any
+    // chance to classify the touch — refocusing the (possibly just-blurred)
+    // textarea instantly re-arms Android's native keyboard-on-focused-touch
+    // behavior regardless of whether the gesture turns out to be a scroll.
+    // Ghostty's own touchend handler already focuses the terminal correctly
+    // for a genuine tap (gated by `blockTouchEndIfSwipe` below), so touch
+    // pointers skip this eager focus entirely; non-touch pointers (mouse)
+    // keep the original immediate focus-on-click behavior.
+    if (e.pointerType === "touch") return
     focusTerminal()
   }
 
