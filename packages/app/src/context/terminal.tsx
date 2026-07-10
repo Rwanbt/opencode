@@ -226,9 +226,23 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     )
   }
 
+  // FORK (P5 investigation, 2026-07-09): trace `removeExited` entry. Hypothesis
+  // is that an Enter press triggers PTY server-side exit, which fires pty.exited,
+  // which calls this and removes T2 from the store. If this log fires in pairs
+  // with the pty.exited listener log below (same id), the chain is confirmed.
   const removeExited = (id: string) => {
     const all = store.all
     const index = all.findIndex((x) => x.id === id)
+    console.log(
+      "[term-investigation] removeExited",
+      JSON.stringify({
+        id,
+        foundAtIndex: index,
+        isActiveTab: store.active === id,
+        storeActive: store.active,
+        storeAllIds: store.all.map((p) => p.id),
+      }),
+    )
     if (index === -1) return
     const active = store.active === id ? (index === 0 ? all[1]?.id : all[0]?.id) : store.active
     batch(() => {
@@ -242,7 +256,20 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     })
   }
 
+  // FORK (P5 investigation, 2026-07-09): trace every pty.exited event from the
+  // server. If this fires simultaneously with removeExited above (matching id),
+  // the "Enter ferme T2" symptom is caused by the PTY process exiting on the
+  // server side — to be cross-validated against Bun server logs
+  // (`log.info("session exited", { id, exitCode })` in pty/index.ts).
   const unsub = sdk.event.on("pty.exited", (event: { properties: { id: string } }) => {
+    console.log(
+      "[term-investigation] pty.exited event",
+      JSON.stringify({
+        id: event.properties.id,
+        storeActive: store.active,
+        storeAllIds: store.all.map((p) => p.id),
+      }),
+    )
     removeExited(event.properties.id)
   })
   onCleanup(unsub)
@@ -288,19 +315,21 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     // failure (network error, auth not yet ready, server still booting)
     // must NOT mark the PTY dead — otherwise a sweep racing the sidecar
     // health check would wipe every still-valid session.
+    //
+    // FORK (P1, 2026-07-09): SDK default `throwOnError:false` means non-2xx
+    // responses are returned as `{data: undefined, error: {name, ...}}`,
+    // NOT thrown. Reading `res.error` is the only way to detect NotFoundError.
+    // The previous `.then(() => "alive").catch(...)` chain was unreachable
+    // for HTTP error paths and silently grandfathered every dead tab.
     const statuses = await Promise.all(
-      ids.map((id) =>
-        sdk.client.pty
-          .get({ ptyID: id })
-          .then(() => "alive" as const)
-          .catch((err: unknown) => {
-            const name =
-              err && typeof err === "object" && "name" in err && typeof err.name === "string"
-                ? err.name
-                : undefined
-            return name === "NotFoundError" ? ("gone" as const) : ("unknown" as const)
-          }),
-      ),
+      ids.map(async (id) => {
+        const res = await sdk.client.pty.get({ ptyID: id })
+        if (res.error) {
+          const name = (res.error as { name?: string }).name
+          return name === "NotFoundError" ? ("gone" as const) : ("unknown" as const)
+        }
+        return "alive" as const
+      }),
     )
     const dead = new Set(ids.filter((_, index) => statuses[index] === "gone"))
     if (dead.size === 0) {
@@ -349,24 +378,27 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     const pty = store.all[index]
     if (!pty) return
     const estimated = estimateTerminalSize({ cols: pty.cols, rows: pty.rows })
-    const next = await client.pty
-      .create({
-        title: pty.title,
-        cols: estimated.cols,
-        rows: estimated.rows,
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to clone terminal", error)
-        return undefined
-      })
-    if (!next?.data) return
+    // FORK (P1, 2026-07-09): SDK default `throwOnError:false` returns errors
+    // via `res.error` instead of throwing. Reading `res.error` is the only
+    // way to detect a failed create (e.g., when the sidecar is down).
+    const res = await client.pty.create({
+      title: pty.title,
+      cols: estimated.cols,
+      rows: estimated.rows,
+    })
+    if (res.error) {
+      console.error("Failed to clone terminal", res.error)
+      return
+    }
+    const next = res.data
+    if (!next) return
 
     const active = store.active === pty.id
 
     batch(() => {
       setStore("all", index, {
-        id: next.data.id,
-        title: next.data.title ?? pty.title,
+        id: next.id,
+        title: next.title ?? pty.title,
         titleNumber: pty.titleNumber,
         buffer: undefined,
         cursor: undefined,
@@ -375,7 +407,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         cols: undefined,
       })
       if (active) {
-        setStore("active", next.data.id)
+        setStore("active", next.id)
       }
     })
   }
@@ -433,12 +465,28 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const index = store.all.findIndex((x) => x.id === id)
       if (index === -1) return
       if (!store.all[index]?._pending) return
+      // FORK (P5 investigation, 2026-07-09): success path of lazy-create.
+      // Compare with failPending logs to distinguish "lazy-create succeeded,
+      // then something else killed the tab" vs "lazy-create itself failed".
+      console.log("[term-investigation] finalizePending", JSON.stringify({ id }))
       setStore("all", index, (pty) => ({ ...pty, _pending: undefined }))
     },
     failPending(id: string) {
       const index = store.all.findIndex((x) => x.id === id)
       if (index === -1) return
       if (!store.all[index]?._pending) return
+      // FORK (P5 investigation, 2026-07-09): fail path of lazy-create.
+      // Cross-validate with the lazy-create error log in terminal.tsx
+      // (around line 846) to confirm they fire together.
+      console.log(
+        "[term-investigation] failPending",
+        JSON.stringify({
+          id,
+          isActiveTab: store.active === id,
+          storeActive: store.active,
+          storeAllIds: store.all.map((p) => p.id),
+        }),
+      )
       batch(() => {
         if (store.active === id) {
           const fallback = index > 0 ? store.all[index - 1]?.id : store.all[1]?.id

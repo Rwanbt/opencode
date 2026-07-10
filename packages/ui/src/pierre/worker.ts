@@ -1,11 +1,24 @@
 import { WorkerPoolManager } from "@pierre/diffs/worker"
 import ShikiWorkerUrl from "@pierre/diffs/worker/worker.js?worker&url"
+import { registerOpenCodeTheme } from "./opencode-theme"
 
 export type WorkerPoolStyle = "unified" | "split"
 
 export function workerFactory(): Worker {
   return new Worker(ShikiWorkerUrl, { type: "module" })
 }
+
+// WHY here, not just in context/marked.tsx (where this theme registration
+// originated for markdown rendering): WorkerPoolManager resolves themes by
+// NAME on the main thread before handing them to the Shiki worker — with no
+// fallback if "OpenCode" isn't registered yet. Relying on marked.tsx's
+// module import as the only registration point meant opening a file before
+// any markdown had rendered left every syntax-highlighting span uncolored
+// (confirmed live: tokens present and correctly split, but a single uniform
+// foreground, empty class list — the theme lookup silently found nothing).
+// registerCustomTheme() just stores a loader in a Map; calling it twice is
+// harmless.
+registerOpenCodeTheme()
 
 function createPool(lineDiffType: "none" | "word-alt") {
   const pool = new WorkerPoolManager(

@@ -581,6 +581,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Dynamic
                                     component={fileComponent}
                                     mode="diff"
+                                    // WHY: overrides createDefaultOptions' "scroll" default — the
+                                    // line-comment popover/tools bar here isn't scoped to absorb
+                                    // this viewer's own horizontal scroll, so "scroll" pushes the
+                                    // outer session-review-scroll viewport wider instead of
+                                    // staying contained.
+                                    overflow="wrap"
                                     preloadedDiff={diff.preloaded}
                                     diffStyle={diffStyle()}
                                     onRendered={() => {

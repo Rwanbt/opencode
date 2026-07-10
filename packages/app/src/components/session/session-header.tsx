@@ -477,8 +477,11 @@ export function SessionHeader() {
                     </Button>
                   </TooltipKeybind>
 
-                  {/* FORK: Stretch Phase 6 — editor focus mode (tablet mode) */}
-                  <Show when={layout.fileTree.opened() || view().reviewPanel.opened()}>
+                  {/* FORK: Stretch Phase 6 — editor focus mode (tablet mode).
+                      sessionPanelWidth (session.tsx) only reacts to this when
+                      isDesktop(), so on mobile the button toggles state with
+                      no visible effect — hide it there. */}
+                  <Show when={platform.platform !== "mobile" && (layout.fileTree.opened() || view().reviewPanel.opened())}>
                     <TooltipKeybind
                       title={layout.editorFocus.enabled() ? "Restaurer le chat" : "Mode focus éditeur"}
                       keybind=""

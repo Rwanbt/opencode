@@ -282,6 +282,15 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
         );
     }
 
+    // Extraction verified complete: the ~786 MB compressed archive is now
+    // pure dead weight (rootfs/ already holds everything it contained) and
+    // was never being deleted, permanently wasting that space on every
+    // device after every fresh extraction. Best-effort: a failed delete
+    // isn't fatal, just leaves the waste for next time.
+    if let Err(e) = fs::remove_file(&rootfs_tar) {
+        log::warn!("[install_ext] failed to remove rootfs.tar.gz after extraction: {}", e);
+    }
+
     // Bake the toolchain wrappers immediately after extraction so cargo /
     // rustc / gcc are usable without a server restart. start_embedded_server
     // also calls this — both are idempotent. Rationale: the very first

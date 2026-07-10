@@ -118,6 +118,9 @@ export type Platform = {
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
 
+  /** Read text from clipboard (mobile only — bridges the native Android clipboard) */
+  readClipboardText?(): Promise<string | null>
+
   /** Check if local CLI execution is available (Android Termux) */
   checkLocalAvailable?(): Promise<boolean>
 

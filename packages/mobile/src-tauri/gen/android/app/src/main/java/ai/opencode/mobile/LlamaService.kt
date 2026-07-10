@@ -74,6 +74,20 @@ class LlamaService : Service() {
     @Volatile
     private var watchdogThread: Thread? = null
 
+    @Volatile
+    private var ptyWatchdogThread: Thread? = null
+
+    // Bounds automatic pty_server respawns so a fundamentally broken binary
+    // (or a device that keeps phantom-process-killing it) can't crash-loop
+    // forever. See PtyServerRespawnPolicy.
+    private val ptyRespawnPolicy = PtyServerRespawnPolicy()
+
+    // Params of the last spawnPtyServer() call, kept so the watchdog can
+    // respawn with the same args after an unexpected death.
+    private var lastPtyNativeLibDir: String? = null
+    private var lastPtyRuntimeDir: String? = null
+    private var lastPtyPort: Int = 14098
+
     // Held for the lifetime of an active llama-server child process.
     // PARTIAL_WAKE_LOCK prevents CPU deep sleep between token generation steps
     // when the screen is off — without it the SoC can stall for ~200ms per step.
@@ -356,7 +370,14 @@ class LlamaService : Service() {
      * @param port          TCP port for the PTY server
      */
     fun spawnPtyServer(nativeLibDir: String, runtimeDir: String, port: Int = 14098) {
+        // stopPtyServer() interrupts any watchdog from a previous instance
+        // first, so it never mistakes this intentional restart for an
+        // unexpected death.
         stopPtyServer()
+        lastPtyNativeLibDir = nativeLibDir
+        lastPtyRuntimeDir = runtimeDir
+        lastPtyPort = port
+
         val binary = "$nativeLibDir/libpty_server.so"
         val portFile = "$runtimeDir/.pty_server_port"
 
@@ -372,6 +393,7 @@ class LlamaService : Service() {
             val proc = pb.start()
             ptyServerProcess = proc
             Log.i(TAG, "PTY server spawned on port $port (binary=$binary)")
+            ptyRespawnPolicy.onHealthy()
 
             // Stream PTY server logs to logcat in background
             Thread {
@@ -382,14 +404,62 @@ class LlamaService : Service() {
                 } catch (_: Exception) {}
                 Log.i(TAG, "PTY server process ended")
             }.start()
+
+            startPtyWatchdog(proc)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to spawn PTY server: ${e.message}")
         }
     }
 
+    /**
+     * Monitor the PTY server process and respawn it if it exits
+     * unexpectedly (e.g. Android's phantom process killer reaping it —
+     * see PtyServerRespawnPolicy for the crash-loop bound). Interrupted
+     * when stopPtyServer()/a fresh spawnPtyServer() call supersedes it.
+     */
+    private fun startPtyWatchdog(proc: Process) {
+        val watchdog = Thread {
+            try {
+                val exitCode = proc.waitFor()
+                // Only react if this is still the active process (i.e. we
+                // didn't call stopPtyServer() ourselves, which clears the
+                // reference before destroying it).
+                if (ptyServerProcess === proc) {
+                    ptyServerProcess = null
+                    Log.w(TAG, "PTY server exited unexpectedly (code=$exitCode)")
+                    val nativeLibDir = lastPtyNativeLibDir
+                    val runtimeDir = lastPtyRuntimeDir
+                    if (nativeLibDir != null && runtimeDir != null &&
+                        ptyRespawnPolicy.shouldRespawn(expected = false)
+                    ) {
+                        Log.i(
+                            TAG,
+                            "Respawning PTY server (attempt ${ptyRespawnPolicy.attemptCount()})"
+                        )
+                        spawnPtyServer(nativeLibDir, runtimeDir, lastPtyPort)
+                    } else {
+                        Log.e(TAG, "PTY server respawn budget exhausted, giving up")
+                    }
+                }
+            } catch (_: InterruptedException) {
+                // Intentional stop/restart — no action needed
+            }
+        }
+        watchdog.isDaemon = true
+        watchdog.name = "pty-watchdog"
+        watchdog.start()
+        ptyWatchdogThread = watchdog
+    }
+
     /** Stop the PTY server process. */
     fun stopPtyServer() {
+        // Interrupt the watchdog first so it doesn't treat this intentional
+        // stop as an unexpected death and try to respawn.
+        ptyWatchdogThread?.interrupt()
+        ptyWatchdogThread = null
+        ptyRespawnPolicy.shouldRespawn(expected = true)
         val proc = ptyServerProcess ?: return
+        ptyServerProcess = null  // clear before destroying so the watchdog sees null
         try {
             proc.destroyForcibly()
             proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -397,6 +467,5 @@ class LlamaService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Error stopping PTY server: ${e.message}")
         }
-        ptyServerProcess = null
     }
 }

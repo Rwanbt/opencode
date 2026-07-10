@@ -164,7 +164,19 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     theme: "OpenCode",
     themeType: "system",
     disableLineNumbers: false,
-    overflow: "wrap",
+    // Matches the editor (CodeMirror never wraps — no EditorView.lineWrapping
+    // extension — and scrolls horizontally instead): long lines should
+    // scroll, not wrap, in the read-only viewer too.
+    //
+    // WHY line-comment call sites override this back to "wrap" (see
+    // session-review.tsx and viewer-panel.tsx): the line-comment
+    // popover/tools bar isn't scoped to absorb this viewer's own horizontal
+    // scroll under "scroll" mode, so it pushes the outer
+    // `.scroll-view__viewport` wider instead of staying contained (see
+    // session-review.spec.ts horizontal-overflow tests). Every current
+    // consumer wires line-commenting, so "scroll" only actually applies to
+    // a future comment-free read-only viewer.
+    overflow: "scroll",
     diffStyle: style ?? "unified",
     diffIndicators: "bars",
     lineHoverHighlight: "both",

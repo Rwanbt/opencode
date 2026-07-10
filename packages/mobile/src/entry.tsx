@@ -18,6 +18,11 @@ import { createPlatform, setPrivateServerFp } from "./platform"
 import { ensureLocalLLMLoaded } from "./hooks/use-auto-start-llm"
 import { initSpeechListeners, cleanupSpeechListeners } from "./hooks/use-speech"
 import { NotificationBridge } from "./notifications"
+import { checkLocalHealth, writeDebugLog } from "./runtime"
+import {
+  createEmbeddedServerRecovery,
+  EMBEDDED_SERVER_HEALTH_POLL_MS,
+} from "./embedded-server-recovery"
 
 const root = document.getElementById("root")
 
@@ -244,11 +249,22 @@ function App() {
     // partially or fully hidden under the keyboard. `visualViewport` is
     // the authoritative source and fires `resize` reliably on all touch
     // flows we care about.
+    //
+    // `--vv-top` (visualViewport.offsetTop) is exposed for the same reason:
+    // on this WebView the visible viewport can shift down relative to the
+    // layout viewport (confirmed on-device: offsetTop reaching 127px while
+    // focusing the terminal's hidden IME textarea) without #root moving
+    // with it — height alone shrinks correctly, but #root stays anchored
+    // at the old top, pushing its top content off-screen above the visible
+    // area and leaving a gap of exactly `offsetTop` px above the keyboard.
+    // #root's `transform` (mobile.css) reads this to track the shift.
     if (typeof window === "undefined") return
     const vp = window.visualViewport
     const sync = () => {
       const h = vp?.height ?? window.innerHeight
+      const top = vp?.offsetTop ?? 0
       document.documentElement.style.setProperty("--vvh", `${h}px`)
+      document.documentElement.style.setProperty("--vv-top", `${top}px`)
     }
     sync()
     if (vp) {
@@ -469,6 +485,30 @@ function FullApp(props: {
   const [noModelBanner, setNoModelBanner] = createSignal(false)
   const [blockedModelBanner, setBlockedModelBanner] = createSignal<string | null>(null)
 
+  // The embedded Bun process can terminate independently of the Android app.
+  // Recover it in place while preserving the existing credentials, so editor
+  // buffers and mounted SDK clients survive the restart.
+  onMount(() => {
+    if (props.serverInfo.variant !== "embedded") return
+    const port = Number(new URL(props.serverInfo.url).port || "14096")
+    const poll = createEmbeddedServerRecovery({
+      checkHealth: () => checkLocalHealth(port, props.serverInfo.password),
+      restart: async () => {
+        await props.platform.startLocalServer?.()
+      },
+    })
+    const run = () => {
+      void poll().catch((error) => {
+        const message = `Embedded server recovery failed: ${String(error)}`
+        console.error(message)
+        void writeDebugLog(message)
+      })
+    }
+    run()
+    const timer = window.setInterval(run, EMBEDDED_SERVER_HEALTH_POLL_MS)
+    onCleanup(() => window.clearInterval(timer))
+  })
+
   // Listen for "open-model-manager" custom event from the model selector
   onMount(() => {
     const handler = () => props.onOpenModelManager?.()
@@ -677,3 +717,5 @@ function FullApp(props: {
 }
 
 render(() => <App />, root!)
+
+

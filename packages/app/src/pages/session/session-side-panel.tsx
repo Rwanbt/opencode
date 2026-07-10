@@ -309,7 +309,16 @@ export function SessionSidePanel(props: {
           "pointer-events-none": !open(),
         }}
         style={isMobile()
-          ? { height: open() ? "50vh" : "0px", transition: "height 240ms cubic-bezier(0.22,1,0.36,1)" }
+          ? {
+              // Full height (not the previous 50vh half-sheet): browsing
+              // files/reviewing changes is a primary mobile task, not a
+              // quick peek — the panel is `position: absolute` over the
+              // session content (see mobile.css .mobile-side-panel), so
+              // covering the composer underneath is the intended behavior
+              // while it's open, not a layout bug.
+              height: open() ? "100%" : "0px",
+              transition: "height 240ms cubic-bezier(0.22,1,0.36,1)",
+            }
           : { width: panelWidth() }
         }
       >

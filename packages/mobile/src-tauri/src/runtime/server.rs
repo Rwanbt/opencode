@@ -112,7 +112,7 @@ pub async fn start_embedded_server(
 
     let tool_fns = build_tool_functions(&dir, &nlib_dir);
 
-    write_shell_rc_files(&home_dir, &mkshrc_path, &tool_fns);
+    write_shell_rc_files(&home_dir, &mkshrc_path, &tool_fns, &bin_link_dir);
 
     let (resolv_path, ca_bundle_path) = setup_dns_and_ca(&dir);
     let rootfs_dir = dir.join("rootfs");
@@ -442,7 +442,10 @@ const BUSYBOX_FALLBACK_APPLETS: &[&str] = &["gawk", "ed", "bc", "dc", "expr"];
 
 /// Interactive applets that SIGSYS under Android's zygote seccomp when run from
 /// the static busybox (D-19). These must be served by the seccomp-safe
-/// /system/bin/toybox, never by busybox — enforced by a unit test.
+/// /system/bin/toybox, never by busybox — enforced by a unit test. Only
+/// referenced from the test invariant below (the actual routing lives in
+/// `setup_command_symlinks`), hence `cfg(test)`.
+#[cfg(all(test, unix))]
 const SECCOMP_RISK_APPLETS: &[&str] =
     &["vi", "vim", "less", "top", "htop", "nano", "more", "microcom"];
 
@@ -763,28 +766,101 @@ fn build_tool_functions(dir: &Path, nlib_dir: &Path) -> String {
     tool_fns
 }
 
+/// Shell builtins that also happen to be names we symlink into `bin_link_dir`
+/// (D-19b). Shadowing these with a function would replace a zero-syscall
+/// builtin with an external exec for no benefit — only non-builtin names need
+/// the function-wrapping workaround below.
+const SHELL_BUILTIN_OVERLAP: &[&str] = &["echo", "printf", "test", "true", "false", "pwd", "kill", "[", "time"];
+
+/// D-19b: bash (>=5.1) resolves a bare command name via `$PATH` search using an
+/// internal `posix_spawn()` fast path; on this Android build that path SIGSYS's
+/// under the zygote seccomp filter regardless of the target binary (verified:
+/// even re-execing bash's own binary crashes when found via `$PATH`, while the
+/// identical binary invoked by absolute path always succeeds — see
+/// reference-mobile-bash-path-search-posix-spawn-seccomp.md). Shell *functions*
+/// are resolved before `$PATH` search, so defining one per managed command that
+/// calls its absolute path sidesteps the crash without touching bash itself.
+/// Driven by the actual `bin_link_dir` listing (not a duplicated static list)
+/// so it always matches whatever `setup_command_symlinks` produced on this
+/// device.
+fn generate_bin_command_functions(bin_link_dir: &Path) -> String {
+    let mut names: Vec<String> = fs::read_dir(bin_link_dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|name| !SHELL_BUILTIN_OVERLAP.contains(&name.as_str()))
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+
+    let mut out = String::new();
+    for name in &names {
+        let path = bin_link_dir.join(name);
+        // `ls`/`grep` used to be plain `alias name='name --color=auto'`. Bash
+        // alias-expands a command word as it's parsed even when that word is
+        // about to be *defined* as a function — an `alias grep=...` earlier in
+        // this same file turns the later `grep() { ... }` definition into a
+        // syntax error ("unexpected token `('"), aborting the rest of the rc
+        // file (D-19c, found on-device: every function after `grep`
+        // alphabetically, including `ls`, silently never got defined). Fold
+        // `--color=auto` into the function body instead of a colliding alias.
+        let color_flag = match name.as_str() {
+            "ls" | "grep" => " --color=auto",
+            _ => "",
+        };
+        out.push_str(&format!(
+            "{name}() {{ \"{path}\"{color_flag} \"$@\"; }}\n",
+            name = name,
+            path = path.display(),
+            color_flag = color_flag,
+        ));
+    }
+    out
+}
+
 /// Write the interactive shell rc files (.mkshrc/.bashrc/.profile) that source
 /// the tool wrappers and set the prompt/aliases (D-01 step 2b extraction).
-fn write_shell_rc_files(home_dir: &Path, mkshrc_path: &Path, tool_fns: &str) {
-    // mksh uses $'\e[...]' syntax for ANSI escapes in PS1 (not bash's \[\033[...]\])
-    let mkshrc_content = format!(
+fn write_shell_rc_files(home_dir: &Path, mkshrc_path: &Path, tool_fns: &str, bin_link_dir: &Path) {
+    let bin_fns = generate_bin_command_functions(bin_link_dir);
+    // CRITICAL — PS1 must wrap ANSI color escapes in bash's `\[ \]` non-printing
+    // markers. Without them, readline counts every escape byte as a visible
+    // column when computing the prompt's on-screen width. On a mobile-width
+    // terminal (~36 columns) the raw PS1 byte length itself reaches 36, so
+    // readline believes the prompt already fills the entire line and flips into
+    // horizontal-scroll mode on the very first prompt — showing a leading `<`
+    // and stripping the color codes (confirmed on-device: $COLUMNS=36 and
+    // ${#PS1}=36 coincide exactly, and the prompt renders as `<:app_dev$`).
+    // `\[ \]` tells readline those bytes take zero columns. `\W` (basename only,
+    // not `\w` full path) keeps the *visible* prompt short too.
+    let bashrc_content = format!(
         "# OpenCode mobile shell init\n\
-PS1=$'\\e[1;32m'\"$USER@opencode\"$'\\e[0m'\":\"$'\\e[1;34m'\"\\w\"$'\\e[0m'\"$ \"\n\
-alias ls='ls --color=auto'\n\
-alias ll='ls -la --color=auto'\n\
-alias la='ls -A --color=auto'\n\
-alias grep='grep --color=auto'\n\
+PS1='\\[\\e[1;32m\\]$USER@opencode\\[\\e[0m\\]:\\[\\e[1;34m\\]\\W\\[\\e[0m\\]$ '\n\
+alias ll='ls -la'\n\
+alias la='ls -A'\n\
 alias ..='cd ..'\n\
 alias cls='clear'\n\
+{bin_fns}\
+{tool_fns}"
+    );
+    let bashrc_path = home_dir.join(".bashrc");
+    let _ = fs::write(&bashrc_path, &bashrc_content);
+
+    // mksh rc: mksh doesn't understand bash's `\[ \]` readline markers; it uses
+    // raw SOH/STX (\001/\002) to delimit non-printing bytes for its own line
+    // editor. Wrap the escapes with those so mksh's editor also skips them.
+    let mkshrc_content = format!(
+        "# OpenCode mobile shell init (mksh)\n\
+PS1=$'\\001\\e[1;32m\\002'\"$USER@opencode\"$'\\001\\e[0m\\002'\":\"$'\\001\\e[1;34m\\002'\"\\W\"$'\\001\\e[0m\\002'\"$ \"\n\
+alias ll='ls -la'\n\
+alias la='ls -A'\n\
+alias ..='cd ..'\n\
+alias cls='clear'\n\
+{bin_fns}\
 {tool_fns}"
     );
     let _ = fs::write(&mkshrc_path, &mkshrc_content);
-
-    // .bashrc for bash (which is the real shell via libbash_exec.so symlinked
-    // as both `bash` and `sh`). Same content as .mkshrc — mksh-specific PS1
-    // escape syntax ($'\e[...]') also works in bash via ANSI-C quoting.
-    let bashrc_path = home_dir.join(".bashrc");
-    let _ = fs::write(&bashrc_path, &mkshrc_content);
 
     // .profile for login shells — source both rc files for robustness.
     let profile_path = home_dir.join(".profile");
@@ -847,6 +923,16 @@ fn setup_dns_and_ca(dir: &Path) -> (PathBuf, PathBuf) {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("opencode_server_test_{}_{}", name, n));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
     #[test]
     fn busybox_fallback_excludes_seccomp_risk_applets() {
@@ -858,6 +944,68 @@ mod tests {
                 !SECCOMP_RISK_APPLETS.contains(applet),
                 "{applet} routes to the static busybox but is a known SIGSYS-risk applet"
             );
+        }
+    }
+
+    #[test]
+    fn generate_bin_command_functions_wraps_managed_commands_by_absolute_path() {
+        // D-19b: every non-builtin entry actually present in bin_link_dir must
+        // get a shell function that calls its own absolute path directly —
+        // this is what sidesteps bash's `$PATH`-search SIGSYS (see
+        // reference-mobile-bash-path-search-posix-spawn-seccomp.md).
+        let dir = temp_test_dir("bin_fns");
+        for name in ["ls", "date", "echo"] {
+            std::os::unix::fs::symlink("/system/bin/toybox", dir.join(name)).unwrap();
+        }
+        let out = generate_bin_command_functions(&dir);
+        let _ = fs::remove_dir_all(&dir);
+
+        let ls_path = dir.join("ls");
+        assert!(
+            out.contains(&format!("ls() {{ \"{}\" --color=auto \"$@\"; }}", ls_path.display())),
+            "expected an ls() function calling the absolute path with --color=auto, got: {out}"
+        );
+        assert!(out.contains("date() {"), "date should get a function too");
+        assert!(
+            !out.contains("echo() {"),
+            "echo is a shell builtin (SHELL_BUILTIN_OVERLAP) and must not be shadowed"
+        );
+    }
+
+    #[test]
+    fn write_shell_rc_files_never_defines_an_alias_and_function_with_the_same_name() {
+        // D-19c regression guard: `alias grep='grep --color=auto'` followed later
+        // in the same file by `grep() { ... }` makes bash's parser choke
+        // ("syntax error near unexpected token `('") on the function
+        // definition, because the alias is expanded while parsing the *name*
+        // being defined — silently truncating every function after it in the
+        // file (this is exactly how the `ls()` wrapper went dead on-device:
+        // `grep`, which sorts before `ls`, aborted the rest of the rc file).
+        let dir = temp_test_dir("rc_no_alias_fn_collision");
+        let home_dir = dir.join("home");
+        fs::create_dir_all(&home_dir).unwrap();
+        let bin_dir = dir.join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        for name in ["ls", "grep", "date"] {
+            std::os::unix::fs::symlink("/system/bin/toybox", bin_dir.join(name)).unwrap();
+        }
+        let mkshrc_path = home_dir.join(".mkshrc");
+
+        write_shell_rc_files(&home_dir, &mkshrc_path, "", &bin_dir);
+        let bashrc = fs::read_to_string(home_dir.join(".bashrc")).unwrap();
+        let mkshrc = fs::read_to_string(&mkshrc_path).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+
+        for content in [&bashrc, &mkshrc] {
+            for name in ["ls", "grep"] {
+                let has_alias = content.contains(&format!("alias {name}='"));
+                let has_function = content.contains(&format!("{name}() {{"));
+                assert!(
+                    !(has_alias && has_function),
+                    "{name} must not have both an alias and a function definition in the same rc file (parser collision): {content}"
+                );
+                assert!(has_function, "{name} should still get a function wrapping its absolute path");
+            }
         }
     }
 
