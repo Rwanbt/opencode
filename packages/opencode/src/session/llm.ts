@@ -548,6 +548,9 @@ export namespace LLM {
       }),
       experimental_telemetry: {
         isEnabled: cfg.experimental?.openTelemetry,
+        // Native observability is metadata-only in Phase 1; never let the AI SDK retain prompts or responses. See ADR-1031.
+        recordInputs: false,
+        recordOutputs: false,
         metadata: {
           userId: cfg.username ?? "unknown",
           sessionId: input.sessionID,
