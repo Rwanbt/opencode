@@ -19,6 +19,12 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { ProviderTransform } from "@/provider/transform"
+import { ObservabilityId } from "@/observability/id"
+import { finishTool, startTool } from "@/observability/lifecycle"
+import { resolveCapturePolicy } from "@/observability/capture-policy"
+import { ObservabilityRuntime } from "@/observability/runtime"
+import type { ObservabilityService } from "@/observability/service"
+import type { TraceContext } from "@/observability/trace-context"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
@@ -63,6 +69,10 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    // Open tool.call spans awaiting a terminal event, keyed by toolCallID.
+    // Anything still here in cleanup() never reached tool-result/tool-error,
+    // i.e. it was aborted mid-flight.
+    toolSpans: Record<string, { trace: TraceContext; startedAtMs: number }>
   }
 
   type StreamEvent = Event
@@ -112,8 +122,19 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          toolSpans: {},
         }
         let aborted = false
+
+        // Resolved once per turn, mirroring session/llm.ts. A single
+        // per-turn traceId correlates this turn's tool calls with each
+        // other; it is independent from the LLM call's own traceId since
+        // that one isn't threaded across the LLM/tool boundary yet.
+        const capturePolicy = resolveCapturePolicy((yield* config.get()).experimental?.observability)
+        const observability: ObservabilityService | undefined = capturePolicy.enabled
+          ? ObservabilityRuntime.service()
+          : undefined
+        const turnTraceId = observability ? ObservabilityId.create() : undefined
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
@@ -196,6 +217,15 @@ export namespace SessionProcessor {
                 state: { status: "running", input: value.input, time: { start: Date.now() } },
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
+
+              if (observability && turnTraceId) {
+                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID })
+                ctx.toolSpans[value.toolCallId] = { trace: started.trace, startedAtMs: started.event.tsMs }
+                observability.record(started.trace, {
+                  ...started.event,
+                  metadata: { toolKind: value.toolName },
+                })
+              }
 
               // Cross-message tool history. Local 4B models retry failed tool
               // calls in NEW assistant messages (each turn = new message), so a
@@ -309,6 +339,13 @@ export namespace SessionProcessor {
                 },
               })
               delete ctx.toolcalls[value.toolCallId]
+
+              const finishedSpan = ctx.toolSpans[value.toolCallId]
+              if (observability && finishedSpan) {
+                const terminal = finishTool(finishedSpan.trace, "finished", finishedSpan.startedAtMs)
+                observability.record(terminal.context, { ...terminal.event, metadata: { toolKind: toolName } })
+                delete ctx.toolSpans[value.toolCallId]
+              }
               return
             }
 
@@ -360,6 +397,14 @@ export namespace SessionProcessor {
                 ctx.blocked = ctx.shouldBreak
               }
               delete ctx.toolcalls[value.toolCallId]
+
+              const failedSpan = ctx.toolSpans[value.toolCallId]
+              if (observability && failedSpan) {
+                const terminal = finishTool(failedSpan.trace, "failed", failedSpan.startedAtMs)
+                const errorKind = (value.error instanceof Error ? value.error.name : typeof value.error).slice(0, 128)
+                observability.record(terminal.context, { ...terminal.event, metadata: { toolKind: toolName, errorKind } })
+                delete ctx.toolSpans[value.toolCallId]
+              }
               return
             }
 
@@ -522,6 +567,17 @@ export namespace SessionProcessor {
               },
             })
           }
+
+          // Any span still open here never reached tool-result/tool-error —
+          // the turn ended (success, halt, or abort) while it was in flight.
+          if (observability) {
+            for (const span of Object.values(ctx.toolSpans)) {
+              const terminal = finishTool(span.trace, "aborted", span.startedAtMs)
+              observability.record(terminal.context, terminal.event)
+            }
+            ctx.toolSpans = {}
+          }
+
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
 
