@@ -14,13 +14,13 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 
 ## Schéma et stockage
 
-- [ ] Table Phase 1 sans colonnes de contenu.
-- [ ] `id` interne + `event_id` ULID justifiés.
-- [ ] Coût nano-USD + snapshot pricing.
-- [ ] JSON validé Zod avant insertion.
-- [ ] Index keyset validés avec `EXPLAIN QUERY PLAN`.
-- [ ] Migration additive testée sur DB existante.
-- [ ] Rollback manuel documenté et testé sur copie.
+- [x] Table Phase 1 sans colonnes de contenu (event.sql.ts n'a ni `local_content_redacted_json` ni `local_full_json`, vérifié par test).
+- [x] `id` interne + `event_id` ULID justifiés (event.sql.ts, index unique sur event_id).
+- [x] Coût nano-USD + snapshot pricing (`cost_nano_usd`/`pricing_version`/`pricing_source`/`cost_computed_at_ms`, peuplés depuis `Session.getUsage` dans session/llm.ts).
+- [x] JSON validé Zod avant insertion (`parseObservabilityEvent` dans `ObservabilityService.record()`).
+- [x] Index keyset validés avec `EXPLAIN QUERY PLAN` (event-migration.test.ts).
+- [x] Migration additive testée sur DB existante (event-migration.test.ts, upgrade sur DB avec table préexistante).
+- [ ] Rollback manuel documenté et testé sur copie (procédure documentée dans ADR-1030, mais jamais réellement répétée/vérifiée sur une copie de DB).
 
 ## Core, API/UI et tests
 
