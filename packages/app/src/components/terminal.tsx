@@ -557,6 +557,21 @@ export const Terminal = (props: TerminalProps) => {
 
       try {
         t.open(container)
+        // Ghostty sets `contenteditable="true"` on this container (see
+        // ghostty-web/lib/terminal.ts) purely so desktop browser extensions
+        // (Vimium, etc.) recognize it as an input element — irrelevant on
+        // Android, where no such extensions run. On mobile it's actively
+        // harmful: confirmed on-device that reopening a terminal makes
+        // Android's WebView focus this contenteditable container natively
+        // (no JS `.focus()` call involved — verified via a global
+        // `Element.prototype.focus` trace that stayed empty) and pop the
+        // softkeyboard before the real input textarea is even the target,
+        // leaving it open but non-functional until the user explicitly taps
+        // the textarea. Real keyboard input always goes through the hidden
+        // textarea (see `focusTerminal`/`suppressSyntheticMouseEvents`
+        // above), never through this container's contenteditable state, so
+        // removing it on mobile costs nothing.
+        if (platform.platform === "mobile") container.contentEditable = "false"
         const rect = container.getBoundingClientRect()
         addDebug(`t.open() OK — container: ${Math.round(rect.width)}x${Math.round(rect.height)} inDOM:${document.contains(container)}`)
       } catch (err) {

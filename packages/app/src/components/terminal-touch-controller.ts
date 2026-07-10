@@ -137,7 +137,65 @@ export const useTerminalUiBindings = (input: {
   }
 
   const beginSelection = (x: number, y: number) => {
+    // The synthetic mousedown below triggers TWO independent focus() calls
+    // that both end up opening the Android softkeyboard, confirmed via CDP
+    // instrumentation on a real device (both attempts below were tested
+    // in isolation and failed to fully fix the symptom before this combined
+    // fix):
+    //
+    // 1. Ghostty's own `canvas.addEventListener("mousedown", () =>
+    //    textarea.focus())` (ghostty-web/lib/terminal.ts:446-449) —
+    //    unconditionally focuses the hidden input textarea.
+    // 2. SelectionManager's mousedown handler
+    //    (ghostty-web/lib/selection-manager.ts:435-441, comment: "CRITICAL:
+    //    Focus the terminal so it can receive keyboard input") calls
+    //    `canvas.parentElement.focus()` — i.e. `input.container` itself.
+    //    That container has `contenteditable="true"` set on it by Ghostty
+    //    (terminal.ts:396, for browser-extension compatibility), so Android
+    //    treats it as a genuine text field and shows the softkeyboard even
+    //    though the hidden textarea never gains focus. This is why
+    //    suppressing only the textarea's `focus()` (previous attempt) left
+    //    the keyboard reopening exactly as before — confirmed on-device: no
+    //    `textarea-focus` event fired, yet `visualViewport` still shrank.
+    //
+    // The keyboard reopening mid-drag also resizes `visualViewport`, which
+    // shifts the whole terminal panel layout up/down (see terminal-panel.tsx's
+    // viewport-height store) — two root causes, but the same two visible
+    // symptoms (keyboard flicker + layout jump).
+    //
+    // A same-tick `blur()` after the dispatch does NOT work (confirmed
+    // on-device via CDP instrumentation): Android's "show soft input"
+    // request, once triggered by `focus()`, is already in flight natively by
+    // the time our synchronous JS blur() runs — the keyboard opens anyway
+    // (~130ms later) regardless. The IME's native state and the DOM's focus
+    // state can desync; a same-tick blur cannot cancel a request that
+    // already fired.
+    //
+    // Can't intercept via event capturing either — SelectionManager's own
+    // mousedown handler, which actually anchors the selection (same handler
+    // that calls `canvas.parentElement.focus()` above), lives on the SAME
+    // canvas element and the SAME event as Ghostty's focus listener, so
+    // stopping propagation before the canvas would kill the real selection
+    // logic along with both unwanted focus calls.
+    //
+    // Instead, suppress both calls at their source: temporarily replace
+    // `.focus` on the textarea AND on the container with a no-op for the
+    // exact duration of the synchronous `dispatchEvent` call, then restore
+    // both immediately. `dispatchEvent` runs every listener (Ghostty's and
+    // SelectionManager's) before returning, so the override is guaranteed
+    // active exactly when either `focus()` would otherwise fire — the
+    // browser never sees a real focus request on either element, so no
+    // "show soft input" is ever queued in the first place. SelectionManager's
+    // own selection-anchoring logic (`isSelecting = true`, anchor cell) does
+    // not depend on the focus() call succeeding, so suppressing it is safe.
+    const textarea = input.term.textarea
+    const originalTextareaFocus = textarea?.focus.bind(textarea)
+    const originalContainerFocus = input.container.focus.bind(input.container)
+    if (textarea) textarea.focus = () => {}
+    input.container.focus = () => {}
     dispatchCanvasMouseEvent("mousedown", x, y)
+    if (textarea && originalTextareaFocus) textarea.focus = originalTextareaFocus
+    input.container.focus = originalContainerFocus
     // Snap the long-press's initial grab to word granularity (matches
     // Android's native long-press-to-select) by replaying it as a
     // double-click through SelectionManager's own tested word-boundary
@@ -227,6 +285,12 @@ export const useTerminalUiBindings = (input: {
   const suppressSyntheticMouseEvents = (e: TouchEvent) => {
     e.preventDefault()
     input.term.textarea?.blur()
+    // Belt-and-braces: the container itself is a fallback focus target for
+    // Ghostty's own `Term.focus()`/SelectionManager (see terminal.tsx's
+    // contenteditable-strip comment for the confirmed root cause on mobile).
+    // Blurring it too costs nothing when it never had focus in the first
+    // place, and covers it if it ever does independently of the textarea.
+    if (document.activeElement === input.container) input.container.blur()
   }
   const touchStartOptions: AddEventListenerOptions = { capture: true, passive: false }
   input.container.addEventListener("touchstart", suppressSyntheticMouseEvents, touchStartOptions)
@@ -236,9 +300,6 @@ export const useTerminalUiBindings = (input: {
 
   const onTouchDownCapture = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || currentTouch) return
-    // A fresh touch inside the terminal is an explicit replacement of the
-    // previous selection, including a long-press on another word.
-    if (input.term.getSelection().length > 0) input.term.clearSelection()
     currentTouch = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: "pending", scrollApplied: 0 }
     selectionMoved = false
     lastSelectingPoint = null
@@ -256,6 +317,7 @@ export const useTerminalUiBindings = (input: {
       if (!currentTouch || currentTouch.id !== pointerId || currentTouch.mode !== "pending") return
       currentTouch.mode = "selecting"
       lastSelectingPoint = { x, y }
+      if (input.term.getSelection().length > 0) input.term.clearSelection()
       beginSelection(x, y)
     }, LONG_PRESS_MS)
   }

@@ -262,6 +262,21 @@ export async function createPlatform(): Promise<Platform> {
       }
     },
 
+    // Clipboard text reading — bridges the native Android clipboard via the
+    // Tauri plugin. Bare `navigator.clipboard.readText()` is not used here:
+    // there is no precedent for it anywhere else in this codebase, and the
+    // existing image-paste code above already established the plugin as the
+    // reliable path for clipboard *reads* on this WebView.
+    async readClipboardText() {
+      if (!plugins?.clipboard?.readText) return null
+      try {
+        const text = await plugins.clipboard.readText()
+        return text || null
+      } catch {
+        return null
+      }
+    },
+
     // openDirectoryPickerDialog is intentionally NOT defined on mobile.
     // The Tauri Android dialog plugin does not actually support directory
     // selection — it returns null silently. Leaving this property undefined

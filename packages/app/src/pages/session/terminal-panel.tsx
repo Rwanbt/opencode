@@ -5,12 +5,13 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { showToast } from "@opencode-ai/ui/toast"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 
 import { SortableTerminalTab } from "@/components/session"
-import { Terminal } from "@/components/terminal"
+import { Terminal, type TerminalSelectionApi } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -31,7 +32,11 @@ function focusTerminalTextarea(id: string) {
 function TerminalMobileToolbar(props: {
   activeId: () => string | undefined
   sendBytes: (id: string, data: string) => void
+  hasSelection: () => boolean
+  onCopy: () => void
+  onPaste: () => void
 }) {
+  const language = useLanguage()
   const [ctrlActive, setCtrlActive] = createSignal(false)
   const [altActive, setAltActive] = createSignal(false)
 
@@ -151,6 +156,30 @@ function TerminalMobileToolbar(props: {
       >
         ⌨
       </button>
+      <button
+        type="button"
+        class={btnBase}
+        classList={{ [btnNormal]: true, "opacity-40": !props.hasSelection() }}
+        disabled={!props.hasSelection()}
+        aria-label={language.t("terminal.selection.copy")}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          props.onCopy()
+        }}
+      >
+        {language.t("terminal.selection.copy")}
+      </button>
+      <button
+        type="button"
+        class={`${btnBase} ${btnNormal}`}
+        aria-label={language.t("terminal.selection.paste")}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          props.onPaste()
+        }}
+      >
+        {language.t("terminal.selection.paste")}
+      </button>
       <For each={keys}>
         {(k) => (
           <button
@@ -185,6 +214,53 @@ export function TerminalPanel() {
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
   const sendHandles = new Map<string, (data: string) => void>()
+
+  const selectionApis = new Map<string, TerminalSelectionApi>()
+  const [activeSelectionApi, setActiveSelectionApi] = createSignal<TerminalSelectionApi | undefined>(undefined)
+  const [activeHasSelection, setActiveHasSelection] = createSignal(false)
+
+  const registerSelectionApi = (id: string, api: TerminalSelectionApi | undefined) => {
+    if (api) selectionApis.set(id, api)
+    else selectionApis.delete(id)
+    if (terminal.active() === id) setActiveSelectionApi(() => api)
+  }
+
+  // Re-resolve the active tab's selection API whenever the active tab
+  // changes OR a fresh API registers for the tab that's already active —
+  // `onSelectionApi` on <Terminal> fires asynchronously (inside its async
+  // mount), so either order can happen first.
+  createEffect(
+    on(
+      () => terminal.active(),
+      (id) => setActiveSelectionApi(() => (id ? selectionApis.get(id) : undefined)),
+    ),
+  )
+
+  createEffect(() => {
+    const api = activeSelectionApi()
+    if (!api) {
+      setActiveHasSelection(false)
+      return
+    }
+    setActiveHasSelection(api.hasSelection())
+    const unsubscribe = api.onSelectionChange(() => setActiveHasSelection(api.hasSelection()))
+    onCleanup(unsubscribe)
+  })
+
+  const copyActiveSelection = () => {
+    if (!activeSelectionApi()?.copySelection()) return
+    showToast({ variant: "success", title: language.t("terminal.selection.copied") })
+  }
+
+  const pasteIntoActiveTerminal = async () => {
+    const api = activeSelectionApi()
+    if (!api) return
+    const text = await platform.readClipboardText?.()
+    if (!text) return
+    api.paste(text)
+    const id = terminal.active()
+    if (id) focusTerminalTextarea(id)
+  }
 
   const [store, setStore] = createStore({
     autoCreated: false,
@@ -443,6 +519,9 @@ export function TerminalPanel() {
                 <TerminalMobileToolbar
                   activeId={() => terminal.active()}
                   sendBytes={(id, data) => sendHandles.get(id)?.(data)}
+                  hasSelection={activeHasSelection}
+                  onCopy={copyActiveSelection}
+                  onPaste={pasteIntoActiveTerminal}
                 />
               </Show>
               <div class="flex-1 min-h-0 relative">
@@ -466,6 +545,7 @@ export function TerminalPanel() {
                             onCleanup={ops.update}
                             onConnectError={() => ops.clone(pty.id)}
                             onSend={(fn) => { if (fn) sendHandles.set(pty.id, fn); else sendHandles.delete(pty.id) }}
+                            onSelectionApi={(api) => registerSelectionApi(pty.id, api)}
                           />
                         </div>
                       )}

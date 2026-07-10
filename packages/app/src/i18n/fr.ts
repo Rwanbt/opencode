@@ -543,6 +543,9 @@ export const dict = {
   "terminal.connectionLost.title": "Connexion perdue",
   "terminal.connectionLost.description":
     "La connexion au terminal a été interrompue. Cela peut arriver lorsque le serveur redémarre.",
+  "terminal.selection.copy": "Copier",
+  "terminal.selection.paste": "Coller",
+  "terminal.selection.copied": "Copié dans le presse-papiers",
   "common.closeTab": "Fermer l'onglet",
   "common.dismiss": "Ignorer",
   "common.requestFailed": "La demande a échoué",

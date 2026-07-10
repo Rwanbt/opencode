@@ -183,7 +183,7 @@ Garde-fous obligatoires :
 
 - [ ] Étape 0 — conserver l’APK connu bon et caractériser visuellement la sélection actuelle sur device.
 - [x] Étape 1 — extraire `terminal-selection-geometry.ts` + tests purs. (4 tests passants)
-- [ ] Étape 2 — extraire le contrôleur tactile sans modifier les comportements ; typecheck + tests.
+- [x] Étape 2 — extraire le contrôleur tactile sans modifier les comportements ; typecheck + tests passants.
 - [ ] Étape 3 — ajouter un overlay inerte (poignées non interactives) ; vérifier surlignage et synchronisation scroll.
 - [ ] Étape 4 — activer pointer capture et drag de la poignée `end` seulement ; build/install/device.
 - [ ] Étape 5 — ajouter poignée `start`, inversion et cancel ; build/install/device.
@@ -334,12 +334,15 @@ Si `mouseDownDispatched && !mouseUpDispatched`, `finishHandleDrag` émet exactem
 
 Le crossing est validé avant la finition visuelle : après le PoC, un spike `end` déplace la poignée derrière `start`, puis vérifie que le surlignage reste présent, que `getSelectionPosition()` retourne le nouvel ordre normalisé et que le pointer physique actif continue son drag. Si le pont ne permet pas ce comportement, stopper et réviser le mécanisme d’ancrage plutôt que d’ajouter un état `isInverted` spéculatif.
 
+### Résultat spike 2026-07-10
+
+Le spike CDP sur WebView réel a produit trois écritures clipboard : mot initial, extension `end`, puis crossing vers la gauche. Le pont synthétique et l’inversion Ghostty sont donc validés. La couverture `pointercancel/lostpointercapture` est reportée à l’étape interactive.
 ### Séquence v2 obligatoire
 
 - [ ] Gate 0 — instrumentation read-only `offsetX/offsetY`, listeners et rect.
 - [x] Étape 1 — géométrie pure + tests de cellules viewport et rect transformé. (4 tests passants)
-- [ ] Étape 2 — extraction mécanique du contrôleur sans changement de comportement ; compter le déplacement comme refactor mécanique, pas comme 400 LOC comportementales.
-- [ ] Étape 2.5 — spike synthétique end + crossing + cancel/lostcapture, sans UI finale.
+- [x] Étape 2 — extraction mécanique du contrôleur sans changement de comportement ; typecheck/Biome passants.
+- [~] Étape 2.5 — spike synthétique end + crossing validés sur device ; cancel/lostcapture restent à valider avec la poignée.
 - [ ] Étape 3 — overlay inerte, rect final et scroll/resize/overscroll ; validation du surlignage inchangé.
 - [ ] Étape 4 — poignée end interactive, pointer capture et auto-scroll ; build/device isolé.
 - [ ] Étape 5 — poignée start, crossing et changement de rôle physique ; build/device isolé.
