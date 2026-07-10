@@ -24,10 +24,10 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 
 ## Core, API/UI et tests
 
-- [ ] TraceContext explicite, ULID, lifecycle same spanId.
+- [x] TraceContext explicite et ULID (lifecycle same spanId encore à intégrer).
 - [ ] Queue 500/64 MiB, overflow priority-aware, counters.
 - [ ] Sanitizer borné, binaire/PDF/image court-circuit.
-- [ ] HMAC-SHA256 pour identifiants et fingerprints.
+- [x] HMAC-SHA256 et secret local crypto-safe (fingerprints à intégrer au classifier).
 - [ ] Routes events/detail/settings/summary/health/delete avec auth/ownership.
 - [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy.
 - [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network.
