@@ -1,4 +1,4 @@
-import { Database, and, desc, eq, lt, or } from "../storage/db"
+import { Database, and, desc, eq, gt, lt, or, sql } from "../storage/db"
 import { ObservabilityEventTable } from "./event.sql"
 import type { ObservabilityEvent } from "./event-schema"
 
@@ -125,6 +125,232 @@ export const ObservabilityRepository = {
 
     return { totalEvents: rows.length, totalCostNanoUsd, byType, byStatus, firstEventTsMs, lastEventTsMs }
   },
+
+  /**
+   * Cohort comparison for Phase 2 UI.
+   * Groups by (model_provider, model_id, skillHmac) and computes:
+   * - p50/p95 latency (from llm.call.finished/failed/aborted duration_ms)
+   * - cost per turn (sum of cost_nano_usd for llm events / count of distinct trace_id)
+   * - failure rate (failed events / total events for the cohort)
+   */
+  compareCohorts(params: {
+    workspaceId?: string
+    projectId?: string
+    sinceMs?: number
+    untilMs?: number
+  } = {}): CohortComparisonResult[] {
+    const { workspaceId, projectId, sinceMs, untilMs } = params
+
+    // First, get all finished LLM events with their metadata
+    const whereConditions = [
+      eq(ObservabilityEventTable.event_type, "llm.call.finished"),
+      eq(ObservabilityEventTable.status, "finished"),
+    ]
+    if (workspaceId) whereConditions.push(eq(ObservabilityEventTable.workspace_id, workspaceId))
+    if (projectId) whereConditions.push(eq(ObservabilityEventTable.project_id, projectId))
+    if (sinceMs) whereConditions.push(gt(ObservabilityEventTable.ts_ms, sinceMs))
+    if (untilMs) whereConditions.push(lt(ObservabilityEventTable.ts_ms, untilMs))
+
+    const rows = Database.use((db) =>
+      db
+        .select({
+          modelProvider: ObservabilityEventTable.model_provider,
+          modelId: ObservabilityEventTable.model_id,
+          durationMs: ObservabilityEventTable.duration_ms,
+          costNanoUsd: ObservabilityEventTable.cost_nano_usd,
+          traceId: ObservabilityEventTable.trace_id,
+          metadataJson: ObservabilityEventTable.metadata_json,
+        })
+        .from(ObservabilityEventTable)
+        .where(and(...whereConditions))
+        .all(),
+    )
+
+    // Group by cohort: (modelProvider, modelId, skillHmac)
+    const cohorts = new Map<string, {
+      modelProvider: string | null
+      modelId: string | null
+      skillHmac: string | null
+      durations: number[]
+      costs: number[]
+      traceIds: Set<string>
+      totalEvents: number
+      failedEvents: number
+    }>()
+
+    // Also need failed/aborted events for failure rate
+    const failedWhere = [
+      or(
+        eq(ObservabilityEventTable.event_type, "llm.call.failed"),
+        eq(ObservabilityEventTable.event_type, "llm.call.aborted"),
+      ),
+      eq(ObservabilityEventTable.status, "failed"),
+    ]
+    if (workspaceId) failedWhere.push(eq(ObservabilityEventTable.workspace_id, workspaceId))
+    if (projectId) failedWhere.push(eq(ObservabilityEventTable.project_id, projectId))
+    if (sinceMs) failedWhere.push(gt(ObservabilityEventTable.ts_ms, sinceMs))
+    if (untilMs) failedWhere.push(lt(ObservabilityEventTable.ts_ms, untilMs))
+
+    const failedRows = Database.use((db) =>
+      db
+        .select({
+          modelProvider: ObservabilityEventTable.model_provider,
+          modelId: ObservabilityEventTable.model_id,
+          metadataJson: ObservabilityEventTable.metadata_json,
+        })
+        .from(ObservabilityEventTable)
+        .where(and(...failedWhere))
+        .all(),
+    )
+
+    for (const r of rows) {
+      const meta = r.metadataJson as Record<string, unknown> | null
+      const skillHmac = (meta?.skillHmac as string) ?? null
+      const key = `${r.modelProvider ?? "unknown"}|${r.modelId ?? "unknown"}|${skillHmac ?? "none"}`
+
+      let cohort = cohorts.get(key)
+      if (!cohort) {
+        cohort = {
+          modelProvider: r.modelProvider,
+          modelId: r.modelId,
+          skillHmac,
+          durations: [],
+          costs: [],
+          traceIds: new Set(),
+          totalEvents: 0,
+          failedEvents: 0,
+        }
+        cohorts.set(key, cohort)
+      }
+      if (r.durationMs !== null && r.durationMs !== undefined) cohort.durations.push(r.durationMs)
+      if (r.costNanoUsd !== null && r.costNanoUsd !== undefined) cohort.costs.push(r.costNanoUsd)
+      if (r.traceId) cohort.traceIds.add(r.traceId)
+      cohort.totalEvents++
+    }
+
+    for (const r of failedRows) {
+      const meta = r.metadataJson as Record<string, unknown> | null
+      const skillHmac = (meta?.skillHmac as string) ?? null
+      const key = `${r.modelProvider ?? "unknown"}|${r.modelId ?? "unknown"}|${skillHmac ?? "none"}`
+
+      let cohort = cohorts.get(key)
+      if (!cohort) {
+        cohort = {
+          modelProvider: r.modelProvider,
+          modelId: r.modelId,
+          skillHmac,
+          durations: [],
+          costs: [],
+          traceIds: new Set(),
+          totalEvents: 0,
+          failedEvents: 0,
+        }
+        cohorts.set(key, cohort)
+      }
+      cohort.totalEvents++
+      cohort.failedEvents++
+    }
+
+    // Compute percentiles and aggregates
+    const results: CohortComparisonResult[] = []
+    for (const [, cohort] of cohorts) {
+      const sortedDurations = cohort.durations.sort((a, b) => a - b)
+      const p50 = percentile(sortedDurations, 50)
+      const p95 = percentile(sortedDurations, 95)
+      const totalCost = cohort.costs.reduce((a, b) => a + b, 0)
+      const costPerTurn = cohort.traceIds.size > 0 ? totalCost / cohort.traceIds.size : 0
+      const failureRate = cohort.totalEvents > 0 ? (cohort.failedEvents / cohort.totalEvents) * 100 : 0
+
+      results.push({
+        modelProvider: cohort.modelProvider,
+        modelId: cohort.modelId,
+        skillHmac: cohort.skillHmac,
+        latencyP50Ms: p50,
+        latencyP95Ms: p95,
+        costPerTurnNanoUsd: costPerTurn,
+        failureRatePct: failureRate,
+        totalEvents: cohort.totalEvents,
+        traceCount: cohort.traceIds.size,
+      })
+    }
+
+    // Sort by total events descending (most used first)
+    results.sort((a, b) => b.totalEvents - a.totalEvents)
+    return results
+  },
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0
+  const index = Math.ceil(p / 100 * sorted.length) - 1
+  return sorted[Math.max(0, index)]
+}
+
+export interface CohortComparisonResult {
+  modelProvider: string | null
+  modelId: string | null
+  skillHmac: string | null
+  latencyP50Ms: number
+  latencyP95Ms: number
+  costPerTurnNanoUsd: number
+  failureRatePct: number
+  totalEvents: number
+  traceCount: number
+}
+
+/**
+ * Export events as NDJSON (newline-delimited JSON) for local backup/analysis.
+ * Streams all events matching the criteria, ordered by ts_ms ASC.
+ */
+export async function* exportEvents(params: {
+  sessionId?: string
+  projectId?: string
+  workspaceId?: string
+  sinceMs?: number
+  untilMs?: number
+  limit?: number
+}): AsyncGenerator<string> {
+  const { sessionId, projectId, workspaceId, sinceMs, untilMs, limit } = params
+
+  const whereConditions = []
+  if (sessionId) whereConditions.push(eq(ObservabilityEventTable.session_id, sessionId))
+  if (projectId) whereConditions.push(eq(ObservabilityEventTable.project_id, projectId))
+  if (workspaceId) whereConditions.push(eq(ObservabilityEventTable.workspace_id, workspaceId))
+  if (sinceMs) whereConditions.push(gt(ObservabilityEventTable.ts_ms, sinceMs))
+  if (untilMs) whereConditions.push(lt(ObservabilityEventTable.ts_ms, untilMs))
+
+  const where = whereConditions.length > 0 ? and(...whereConditions) : undefined
+
+  let count = 0
+  const batchSize = 1000
+  let cursor: { tsMs: number; id: number } | undefined
+
+  while (true) {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(ObservabilityEventTable)
+        .where(
+          where
+            ? and(where, cursor ? or(gt(ObservabilityEventTable.ts_ms, cursor.tsMs), and(eq(ObservabilityEventTable.ts_ms, cursor.tsMs), gt(ObservabilityEventTable.id, cursor.id))) : undefined)
+            : cursor ? or(gt(ObservabilityEventTable.ts_ms, cursor.tsMs), and(eq(ObservabilityEventTable.ts_ms, cursor.tsMs), gt(ObservabilityEventTable.id, cursor.id))) : undefined,
+        )
+        .orderBy(ObservabilityEventTable.ts_ms, ObservabilityEventTable.id)
+        .limit(batchSize)
+        .all(),
+    )
+
+    if (!rows.length) break
+
+    for (const row of rows) {
+      if (limit && count >= limit) return
+      count++
+      yield JSON.stringify(toDto(row)) + "\n"
+    }
+
+    const last = rows[rows.length - 1]
+    cursor = { tsMs: last.ts_ms, id: last.id }
+  }
 }
 
 // snake_case DB row -> camelCase public DTO, field names matched to
@@ -159,4 +385,63 @@ export function toDto(row: EventRow) {
     localRedacted: row.local_redacted_json,
     schemaVersion: row.schema_version,
   }
+}
+
+/**
+ * Aggregate summary across sessions/projects/workspaces.
+ * Returns total events, cost, and breakdown by type/status.
+ */
+export function summaryAll(params: {
+  workspaceId?: string
+  projectId?: string
+  sessionId?: string
+  sinceMs?: number
+  untilMs?: number
+} = {}): {
+  totalEvents: number
+  totalCostNanoUsd: number
+  byType: Record<string, number>
+  byStatus: Record<string, number>
+  firstEventTsMs?: number
+  lastEventTsMs?: number
+} {
+  const { workspaceId, projectId, sessionId, sinceMs, untilMs } = params
+
+  const whereConditions = []
+  if (sessionId) whereConditions.push(eq(ObservabilityEventTable.session_id, sessionId))
+  if (projectId) whereConditions.push(eq(ObservabilityEventTable.project_id, projectId))
+  if (workspaceId) whereConditions.push(eq(ObservabilityEventTable.workspace_id, workspaceId))
+  if (sinceMs) whereConditions.push(gt(ObservabilityEventTable.ts_ms, sinceMs))
+  if (untilMs) whereConditions.push(lt(ObservabilityEventTable.ts_ms, untilMs))
+
+  const where = whereConditions.length > 0 ? and(...whereConditions) : undefined
+
+  const rows = Database.use((db) =>
+    db
+      .select({
+        eventType: ObservabilityEventTable.event_type,
+        status: ObservabilityEventTable.status,
+        tsMs: ObservabilityEventTable.ts_ms,
+        costNanoUsd: ObservabilityEventTable.cost_nano_usd,
+      })
+      .from(ObservabilityEventTable)
+      .where(where)
+      .all(),
+  )
+
+  const byType: Record<string, number> = {}
+  const byStatus: Record<string, number> = {}
+  let totalCostNanoUsd = 0
+  let firstEventTsMs: number | undefined
+  let lastEventTsMs: number | undefined
+
+  for (const r of rows) {
+    byType[r.eventType] = (byType[r.eventType] ?? 0) + 1
+    byStatus[r.status] = (byStatus[r.status] ?? 0) + 1
+    if (r.costNanoUsd) totalCostNanoUsd += r.costNanoUsd
+    if (firstEventTsMs === undefined || r.tsMs < firstEventTsMs) firstEventTsMs = r.tsMs
+    if (lastEventTsMs === undefined || r.tsMs > lastEventTsMs) lastEventTsMs = r.tsMs
+  }
+
+  return { totalEvents: rows.length, totalCostNanoUsd, byType, byStatus, firstEventTsMs, lastEventTsMs }
 }

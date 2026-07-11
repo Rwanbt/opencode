@@ -138,14 +138,19 @@ import type {
   McpRemoveErrors,
   McpRemoveResponses,
   McpStatusResponses,
+  ObservabilityCompareErrors,
+  ObservabilityCompareResponses,
   ObservabilityDataDeleteErrors,
   ObservabilityDataDeleteResponses,
   ObservabilityEventsGetErrors,
   ObservabilityEventsGetResponses,
   ObservabilityEventsListErrors,
   ObservabilityEventsListResponses,
+  ObservabilityExportErrors,
+  ObservabilityExportResponses,
   ObservabilityHealthResponses,
   ObservabilitySettingsResponses,
+  ObservabilitySummaryAggregateResponses,
   ObservabilitySummaryErrors,
   ObservabilitySummaryResponses,
   OutputFormat,
@@ -4145,6 +4150,124 @@ export class Observability extends HeyApiClient {
       ThrowOnError
     >({
       url: "/observability/summary",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Compare configuration cohorts
+   *
+   * Aggregates latency p50/p95, cost per turn, and failure rate by (model_provider, model_id, skill_hmac). Phase 2 feature — returns empty array if insufficient data.
+   */
+  public compare<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      timeWindowMs?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "timeWindowMs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityCompareResponses,
+      ObservabilityCompareErrors,
+      ThrowOnError
+    >({
+      url: "/observability/compare",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export observability events as NDJSON
+   *
+   * Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionId?: string
+      projectId?: string
+      workspaceId?: string
+      sinceMs?: number
+      untilMs?: number
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "projectId" },
+            { in: "query", key: "workspaceId" },
+            { in: "query", key: "sinceMs" },
+            { in: "query", key: "untilMs" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityExportResponses, ObservabilityExportErrors, ThrowOnError>({
+      url: "/observability/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Aggregate summary across sessions/projects/workspaces
+   *
+   * Aggregate event counts (by type/status) and total cost across a scope. Defaults to the current project when no sessionId/projectId/workspaceId is given — never returns other projects' data implicitly.
+   */
+  public summaryAggregate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionId?: string
+      projectId?: string
+      workspaceId?: string
+      sinceMs?: number
+      untilMs?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "projectId" },
+            { in: "query", key: "workspaceId" },
+            { in: "query", key: "sinceMs" },
+            { in: "query", key: "untilMs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySummaryAggregateResponses, unknown, ThrowOnError>({
+      url: "/observability/summary/aggregate",
       ...options,
       ...params,
     })

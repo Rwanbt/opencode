@@ -7601,9 +7601,15 @@
                     "storage": {
                       "type": "string",
                       "const": "sqlite_unencrypted_local"
+                    },
+                    "retentionDays": {
+                      "type": "number"
+                    },
+                    "maxEvents": {
+                      "type": "number"
                     }
                   },
-                  "required": ["enabled", "captureMode", "policyVersion", "localFullAvailable", "storage"]
+                  "required": ["enabled", "captureMode", "policyVersion", "localFullAvailable", "storage", "maxEvents"]
                 }
               }
             }
@@ -8062,6 +8068,152 @@
         ]
       }
     },
+    "/observability/compare": {
+      "get": {
+        "operationId": "observability.compare",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeWindowMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "summary": "Compare configuration cohorts",
+        "description": "Aggregates latency p50/p95, cost per turn, and failure rate by (model_provider, model_id, skill_hmac). Phase 2 feature — returns empty array if insufficient data.",
+        "responses": {
+          "200": {
+            "description": "Cohort comparison",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cohorts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "modelProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "modelId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "skillHmac": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "latencyP50Ms": {
+                            "type": "number"
+                          },
+                          "latencyP95Ms": {
+                            "type": "number"
+                          },
+                          "costPerTurnNanoUsd": {
+                            "type": "number"
+                          },
+                          "failureRatePct": {
+                            "type": "number"
+                          },
+                          "totalEvents": {
+                            "type": "number"
+                          },
+                          "traceCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "modelProvider",
+                          "modelId",
+                          "skillHmac",
+                          "latencyP50Ms",
+                          "latencyP95Ms",
+                          "costPerTurnNanoUsd",
+                          "failureRatePct",
+                          "totalEvents",
+                          "traceCount"
+                        ]
+                      }
+                    },
+                    "referenceIndex": {
+                      "type": "number"
+                    },
+                    "timeWindowMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["cohorts"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.compare({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/observability/data": {
       "delete": {
         "operationId": "observability.data.delete",
@@ -8173,6 +8325,226 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.data.delete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/export": {
+      "get": {
+        "operationId": "observability.export",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sinceMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "untilMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          }
+        ],
+        "summary": "Export observability events as NDJSON",
+        "description": "Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.",
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of events",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.export({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/summary/aggregate": {
+      "get": {
+        "operationId": "observability.summaryAggregate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sinceMs",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "untilMs",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "summary": "Aggregate summary across sessions/projects/workspaces",
+        "description": "Aggregate event counts (by type/status) and total cost across a scope. Defaults to the current project when no sessionId/projectId/workspaceId is given — never returns other projects' data implicitly.",
+        "responses": {
+          "200": {
+            "description": "Summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalEvents": {
+                      "type": "number"
+                    },
+                    "totalCostNanoUsd": {
+                      "type": "number"
+                    },
+                    "byType": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "byStatus": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "firstEventTsMs": {
+                      "type": "number"
+                    },
+                    "lastEventTsMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["totalEvents", "totalCostNanoUsd", "byType", "byStatus"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.summaryAggregate({\n  ...\n})"
           }
         ]
       }
@@ -17781,6 +18153,18 @@
                     "description": "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
                     "type": "string",
                     "enum": ["local_metadata", "local_redacted"]
+                  },
+                  "retentionDays": {
+                    "description": "Delete events older than this many days. Undefined keeps events until another retention limit applies.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "maxEvents": {
+                    "description": "Maximum local observability event count. Default: 100000.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   }
                 }
               },

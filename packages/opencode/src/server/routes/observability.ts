@@ -30,8 +30,8 @@ import z from "zod"
 import { Config } from "../../config/config"
 import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
-import { ObservabilityRepository, cursor, toDto } from "../../observability/repository"
-import { deleteByScope, type DeleteScope } from "../../observability/purge"
+import { ObservabilityRepository, cursor, toDto, exportEvents, summaryAll } from "../../observability/repository"
+import { deleteByScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
 import { Session } from "../../session"
 import { SessionID } from "@/session/schema"
 import { Instance } from "../../project/instance"
@@ -96,7 +96,18 @@ const DeleteBodySchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("session"), id: SessionID.zod }),
 ])
 
-const DeleteResultSchema = z.object({ deletedCount: z.number() })
+const DeleteResultSchema = z.object({
+  deletedCount: z.number(),
+})
+
+const SummaryAllSchema = z.object({
+  totalEvents: z.number(),
+  totalCostNanoUsd: z.number(),
+  byType: z.record(z.string(), z.number()),
+  byStatus: z.record(z.string(), z.number()),
+  firstEventTsMs: z.number().optional(),
+  lastEventTsMs: z.number().optional(),
+})
 
 const SummarySchema = z.object({
   sessionId: z.string(),
@@ -108,12 +119,32 @@ const SummarySchema = z.object({
   lastEventTsMs: z.number().optional(),
 })
 
+const CohortMetricsSchema = z.object({
+  modelProvider: z.string().nullable(),
+  modelId: z.string().nullable(),
+  skillHmac: z.string().nullable(),
+  latencyP50Ms: z.number(),
+  latencyP95Ms: z.number(),
+  costPerTurnNanoUsd: z.number(),
+  failureRatePct: z.number(),
+  totalEvents: z.number(),
+  traceCount: z.number(),
+})
+
+const CompareSchema = z.object({
+  cohorts: z.array(CohortMetricsSchema),
+  referenceIndex: z.number().optional(),
+  timeWindowMs: z.number().optional(),
+})
+
 const SettingsSchema = z.object({
   enabled: z.boolean(),
   captureMode: z.enum(["local_metadata", "local_redacted"]),
   policyVersion: z.literal(3),
   localFullAvailable: z.literal(false),
   storage: z.literal("sqlite_unencrypted_local"),
+  retentionDays: z.number().optional(),
+  maxEvents: z.number(),
 })
 
 export const ObservabilityRoutes = () =>
@@ -164,12 +195,15 @@ export const ObservabilityRoutes = () =>
       async (c) => {
         const cfg = await Config.get()
         const policy = resolveCapturePolicy(cfg.experimental?.observability)
+        const retention = resolveRetentionConfig(cfg.experimental?.observability)
         return c.json({
           enabled: policy.enabled,
           captureMode: policy.level,
           policyVersion: policy.policyVersion,
           localFullAvailable: false,
           storage: "sqlite_unencrypted_local",
+          retentionDays: retention.retentionDays,
+          maxEvents: retention.maxEvents,
         })
       },
     )
@@ -276,6 +310,38 @@ export const ObservabilityRoutes = () =>
         return c.json({ sessionId, ...summary })
       },
     )
+    .get(
+      "/compare",
+      describeRoute({
+        summary: "Compare configuration cohorts",
+        description:
+          "Aggregates latency p50/p95, cost per turn, and failure rate by (model_provider, model_id, skill_hmac). " +
+          "Phase 2 feature — returns empty array if insufficient data.",
+        operationId: "observability.compare",
+        responses: {
+          200: {
+            description: "Cohort comparison",
+            content: { "application/json": { schema: resolver(CompareSchema) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          timeWindowMs: z.coerce.number().int().positive().optional(),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const now = Date.now()
+        const result = ObservabilityRepository.compareCohorts({
+          projectId: Instance.project.id,
+          sinceMs: query.timeWindowMs ? now - query.timeWindowMs : undefined,
+        })
+        return c.json(result)
+      },
+    )
     .delete(
       "/data",
       describeRoute({
@@ -327,5 +393,96 @@ export const ObservabilityRoutes = () =>
 
         const result = await deleteByScope(scope)
         return c.json(result)
+      },
+    )
+    .get(
+      "/export",
+      describeRoute({
+        summary: "Export observability events as NDJSON",
+        description:
+          "Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.",
+        operationId: "observability.export",
+        responses: {
+          200: {
+            description: "NDJSON stream of events",
+            content: { "application/x-ndjson": { schema: { type: "string", format: "binary" } } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          sessionId: SessionID.zod.optional(),
+          projectId: z.string().optional(),
+          workspaceId: z.string().optional(),
+          sinceMs: z.coerce.number().int().positive().optional(),
+          untilMs: z.coerce.number().int().positive().optional(),
+          limit: z.coerce.number().int().min(1).max(100000).optional(),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+
+        // Ownership check for session
+        if (query.sessionId) {
+          await requireOwnedSession(query.sessionId)
+        }
+        if (query.projectId && query.projectId !== Instance.project.id) {
+          throw new NotFoundError({ message: "Project not found" })
+        }
+
+        c.header("Content-Type", "application/x-ndjson")
+        c.header("Cache-Control", "no-store")
+
+        // Same ownership anchor as every other route in this file (ADR-1028):
+        // an unscoped export must never stream another project's events.
+        const scoped =
+          query.sessionId || query.projectId || query.workspaceId
+            ? query
+            : { ...query, projectId: Instance.project.id }
+
+        const stream = exportEvents({
+          sessionId: scoped.sessionId,
+          projectId: scoped.projectId,
+          workspaceId: scoped.workspaceId,
+          sinceMs: scoped.sinceMs,
+          untilMs: scoped.untilMs,
+          limit: scoped.limit,
+        })
+
+        // Convert async generator to ReadableStream
+        const readable = new ReadableStream({
+          async start(controller) {
+            for await (const line of stream) {
+              controller.enqueue(new TextEncoder().encode(line))
+            }
+            controller.close()
+          },
+        })
+
+        return c.body(readable)
+      },
+    )
+    .get(
+      "/summary/aggregate",
+      describeRoute({
+        summary: "Aggregate summary across sessions/projects/workspaces",
+        description:
+          "Aggregate event counts (by type/status) and total cost across a scope. Defaults to the current " +
+          "project when no sessionId/projectId/workspaceId is given — never returns other projects' data implicitly.",
+        operationId: "observability.summaryAggregate",
+        responses: { 200: { description: "Summary", content: { "application/json": { schema: resolver(SummaryAllSchema) } } } },
+      }),
+      validator("query", z.object({ sessionId: z.string().optional(), projectId: z.string().optional(), workspaceId: z.string().optional(), sinceMs: z.coerce.number().optional(), untilMs: z.coerce.number().optional() })),
+      async (c) => {
+        const query = c.req.valid("query")
+        if (query.sessionId) await requireOwnedSession(SessionID.make(query.sessionId))
+        if (query.projectId && query.projectId !== Instance.project.id) throw new NotFoundError({ message: "Project not found" })
+        // Same ownership anchor as every other route in this file (ADR-1028):
+        // an unscoped request must never see another project's aggregates.
+        const scoped = query.sessionId || query.projectId || query.workspaceId ? query : { ...query, projectId: Instance.project.id }
+        const summary = summaryAll(scoped)
+        return c.json(summary)
       },
     )

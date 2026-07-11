@@ -1948,6 +1948,14 @@ export type Config = {
        * Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.
        */
       captureMode?: "local_metadata" | "local_redacted"
+      /**
+       * Delete events older than this many days. Undefined keeps events until another retention limit applies.
+       */
+      retentionDays?: number
+      /**
+       * Maximum local observability event count. Default: 100000.
+       */
+      maxEvents?: number
     }
     /**
      * Tools that should only be available to primary agents.
@@ -6001,6 +6009,8 @@ export type ObservabilitySettingsResponses = {
     policyVersion: 3
     localFullAvailable: false
     storage: "sqlite_unencrypted_local"
+    retentionDays?: number
+    maxEvents: number
   }
 }
 
@@ -6174,6 +6184,53 @@ export type ObservabilitySummaryResponses = {
 
 export type ObservabilitySummaryResponse = ObservabilitySummaryResponses[keyof ObservabilitySummaryResponses]
 
+export type ObservabilityCompareData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    timeWindowMs?: number
+  }
+  url: "/observability/compare"
+}
+
+export type ObservabilityCompareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityCompareError = ObservabilityCompareErrors[keyof ObservabilityCompareErrors]
+
+export type ObservabilityCompareResponses = {
+  /**
+   * Cohort comparison
+   */
+  200: {
+    cohorts: Array<{
+      modelProvider: string | null
+      modelId: string | null
+      skillHmac: string | null
+      latencyP50Ms: number
+      latencyP95Ms: number
+      costPerTurnNanoUsd: number
+      failureRatePct: number
+      totalEvents: number
+      traceCount: number
+    }>
+    referenceIndex?: number
+    timeWindowMs?: number
+  }
+}
+
+export type ObservabilityCompareResponse = ObservabilityCompareResponses[keyof ObservabilityCompareResponses]
+
 export type ObservabilityDataDeleteData = {
   body?:
     | {
@@ -6218,6 +6275,80 @@ export type ObservabilityDataDeleteResponses = {
 }
 
 export type ObservabilityDataDeleteResponse = ObservabilityDataDeleteResponses[keyof ObservabilityDataDeleteResponses]
+
+export type ObservabilityExportData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    sinceMs?: number
+    untilMs?: number
+    limit?: number
+  }
+  url: "/observability/export"
+}
+
+export type ObservabilityExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityExportError = ObservabilityExportErrors[keyof ObservabilityExportErrors]
+
+export type ObservabilityExportResponses = {
+  /**
+   * NDJSON stream of events
+   */
+  200: Blob | File
+}
+
+export type ObservabilityExportResponse = ObservabilityExportResponses[keyof ObservabilityExportResponses]
+
+export type ObservabilitySummaryAggregateData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    sinceMs?: number
+    untilMs?: number
+  }
+  url: "/observability/summary/aggregate"
+}
+
+export type ObservabilitySummaryAggregateResponses = {
+  /**
+   * Summary
+   */
+  200: {
+    totalEvents: number
+    totalCostNanoUsd: number
+    byType: {
+      [key: string]: number
+    }
+    byStatus: {
+      [key: string]: number
+    }
+    firstEventTsMs?: number
+    lastEventTsMs?: number
+  }
+}
+
+export type ObservabilitySummaryAggregateResponse =
+  ObservabilitySummaryAggregateResponses[keyof ObservabilitySummaryAggregateResponses]
 
 export type CollabPresenceData = {
   body?: never
