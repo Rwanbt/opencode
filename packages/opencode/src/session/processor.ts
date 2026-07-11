@@ -115,8 +115,16 @@ export namespace SessionProcessor {
     reasoningMap: Record<string, MessageV2.ReasoningPart>
     // Open tool.call spans awaiting a terminal event, keyed by toolCallID.
     // Anything still here in cleanup() never reached tool-result/tool-error,
-    // i.e. it was aborted mid-flight.
-    toolSpans: Record<string, { trace: TraceContext; startedAtMs: number }>
+    // i.e. it was aborted mid-flight. toolName/identityMetadata are captured
+    // once at "tool-call" time (the same values used on the started event)
+    // so the aborted event carries the same toolKind/skillHmac/pathHmac/
+    // mcpHmac identity as started/finished/failed instead of an empty
+    // metadata object — a tool never reaching tool-result/tool-error means
+    // there's no later output/error to derive identity from anyway.
+    toolSpans: Record<
+      string,
+      { trace: TraceContext; startedAtMs: number; toolName: string; identityMetadata: Record<string, string | undefined> }
+    >
   }
 
   type StreamEvent = Event
@@ -264,7 +272,6 @@ export namespace SessionProcessor {
 
               if (observability && turnTraceId) {
                 const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID })
-                ctx.toolSpans[value.toolCallId] = { trace: started.trace, startedAtMs: started.event.tsMs }
                 const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
                 let fileIdentity: { pathHmac?: string } = {}
@@ -282,9 +289,16 @@ export namespace SessionProcessor {
                   // MCP tools: HMAC the tool name
                   mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(value.toolName))
                 }
+                const identityMetadata = { ...skillIdentity, ...fileIdentity, ...mcpIdentity }
+                ctx.toolSpans[value.toolCallId] = {
+                  trace: started.trace,
+                  startedAtMs: started.event.tsMs,
+                  toolName: value.toolName,
+                  identityMetadata,
+                }
                 observability.record(started.trace, {
                   ...started.event,
-                  metadata: { toolKind: value.toolName, ...skillIdentity, ...fileIdentity, ...mcpIdentity },
+                  metadata: { toolKind: value.toolName, ...identityMetadata },
                   originalSizeBytes: argsClassification.originalSizeBytes,
                   payloadTruncated: argsClassification.payloadTruncated,
                   redactionStatus: argsClassification.redactionStatus,
@@ -684,7 +698,10 @@ export namespace SessionProcessor {
           if (observability) {
             for (const span of Object.values(ctx.toolSpans)) {
               const terminal = finishTool(span.trace, "aborted", span.startedAtMs)
-              observability.record(terminal.context, terminal.event)
+              observability.record(terminal.context, {
+                ...terminal.event,
+                metadata: { toolKind: span.toolName, ...span.identityMetadata },
+              })
             }
             ctx.toolSpans = {}
           }

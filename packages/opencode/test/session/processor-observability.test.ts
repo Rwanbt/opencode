@@ -504,6 +504,92 @@ it.live("session.processor observability records tool.call.aborted for tools sti
         expect(started).toBeDefined()
         expect(aborted).toBeDefined()
         expect(aborted!.span_id).toBe(started!.span_id)
+        // Same identity the started event carries — an aborted tool never
+        // reaches tool-result/tool-error, so this is reconstructed from
+        // what was captured at tool-call time (session/processor.ts
+        // ctx.toolSpans), not re-derived from an output/error it never had.
+        expect((aborted!.metadata_json as any).toolKind).toBe("bash")
+        expect((started!.metadata_json as any).toolKind).toBe("bash")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor observability records skillHmac on tool.call.aborted for a skill tool still open at cleanup", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const skillName = "hanging-secret-skill"
+
+        yield* llm.tool("skill", { name: skillName })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hang on a skill")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const observabilityService = ObservabilityRuntime.service()
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "hang on a skill" }],
+            tools: {
+              skill: skillTool(() => new Promise(() => {})),
+            },
+          })
+          .pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+        yield* Effect.promise(async () => {
+          const end = Date.now() + 500
+          while (Date.now() < end) {
+            const parts = await MessageV2.parts(msg.id)
+            if (parts.some((part) => part.type === "tool" && part.state.status === "running")) return
+            await Bun.sleep(10)
+          }
+        })
+        yield* Fiber.interrupt(run)
+
+        const exit = yield* Fiber.await(run)
+        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
+          yield* handle.abort()
+        }
+
+        yield* Effect.promise(() => observabilityService.flush())
+        const rows = yield* Effect.sync(() => rowsForSession(chat.id))
+
+        const started = rows.find((r) => r.event_type === "tool.call.started")
+        const aborted = rows.find((r) => r.event_type === "tool.call.aborted")
+
+        expect(started).toBeDefined()
+        expect(aborted).toBeDefined()
+        const startedMeta = started!.metadata_json as any
+        const abortedMeta = aborted!.metadata_json as any
+        expect(abortedMeta.toolKind).toBe("skill")
+        expect(abortedMeta.skillHmac).toMatch(/^[0-9a-f]{64}$/)
+        expect(abortedMeta.skillHmac).toBe(startedMeta.skillHmac)
+
+        const serialized = JSON.stringify(rows)
+        expect(serialized).not.toContain(skillName)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),
