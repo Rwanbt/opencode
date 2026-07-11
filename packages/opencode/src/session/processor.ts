@@ -46,6 +46,30 @@ async function skillIdentityMetadata(name: unknown, dir: unknown) {
   return result
 }
 
+// File path HMAC for file tools (read, write, edit, glob, grep, bash, apply_patch, ls)
+async function filePathIdentityMetadata(filePath: unknown) {
+  const result: { pathHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (typeof filePath === "string" && filePath.length > 0) result.pathHmac = hmacSha256(secret, filePath)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
+
+// MCP tool HMAC for MCP tools (prefixed with "mcp_")
+async function mcpToolIdentityMetadata(toolName: string) {
+  const result: { mcpHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (toolName.startsWith("mcp_") && toolName.length > 4) result.mcpHmac = hmacSha256(secret, toolName)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
+
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
   const log = Log.create({ service: "session.processor" })
@@ -243,14 +267,24 @@ export namespace SessionProcessor {
                 ctx.toolSpans[value.toolCallId] = { trace: started.trace, startedAtMs: started.event.tsMs }
                 const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
                 if (value.toolName === "skill") {
                   skillIdentity = yield* Effect.promise(() =>
                     skillIdentityMetadata((value.input as any)?.name, undefined),
                   )
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(value.toolName)) {
+                  // File tools: extract filePath from input
+                  const input = value.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (value.toolName.startsWith("mcp_")) {
+                  // MCP tools: HMAC the tool name
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(value.toolName))
                 }
                 observability.record(started.trace, {
                   ...started.event,
-                  metadata: { toolKind: value.toolName, ...skillIdentity },
+                  metadata: { toolKind: value.toolName, ...skillIdentity, ...fileIdentity, ...mcpIdentity },
                   originalSizeBytes: argsClassification.originalSizeBytes,
                   payloadTruncated: argsClassification.payloadTruncated,
                   redactionStatus: argsClassification.redactionStatus,
@@ -376,11 +410,19 @@ export namespace SessionProcessor {
                 const terminal = finishTool(finishedSpan.trace, "finished", finishedSpan.startedAtMs)
                 const outputClassification = sanitizeText({ text: value.output.output })
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
                 if (toolName === "skill") {
                   const outputMetadata = value.output.metadata as { name?: unknown; dir?: unknown } | undefined
                   skillIdentity = yield* Effect.promise(() =>
                     skillIdentityMetadata(outputMetadata?.name, outputMetadata?.dir),
                   )
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(toolName)) {
+                  const input = match.state.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (toolName.startsWith("mcp_")) {
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
                 }
                 observability.record(terminal.context, {
                   ...terminal.event,
@@ -389,6 +431,8 @@ export namespace SessionProcessor {
                     outputFileKind: outputClassification.fileKind,
                     outputMime: outputClassification.mime,
                     ...skillIdentity,
+                    ...fileIdentity,
+                    ...mcpIdentity,
                   },
                   originalSizeBytes: outputClassification.originalSizeBytes,
                   payloadTruncated: outputClassification.payloadTruncated,
@@ -454,13 +498,21 @@ export namespace SessionProcessor {
                 const terminal = finishTool(failedSpan.trace, "failed", failedSpan.startedAtMs)
                 const errorKind = (value.error instanceof Error ? value.error.name : typeof value.error).slice(0, 128)
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
                 if (toolName === "skill") {
                   const requestedName = (value.input as any)?.name ?? (match.state.input as any)?.name
                   skillIdentity = yield* Effect.promise(() => skillIdentityMetadata(requestedName, undefined))
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(toolName)) {
+                  const input = match?.state.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (toolName.startsWith("mcp_")) {
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
                 }
                 observability.record(terminal.context, {
                   ...terminal.event,
-                  metadata: { toolKind: toolName, errorKind, ...skillIdentity },
+                  metadata: { toolKind: toolName, errorKind, ...skillIdentity, ...fileIdentity, ...mcpIdentity },
                 })
                 delete ctx.toolSpans[value.toolCallId]
               }
