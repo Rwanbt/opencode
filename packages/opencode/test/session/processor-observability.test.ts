@@ -178,6 +178,13 @@ const bashTool = (execute: () => Promise<{ output: string; title: string; metada
     execute,
   })
 
+const skillTool = (execute: () => Promise<{ output: string; title: string; metadata: Record<string, unknown> }>) =>
+  tool({
+    description: "load a skill",
+    inputSchema: z.object({ name: z.string() }),
+    execute,
+  })
+
 it.live("session.processor observability records tool.call.started then finished, same span", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
@@ -291,6 +298,137 @@ it.live("session.processor observability records tool.call.failed when execute t
 
         const serialized = JSON.stringify(rows)
         expect(serialized).not.toContain("permission denied")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor observability records skill identity as HMAC only, never raw name or path", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const skillName = "my-secret-skill-xyz"
+        const skillDir = "/home/user/.secret-skills-path/my-secret-skill-xyz"
+
+        yield* llm.tool("skill", { name: skillName })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "use the skill")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "use the skill" }],
+          tools: {
+            skill: skillTool(async () => ({
+              output: `<skill_content name="${skillName}"># Skill: ${skillName}\n...`,
+              title: `Loaded skill: ${skillName}`,
+              metadata: { name: skillName, dir: skillDir },
+            })),
+          },
+        })
+
+        yield* Effect.promise(() => ObservabilityRuntime.service().flush())
+        const rows = yield* Effect.sync(() => rowsForSession(chat.id))
+
+        const started = rows.find((r) => r.event_type === "tool.call.started")
+        const finished = rows.find((r) => r.event_type === "tool.call.finished")
+
+        expect(value).toBe("continue")
+        expect(started).toBeDefined()
+        expect(finished).toBeDefined()
+
+        const startedMeta = started!.metadata_json as any
+        const finishedMeta = finished!.metadata_json as any
+        expect(startedMeta.toolKind).toBe("skill")
+        expect(finishedMeta.toolKind).toBe("skill")
+        expect(startedMeta.skillHmac).toMatch(/^[0-9a-f]{64}$/)
+        expect(finishedMeta.skillHmac).toMatch(/^[0-9a-f]{64}$/)
+        expect(finishedMeta.pathHmac).toMatch(/^[0-9a-f]{64}$/)
+        // Same skill name at started (requested) and finished (resolved) must
+        // hash to the same value — proves identity is trackable without ever
+        // storing the raw name.
+        expect(startedMeta.skillHmac).toBe(finishedMeta.skillHmac)
+
+        const serialized = JSON.stringify(rows)
+        expect(serialized).not.toContain(skillName)
+        expect(serialized).not.toContain(skillDir)
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor observability records skillHmac on tool.call.failed, never the raw name", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const skillName = "another-secret-skill"
+
+        yield* llm.tool("skill", { name: skillName })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "use a missing skill")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "use a missing skill" }],
+          tools: {
+            skill: skillTool(async () => {
+              throw new Error(`Skill "${skillName}" not found`)
+            }),
+          },
+        })
+
+        yield* Effect.promise(() => ObservabilityRuntime.service().flush())
+        const rows = yield* Effect.sync(() => rowsForSession(chat.id))
+
+        const failed = rows.find((r) => r.event_type === "tool.call.failed")
+        expect(failed).toBeDefined()
+        const failedMeta = failed!.metadata_json as any
+        expect(failedMeta.toolKind).toBe("skill")
+        expect(failedMeta.skillHmac).toMatch(/^[0-9a-f]{64}$/)
+
+        const serialized = JSON.stringify(rows)
+        expect(serialized).not.toContain(skillName)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

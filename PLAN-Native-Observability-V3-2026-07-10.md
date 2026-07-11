@@ -1374,6 +1374,7 @@ Estimation révisée:
 - [x] `RecordResult`.
 - [x] lifecycle LLM (session/llm.ts: started/finished/failed/aborted, same spanId, non-blocking, gated by experimental.observability.enabled).
 - [x] lifecycle tools (session/processor.ts: started on tool-call → running, finished/failed from tool-result/tool-error, aborted from cleanup() for spans still open; toolKind clear, errorKind bounded, no raw error text).
+- [x] Skills/Markdown identity HMAC (session/processor.ts: skillHmac from requested name at tool-call, skillHmac+pathHmac from resolved skill.name/dir at tool-result, skillHmac from requested/last-known name at tool-error; skill tool reuses the generic tool.call lifecycle — no separate span kind needed; name/path never stored raw, only HMAC-SHA256).
 - [ ] session delete purge hook.
 
 ### Tests

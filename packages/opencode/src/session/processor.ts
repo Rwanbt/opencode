@@ -26,6 +26,25 @@ import { ObservabilityRuntime } from "@/observability/runtime"
 import type { ObservabilityService } from "@/observability/service"
 import type { TraceContext } from "@/observability/trace-context"
 import { sanitizeText } from "@/observability/sanitizer"
+import { hmacSha256 } from "@/observability/hmac"
+import { secret as observabilitySecret } from "@/observability/hmac-secret"
+
+// The skill tool is the only tool whose identity (name, absolute path) is
+// itself sensitive — everything else is generic tool args/output already
+// covered by sanitizeText(). HMAC only, regardless of capture level: the
+// Phase 1 privacy matrix allows skill.name as "HMAC or absent" even at
+// local_metadata, and absolute paths as "always HMAC only".
+async function skillIdentityMetadata(name: unknown, dir: unknown) {
+  const result: { skillHmac?: string; pathHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (typeof name === "string" && name.length > 0) result.skillHmac = hmacSha256(secret, name)
+    if (typeof dir === "string" && dir.length > 0) result.pathHmac = hmacSha256(secret, dir)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
@@ -223,9 +242,15 @@ export namespace SessionProcessor {
                 const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID })
                 ctx.toolSpans[value.toolCallId] = { trace: started.trace, startedAtMs: started.event.tsMs }
                 const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                if (value.toolName === "skill") {
+                  skillIdentity = yield* Effect.promise(() =>
+                    skillIdentityMetadata((value.input as any)?.name, undefined),
+                  )
+                }
                 observability.record(started.trace, {
                   ...started.event,
-                  metadata: { toolKind: value.toolName },
+                  metadata: { toolKind: value.toolName, ...skillIdentity },
                   originalSizeBytes: argsClassification.originalSizeBytes,
                   payloadTruncated: argsClassification.payloadTruncated,
                   redactionStatus: argsClassification.redactionStatus,
@@ -350,12 +375,20 @@ export namespace SessionProcessor {
               if (observability && finishedSpan) {
                 const terminal = finishTool(finishedSpan.trace, "finished", finishedSpan.startedAtMs)
                 const outputClassification = sanitizeText({ text: value.output.output })
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                if (toolName === "skill") {
+                  const outputMetadata = value.output.metadata as { name?: unknown; dir?: unknown } | undefined
+                  skillIdentity = yield* Effect.promise(() =>
+                    skillIdentityMetadata(outputMetadata?.name, outputMetadata?.dir),
+                  )
+                }
                 observability.record(terminal.context, {
                   ...terminal.event,
                   metadata: {
                     toolKind: toolName,
                     outputFileKind: outputClassification.fileKind,
                     outputMime: outputClassification.mime,
+                    ...skillIdentity,
                   },
                   originalSizeBytes: outputClassification.originalSizeBytes,
                   payloadTruncated: outputClassification.payloadTruncated,
@@ -420,7 +453,15 @@ export namespace SessionProcessor {
               if (observability && failedSpan) {
                 const terminal = finishTool(failedSpan.trace, "failed", failedSpan.startedAtMs)
                 const errorKind = (value.error instanceof Error ? value.error.name : typeof value.error).slice(0, 128)
-                observability.record(terminal.context, { ...terminal.event, metadata: { toolKind: toolName, errorKind } })
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                if (toolName === "skill") {
+                  const requestedName = (value.input as any)?.name ?? (match.state.input as any)?.name
+                  skillIdentity = yield* Effect.promise(() => skillIdentityMetadata(requestedName, undefined))
+                }
+                observability.record(terminal.context, {
+                  ...terminal.event,
+                  metadata: { toolKind: toolName, errorKind, ...skillIdentity },
+                })
                 delete ctx.toolSpans[value.toolCallId]
               }
               return
