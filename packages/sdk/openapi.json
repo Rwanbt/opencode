@@ -7519,11 +7519,44 @@
                     "circuitOpen": {
                       "type": "boolean"
                     },
+                    "eventsAccepted": {
+                      "type": "number"
+                    },
                     "eventsInserted": {
+                      "type": "number"
+                    },
+                    "eventsRejectedInvalidContext": {
+                      "type": "number"
+                    },
+                    "eventsRejectedInvalidEvent": {
+                      "type": "number"
+                    },
+                    "eventsDroppedQueueFull": {
+                      "type": "number"
+                    },
+                    "eventsDroppedCircuitOpen": {
                       "type": "number"
                     },
                     "eventsFailedDb": {
                       "type": "number"
+                    },
+                    "eventsFailedBusy": {
+                      "type": "number"
+                    },
+                    "eventsFailedFull": {
+                      "type": "number"
+                    },
+                    "eventsFailedCorrupt": {
+                      "type": "number"
+                    },
+                    "sanitizerFailed": {
+                      "type": "number"
+                    },
+                    "lastErrorAt": {
+                      "type": "number"
+                    },
+                    "lastErrorKind": {
+                      "type": "string"
                     },
                     "queueSize": {
                       "type": "number"
@@ -7536,8 +7569,17 @@
                     "enabled",
                     "captureMode",
                     "circuitOpen",
+                    "eventsAccepted",
                     "eventsInserted",
+                    "eventsRejectedInvalidContext",
+                    "eventsRejectedInvalidEvent",
+                    "eventsDroppedQueueFull",
+                    "eventsDroppedCircuitOpen",
                     "eventsFailedDb",
+                    "eventsFailedBusy",
+                    "eventsFailedFull",
+                    "eventsFailedCorrupt",
+                    "sanitizerFailed",
                     "queueSize",
                     "queueBytes"
                   ]

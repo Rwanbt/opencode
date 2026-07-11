@@ -5980,8 +5980,19 @@ export type ObservabilityHealthResponses = {
     enabled: boolean
     captureMode: "local_metadata" | "local_redacted"
     circuitOpen: boolean
+    eventsAccepted: number
     eventsInserted: number
+    eventsRejectedInvalidContext: number
+    eventsRejectedInvalidEvent: number
+    eventsDroppedQueueFull: number
+    eventsDroppedCircuitOpen: number
     eventsFailedDb: number
+    eventsFailedBusy: number
+    eventsFailedFull: number
+    eventsFailedCorrupt: number
+    sanitizerFailed: number
+    lastErrorAt?: number
+    lastErrorKind?: string
     queueSize: number
     queueBytes: number
   }
