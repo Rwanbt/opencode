@@ -569,47 +569,48 @@ export const GithubRunCommand = cmd({
             console.error("Rejected attachment URL: unparseable")
             continue
           }
-          if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "github.com") {
+
+          // WHY the sink lives inside this positive equality check (rather
+          // than an early `if (bad) continue`): this is the barrier-guard
+          // shape CodeQL's SSRF taint tracker recognizes as sanitizing —
+          // the request is only ever reachable when hostname/protocol are
+          // proven equal to the fixed, trusted values.
+          if (parsedUrl.protocol === "https:" && parsedUrl.hostname === "github.com") {
+            const filename = path.basename(url)
+
+            const res = await fetch(parsedUrl, {
+              headers: {
+                Authorization: `Bearer ${appToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            })
+            if (!res.ok) {
+              // WHY replace() here: url comes from a GitHub comment body
+              // (untrusted input) and the regex above still allows raw
+              // control characters in its path segment — strip them before
+              // logging so a crafted comment can't forge fake log lines
+              // (CWE-117) in CI output.
+              console.error(`Failed to download image: ${url.replace(/[\x00-\x1f\x7f]/g, "")}`)
+              continue
+            }
+
+            // Replace img tag with file path, ie. @image.png
+            const replacement = `@${filename}`
+            prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
+            offset += replacement.length - tag.length
+
+            const contentType = res.headers.get("content-type")
+            imgData.push({
+              filename,
+              mime: contentType?.startsWith("image/") ? contentType : "text/plain",
+              content: Buffer.from(await res.arrayBuffer()).toString("base64"),
+              start,
+              end: start + replacement.length,
+              replacement,
+            })
+          } else {
             console.error("Rejected attachment URL: unexpected host")
-            continue
           }
-
-          const filename = path.basename(url)
-
-          // Download image. WHY fetch(parsedUrl) rather than fetch(url):
-          // requesting the validated URL object — not the original string —
-          // is what lets static analysis (and any future reviewer) confirm
-          // the network call can only ever target the host checked above.
-          const res = await fetch(parsedUrl, {
-            headers: {
-              Authorization: `Bearer ${appToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-          })
-          if (!res.ok) {
-            // WHY replace() here: url comes from a GitHub comment body
-            // (untrusted input) and the regex above still allows raw
-            // control characters in its path segment — strip them before
-            // logging so a crafted comment can't forge fake log lines
-            // (CWE-117) in CI output.
-            console.error(`Failed to download image: ${url.replace(/[\x00-\x1f\x7f]/g, "")}`)
-            continue
-          }
-
-          // Replace img tag with file path, ie. @image.png
-          const replacement = `@${filename}`
-          prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
-          offset += replacement.length - tag.length
-
-          const contentType = res.headers.get("content-type")
-          imgData.push({
-            filename,
-            mime: contentType?.startsWith("image/") ? contentType : "text/plain",
-            content: Buffer.from(await res.arrayBuffer()).toString("base64"),
-            start,
-            end: start + replacement.length,
-            replacement,
-          })
         }
 
         return { userPrompt: prompt, promptFiles: imgData }
