@@ -21,7 +21,7 @@ export const EventTypeSchema = z.enum([
 export const EventStatusSchema = z.enum(["started", "finished", "failed", "aborted", "dropped"])
 export const RedactionStatusSchema = z.enum(["metadata_only", "redacted", "failed_closed"])
 
-const MetadataSchema = z.object({
+export const MetadataSchema = z.object({
   modelProvider: OptionalSmallString,
   modelId: OptionalSmallString,
   inputTokens: OptionalNonNegativeInteger,
