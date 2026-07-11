@@ -13,16 +13,10 @@
  *   DELETE /observability/data           Delete events by scope. Requires
  *                                          header `X-Confirm-Delete: yes`.
  *
- * Ownership (ADR-1028): event.sql.ts's project_id/workspace_id columns are
- * never actually populated yet — no call site threads them through
- * TraceContext (only sessionId is set today). So the only scope that can be
- * verified is session_id -> session.projectID -> Instance.project.id. Every
- * events/delete route below resolves the session first and 404s (not 403 —
- * a non-revealing not-found, matching Session.get's own behavior) if it
- * belongs to a different project. `DELETE /data` only accepts "session",
- * "project" (id must equal the current instance's project), and "all" —
- * "workspace" is deferred until Instance exposes a verifiable current-
- * workspace identity to check against.
+ * Ownership (ADR-1028): project_id/workspace_id are populated from the
+ * owned SessionInfo and verified against the current project/workspace. A
+ * foreign scope returns a non-revealing 404; DELETE workspace requires an
+ * existing Workspace row belonging to the current project.
  */
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"

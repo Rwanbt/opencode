@@ -25,10 +25,10 @@ Phase 0 est validée pour une fondation Phase 1 metadata-only : aucune donnée l
 
 ## Limites assumées
 
-- Scope HTTP `workspace` différé : aucune identité workspace courante vérifiable en Phase 1.
+- Scope HTTP workspace active : events use SessionInfo.workspaceID and routes verify current project ownership.
 - `maxDbBytes`, exporters et contenu lisible restent hors Phase 1.
 - Le navigateur headless n’a pas pu être relancé lors de la dernière vérification ; `settings-plugins.tsx` n’a pas été modifié.
 
 ## Décision
 
-Autoriser la poursuite vers Phase 1, sous réserve d’un run CI réel du workflow SDK drift et d’une vérification navigateur ultérieure de `settings-plugins.tsx`.
+Phase 1 continuation authorized. No pull request before manual application validation by the user.
