@@ -21,6 +21,7 @@ import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { Token } from "@/util/token"
 import { Session } from "."
+import { SessionID } from "./schema"
 import { ObservabilityId } from "@/observability/id"
 import { finishLlm, startLlm } from "@/observability/lifecycle"
 import { resolveCapturePolicy, type CapturePolicy } from "@/observability/capture-policy"
@@ -454,9 +455,10 @@ export namespace LLM {
     }
 
     const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
+    const sessionInfo = observability ? await Session.get(input.sessionID as SessionID).catch(() => undefined) : undefined
     const llmStartedAtMs = Date.now()
     const llmSpan = observability
-      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID }, llmStartedAtMs)
+      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID, workspaceId: sessionInfo?.workspaceID }, llmStartedAtMs)
       : undefined
     if (observability && llmSpan) {
       observability.record(llmSpan.trace, {

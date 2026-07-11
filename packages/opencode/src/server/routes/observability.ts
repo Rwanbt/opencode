@@ -33,6 +33,8 @@ import { resolveCapturePolicy } from "../../observability/capture-policy"
 import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll } from "../../observability/repository"
 import { deleteByScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
 import { Session } from "../../session"
+import { Workspace } from "../../control-plane/workspace"
+import { WorkspaceID } from "../../control-plane/schema"
 import { SessionID } from "@/session/schema"
 import { Instance } from "../../project/instance"
 import { NotFoundError } from "../../storage/db"
@@ -73,6 +75,13 @@ const EventDtoSchema = z.object({
 // SessionID.zod-typed Hono validator, or a raw DB column we wrote ourselves)
 // — never re-parses, so a malformed id from user input surfaces as the
 // standard 400 at the Hono validator layer, not an uncaught ZodError here.
+async function requireOwnedWorkspace(workspaceId: string) {
+  const parsed = WorkspaceID.zod.safeParse(workspaceId)
+  const workspace = parsed.success ? await Workspace.get(parsed.data) : undefined
+  if (!workspace || workspace.projectID !== Instance.project.id) throw new NotFoundError({ message: `Workspace not found: ${workspaceId}` })
+  return workspace
+}
+
 async function requireOwnedSession(sessionId: SessionID) {
   const session = await Session.get(sessionId)
   if (session.projectID !== Instance.project.id) {
@@ -103,6 +112,7 @@ const HealthSchema = z.object({
 })
 
 const DeleteBodySchema = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("workspace"), id: WorkspaceID.zod }),
   z.object({ scope: z.literal("all") }),
   z.object({ scope: z.literal("project"), id: z.string().min(1) }),
   z.object({ scope: z.literal("session"), id: SessionID.zod }),
@@ -250,6 +260,7 @@ export const ObservabilityRoutes = () =>
         "query",
         z.object({
           sessionId: SessionID.zod,
+          workspace: WorkspaceID.zod.optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
           before: z
             .string()
@@ -271,11 +282,13 @@ export const ObservabilityRoutes = () =>
       async (c) => {
         const query = c.req.valid("query")
         await requireOwnedSession(query.sessionId)
+        if (query.workspace) await requireOwnedWorkspace(query.workspace)
         const limit = query.limit ?? 50
-        const page = ObservabilityRepository.page({ sessionId: query.sessionId, limit, before: query.before })
+        const page = ObservabilityRepository.page({ sessionId: query.sessionId, workspaceId: query.workspace, limit, before: query.before })
         if (page.cursor) {
           const url = new URL(c.req.url)
           url.searchParams.set("sessionId", query.sessionId)
+          if (query.workspace) url.searchParams.set("workspace", query.workspace)
           url.searchParams.set("limit", String(limit))
           url.searchParams.set("before", page.cursor)
           c.header("Access-Control-Expose-Headers", "Link, X-Next-Cursor")
@@ -404,6 +417,9 @@ export const ObservabilityRoutes = () =>
         if (body.scope === "session") {
           await requireOwnedSession(body.id)
           scope = { scope: "session", id: body.id }
+        } else if (body.scope === "workspace") {
+          await requireOwnedWorkspace(body.id)
+          scope = { scope: "workspace", id: body.id }
         } else if (body.scope === "project") {
           if (body.id !== Instance.project.id) {
             return c.json({ error: "invalid_scope", message: "id must match the current project" }, 400)
@@ -444,7 +460,8 @@ export const ObservabilityRoutes = () =>
       validator(
         "query",
         z.object({
-          sessionId: SessionID.zod.optional(),
+          sessionId: SessionID.zod,
+
           projectId: z.string().optional(),
           workspaceId: z.string().optional(),
           sinceMs: z.coerce.number().int().positive().optional(),

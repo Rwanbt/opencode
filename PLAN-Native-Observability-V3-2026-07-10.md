@@ -1363,8 +1363,8 @@ Estimation révisée:
 - [x] `/health` ajouté (`GET /observability/health` : server/routes/observability.ts, expose `ObservabilityRuntime.service().stats()` + capture policy résolue de l'instance courante — pas de scope cross-projet à vérifier, c'est déjà per-instance via Instance.state).
 - [x] `GET /observability/events` (keyset `(ts_ms,id)` scopé par session) + `GET /observability/events/:eventId` ajoutés.
 - [x] `GET /observability/summary` ajouté (agrégats par type/status + coût total, même ownership que `/events`).
-- [x] `DELETE /observability/data` minimal ajouté (scopes `all`/`project`/`session` ; `workspace` explicitement non supporté Phase 1 faute d'identité "workspace courant" vérifiable — voir commentaire en tête de fichier).
-- [x] Auth/ownership prouvé et testé (`requireOwnedSession` : `Session.get(sessionId).projectID === Instance.project.id`, sinon 404 non-révélateur ; `scope:"project"` exige `id === Instance.project.id` sinon 400 ; testé cross-project avec tmpdirs git-scopés, une session étrangère ne délete rien et 404).
+- [x] `DELETE /observability/data` avec scopes `all`/`workspace`/`project`/`session`, ownership workspace vérifié via `Workspace.get` et `projectID courant`.
+- [x] Auth/ownership prouvé et testé pour session/project/workspace (`requireOwnedSession` + `requireOwnedWorkspace`, 404 non-révélateur).
 
 ### Implémentation core
 

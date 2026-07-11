@@ -6247,6 +6247,10 @@ export type ObservabilityCompareResponse = ObservabilityCompareResponses[keyof O
 export type ObservabilityDataDeleteData = {
   body?:
     | {
+        scope: "workspace"
+        id: string
+      }
+    | {
         scope: "all"
       }
     | {
@@ -6292,10 +6296,10 @@ export type ObservabilityDataDeleteResponse = ObservabilityDataDeleteResponses[k
 export type ObservabilityExportData = {
   body?: never
   path?: never
-  query?: {
+  query: {
     directory?: string
     workspace?: string
-    sessionId?: string
+    sessionId: string
     projectId?: string
     workspaceId?: string
     sinceMs?: number

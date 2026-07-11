@@ -186,6 +186,7 @@ export namespace SessionProcessor {
         const observability: ObservabilityService | undefined = capturePolicy.enabled
           ? ObservabilityRuntime.service()
           : undefined
+        const sessionInfo = observability ? yield* session.get(ctx.sessionID).pipe(Effect.orElseSucceed(() => undefined)) : undefined
         const turnTraceId = observability ? ObservabilityId.create() : undefined
 
         const parse = (e: unknown) =>
@@ -271,7 +272,7 @@ export namespace SessionProcessor {
               } satisfies MessageV2.ToolPart)
 
               if (observability && turnTraceId) {
-                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID })
+                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID, workspaceId: sessionInfo?.workspaceID })
                 const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
                 let fileIdentity: { pathHmac?: string } = {}

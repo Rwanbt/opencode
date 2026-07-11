@@ -4016,6 +4016,10 @@ export class Data extends HeyApiClient {
       workspace?: string
       body?:
         | {
+            scope: "workspace"
+            id: string
+          }
+        | {
             scope: "all"
           }
         | {
@@ -4197,10 +4201,10 @@ export class Observability extends HeyApiClient {
    * Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.
    */
   public export<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
       workspace?: string
-      sessionId?: string
+      sessionId: string
       projectId?: string
       workspaceId?: string
       sinceMs?: number

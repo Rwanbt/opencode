@@ -7,6 +7,9 @@ import { ObservabilityRepository } from "../../src/observability/repository"
 import { parseObservabilityEvent } from "../../src/observability/event-schema"
 import { createTraceContext } from "../../src/observability/trace-context"
 import { ObservabilityId } from "../../src/observability/id"
+import { Database } from "../../src/storage/db"
+import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { WorkspaceID } from "../../src/control-plane/schema"
 
 // HTTP-level coverage for the observability events routes — pins keyset
 // pagination and the cross-project ownership check (ADR-1028: a session's
@@ -83,6 +86,18 @@ describe("GET /observability/events", () => {
     expect(r2.headers.get("x-next-cursor")).toBeNull()
   })
 
+  test("filters and owns events by workspace", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const session = await createSession(tmp.path)
+    const workspaceId = WorkspaceID.ascending()
+    Database.use((db) => db.insert(WorkspaceTable).values({ id: workspaceId, type: "worktree", branch: null, name: "test", directory: tmp.path, extra: null, project_id: session.projectID }).run())
+    const event = makeEvent(createTraceContext({ sessionId: session.id, workspaceId }), Date.now())
+    await ObservabilityRepository.insert([event])
+
+    const response = await call("GET", `/observability/events?sessionId=${session.id}&workspace=${workspaceId}`, tmp.path)
+    expect(response.status).toBe(200)
+    expect((await response.json()) as any[]).toHaveLength(1)
+  })
   test("marks a started span as orphaned after the read threshold", async () => {
     await using tmp = await tmpdir()
     const session = await createSession(tmp.path)

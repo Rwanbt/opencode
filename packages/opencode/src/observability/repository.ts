@@ -63,11 +63,12 @@ export const ObservabilityRepository = {
   // responsible for verifying the session belongs to the requesting scope
   // BEFORE calling this (ADR-1028: ownership via the real session→project
   // relation, not a raw scope value) — this function trusts sessionId as-is.
-  page(input: { sessionId: string; limit: number; before?: string }): { items: EventRow[]; more: boolean; cursor?: string } {
+  page(input: { sessionId: string; workspaceId?: string; limit: number; before?: string }): { items: EventRow[]; more: boolean; cursor?: string } {
     const before = input.before ? cursor.decode(input.before) : undefined
-    const where = before
-      ? and(eq(ObservabilityEventTable.session_id, input.sessionId), older(before))
+    const scope = input.workspaceId
+      ? and(eq(ObservabilityEventTable.session_id, input.sessionId), eq(ObservabilityEventTable.workspace_id, input.workspaceId))
       : eq(ObservabilityEventTable.session_id, input.sessionId)
+    const where = before ? and(scope, older(before)) : scope
     const rows = Database.use((db) =>
       db
         .select()

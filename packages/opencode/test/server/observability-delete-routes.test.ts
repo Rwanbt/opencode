@@ -7,6 +7,9 @@ import { ObservabilityRepository } from "../../src/observability/repository"
 import { parseObservabilityEvent } from "../../src/observability/event-schema"
 import { createTraceContext } from "../../src/observability/trace-context"
 import { ObservabilityId } from "../../src/observability/id"
+import { Database } from "../../src/storage/db"
+import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { WorkspaceID } from "../../src/control-plane/schema"
 
 // HTTP-level coverage for DELETE /observability/data — confirmation header
 // gate, scope-by-scope deletion, and the same real-ownership check as the
@@ -80,6 +83,17 @@ describe("DELETE /observability/data", () => {
     expect(await eventsFor(tmp.path, kept.id)).toHaveLength(1)
   })
 
+  test("deletes events by an owned workspace", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const session = await createSession(tmp.path)
+    const workspaceId = WorkspaceID.ascending()
+    Database.use((db) => db.insert(WorkspaceTable).values({ id: workspaceId, type: "worktree", branch: null, name: "test", directory: tmp.path, extra: null, project_id: session.projectID }).run())
+    await ObservabilityRepository.insert([makeEvent(createTraceContext({ sessionId: session.id, workspaceId }))])
+
+    const response = await call("DELETE", "/observability/data", tmp.path, { scope: "workspace", id: workspaceId })
+    expect(response.status).toBe(200)
+    expect((await response.json()) as { deletedCount: number }).toMatchObject({ deletedCount: 1 })
+  })
   test("404s when the session belongs to another project", async () => {
     await using tmpA = await tmpdir({ git: true })
     await using tmpB = await tmpdir({ git: true })
