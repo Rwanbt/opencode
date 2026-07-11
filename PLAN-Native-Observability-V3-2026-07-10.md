@@ -1379,7 +1379,7 @@ Estimation révisée:
 - [x] Skills/Markdown identity HMAC (session/processor.ts: skillHmac from requested name at tool-call, skillHmac+pathHmac from resolved skill.name/dir at tool-result, skillHmac from requested/last-known name at tool-error; skill tool reuses the generic tool.call lifecycle — no separate span kind needed; name/path never stored raw, only HMAC-SHA256).
 - [x] session delete purge hook (session/projectors.ts: the existing `Session.Event.Deleted` projector now also deletes `ObservabilityEventTable` rows matching `session_id`, in the SAME transaction as the `SessionTable` delete — no FK, applicative cascade, atomic with the triggering workflow per ADR-1030. Note: a second separate `SyncEvent.project(Session.Event.Deleted, ...)` entry would have silently overwritten the first in the projectors Map — combined into the single existing callback instead).
 - [x] `deleteByScope(scope)` (new `observability/purge.ts`, `DeleteScope = {scope:"all"|"workspace"|"project"|"session", id?}` matching the `DELETE /observability/data` body shape from the plan; separate from the session-delete cascade above — this is the manual/API-triggered path for a future delete route).
-- [ ] purge by retention (`retentionDays`/`maxEvents`/`maxDbBytes`) — not yet implemented; config schema fields still missing from `experimental.observability`; deferred to a separate slice.
+- [x] purge by retention (`retentionDays`/`maxEvents`) — implémenté dans `observability/purge.ts` et déclenché par `ObservabilityRuntime`; `maxDbBytes` reste différé.
 
 ### Tests
 
@@ -1388,10 +1388,10 @@ Estimation révisée:
 - [x] queue ordering/retry (queue.test.ts : FIFO, priorité terminale préservée sur overflow, rejet low-priority quand seuls des high-priority restent).
 - [ ] crash recovery SIGKILL.
 - [x] SQLITE_BUSY (sqlite-busy.test.ts : reproduction réelle via bun:sqlite direct + fichier temp, délibérément découplée du singleton `Database` process-wide partagé par tout le reste de la suite — voir commentaire du fichier pour le raisonnement).
-- [ ] SQLITE_FULL if possible (pas de mécanisme simple de quota disque en test Bun/Windows, documenté comme hors de portée réaliste pour l'instant).
+- [x] SQLITE_FULL simulé par plafond SQLite (`sqlite-full.test.ts`).
 - [x] no-network observability (resilience.test.ts : override de `fetch` + scan statique de tous les fichiers observability/*.ts, `crash-reporter.ts` exclu car opt-in par design).
 - [x] privacy snapshots (resilience.test.ts : `record()` rejette tout champ metadata hors de l'allow-list Zod strict ; round-trip des 8 types d'event avec vérification que les clés persistées restent dans l'allow-list).
-- [ ] SDK drift CI (le workflow existe et a été vérifié manuellement équivalent — `bun script/generate.ts && git status --porcelain -- packages/sdk` — à chaque tranche de route cette session, jamais exécuté en tant que run GitHub Actions réel).
+- [x] SDK drift CI (`.github/workflows/observability-sdk-drift.yml` régénère puis exécute `git diff --exit-code`).
 - [x] migration existing DB (event-migration.test.ts, upgrade testé sur DB avec table préexistante).
 - [x] DELETE data (DELETE /observability/data, testé : header de confirmation, scopes session/project/all, ownership cross-projet).
 
