@@ -1383,17 +1383,17 @@ Estimation révisée:
 
 ### Tests
 
-- [ ] 100 sessions concurrentes.
-- [ ] started/terminal same spanId.
-- [ ] queue ordering/retry.
+- [x] 100 sessions concurrentes (resilience.test.ts : 100 sessions × 100 events entrelacés round-robin, marqueur par event vérifié contre la ligne DB réelle au lecture — pas de contamination croisée).
+- [x] started/terminal same spanId (lifecycle.test.ts, pour LLM et tool).
+- [x] queue ordering/retry (queue.test.ts : FIFO, priorité terminale préservée sur overflow, rejet low-priority quand seuls des high-priority restent).
 - [ ] crash recovery SIGKILL.
-- [ ] SQLITE_BUSY.
-- [ ] SQLITE_FULL if possible.
-- [ ] no-network observability.
-- [ ] privacy snapshots.
-- [ ] SDK drift CI.
-- [ ] migration existing DB.
-- [ ] DELETE data.
+- [x] SQLITE_BUSY (sqlite-busy.test.ts : reproduction réelle via bun:sqlite direct + fichier temp, délibérément découplée du singleton `Database` process-wide partagé par tout le reste de la suite — voir commentaire du fichier pour le raisonnement).
+- [ ] SQLITE_FULL if possible (pas de mécanisme simple de quota disque en test Bun/Windows, documenté comme hors de portée réaliste pour l'instant).
+- [x] no-network observability (resilience.test.ts : override de `fetch` + scan statique de tous les fichiers observability/*.ts, `crash-reporter.ts` exclu car opt-in par design).
+- [x] privacy snapshots (resilience.test.ts : `record()` rejette tout champ metadata hors de l'allow-list Zod strict ; round-trip des 8 types d'event avec vérification que les clés persistées restent dans l'allow-list).
+- [ ] SDK drift CI (le workflow existe et a été vérifié manuellement équivalent — `bun script/generate.ts && git status --porcelain -- packages/sdk` — à chaque tranche de route cette session, jamais exécuté en tant que run GitHub Actions réel).
+- [x] migration existing DB (event-migration.test.ts, upgrade testé sur DB avec table préexistante).
+- [x] DELETE data (DELETE /observability/data, testé : header de confirmation, scopes session/project/all, ownership cross-projet).
 
 ---
 

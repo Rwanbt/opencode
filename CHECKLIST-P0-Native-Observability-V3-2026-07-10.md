@@ -30,7 +30,7 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 - [x] HMAC-SHA256 et secret local crypto-safe (`skillHmac`/`pathHmac` câblés dans session/processor.ts pour l'identité skill sur started/finished/failed — nom et chemin jamais stockés en clair, testé par 2 tests dédiés ; `fingerprintContent()` reste disponible et testé mais pas encore appelé par un site d'appel réel).
 - [x] Routes events/detail/settings/summary/health/delete avec auth/ownership (toutes faites : events, detail, settings, summary, health, delete — `requireOwnedSession` réel testé cross-projet ; scope `workspace` explicitement non supporté sur `DELETE /data`, voir commentaire en tête de server/routes/observability.ts).
 - [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy.
-- [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network.
+- [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network (fait : concurrence 100×100, SQLite busy réel, sanitizer, privacy — voir plan §21 Tests ; manquant : DB full, crash SIGKILL).
 
 ## Gate finale
 
