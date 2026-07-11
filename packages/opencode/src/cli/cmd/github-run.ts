@@ -576,8 +576,11 @@ export const GithubRunCommand = cmd({
 
           const filename = path.basename(url)
 
-          // Download image
-          const res = await fetch(url, {
+          // Download image. WHY fetch(parsedUrl) rather than fetch(url):
+          // requesting the validated URL object — not the original string —
+          // is what lets static analysis (and any future reviewer) confirm
+          // the network call can only ever target the host checked above.
+          const res = await fetch(parsedUrl, {
             headers: {
               Authorization: `Bearer ${appToken}`,
               Accept: "application/vnd.github.v3+json",
