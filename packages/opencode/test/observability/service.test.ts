@@ -72,4 +72,33 @@ describe("observability service", () => {
     expect(result).toMatchObject({ ok: true })
     expect(service.stats().sanitizerFailed).toBe(1)
   })
+
+  // BoundedEventQueue defaults to maxEvents=500 (queue.ts) — ObservabilityService
+  // doesn't expose a way to inject a smaller queue, so these drive the real
+  // default cap end to end rather than a mock. status !== "started" maps to
+  // "high" priority in record() — see the `priority` line there.
+  const started = () => ({ ...event(), type: "llm.call.started" as const, status: "started" as const })
+  const finished = () => ({ ...event(), type: "llm.call.finished" as const, status: "finished" as const, durationMs: 1 })
+
+  test("eventsDroppedQueueFull counts low-priority evictions made to admit high-priority events", () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    for (let i = 0; i < 500; i++) expect(service.record(createTraceContext(), started())).toMatchObject({ ok: true })
+    expect(service.stats().queueSize).toBe(500)
+
+    for (let i = 0; i < 5; i++) expect(service.record(createTraceContext(), finished())).toMatchObject({ ok: true })
+
+    const stats = service.stats()
+    expect(stats.queueSize).toBe(500) // each high-priority admit evicted one low-priority item
+    expect(stats.eventsDroppedQueueFull).toBe(5)
+    expect(stats.eventsAccepted).toBe(505)
+  })
+
+  test("eventsDroppedQueueFull counts a hard reject once the queue is full of high-priority events only", () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    for (let i = 0; i < 500; i++) expect(service.record(createTraceContext(), finished())).toMatchObject({ ok: true })
+
+    expect(service.record(createTraceContext(), finished())).toEqual({ ok: false, reason: "queue_full" })
+    expect(service.stats().eventsDroppedQueueFull).toBe(1)
+    expect(service.stats().eventsAccepted).toBe(500)
+  })
 })
