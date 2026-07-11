@@ -15,6 +15,10 @@ export const EventTypeSchema = z.enum([
   "tool.call.finished",
   "tool.call.failed",
   "tool.call.aborted",
+  "agent.call.started",
+  "agent.call.finished",
+  "agent.call.failed",
+  "agent.call.aborted",
   "observability.write.dropped",
 ])
 
@@ -38,6 +42,7 @@ export const MetadataSchema = z.object({
   mcpHmac: Hmac.optional(),
   outputFileKind: OptionalSmallString,
   outputMime: OptionalSmallString,
+  agentName: OptionalSmallString,
 }).strict()
 
 export const RedactedClassSchema = z.enum(["secret", "path", "email", "username", "binary"])
