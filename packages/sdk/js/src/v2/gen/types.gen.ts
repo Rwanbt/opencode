@@ -6129,6 +6129,51 @@ export type ObservabilityEventsGetResponses = {
 
 export type ObservabilityEventsGetResponse = ObservabilityEventsGetResponses[keyof ObservabilityEventsGetResponses]
 
+export type ObservabilityDataDeleteData = {
+  body?:
+    | {
+        scope: "all"
+      }
+    | {
+        scope: "project"
+        id: string
+      }
+    | {
+        scope: "session"
+        id: string
+      }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/data"
+}
+
+export type ObservabilityDataDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityDataDeleteError = ObservabilityDataDeleteErrors[keyof ObservabilityDataDeleteErrors]
+
+export type ObservabilityDataDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: {
+    deletedCount: number
+  }
+}
+
+export type ObservabilityDataDeleteResponse = ObservabilityDataDeleteResponses[keyof ObservabilityDataDeleteResponses]
+
 export type CollabPresenceData = {
   body?: never
   path?: never

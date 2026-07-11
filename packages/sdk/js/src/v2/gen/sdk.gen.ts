@@ -138,6 +138,8 @@ import type {
   McpRemoveErrors,
   McpRemoveResponses,
   McpStatusResponses,
+  ObservabilityDataDeleteErrors,
+  ObservabilityDataDeleteResponses,
   ObservabilityEventsGetErrors,
   ObservabilityEventsGetResponses,
   ObservabilityEventsListErrors,
@@ -3995,6 +3997,60 @@ export class Events extends HeyApiClient {
   }
 }
 
+export class Data extends HeyApiClient {
+  /**
+   * Delete observability data
+   *
+   * Destroys observability events for a scope (session/project/all). Requires header `X-Confirm-Delete: yes`. "workspace" scope is not yet supported (see file header comment).
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      body?:
+        | {
+            scope: "all"
+          }
+        | {
+            scope: "project"
+            id: string
+          }
+        | {
+            scope: "session"
+            id: string
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ObservabilityDataDeleteResponses,
+      ObservabilityDataDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/observability/data",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Observability extends HeyApiClient {
   /**
    * Observability health
@@ -4059,6 +4115,11 @@ export class Observability extends HeyApiClient {
   private _events?: Events
   get events(): Events {
     return (this._events ??= new Events({ client: this.client }))
+  }
+
+  private _data?: Data
+  get data(): Data {
+    return (this._data ??= new Data({ client: this.client }))
   }
 }
 

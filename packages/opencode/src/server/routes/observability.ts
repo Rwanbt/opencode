@@ -7,16 +7,21 @@
  *                                       (observability/runtime.ts), not global.
  *   GET /observability/settings       Resolved capture policy + Phase 1 storage
  *                                       disclosure flags for the settings UI.
- *   GET /observability/events         Keyset-paginated events for one session.
- *   GET /observability/events/:eventId Single event by its ULID.
+ *   GET    /observability/events         Keyset-paginated events for one session.
+ *   GET    /observability/events/:eventId Single event by its ULID.
+ *   DELETE /observability/data           Delete events by scope. Requires
+ *                                          header `X-Confirm-Delete: yes`.
  *
  * Ownership (ADR-1028): event.sql.ts's project_id/workspace_id columns are
  * never actually populated yet — no call site threads them through
  * TraceContext (only sessionId is set today). So the only scope that can be
  * verified is session_id -> session.projectID -> Instance.project.id. Every
- * events route below resolves the session first and 404s (not 403 — a
- * non-revealing not-found, matching Session.get's own behavior) if it
- * belongs to a different project. Deletion routes land in a later slice.
+ * events/delete route below resolves the session first and 404s (not 403 —
+ * a non-revealing not-found, matching Session.get's own behavior) if it
+ * belongs to a different project. `DELETE /data` only accepts "session",
+ * "project" (id must equal the current instance's project), and "all" —
+ * "workspace" is deferred until Instance exposes a verifiable current-
+ * workspace identity to check against.
  */
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
@@ -25,10 +30,12 @@ import { Config } from "../../config/config"
 import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
 import { ObservabilityRepository, cursor, toDto } from "../../observability/repository"
+import { deleteByScope, type DeleteScope } from "../../observability/purge"
 import { Session } from "../../session"
 import { SessionID } from "@/session/schema"
 import { Instance } from "../../project/instance"
 import { NotFoundError } from "../../storage/db"
+import { AuditLog } from "../../session/audit"
 import { errors } from "../error"
 
 const EventDtoSchema = z.object({
@@ -81,6 +88,14 @@ const HealthSchema = z.object({
   queueSize: z.number(),
   queueBytes: z.number(),
 })
+
+const DeleteBodySchema = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("all") }),
+  z.object({ scope: z.literal("project"), id: z.string().min(1) }),
+  z.object({ scope: z.literal("session"), id: SessionID.zod }),
+])
+
+const DeleteResultSchema = z.object({ deletedCount: z.number() })
 
 const SettingsSchema = z.object({
   enabled: z.boolean(),
@@ -225,5 +240,58 @@ export const ObservabilityRoutes = () =>
         // from a TraceContext.sessionId — not user input, no re-validation.
         await requireOwnedSession(row.session_id as SessionID)
         return c.json(toDto(row))
+      },
+    )
+    .delete(
+      "/data",
+      describeRoute({
+        summary: "Delete observability data",
+        description:
+          "Destroys observability events for a scope (session/project/all). Requires header " +
+          '`X-Confirm-Delete: yes`. "workspace" scope is not yet supported (see file header comment).',
+        operationId: "observability.data.delete",
+        responses: {
+          200: {
+            description: "Deleted",
+            content: { "application/json": { schema: resolver(DeleteResultSchema) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("json", DeleteBodySchema),
+      async (c) => {
+        const confirm = c.req.header("x-confirm-delete")
+        if (confirm !== "yes") {
+          return c.json(
+            { error: "missing_confirmation", message: "Set X-Confirm-Delete: yes to confirm destructive action." },
+            400,
+          )
+        }
+
+        const body = c.req.valid("json")
+        let scope: DeleteScope
+        if (body.scope === "session") {
+          await requireOwnedSession(body.id)
+          scope = { scope: "session", id: body.id }
+        } else if (body.scope === "project") {
+          if (body.id !== Instance.project.id) {
+            return c.json({ error: "invalid_scope", message: "id must match the current project" }, 400)
+          }
+          scope = { scope: "project", id: body.id }
+        } else {
+          scope = { scope: "all" }
+        }
+
+        // Audit first (pre-wipe) so the record survives, same rationale as
+        // gdpr.ts's DELETE /user/data.
+        await AuditLog.record({
+          action: "observability.data.delete",
+          force: true,
+          target: body.scope === "all" ? undefined : body.id,
+          metadata: { scope: body.scope },
+        })
+
+        const result = await deleteByScope(scope)
+        return c.json(result)
       },
     )

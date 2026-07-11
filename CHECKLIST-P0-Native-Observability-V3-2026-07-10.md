@@ -10,7 +10,7 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 - [x] ADR-1030 — migration, rollback et SDK drift.
 - [x] Threat model SQLite non chiffré documenté.
 - [x] ADR-1031 — legacy `experimental_telemetry` tranché.
-- [ ] Vérifier les lignes d’ownership session/project/workspace dans les routes finales.
+- [x] Vérifier les lignes d’ownership session/project/workspace dans les routes finales (`requireOwnedSession` dans server/routes/observability.ts, testé cross-projet avec tmpdirs git-scopés ; `workspace` non couvert — non implémenté, voir section Core ci-dessous).
 
 ## Schéma et stockage
 
@@ -28,7 +28,7 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 - [ ] Queue 500/64 MiB, overflow priority-aware, counters.
 - [x] Sanitizer borné, binaire/PDF/image court-circuit (field-classifier.ts + sanitizer.ts, câblé dans session/processor.ts pour args/output tool ; jamais de contenu brut retourné, fail-closed testé).
 - [x] HMAC-SHA256 et secret local crypto-safe (`skillHmac`/`pathHmac` câblés dans session/processor.ts pour l'identité skill sur started/finished/failed — nom et chemin jamais stockés en clair, testé par 2 tests dédiés ; `fingerprintContent()` reste disponible et testé mais pas encore appelé par un site d'appel réel).
-- [ ] Routes events/detail/settings/summary/health/delete avec auth/ownership.
+- [ ] Routes events/detail/settings/summary/health/delete avec auth/ownership (fait : events, detail, settings, health, delete — tous avec `requireOwnedSession` réel testé cross-projet ; manquant : `summary`).
 - [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy.
 - [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network.
 
