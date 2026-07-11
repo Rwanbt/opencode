@@ -1,4 +1,4 @@
-import { Database, and, desc, eq, gt, lt, or, sql } from "../storage/db"
+import { Database, and, desc, eq, gt, inArray, lt, or } from "../storage/db"
 import { ObservabilityEventTable } from "./event.sql"
 import type { ObservabilityEvent } from "./event-schema"
 
@@ -43,6 +43,15 @@ function row(event: ObservabilityEvent) {
   }
 }
 
+const ORPHAN_AFTER_MS = 60_000
+
+export function derivedOrphanedRows(rows: EventRow[], nowMs = Date.now()): Map<number, "orphaned"> {
+  const started = rows.filter((item) => item.status === "started" && nowMs - item.ts_ms > ORPHAN_AFTER_MS)
+  if (!started.length) return new Map()
+  const spanIds = [...new Set(started.map((item) => item.span_id))]
+  const completed = new Set(Database.use((db) => db.select({ spanId: ObservabilityEventTable.span_id }).from(ObservabilityEventTable).where(and(inArray(ObservabilityEventTable.span_id, spanIds), inArray(ObservabilityEventTable.status, ["finished", "failed", "aborted"]))).all().map((item) => item.spanId)))
+  return new Map(started.filter((item) => !completed.has(item.span_id)).map((item) => [item.id, "orphaned" as const]))
+}
 export const ObservabilityRepository = {
   async insert(events: ObservabilityEvent[]) {
     if (!events.length) return
@@ -358,7 +367,7 @@ export async function* exportEvents(params: {
 // consistent with the rest of the module. Safe to expose as-is: the schema
 // forbids readable content at the DB level (Phase 1), so nothing here needs
 // further redaction on the way out.
-export function toDto(row: EventRow) {
+export function toDto(row: EventRow, derivedStatus?: "orphaned") {
   return {
     eventId: row.event_id,
     traceId: row.trace_id,
@@ -372,6 +381,7 @@ export function toDto(row: EventRow) {
     stepIndex: row.step_index ?? undefined,
     type: row.event_type,
     status: row.status,
+    derivedStatus,
     tsMs: row.ts_ms,
     durationMs: row.duration_ms ?? undefined,
     costNanoUsd: row.cost_nano_usd ?? undefined,

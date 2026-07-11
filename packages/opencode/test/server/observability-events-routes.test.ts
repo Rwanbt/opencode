@@ -32,12 +32,12 @@ function call(method: string, route: string, dir: string) {
   return server.fetch(url, { method, headers: { Authorization: AUTH } })
 }
 
-function makeEvent(context: ReturnType<typeof createTraceContext>, tsMs: number) {
+function makeEvent(context: ReturnType<typeof createTraceContext>, tsMs: number, type: "llm.call.started" | "llm.call.finished" = "llm.call.started", status: "started" | "finished" = "started") {
   const parsed = parseObservabilityEvent({
     eventId: ObservabilityId.create(),
     context,
-    type: "llm.call.started",
-    status: "started",
+    type,
+    status,
     tsMs,
     enqueueSeq: 1,
   })
@@ -83,6 +83,17 @@ describe("GET /observability/events", () => {
     expect(r2.headers.get("x-next-cursor")).toBeNull()
   })
 
+  test("marks a started span as orphaned after the read threshold", async () => {
+    await using tmp = await tmpdir()
+    const session = await createSession(tmp.path)
+    const started = makeEvent(createTraceContext({ sessionId: session.id }), Date.now() - 120_000)
+    await ObservabilityRepository.insert([started])
+
+    const response = await call("GET", `/observability/events?sessionId=${session.id}`, tmp.path)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as any[]
+    expect(body.find((event) => event.eventId === started.eventId)?.derivedStatus).toBe("orphaned")
+  })
   test("404s for a session belonging to another project", async () => {
     // Needs its own git repo per dir — without .git, Project.fromDirectory
     // falls back to the shared ProjectID.global for every directory, which

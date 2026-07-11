@@ -30,7 +30,7 @@ import z from "zod"
 import { Config } from "../../config/config"
 import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
-import { ObservabilityRepository, cursor, toDto, exportEvents, summaryAll } from "../../observability/repository"
+import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll } from "../../observability/repository"
 import { deleteByScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
 import { Session } from "../../session"
 import { SessionID } from "@/session/schema"
@@ -52,6 +52,7 @@ const EventDtoSchema = z.object({
   stepIndex: z.number().optional(),
   type: z.string(),
   status: z.string(),
+  derivedStatus: z.literal("orphaned").optional(),
   tsMs: z.number(),
   durationMs: z.number().optional(),
   costNanoUsd: z.number().optional(),
@@ -281,7 +282,8 @@ export const ObservabilityRoutes = () =>
           c.header("Link", `<${url.toString()}>; rel="next"`)
           c.header("X-Next-Cursor", page.cursor)
         }
-        return c.json(page.items.map(toDto))
+        const orphaned = derivedOrphanedRows(page.items)
+        return c.json(page.items.map((item) => toDto(item, orphaned.get(item.id))))
       },
     )
     .get(
@@ -306,7 +308,8 @@ export const ObservabilityRoutes = () =>
         // Trusted: this came from our own DB column, written by record()
         // from a TraceContext.sessionId — not user input, no re-validation.
         await requireOwnedSession(row.session_id as SessionID)
-        return c.json(toDto(row))
+        const orphaned = derivedOrphanedRows([row])
+        return c.json(toDto(row, orphaned.get(row.id)))
       },
     )
     .get(

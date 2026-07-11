@@ -6070,6 +6070,7 @@ export type ObservabilityEventsListResponses = {
     stepIndex?: number
     type: string
     status: string
+    derivedStatus?: "orphaned"
     tsMs: number
     durationMs?: number
     costNanoUsd?: number
@@ -6129,6 +6130,7 @@ export type ObservabilityEventsGetResponses = {
     stepIndex?: number
     type: string
     status: string
+    derivedStatus?: "orphaned"
     tsMs: number
     durationMs?: number
     costNanoUsd?: number
