@@ -138,6 +138,8 @@ import type {
   McpRemoveErrors,
   McpRemoveResponses,
   McpStatusResponses,
+  ObservabilityHealthResponses,
+  ObservabilitySettingsResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -3911,6 +3913,68 @@ export class Debate extends HeyApiClient {
   }
 }
 
+export class Observability extends HeyApiClient {
+  /**
+   * Observability health
+   *
+   * Current instance's observability queue/circuit-breaker state. Reflects only the process serving this request, not a global/cross-project view.
+   */
+  public health<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityHealthResponses, unknown, ThrowOnError>({
+      url: "/observability/health",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Observability settings
+   *
+   * Resolved capture policy plus Phase 1 storage disclosure flags for the settings UI (unencrypted local SQLite, no full-content capture available).
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySettingsResponses, unknown, ThrowOnError>({
+      url: "/observability/settings",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Audit extends HeyApiClient {
   /**
    * List audit log entries
@@ -6390,6 +6454,11 @@ export class OpencodeClient extends HeyApiClient {
   private _debate?: Debate
   get debate(): Debate {
     return (this._debate ??= new Debate({ client: this.client }))
+  }
+
+  private _observability?: Observability
+  get observability(): Observability {
+    return (this._observability ??= new Observability({ client: this.client }))
   }
 
   private _gdpr?: Gdpr

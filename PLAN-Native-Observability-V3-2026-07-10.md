@@ -1360,9 +1360,9 @@ Estimation révisée:
 - [ ] `cost_nano_usd` + pricing snapshot.
 - [ ] Zod TraceContext/Event/JSON.
 - [ ] Keyset `(ts_ms,id)` stable.
-- [ ] `/health` ajouté.
+- [x] `/health` ajouté (`GET /observability/health` : server/routes/observability.ts, expose `ObservabilityRuntime.service().stats()` + capture policy résolue de l'instance courante — pas de scope cross-projet à vérifier, c'est déjà per-instance via Instance.state).
 - [ ] `DELETE /observability/data` minimal ajouté.
-- [ ] Auth/ownership prouvé et testé.
+- [ ] Auth/ownership prouvé et testé (health/settings n'en ont pas besoin — pas de données appartenant à un scope tiers ; nécessaire dès `/events`).
 
 ### Implémentation core
 

@@ -7480,6 +7480,143 @@
         ]
       }
     },
+    "/observability/health": {
+      "get": {
+        "operationId": "observability.health",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Observability health",
+        "description": "Current instance's observability queue/circuit-breaker state. Reflects only the process serving this request, not a global/cross-project view.",
+        "responses": {
+          "200": {
+            "description": "Health snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "captureMode": {
+                      "type": "string",
+                      "enum": ["local_metadata", "local_redacted"]
+                    },
+                    "circuitOpen": {
+                      "type": "boolean"
+                    },
+                    "eventsInserted": {
+                      "type": "number"
+                    },
+                    "eventsFailedDb": {
+                      "type": "number"
+                    },
+                    "queueSize": {
+                      "type": "number"
+                    },
+                    "queueBytes": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "captureMode",
+                    "circuitOpen",
+                    "eventsInserted",
+                    "eventsFailedDb",
+                    "queueSize",
+                    "queueBytes"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/settings": {
+      "get": {
+        "operationId": "observability.settings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Observability settings",
+        "description": "Resolved capture policy plus Phase 1 storage disclosure flags for the settings UI (unencrypted local SQLite, no full-content capture available).",
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "captureMode": {
+                      "type": "string",
+                      "enum": ["local_metadata", "local_redacted"]
+                    },
+                    "policyVersion": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "localFullAvailable": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "sqlite_unencrypted_local"
+                    }
+                  },
+                  "required": ["enabled", "captureMode", "policyVersion", "localFullAvailable", "storage"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.settings({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/presence": {
       "get": {
         "operationId": "collab.presence",
@@ -17071,6 +17208,21 @@
               "openTelemetry": {
                 "description": "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
                 "type": "boolean"
+              },
+              "observability": {
+                "description": "Native local observability: metadata-only event capture, no prompts/responses, no network.",
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "description": "Enable native local observability event capture (default: false). See ADR-1020 through 1031.",
+                    "type": "boolean"
+                  },
+                  "captureMode": {
+                    "description": "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
+                    "type": "string",
+                    "enum": ["local_metadata", "local_redacted"]
+                  }
+                }
               },
               "primary_tools": {
                 "description": "Tools that should only be available to primary agents.",

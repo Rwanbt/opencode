@@ -1937,6 +1937,19 @@ export type Config = {
      */
     openTelemetry?: boolean
     /**
+     * Native local observability: metadata-only event capture, no prompts/responses, no network.
+     */
+    observability?: {
+      /**
+       * Enable native local observability event capture (default: false). See ADR-1020 through 1031.
+       */
+      enabled?: boolean
+      /**
+       * Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.
+       */
+      captureMode?: "local_metadata" | "local_redacted"
+    }
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
@@ -5940,6 +5953,58 @@ export type DebateFeedbackResponses = {
 }
 
 export type DebateFeedbackResponse = DebateFeedbackResponses[keyof DebateFeedbackResponses]
+
+export type ObservabilityHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/health"
+}
+
+export type ObservabilityHealthResponses = {
+  /**
+   * Health snapshot
+   */
+  200: {
+    enabled: boolean
+    captureMode: "local_metadata" | "local_redacted"
+    circuitOpen: boolean
+    eventsInserted: number
+    eventsFailedDb: number
+    queueSize: number
+    queueBytes: number
+  }
+}
+
+export type ObservabilityHealthResponse = ObservabilityHealthResponses[keyof ObservabilityHealthResponses]
+
+export type ObservabilitySettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/settings"
+}
+
+export type ObservabilitySettingsResponses = {
+  /**
+   * Settings
+   */
+  200: {
+    enabled: boolean
+    captureMode: "local_metadata" | "local_redacted"
+    policyVersion: 3
+    localFullAvailable: false
+    storage: "sqlite_unencrypted_local"
+  }
+}
+
+export type ObservabilitySettingsResponse = ObservabilitySettingsResponses[keyof ObservabilitySettingsResponses]
 
 export type CollabPresenceData = {
   body?: never
