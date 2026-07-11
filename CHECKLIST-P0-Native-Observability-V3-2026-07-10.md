@@ -29,7 +29,7 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 - [x] Sanitizer borné, binaire/PDF/image court-circuit (field-classifier.ts + sanitizer.ts, câblé dans session/processor.ts pour args/output tool ; jamais de contenu brut retourné, fail-closed testé).
 - [x] HMAC-SHA256 et secret local crypto-safe (`skillHmac`/`pathHmac` câblés dans session/processor.ts pour l'identité skill sur started/finished/failed — nom et chemin jamais stockés en clair, testé par 2 tests dédiés ; `fingerprintContent()` reste disponible et testé mais pas encore appelé par un site d'appel réel).
 - [x] Routes events/detail/settings/summary/health/delete avec auth/ownership (toutes faites : events, detail, settings, summary, health, delete — `requireOwnedSession` réel testé cross-projet ; scope `workspace` explicitement non supporté sur `DELETE /data`, voir commentaire en tête de server/routes/observability.ts).
-- [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy (compteurs, circuit breaker et warning privacy faits ; badge orphaned encore à implémenter).
+- [x] UI health/counters, circuit breaker, orphan badge, warnings privacy (compteurs, circuit breaker, badge `orphelin probable` et warning privacy vérifiés).
 - [x] Tests concurrence, DB busy/full, crash SIGKILL, sanitizer, privacy et no-network (468 pass, 4 skip sur la suite observability/session/server ; 0 échec).
 
 ## Gate finale
