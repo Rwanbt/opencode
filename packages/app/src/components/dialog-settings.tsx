@@ -15,6 +15,7 @@ import { SettingsModels } from "./settings-models"
 import { SettingsBenchmark } from "./settings-benchmark"
 import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
+import { SettingsObservability } from "./settings-observability"
 
 export const DialogSettings: Component = () => {
   const mobileLayout = useMobileLayout()
