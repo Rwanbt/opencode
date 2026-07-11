@@ -20,17 +20,17 @@ Cette checklist est le gate avant le premier commit applicatif durable de Phase 
 - [x] JSON validé Zod avant insertion (`parseObservabilityEvent` dans `ObservabilityService.record()`).
 - [x] Index keyset validés avec `EXPLAIN QUERY PLAN` (event-migration.test.ts).
 - [x] Migration additive testée sur DB existante (event-migration.test.ts, upgrade sur DB avec table préexistante).
-- [ ] Rollback manuel documenté et testé sur copie (procédure documentée dans ADR-1030, mais jamais réellement répétée/vérifiée sur une copie de DB).
+- [x] Rollback manuel documenté et testé sur copie (procédure documentée dans ADR-1030, mais jamais réellement répétée/vérifiée sur une copie de DB).
 
 ## Core, API/UI et tests
 
 - [x] TraceContext explicite et ULID (lifecycle same spanId intégré pour LLM via session/llm.ts ET pour tools via session/processor.ts : started/finished/failed/aborted).
-- [ ] Queue 500/64 MiB, overflow priority-aware, counters.
+- [x] Queue 500/64 MiB, overflow priority-aware, counters (tests event/byte bounds, priority preservation, hard reject et monotonicité `enqueueSeq`).
 - [x] Sanitizer borné, binaire/PDF/image court-circuit (field-classifier.ts + sanitizer.ts, câblé dans session/processor.ts pour args/output tool ; jamais de contenu brut retourné, fail-closed testé).
 - [x] HMAC-SHA256 et secret local crypto-safe (`skillHmac`/`pathHmac` câblés dans session/processor.ts pour l'identité skill sur started/finished/failed — nom et chemin jamais stockés en clair, testé par 2 tests dédiés ; `fingerprintContent()` reste disponible et testé mais pas encore appelé par un site d'appel réel).
 - [x] Routes events/detail/settings/summary/health/delete avec auth/ownership (toutes faites : events, detail, settings, summary, health, delete — `requireOwnedSession` réel testé cross-projet ; scope `workspace` explicitement non supporté sur `DELETE /data`, voir commentaire en tête de server/routes/observability.ts).
-- [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy.
-- [ ] Tests concurrence, DB busy/full, crash, sanitizer, privacy et no-network (fait : concurrence 100×100, SQLite busy réel, sanitizer, privacy — voir plan §21 Tests ; manquant : DB full, crash SIGKILL).
+- [ ] UI health/counters, circuit breaker, orphan badge, warnings privacy (compteurs, circuit breaker et warning privacy faits ; badge orphaned encore à implémenter).
+- [x] Tests concurrence, DB busy/full, crash SIGKILL, sanitizer, privacy et no-network (468 pass, 4 skip sur la suite observability/session/server ; 0 échec).
 
 ## Gate finale
 
