@@ -146,6 +146,8 @@ import type {
   ObservabilityEventsListResponses,
   ObservabilityHealthResponses,
   ObservabilitySettingsResponses,
+  ObservabilitySummaryErrors,
+  ObservabilitySummaryResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -4107,6 +4109,42 @@ export class Observability extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ObservabilitySettingsResponses, unknown, ThrowOnError>({
       url: "/observability/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Observability summary for a session
+   *
+   * Aggregate event counts (by type/status) and total cost for one session. Same ownership check as /events.
+   */
+  public summary<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionId: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilitySummaryResponses,
+      ObservabilitySummaryErrors,
+      ThrowOnError
+    >({
+      url: "/observability/summary",
       ...options,
       ...params,
     })

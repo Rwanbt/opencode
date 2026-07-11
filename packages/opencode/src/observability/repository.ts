@@ -83,6 +83,48 @@ export const ObservabilityRepository = {
       db.select().from(ObservabilityEventTable).where(eq(ObservabilityEventTable.event_id, eventId)).get(),
     )
   },
+
+  // In-process aggregation over one session's rows rather than a SQL
+  // GROUP BY — a single session's observability events are bounded by
+  // conversation length, so this stays cheap without depending on an
+  // unverified count()/sum() Drizzle call shape (none existed elsewhere in
+  // this codebase to copy from).
+  summary(sessionId: string): {
+    totalEvents: number
+    totalCostNanoUsd: number
+    byType: Record<string, number>
+    byStatus: Record<string, number>
+    firstEventTsMs?: number
+    lastEventTsMs?: number
+  } {
+    const rows = Database.use((db) =>
+      db
+        .select({
+          eventType: ObservabilityEventTable.event_type,
+          status: ObservabilityEventTable.status,
+          tsMs: ObservabilityEventTable.ts_ms,
+          costNanoUsd: ObservabilityEventTable.cost_nano_usd,
+        })
+        .from(ObservabilityEventTable)
+        .where(eq(ObservabilityEventTable.session_id, sessionId))
+        .all(),
+    )
+
+    const byType: Record<string, number> = {}
+    const byStatus: Record<string, number> = {}
+    let totalCostNanoUsd = 0
+    let firstEventTsMs: number | undefined
+    let lastEventTsMs: number | undefined
+    for (const r of rows) {
+      byType[r.eventType] = (byType[r.eventType] ?? 0) + 1
+      byStatus[r.status] = (byStatus[r.status] ?? 0) + 1
+      if (r.costNanoUsd) totalCostNanoUsd += r.costNanoUsd
+      if (firstEventTsMs === undefined || r.tsMs < firstEventTsMs) firstEventTsMs = r.tsMs
+      if (lastEventTsMs === undefined || r.tsMs > lastEventTsMs) lastEventTsMs = r.tsMs
+    }
+
+    return { totalEvents: rows.length, totalCostNanoUsd, byType, byStatus, firstEventTsMs, lastEventTsMs }
+  },
 }
 
 // snake_case DB row -> camelCase public DTO, field names matched to

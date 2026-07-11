@@ -9,6 +9,7 @@
  *                                       disclosure flags for the settings UI.
  *   GET    /observability/events         Keyset-paginated events for one session.
  *   GET    /observability/events/:eventId Single event by its ULID.
+ *   GET    /observability/summary        Aggregate counts/cost for one session.
  *   DELETE /observability/data           Delete events by scope. Requires
  *                                          header `X-Confirm-Delete: yes`.
  *
@@ -96,6 +97,16 @@ const DeleteBodySchema = z.discriminatedUnion("scope", [
 ])
 
 const DeleteResultSchema = z.object({ deletedCount: z.number() })
+
+const SummarySchema = z.object({
+  sessionId: z.string(),
+  totalEvents: z.number(),
+  totalCostNanoUsd: z.number(),
+  byType: z.record(z.string(), z.number()),
+  byStatus: z.record(z.string(), z.number()),
+  firstEventTsMs: z.number().optional(),
+  lastEventTsMs: z.number().optional(),
+})
 
 const SettingsSchema = z.object({
   enabled: z.boolean(),
@@ -240,6 +251,29 @@ export const ObservabilityRoutes = () =>
         // from a TraceContext.sessionId — not user input, no re-validation.
         await requireOwnedSession(row.session_id as SessionID)
         return c.json(toDto(row))
+      },
+    )
+    .get(
+      "/summary",
+      describeRoute({
+        summary: "Observability summary for a session",
+        description:
+          "Aggregate event counts (by type/status) and total cost for one session. Same ownership check as /events.",
+        operationId: "observability.summary",
+        responses: {
+          200: {
+            description: "Summary",
+            content: { "application/json": { schema: resolver(SummarySchema) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("query", z.object({ sessionId: SessionID.zod })),
+      async (c) => {
+        const { sessionId } = c.req.valid("query")
+        await requireOwnedSession(sessionId)
+        const summary = ObservabilityRepository.summary(sessionId)
+        return c.json({ sessionId, ...summary })
       },
     )
     .delete(

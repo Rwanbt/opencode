@@ -6129,6 +6129,51 @@ export type ObservabilityEventsGetResponses = {
 
 export type ObservabilityEventsGetResponse = ObservabilityEventsGetResponses[keyof ObservabilityEventsGetResponses]
 
+export type ObservabilitySummaryData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionId: string
+  }
+  url: "/observability/summary"
+}
+
+export type ObservabilitySummaryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilitySummaryError = ObservabilitySummaryErrors[keyof ObservabilitySummaryErrors]
+
+export type ObservabilitySummaryResponses = {
+  /**
+   * Summary
+   */
+  200: {
+    sessionId: string
+    totalEvents: number
+    totalCostNanoUsd: number
+    byType: {
+      [key: string]: number
+    }
+    byStatus: {
+      [key: string]: number
+    }
+    firstEventTsMs?: number
+    lastEventTsMs?: number
+  }
+}
+
+export type ObservabilitySummaryResponse = ObservabilitySummaryResponses[keyof ObservabilitySummaryResponses]
+
 export type ObservabilityDataDeleteData = {
   body?:
     | {
