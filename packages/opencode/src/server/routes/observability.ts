@@ -357,11 +357,17 @@ export const ObservabilityRoutes = () =>
       async (c) => {
         const query = c.req.valid("query")
         const now = Date.now()
-        const result = ObservabilityRepository.compareCohorts({
+        const cohorts = ObservabilityRepository.compareCohorts({
           projectId: Instance.project.id,
           sinceMs: query.timeWindowMs ? now - query.timeWindowMs : undefined,
         })
-        return c.json(result)
+        // CompareSchema (and settings-observability.tsx's `data.cohorts`
+        // read) both expect the array wrapped in an object — returning the
+        // bare array here previously made the Comparisons tab throw at
+        // runtime the moment any cohort data existed (`data.cohorts` was
+        // undefined on the real response despite the documented/generated
+        // SDK type claiming it was always present).
+        return c.json({ cohorts, timeWindowMs: query.timeWindowMs })
       },
     )
     .delete(

@@ -3,7 +3,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch as SwitchComponent } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useSDK } from "@/context/sdk"
@@ -93,22 +92,50 @@ export const SettingsObservability: Component = () => {
   return <div class="flex h-full flex-col overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
     <div class="flex items-start justify-between gap-4 pt-6 pb-8"><div><h2 class="text-16-medium text-text-strong">Observability</h2><p class="text-12-regular text-text-weak">Local metadata only. No prompts, responses, tool payloads, or raw errors are displayed.</p></div><Button size="small" variant="secondary" onClick={refresh}>Refresh</Button></div>
     <div class="flex flex-col gap-8">
-      <Tabs defaultValue={activeSubtab()} onChange={setActiveSubtab} class="w-full">
-        <Tabs.List class="mb-4">
-          <Tabs.Trigger value="overview"><Icon name="sliders" /><span class="ml-2">Overview</span></Tabs.Trigger>
-          <Tabs.Trigger value="traces"><Icon name="branch" /><span class="ml-2">Traces</span></Tabs.Trigger>
-          <Tabs.Trigger value="comparisons"><Icon name="bullet-list" /><span class="ml-2">Comparisons</span></Tabs.Trigger>
-          <Tabs.Trigger value="events"><Icon name="bullet-list" /><span class="ml-2">Events</span></Tabs.Trigger>
-        </Tabs.List>
+      {/*
+        Plain buttons, not the shared <Tabs> component: this panel already
+        lives inside dialog-settings.tsx's outer vertical/"settings"-variant
+        Tabs.Content. tabs.css's orientation/variant overrides key off
+        [data-orientation="vertical"]/[data-variant="settings"] on the
+        nearest [data-component="tabs"] ANCESTOR, but apply via a plain
+        descendant combinator on [data-slot="tabs-list"]/[data-slot="tabs-content"]
+        with no boundary at the next [data-component="tabs"] — so a second,
+        nested <Tabs> here inherited height:100%/width:200px meant for the
+        outer sidebar, collapsing this panel's actual content to 0 height
+        (invisible, though present in the DOM) every time this tab was opened.
+      */}
+      <div class="flex items-center gap-1 mb-4" role="tablist">
+        {([
+          ["overview", "sliders", "Overview"],
+          ["traces", "branch", "Traces"],
+          ["comparisons", "bullet-list", "Comparisons"],
+          ["events", "bullet-list", "Events"],
+        ] as const).map(([value, icon, label]) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubtab() === value}
+            class="flex items-center gap-2 rounded-md px-3 py-1.5 text-12-medium"
+            classList={{
+              "bg-surface-base-active text-text-strong": activeSubtab() === value,
+              "text-text-weak hover:text-text-strong": activeSubtab() !== value,
+            }}
+            onClick={() => setActiveSubtab(value)}
+          >
+            <Icon name={icon} />
+            {label}
+          </button>
+        ))}
+      </div>
 
-        <Tabs.Content value="overview" class="no-scrollbar">
+        <Show when={activeSubtab() === "overview"}><div class="no-scrollbar">
           <section><h3 class="pb-2 text-14-medium text-text-strong">Capture</h3><SettingsList><SettingsRow title="Enable native observability" description="Stores local LLM and tool metadata only."><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title="Capture mode" description="Neither mode stores readable content."><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? "Metadata only" : "Metadata + redaction classes"} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">Local SQLite storage is not encrypted at rest. No exporter is configured.</div></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">Retention</h3><SettingsList><SettingsRow title="Retention (days)" description="Delete events older than this many days. Empty keeps events until another limit applies."><TextField size="small" variant="normal" type="number" placeholder="e.g. 30" value={String(settings()?.retentionDays ?? "")} onBlur={(v: string) => { update({ retentionDays: v ? parseInt(v, 10) : undefined }) }} /></SettingsRow><SettingsRow title="Max events" description="Maximum local observability event count. Default: 100000."><TextField size="small" variant="normal" type="number" placeholder="100000" value={String(settings()?.maxEvents ?? "")} onBlur={(v: string) => { update({ maxEvents: v ? parseInt(v, 10) : 100000 }) }} /></SettingsRow></SettingsList></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">Service health</h3><div class="grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric label="Queue" value={String(health()?.queueSize ?? 0)} /><Metric label="Queue bytes" value={`${((health()?.queueBytes ?? 0) / 1024).toFixed(1)} KiB`} /><Metric label="Inserted" value={String(health()?.eventsInserted ?? 0)} /><Metric label="Database failures" value={String(health()?.eventsFailedDb ?? 0)} /></div><Show when={health()?.circuitOpen}><div class="mt-2 rounded-md bg-surface-critical-base px-3 py-2 text-12-regular text-text-on-critical-base">The write circuit is open; product requests still continue.</div></Show></section>
           <section><h3 class="pb-2 text-14-medium text-icon-critical-base">Delete local observability data</h3><div class="rounded-lg border border-border-critical-base bg-surface-critical-weak p-4"><div class="flex flex-col gap-3"><Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All local observability data"} onSelect={(item) => item && setScope(item)} /><TextField label="Confirmation" value={confirmation()} placeholder="Type DELETE to confirm" onChange={setConfirmation} /><div><Button variant="primary" disabled={busy() || confirmation() !== confirmText || (scope() !== "all" && !selected())} onClick={() => void remove()}>Delete data</Button></div></div></div></section>
-        </Tabs.Content>
+        </div></Show>
 
-        <Tabs.Content value="traces" class="no-scrollbar">
+        <Show when={activeSubtab() === "traces"}><div class="no-scrollbar">
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
             <Select size="small" variant="secondary" options={sessions() ?? []} current={selected()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && setSessionId(item.id)} />
             <span class="text-11-regular" style={{ color: "var(--text-weaker)" }}>{sessions()?.length ?? 0} sessions</span>
@@ -121,9 +148,9 @@ export const SettingsObservability: Component = () => {
               </For>
             </div>}
           </Show>
-        </Tabs.Content>
+        </div></Show>
 
-        <Tabs.Content value="comparisons" class="no-scrollbar">
+        <Show when={activeSubtab() === "comparisons"}><div class="no-scrollbar">
           <div class="flex items-center justify-between gap-4 mb-4">
             <div><h3 class="text-14-medium text-text-strong">Compare configurations</h3><p class="text-12-regular text-text-weak">Grouped by model provider, model, and skill — over the last 7 days. Never prompts or responses.</p></div>
           </div>
@@ -156,9 +183,9 @@ export const SettingsObservability: Component = () => {
                   })}
                 </div>
             })()}
-        </Tabs.Content>
+        </div></Show>
 
-        <Tabs.Content value="events" class="no-scrollbar">
+        <Show when={activeSubtab() === "events"}><div class="no-scrollbar">
           <div class="flex items-center justify-between gap-4 pb-2">
             <h3 class="text-14-medium text-text-strong">Session events</h3>
             <Select size="small" variant="secondary" options={sessions() ?? []} current={selected()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && setSessionId(item.id)} />
@@ -172,8 +199,7 @@ export const SettingsObservability: Component = () => {
               {(event) => <div class="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 border-b border-border-weak-base px-4 py-2 text-12-regular last:border-none"><span class="truncate text-text-strong">{event.type}</span><span>{event.status}</span><span class="text-right text-text-weak">{new Date(event.tsMs).toLocaleTimeString()}</span><span class="text-right text-text-weak">{event.durationMs === undefined ? "—" : `${(event.durationMs / 1000).toFixed(1)}s`} · {event.costNanoUsd === undefined ? "—" : `$${(event.costNanoUsd / 1_000_000_000).toFixed(4)}`}</span></div>}
             </For>
           </div>
-        </Tabs.Content>
-      </Tabs>
+        </div></Show>
     </div>
   </div>
 }
