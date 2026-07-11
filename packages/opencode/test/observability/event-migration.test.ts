@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import path from "node:path"
+import { mkdtemp } from "node:fs/promises"
+import os from "node:os"
 
 const migrationPath = path.resolve(import.meta.dir, "../../migration/20260710160000_observability_event/migration.sql")
 
@@ -33,6 +35,30 @@ describe("observability migration", () => {
     }
   })
 
+  test("rollback on a copied database preserves pre-existing application tables", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "opencode-observability-migration-"))
+    const dbPath = path.join(root, "observability.sqlite")
+    const backupPath = path.join(root, "observability.backup.sqlite")
+    const db = new Database(dbPath)
+    try {
+      db.exec("CREATE TABLE existing_session (id text PRIMARY KEY NOT NULL)")
+      db.exec("INSERT INTO existing_session (id) VALUES ('session-before-observability')")
+      await applyMigration(db)
+      db.close()
+      await Bun.write(backupPath, await Bun.file(dbPath).arrayBuffer())
+
+      const rollbackDb = new Database(backupPath)
+      try {
+        rollbackDb.exec("DROP TABLE IF EXISTS observability_event")
+        expect(rollbackDb.query("SELECT id FROM existing_session").all()).toEqual([{ id: "session-before-observability" }])
+        expect(rollbackDb.query("SELECT name FROM sqlite_master WHERE name LIKE 'observability_event%'").all()).toEqual([])
+      } finally {
+        rollbackDb.close()
+      }
+    } finally {
+      try { db.close() } catch {}
+    }
+  })
   test("rollback drops observability_event table and indexes cleanly", async () => {
     const db = new Database(":memory:")
     try {
