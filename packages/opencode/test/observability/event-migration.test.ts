@@ -32,4 +32,32 @@ describe("observability migration", () => {
       db.close()
     }
   })
+
+  test("rollback drops observability_event table and indexes cleanly", async () => {
+    const db = new Database(":memory:")
+    try {
+      await applyMigration(db)
+
+      // Verify table exists
+      let tables = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='observability_event'").all()
+      expect(tables.length).toBe(1)
+
+      // Verify indexes exist
+      let indexes = db.query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'observability_event%'").all()
+      expect(indexes.length).toBeGreaterThan(0)
+
+      // Rollback: drop table (CASCADE drops indexes)
+      db.exec("DROP TABLE IF EXISTS observability_event")
+
+      // Verify table is gone
+      tables = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='observability_event'").all()
+      expect(tables.length).toBe(0)
+
+      // Verify indexes are gone
+      indexes = db.query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'observability_event%'").all()
+      expect(indexes.length).toBe(0)
+    } finally {
+      db.close()
+    }
+  })
 })

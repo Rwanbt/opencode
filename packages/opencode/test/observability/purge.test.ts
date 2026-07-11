@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Database, eq } from "../../src/storage/db"
 import { ObservabilityEventTable } from "../../src/observability/event.sql"
-import { ObservabilityRepository } from "../../src/observability/repository"
-import { deleteByScope } from "../../src/observability/purge"
+import { ObservabilityRepository, exportEvents } from "../../src/observability/repository"
+import { deleteByScope, purgeByRetention } from "../../src/observability/purge"
 import { parseObservabilityEvent } from "../../src/observability/event-schema"
 import { createTraceContext } from "../../src/observability/trace-context"
 import { ObservabilityId } from "../../src/observability/id"
@@ -13,13 +13,13 @@ import { Log } from "../../src/util/log"
 
 Log.init({ print: false })
 
-function makeEvent(context: ReturnType<typeof createTraceContext>) {
+function makeEvent(context: ReturnType<typeof createTraceContext>, tsMs = Date.now()) {
   const parsed = parseObservabilityEvent({
     eventId: ObservabilityId.create(),
     context,
     type: "llm.call.started",
     status: "started",
-    tsMs: Date.now(),
+    tsMs,
     enqueueSeq: 1,
   })
   if (!parsed.success) throw new Error("invalid fixture event: " + JSON.stringify(parsed.error))
@@ -29,6 +29,86 @@ function makeEvent(context: ReturnType<typeof createTraceContext>) {
 function rowsFor(column: typeof ObservabilityEventTable.session_id, value: string) {
   return Database.use((db) => db.select().from(ObservabilityEventTable).where(eq(column, value)).all())
 }
+
+describe("observability exportEvents", () => {
+  test("exports all events as NDJSON ordered by ts_ms ASC", async () => {
+    const now = Date.now()
+    const sessionA = "export-test-session-a-" + ObservabilityId.create()
+    const sessionB = "export-test-session-b-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: sessionA }), now + 2000),
+      makeEvent(createTraceContext({ sessionId: sessionA }), now + 1000),
+      makeEvent(createTraceContext({ sessionId: sessionB }), now + 3000),
+    ])
+
+    const lines: string[] = []
+    for await (const line of exportEvents({ limit: 100 })) {
+      lines.push(line.trim())
+    }
+
+    expect(lines.length).toBe(3)
+    // Should be ordered by ts_ms ASC
+    const events = lines.map((l) => JSON.parse(l))
+    expect(events[0].sessionId).toBe(sessionA)
+    expect(events[1].sessionId).toBe(sessionA)
+    expect(events[2].sessionId).toBe(sessionB)
+    expect(events[0].tsMs).toBeLessThan(events[1].tsMs)
+    expect(events[1].tsMs).toBeLessThan(events[2].tsMs)
+  })
+
+  test("exports events filtered by sessionId", async () => {
+    const sessionA = "export-filter-session-a-" + ObservabilityId.create()
+    const sessionB = "export-filter-session-b-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: sessionA })),
+      makeEvent(createTraceContext({ sessionId: sessionB })),
+    ])
+
+    const lines: string[] = []
+    for await (const line of exportEvents({ sessionId: sessionA })) {
+      lines.push(line.trim())
+    }
+
+    expect(lines.length).toBe(1)
+    const event = JSON.parse(lines[0])
+    expect(event.sessionId).toBe(sessionA)
+  })
+
+  test("exports events with time window filter", async () => {
+    const now = Date.now()
+    const sessionA = "export-time-session-a-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: sessionA }), now - 10000),
+      makeEvent(createTraceContext({ sessionId: sessionA }), now - 5000),
+      makeEvent(createTraceContext({ sessionId: sessionA }), now),
+    ])
+
+    const lines: string[] = []
+    for await (const line of exportEvents({ sessionId: sessionA, sinceMs: now - 8000, untilMs: now - 2000 })) {
+      lines.push(line.trim())
+    }
+
+    expect(lines.length).toBe(1)
+    const event = JSON.parse(lines[0])
+    expect(event.tsMs).toBe(now - 5000)
+  })
+
+  test("respects limit parameter", async () => {
+    const sessionA = "export-limit-session-a-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: sessionA })),
+      makeEvent(createTraceContext({ sessionId: sessionA })),
+      makeEvent(createTraceContext({ sessionId: sessionA })),
+    ])
+
+    const lines: string[] = []
+    for await (const line of exportEvents({ sessionId: sessionA, limit: 2 })) {
+      lines.push(line.trim())
+    }
+
+    expect(lines.length).toBe(2)
+  })
+})
 
 describe("observability deleteByScope", () => {
   test("deletes only rows matching the session scope", async () => {
@@ -76,6 +156,37 @@ describe("observability deleteByScope", () => {
     expect(rowsFor(ObservabilityEventTable.workspace_id, workspaceB)).toHaveLength(1)
   })
 
+  test("retention deletes expired rows without deleting a recent event", async () => {
+    const now = Date.now()
+    const expired = "purge-retention-expired-" + ObservabilityId.create()
+    const recent = "purge-retention-recent-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: expired }), now - 2 * 86_400_000),
+      makeEvent(createTraceContext({ sessionId: recent }), now - 60_000),
+    ])
+
+    const result = purgeByRetention({ retentionDays: 1, maxEvents: 100_000 }, now)
+
+    expect(result.deletedExpired).toBeGreaterThan(0)
+    expect(rowsFor(ObservabilityEventTable.session_id, expired)).toHaveLength(0)
+    expect(rowsFor(ObservabilityEventTable.session_id, recent)).toHaveLength(1)
+  })
+
+  test("retention keeps the newest events when the event cap is exceeded", async () => {
+    const now = Date.now()
+    const oldest = "purge-retention-oldest-" + ObservabilityId.create()
+    const newest = "purge-retention-newest-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: oldest }), now + 60_000),
+      makeEvent(createTraceContext({ sessionId: newest }), now + 120_000),
+    ])
+
+    const result = purgeByRetention({ maxEvents: 1 }, now)
+
+    expect(result.deletedOverLimit).toBeGreaterThan(0)
+    expect(rowsFor(ObservabilityEventTable.session_id, oldest)).toHaveLength(0)
+    expect(rowsFor(ObservabilityEventTable.session_id, newest)).toHaveLength(1)
+  })
   // Runs last on purpose: {scope: "all"} has no WHERE clause and truly wipes
   // the shared test-process SQLite instance (bun test runs files/tests
   // sequentially by default, same shared :memory: DB convention already used

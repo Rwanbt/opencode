@@ -710,6 +710,8 @@ export const Info = z
               .describe(
                 "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
               ),
+            retentionDays: z.number().int().positive().optional().describe("Delete events older than this many days. Undefined keeps events until another retention limit applies."),
+            maxEvents: z.number().int().positive().optional().describe("Maximum local observability event count. Default: 100000."),
           })
           .optional()
           .describe("Native local observability: metadata-only event capture, no prompts/responses, no network."),
