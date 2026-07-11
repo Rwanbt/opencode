@@ -1347,21 +1347,22 @@ Estimation révisée:
 
 ### Documentation/ADR
 
-- [ ] ADR-1027 localInstallSecret ajouté.
-- [ ] ADR-1028 auth/ownership avec preuve fichier:ligne.
-- [ ] ADR-1029 queue ordering/crash semantics.
-- [ ] ADR-1030 migration/rollback/SDK drift.
-- [ ] Threat model at-rest documenté.
-- [ ] Legacy `experimental_telemetry` tranché.
+- [x] ADR-1027 localInstallSecret ajouté (docs/adr/1027-local-install-secret.md).
+- [x] ADR-1028 auth/ownership avec preuve fichier:ligne (docs/adr/1028-local-auth-ownership.md).
+- [x] ADR-1029 queue ordering/crash semantics (docs/adr/1029-queue-ordering-crash-semantics.md).
+- [x] ADR-1030 migration/rollback/SDK drift (docs/adr/1030-migration-rollback-sdk-drift.md).
+- [x] Threat model at-rest documenté (docs/security/observability-threat-model.md).
+- [x] Legacy `experimental_telemetry` tranché (docs/adr/1031-legacy-experimental-telemetry.md).
 
 ### Schéma/API
 
-- [ ] Schéma Phase 1 sans colonnes content Phase 3.
-- [ ] `cost_nano_usd` + pricing snapshot.
-- [ ] Zod TraceContext/Event/JSON.
-- [ ] Keyset `(ts_ms,id)` stable.
+- [x] Schéma Phase 1 sans colonnes content Phase 3 (event.sql.ts n'a ni `local_content_redacted_json` ni `local_full_json`, vérifié par test).
+- [x] `cost_nano_usd` + pricing snapshot (peuplés depuis `Session.getUsage` dans session/llm.ts).
+- [x] Zod TraceContext/Event/JSON (event-schema.ts, `parseObservabilityEvent` utilisé dans `ObservabilityService.record()`).
+- [x] Keyset `(ts_ms,id)` stable (index dédiés dans event.sql.ts, vérifiés par `EXPLAIN QUERY PLAN` et exploités par `ObservabilityRepository.page()`).
 - [x] `/health` ajouté (`GET /observability/health` : server/routes/observability.ts, expose `ObservabilityRuntime.service().stats()` + capture policy résolue de l'instance courante — pas de scope cross-projet à vérifier, c'est déjà per-instance via Instance.state).
 - [x] `GET /observability/events` (keyset `(ts_ms,id)` scopé par session) + `GET /observability/events/:eventId` ajoutés.
+- [x] `GET /observability/summary` ajouté (agrégats par type/status + coût total, même ownership que `/events`).
 - [x] `DELETE /observability/data` minimal ajouté (scopes `all`/`project`/`session` ; `workspace` explicitement non supporté Phase 1 faute d'identité "workspace courant" vérifiable — voir commentaire en tête de fichier).
 - [x] Auth/ownership prouvé et testé (`requireOwnedSession` : `Session.get(sessionId).projectID === Instance.project.id`, sinon 404 non-révélateur ; `scope:"project"` exige `id === Instance.project.id` sinon 400 ; testé cross-project avec tmpdirs git-scopés, une session étrangère ne délete rien et 404).
 
