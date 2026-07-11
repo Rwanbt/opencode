@@ -1,23 +1,76 @@
 /**
- * Native observability read endpoints — Phase 1 (health + settings).
+ * Native observability read endpoints — Phase 1.
  *
  * Endpoints:
- *   GET /observability/health    Current instance's queue/circuit-breaker
- *                                 state. Per-project-instance (Instance.state
- *                                 in observability/runtime.ts), not global.
- *   GET /observability/settings  Resolved capture policy + Phase 1 storage
- *                                 disclosure flags for the settings UI.
+ *   GET /observability/health         Current instance's queue/circuit-breaker
+ *                                       state. Per-project-instance
+ *                                       (observability/runtime.ts), not global.
+ *   GET /observability/settings       Resolved capture policy + Phase 1 storage
+ *                                       disclosure flags for the settings UI.
+ *   GET /observability/events         Keyset-paginated events for one session.
+ *   GET /observability/events/:eventId Single event by its ULID.
  *
- * Event listing/detail and deletion routes land in a later slice — this file
- * only exposes what needs no cross-session ownership check (health/settings
- * describe the current process/config, not another user's data).
+ * Ownership (ADR-1028): event.sql.ts's project_id/workspace_id columns are
+ * never actually populated yet — no call site threads them through
+ * TraceContext (only sessionId is set today). So the only scope that can be
+ * verified is session_id -> session.projectID -> Instance.project.id. Every
+ * events route below resolves the session first and 404s (not 403 — a
+ * non-revealing not-found, matching Session.get's own behavior) if it
+ * belongs to a different project. Deletion routes land in a later slice.
  */
 import { Hono } from "hono"
-import { describeRoute, resolver } from "hono-openapi"
+import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../config/config"
 import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
+import { ObservabilityRepository, cursor, toDto } from "../../observability/repository"
+import { Session } from "../../session"
+import { SessionID } from "@/session/schema"
+import { Instance } from "../../project/instance"
+import { NotFoundError } from "../../storage/db"
+import { errors } from "../error"
+
+const EventDtoSchema = z.object({
+  eventId: z.string(),
+  traceId: z.string(),
+  spanId: z.string(),
+  parentSpanId: z.string().optional(),
+  sessionId: z.string().optional(),
+  projectId: z.string().optional(),
+  workspaceId: z.string().optional(),
+  messageId: z.string().optional(),
+  turnId: z.string().optional(),
+  stepIndex: z.number().optional(),
+  type: z.string(),
+  status: z.string(),
+  tsMs: z.number(),
+  durationMs: z.number().optional(),
+  costNanoUsd: z.number().optional(),
+  pricingVersion: z.string().optional(),
+  pricingSource: z.string().optional(),
+  costComputedAtMs: z.number().optional(),
+  redactionStatus: z.string(),
+  originalSizeBytes: z.number().optional(),
+  payloadTruncated: z.boolean(),
+  metadata: z.record(z.string(), z.unknown()),
+  localRedacted: z.record(z.string(), z.unknown()),
+  schemaVersion: z.number(),
+})
+
+// Throws the SAME NotFoundError shape as an unknown session/event so a
+// cross-project probe can't distinguish "doesn't exist" from "exists but
+// isn't yours". Takes a pre-validated SessionID (either from a
+// SessionID.zod-typed Hono validator, or a raw DB column we wrote ourselves)
+// — never re-parses, so a malformed id from user input surfaces as the
+// standard 400 at the Hono validator layer, not an uncaught ZodError here.
+async function requireOwnedSession(sessionId: SessionID) {
+  const session = await Session.get(sessionId)
+  if (session.projectID !== Instance.project.id) {
+    throw new NotFoundError({ message: `Session not found: ${sessionId}` })
+  }
+  return session
+}
 
 const HealthSchema = z.object({
   enabled: z.boolean(),
@@ -92,5 +145,85 @@ export const ObservabilityRoutes = () =>
           localFullAvailable: false,
           storage: "sqlite_unencrypted_local",
         })
+      },
+    )
+    .get(
+      "/events",
+      describeRoute({
+        summary: "List observability events for a session",
+        description:
+          "Keyset-paginated (ts_ms, id) events for one session, newest first. The session must belong " +
+          "to the current project — a session from another project 404s.",
+        operationId: "observability.events.list",
+        responses: {
+          200: {
+            description: "Events",
+            content: { "application/json": { schema: resolver(z.array(EventDtoSchema)) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          sessionId: SessionID.zod,
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+          before: z
+            .string()
+            .optional()
+            .refine(
+              (value) => {
+                if (!value) return true
+                try {
+                  cursor.decode(value)
+                  return true
+                } catch {
+                  return false
+                }
+              },
+              { message: "Invalid cursor" },
+            ),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        await requireOwnedSession(query.sessionId)
+        const limit = query.limit ?? 50
+        const page = ObservabilityRepository.page({ sessionId: query.sessionId, limit, before: query.before })
+        if (page.cursor) {
+          const url = new URL(c.req.url)
+          url.searchParams.set("sessionId", query.sessionId)
+          url.searchParams.set("limit", String(limit))
+          url.searchParams.set("before", page.cursor)
+          c.header("Access-Control-Expose-Headers", "Link, X-Next-Cursor")
+          c.header("Link", `<${url.toString()}>; rel="next"`)
+          c.header("X-Next-Cursor", page.cursor)
+        }
+        return c.json(page.items.map(toDto))
+      },
+    )
+    .get(
+      "/events/:eventId",
+      describeRoute({
+        summary: "Get a single observability event",
+        description: "Fetch one event by its ULID. 404s if it doesn't exist or belongs to another project.",
+        operationId: "observability.events.get",
+        responses: {
+          200: {
+            description: "Event",
+            content: { "application/json": { schema: resolver(EventDtoSchema) } },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ eventId: z.string().min(1) })),
+      async (c) => {
+        const { eventId } = c.req.valid("param")
+        const row = ObservabilityRepository.getByEventId(eventId)
+        if (!row || !row.session_id) throw new NotFoundError({ message: `Event not found: ${eventId}` })
+        // Trusted: this came from our own DB column, written by record()
+        // from a TraceContext.sessionId — not user input, no re-validation.
+        await requireOwnedSession(row.session_id as SessionID)
+        return c.json(toDto(row))
       },
     )

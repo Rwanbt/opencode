@@ -138,6 +138,10 @@ import type {
   McpRemoveErrors,
   McpRemoveResponses,
   McpStatusResponses,
+  ObservabilityEventsGetErrors,
+  ObservabilityEventsGetResponses,
+  ObservabilityEventsListErrors,
+  ObservabilityEventsListResponses,
   ObservabilityHealthResponses,
   ObservabilitySettingsResponses,
   OutputFormat,
@@ -3913,6 +3917,84 @@ export class Debate extends HeyApiClient {
   }
 }
 
+export class Events extends HeyApiClient {
+  /**
+   * List observability events for a session
+   *
+   * Keyset-paginated (ts_ms, id) events for one session, newest first. The session must belong to the current project — a session from another project 404s.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionId: string
+      limit?: number
+      before?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "before" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityEventsListResponses,
+      ObservabilityEventsListErrors,
+      ThrowOnError
+    >({
+      url: "/observability/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a single observability event
+   *
+   * Fetch one event by its ULID. 404s if it doesn't exist or belongs to another project.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      eventId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "eventId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityEventsGetResponses,
+      ObservabilityEventsGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/events/{eventId}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Observability extends HeyApiClient {
   /**
    * Observability health
@@ -3972,6 +4054,11 @@ export class Observability extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _events?: Events
+  get events(): Events {
+    return (this._events ??= new Events({ client: this.client }))
   }
 }
 

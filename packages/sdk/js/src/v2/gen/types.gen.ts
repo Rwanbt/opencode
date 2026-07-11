@@ -6006,6 +6006,129 @@ export type ObservabilitySettingsResponses = {
 
 export type ObservabilitySettingsResponse = ObservabilitySettingsResponses[keyof ObservabilitySettingsResponses]
 
+export type ObservabilityEventsListData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionId: string
+    limit?: number
+    before?: string
+  }
+  url: "/observability/events"
+}
+
+export type ObservabilityEventsListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityEventsListError = ObservabilityEventsListErrors[keyof ObservabilityEventsListErrors]
+
+export type ObservabilityEventsListResponses = {
+  /**
+   * Events
+   */
+  200: Array<{
+    eventId: string
+    traceId: string
+    spanId: string
+    parentSpanId?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    messageId?: string
+    turnId?: string
+    stepIndex?: number
+    type: string
+    status: string
+    tsMs: number
+    durationMs?: number
+    costNanoUsd?: number
+    pricingVersion?: string
+    pricingSource?: string
+    costComputedAtMs?: number
+    redactionStatus: string
+    originalSizeBytes?: number
+    payloadTruncated: boolean
+    metadata: {
+      [key: string]: unknown
+    }
+    localRedacted: {
+      [key: string]: unknown
+    }
+    schemaVersion: number
+  }>
+}
+
+export type ObservabilityEventsListResponse = ObservabilityEventsListResponses[keyof ObservabilityEventsListResponses]
+
+export type ObservabilityEventsGetData = {
+  body?: never
+  path: {
+    eventId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/events/{eventId}"
+}
+
+export type ObservabilityEventsGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityEventsGetError = ObservabilityEventsGetErrors[keyof ObservabilityEventsGetErrors]
+
+export type ObservabilityEventsGetResponses = {
+  /**
+   * Event
+   */
+  200: {
+    eventId: string
+    traceId: string
+    spanId: string
+    parentSpanId?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    messageId?: string
+    turnId?: string
+    stepIndex?: number
+    type: string
+    status: string
+    tsMs: number
+    durationMs?: number
+    costNanoUsd?: number
+    pricingVersion?: string
+    pricingSource?: string
+    costComputedAtMs?: number
+    redactionStatus: string
+    originalSizeBytes?: number
+    payloadTruncated: boolean
+    metadata: {
+      [key: string]: unknown
+    }
+    localRedacted: {
+      [key: string]: unknown
+    }
+    schemaVersion: number
+  }
+}
+
+export type ObservabilityEventsGetResponse = ObservabilityEventsGetResponses[keyof ObservabilityEventsGetResponses]
+
 export type CollabPresenceData = {
   body?: never
   path?: never
