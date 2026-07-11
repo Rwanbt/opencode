@@ -1,7 +1,7 @@
 import { ObservabilityId } from "./id"
 import type { TraceContext } from "./trace-context"
 
-type SpanKind = "llm" | "tool"
+type SpanKind = "llm" | "tool" | "agent"
 type TerminalStatus = "finished" | "failed" | "aborted"
 
 function startSpan<K extends SpanKind>(kind: K, context: Omit<TraceContext, "spanId">, tsMs: number) {
@@ -37,4 +37,12 @@ export function startTool(context: Omit<TraceContext, "spanId">, tsMs = Date.now
 
 export function finishTool(trace: TraceContext, status: TerminalStatus, startedAtMs: number, tsMs = Date.now()) {
   return finishSpan("tool", trace, status, startedAtMs, tsMs)
+}
+
+export function startAgent(context: Omit<TraceContext, "spanId">, tsMs = Date.now()) {
+  return startSpan("agent", context, tsMs)
+}
+
+export function finishAgent(trace: TraceContext, status: TerminalStatus, startedAtMs: number, tsMs = Date.now()) {
+  return finishSpan("agent", trace, status, startedAtMs, tsMs)
 }
