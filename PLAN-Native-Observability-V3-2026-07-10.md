@@ -1154,13 +1154,17 @@ Pas de prompt/réponse/tool output/error message affiché.
 - Workspace scope supporté côté backend (routes + `capture-content.ts`) mais pas exposé dans le PrivacyPanel UI — pas de sélecteur de workspace existant dans ce panneau à réutiliser ; extension possible sans changement API.
 - Détails : [[OpenCode/Checkpoint-Native-Observability-V3-2026-07-11-Compare-UI]] section "Suite 2026-07-12 (Phase 3)", ADR-1032.
 
-### Phase 4
+### Phase 4 — **Partiellement livré** (2026-07-12, branche `observability`)
 
-- exporter config;
-- preview projection;
-- test export;
-- logs export;
-- aucune table brute accessible.
+- [x] exporter config — via `experimental.observability.exporters` dans `opencode.json` (ADR-1026, `docs/observability-phase4-admin.md`); pas de panneau UI dédié (voir gap ci-dessous).
+- [ ] preview projection — non livré. Pas de panneau UI pour prévisualiser une `ExportProjection` avant envoi.
+- [ ] test export — non livré. Pas de bouton "tester la connexion" dans une UI; validation manuelle possible via smoke-test du script soak (`bun run script/observability-soak-test.ts --duration-ms=10000`) ou activation directe sur un projet Langfuse de test.
+- [x] logs export — chaque échec d'exporter est loggé (`log.warn`, `runtime.ts`), visible dans les logs process standards.
+- [x] aucune table brute accessible — `ExportProjectionSchema` (`.strict()`) exclut structurellement tout champ de contenu; testé (`toExportProjection never surfaces Phase 3 opt-in content`, `ExportProjectionSchema is strict`).
+
+Gap documenté : pas de panneau `settings-observability` pour configurer/tester un exporter depuis l'UI — seule la configuration via fichier JSON est disponible. Le réutilisateur devra ajouter ce panneau s'il souhaite une configuration UI plutôt que fichier.
+
+Détails : ADR-1026, `docs/observability-phase4-admin.md`, `docs/security/observability-threat-model.md` (addendum Phase 4).
 
 ---
 
@@ -1261,15 +1265,19 @@ Gate sortie:
 
 Commits : `490d15cdf1` (backend), `c369e2f52e` (fix précision purge), `c80406ae0b` (UI). Voir §16 pour le détail par livrable.
 
-### Phase 4 — Exporters + durcissement (8–12 jours)
+### Phase 4 — Exporters + durcissement (8–12 jours) — **Partiellement livré 2026-07-12**
 
-- `Exporter` interface;
-- `ExportProjection` runtime/type boundary;
-- Langfuse optional;
-- fuzz sanitizer;
-- soak test 24h;
-- no-network when exporters empty;
-- docs admin.
+- [x] `Exporter` interface (`observability/exporter.ts`);
+- [x] `ExportProjection` runtime/type boundary (`observability/export-projection.ts`, ADR-1026, `.strict()` schema, zero content fields);
+- [x] Langfuse optional (`observability/exporters/langfuse.ts`, config via `experimental.observability.exporters`; mapping vers l'API d'ingestion publique Langfuse UNVERIFIED contre une instance réelle — voir `docs/observability-phase4-admin.md`);
+- [x] fuzz sanitizer (`test/observability/sanitizer-fuzz.test.ts`, PRNG seedé, 120 itérations × propriété : jamais de throw, bornes respectées, pas de temps pathologique, needle-embedding pour la redaction);
+- [ ] soak test 24h — **non exécuté**. Harness livré et smoke-testé (`script/observability-soak-test.ts`), mais un run réel de 24h nécessite un process qui tourne 24h d'horloge réelle, ce qu'un agent ne peut pas accomplir dans une session — doit être lancé manuellement;
+- [x] no-network when exporters empty (`test/observability/exporter.test.ts`, spy `fetch` + preuve structurelle : liste vide → boucle d'export jamais exécutée);
+- [x] docs admin (`docs/observability-phase4-admin.md`).
+
+Commits : voir `git log` branche `observability`, section Phase 4 du 2026-07-12 (ADR-1026 + implémentation + tests + docs).
+
+Gap documenté : pas de panneau UI exporter config/preview/test (voir §16 Phase 4 ci-dessus) — configuration fichier JSON uniquement.
 
 Estimation révisée:
 - réaliste: **42–66 jours**;
@@ -1306,7 +1314,7 @@ Estimation révisée:
 | 1023 API/UI | Amendé: events/keyset/auth/health/delete |
 | 1024 Event lifecycle | Accepted |
 | 1025 Sanitizer borné | Accepted |
-| 1026 ExportProjection boundary | Accepted Phase 4 |
+| 1026 ExportProjection boundary | Accepted Phase 4 — livré 2026-07-12 (docs/adr/1026-exportprojection-boundary.md) |
 | 1027 Local HMAC secret lifecycle | Nouveau, Accepted avant Phase 1 |
 | 1028 Auth/ownership local model | Nouveau, Accepted avant Phase 1 avec preuve code |
 | 1029 Queue ordering/crash semantics | Nouveau, Accepted avant Phase 1 |
@@ -1390,7 +1398,7 @@ Estimation révisée:
 - [x] 100 sessions concurrentes (resilience.test.ts : 100 sessions × 100 events entrelacés round-robin, marqueur par event vérifié contre la ligne DB réelle au lecture — pas de contamination croisée).
 - [x] started/terminal same spanId (lifecycle.test.ts, pour LLM et tool).
 - [x] queue ordering/retry (queue.test.ts : FIFO, priorité terminale préservée sur overflow, rejet low-priority quand seuls des high-priority restent).
-- [ ] crash recovery SIGKILL.
+- [x] crash recovery SIGKILL (`test/observability/sqlite-crash-recovery.test.ts`, commit `cd9f123b1b`: real child process spawned, starts an uncommitted transaction against a real file-backed WAL-mode DB, killed by the OS with SIGKILL mid-transaction; verified no partial row, `PRAGMA integrity_check` clean, table still writable after recovery).
 - [x] SQLITE_BUSY (sqlite-busy.test.ts : reproduction réelle via bun:sqlite direct + fichier temp, délibérément découplée du singleton `Database` process-wide partagé par tout le reste de la suite — voir commentaire du fichier pour le raisonnement).
 - [x] SQLITE_FULL simulé par plafond SQLite (`sqlite-full.test.ts`).
 - [x] no-network observability (resilience.test.ts : override de `fetch` + scan statique de tous les fichiers observability/*.ts, `crash-reporter.ts` exclu car opt-in par design).
@@ -1408,8 +1416,8 @@ Le chantier est production-ready uniquement si:
 1. Phase 1 est stable, bornée, testée, privacy-safe metadata.
 2. Phase 2 apporte export local, summaries, docs et couverture agent.
 3. Phase 3 encadre strictement contenu redacted/full via UI, TTL, revoke, purge.
-4. Phase 4 prouve que les exporters ne peuvent pas recevoir de brut.
-5. Soak test 24h et fuzz sanitizer passent.
+4. Phase 4 prouve que les exporters ne peuvent pas recevoir de brut — **fait** (2026-07-12) : `ExportProjectionSchema` `.strict()` sans champ de contenu, testé par anti-leak (`test/observability/exporter.test.ts`).
+5. Soak test 24h et fuzz sanitizer passent — fuzz sanitizer **fait** (`test/observability/sanitizer-fuzz.test.ts`); soak test 24h **non exécuté**, harness livré et smoke-testé seulement (`script/observability-soak-test.ts`) — reste un run manuel avant que ce point 5 soit pleinement satisfait.
 6. Auth/ownership est prouvé sur le code réel.
 7. Les limites connues sont documentées:
    - queue mémoire perdue sur hard crash avant flush;
@@ -1417,7 +1425,8 @@ Le chantier est production-ready uniquement si:
    - backups/exports externes hors contrôle après création;
    - HMAC secret perdu = corrélation historique perdue;
    - mobile non supporté tant que storage/secret non vérifié;
-   - `local_full` augmente fortement le risque privacy.
+   - `local_full` augmente fortement le risque privacy;
+   - Phase 4 : pas de backfill export, pas de retry export, mapping Langfuse non vérifié en conditions réelles, pas de panneau UI exporter (`docs/observability-phase4-admin.md`).
 
 ---
 

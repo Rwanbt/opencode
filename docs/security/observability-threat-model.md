@@ -44,3 +44,20 @@ La Phase 3 introduit un risque at-rest réel qui n'existait pas en Phase 1/2 : `
 | Chiffrement au repos toujours absent | Inchangé depuis Phase 1 — différé à une phase future, seule bornée dans le temps par le TTL du contenu lui-même | Le contenu `local_full` est donc en clair sur disque pendant toute la durée du TTL (jusqu'à 30 jours) |
 
 Ce risque reste strictement opt-in et scope-isolé : un scope sans opt-in actif n'est affecté par aucune de ces menaces, l'invariant Phase 1 ("zéro contenu lisible") continue de s'appliquer par défaut.
+
+## Addendum Phase 4 — exporters réseau optionnels (ADR-1026, 2026-07-12)
+
+**Statut** : Accepté pour Phase 4.
+
+La Phase 4 introduit le premier client réseau du module observability : un exporter optionnel (Langfuse en premier) qui envoie une `ExportProjection` (jamais une ligne brute) vers un service tiers. Par défaut (`exporters` non défini ou `[]`), ce risque est nul — aucun code réseau ne s'exécute, vérifié par `test/observability/exporter.test.ts`.
+
+| Menace ajoutée | Mitigation Phase 4 | Limite connue |
+|---|---|---|
+| Fuite de contenu opt-in Phase 3 vers un tiers réseau | `ExportProjectionSchema` est `.strict()` et ne définit aucun champ de contenu texte — `local_content_redacted`/`local_full` ne peuvent structurellement pas atteindre un exporter, testé par un cas où l'appelant passe volontairement une ligne complète avec ces champs (`toExportProjection never surfaces Phase 3 opt-in content`) | Un futur champ de contenu ajouté par erreur à `ExportProjectionSchema` sans revue attentive romprait cette garantie — c'est pourquoi le schéma doit rester `.strict()` (ADR-1026) |
+| Corrélation d'identifiants internes par un tiers réseau | `sessionId`/`projectId`/`workspaceId` sont HMACés avant export (même clé locale ADR-1027), jamais transmis en clair, y compris quand la DB locale les stocke en clair pour un accès authentifié local | Le tiers reçoit tout de même `traceId`/`spanId` en clair (ULID internes, non réutilisables comme identifiant utilisateur) — nécessaire pour reconstruire la structure trace/span côté exporter |
+| Identifiants Langfuse (`publicKey`/`secretKey`) exposés dans la config | Stockés dans `opencode.json`/`opencode.jsonc` comme tout autre secret de config de ce projet (pas de mécanisme de coffre-fort dédié en Phase 4) | Même limite que toute clé API déjà présente dans la config OpenCode — pas spécifique à l'observabilité |
+| Échec réseau silencieux masquant une perte de données d'export | Chaque échec d'exporter est loggé (`log.warn`) avec le nom de l'exporter | Pas de retry Phase 4 (`docs/observability-phase4-admin.md`) — un batch perdu au réseau n'est jamais rejoué |
+| Fuite via un exporter tiers mal implémenté (futur exporter autre que Langfuse) | Le seul point d'entrée réseau sanctionné est `observability/exporters/*.ts`, un sous-répertoire dédié — tout nouvel exporter doit y vivre et n'a accès qu'à `ExportProjection`, jamais à `EventRow` | La frontière est une convention de répertoire + revue de code, pas une sandbox runtime — un exporter mal écrit pourrait en théorie importer `repository.ts` directement ; aucun mécanisme technique ne l'en empêche au runtime |
+| Mapping Langfuse jamais vérifié en conditions réelles | Basé sur la documentation publique Langfuse (Ingestion API), format `trace-create`/`span-create`/`generation-create` | UNVERIFIED contre une instance réelle — voir `docs/observability-phase4-admin.md` §"Limites connues" |
+
+Ce risque reste, comme la Phase 3, strictement opt-in : sans configuration explicite d'au moins un exporter, aucune de ces menaces ne s'applique.
