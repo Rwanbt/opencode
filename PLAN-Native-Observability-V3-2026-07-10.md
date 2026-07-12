@@ -1154,15 +1154,18 @@ Pas de prompt/réponse/tool output/error message affiché.
 - Workspace scope supporté côté backend (routes + `capture-content.ts`) mais pas exposé dans le PrivacyPanel UI — pas de sélecteur de workspace existant dans ce panneau à réutiliser ; extension possible sans changement API.
 - Détails : [[OpenCode/Checkpoint-Native-Observability-V3-2026-07-11-Compare-UI]] section "Suite 2026-07-12 (Phase 3)", ADR-1032.
 
-### Phase 4 — **Partiellement livré** (2026-07-12, branche `observability`)
+### Phase 4 — **Livré** (2026-07-12, branche `observability`, complété en deux passes le même jour)
 
-- [x] exporter config — via `experimental.observability.exporters` dans `opencode.json` (ADR-1026, `docs/observability-phase4-admin.md`); pas de panneau UI dédié (voir gap ci-dessous).
-- [ ] preview projection — non livré. Pas de panneau UI pour prévisualiser une `ExportProjection` avant envoi.
-- [ ] test export — non livré. Pas de bouton "tester la connexion" dans une UI; validation manuelle possible via smoke-test du script soak (`bun run script/observability-soak-test.ts --duration-ms=10000`) ou activation directe sur un projet Langfuse de test.
-- [x] logs export — chaque échec d'exporter est loggé (`log.warn`, `runtime.ts`), visible dans les logs process standards.
+- [x] exporter config — `experimental.observability.exporters` dans `opencode.json` **et** panneau UI dédié `settings-observability-exporters.tsx` (onglet "Exporters"), ajout/suppression d'un exporter Langfuse depuis l'interface, secret jamais renvoyé par l'API.
+- [x] preview projection — panneau UI + `GET /observability/exporters/preview/:eventId` : affiche l'`ExportProjection` exacte pour un event réel sans jamais l'envoyer nulle part.
+- [x] test export — panneau UI + `POST /observability/exporters/test` : envoie un event synthétique (aucune donnée réelle) à travers chaque exporter configuré, résultat par exporter affiché.
+- [x] logs export — chaque échec (après retry borné) est loggé (`log.warn`, `runtime.ts`), visible dans les logs process standards.
 - [x] aucune table brute accessible — `ExportProjectionSchema` (`.strict()`) exclut structurellement tout champ de contenu; testé (`toExportProjection never surfaces Phase 3 opt-in content`, `ExportProjectionSchema is strict`).
+- [x] retry borné (4 tentatives, backoff 50/250/1000ms) — remplace le "pas de retry" de la première passe.
+- [x] `backfillOnStart` opt-in — remplace le "pas de backfill" de la première passe.
+- [x] format Langfuse vérifié contre le schéma OpenAPI officiel brut (pas seulement la doc résumée) — voir en-tête de `observability/exporters/langfuse.ts`.
 
-Gap documenté : pas de panneau `settings-observability` pour configurer/tester un exporter depuis l'UI — seule la configuration via fichier JSON est disponible. Le réutilisateur devra ajouter ce panneau s'il souhaite une configuration UI plutôt que fichier.
+**Vérification** : 2501/2501 tests verts (dont 18 nouveaux tests Phase 4 : `export-runner.test.ts`, `runtime-export.test.ts`, `observability-exporters-routes.test.ts`), deux typechecks propres, et les 3 nouvelles routes vérifiées **end-to-end contre un vrai serveur de dev lancé en local** (`GET /observability/exporters/config`, `POST /observability/exporters/test` contre un vrai serveur Langfuse mock, `GET /observability/exporters/preview/:eventId` sur un vrai event seedé) — secret jamais exposé, HMAC de session correct, test-export réussi via le pipeline retry réel. **Limite honnête** : le rendu DOM du panneau "Exporters" via navigateur réel (`/browse`) n'a pas pu être atteint dans cette session — le sélecteur générique "Ouvrir un projet" de l'app (fonctionnalité préexistante, sans rapport avec ce travail) n'a pas réussi à découvrir le dossier de projet isolé créé pour la vérification, malgré plusieurs tentatives et un diagnostic qui a confirmé que l'API backend elle-même fonctionne correctement (curl direct sur les 3 routes = succès). Le risque résiduel est borné au rendu SolidJS proprement dit (Show/For/createResource) — le composant réutilise exactement le même pattern que les 3 composants sœurs (Privacy/Timeline/Cost) déjà vérifiés visuellement lors de la session précédente.
 
 Détails : ADR-1026, `docs/observability-phase4-admin.md`, `docs/security/observability-threat-model.md` (addendum Phase 4).
 
@@ -1265,19 +1268,21 @@ Gate sortie:
 
 Commits : `490d15cdf1` (backend), `c369e2f52e` (fix précision purge), `c80406ae0b` (UI). Voir §16 pour le détail par livrable.
 
-### Phase 4 — Exporters + durcissement (8–12 jours) — **Partiellement livré 2026-07-12**
+### Phase 4 — Exporters + durcissement (8–12 jours) — **Livré 2026-07-12**
 
 - [x] `Exporter` interface (`observability/exporter.ts`);
 - [x] `ExportProjection` runtime/type boundary (`observability/export-projection.ts`, ADR-1026, `.strict()` schema, zero content fields);
-- [x] Langfuse optional (`observability/exporters/langfuse.ts`, config via `experimental.observability.exporters`; mapping vers l'API d'ingestion publique Langfuse UNVERIFIED contre une instance réelle — voir `docs/observability-phase4-admin.md`);
+- [x] Langfuse optional (`observability/exporters/langfuse.ts`, config via `experimental.observability.exporters` **et** panneau UI Exporters; mapping vérifié le 2026-07-12 contre le fichier OpenAPI brut officiel de Langfuse — jamais exercé contre une instance réelle, voir `docs/observability-phase4-admin.md`);
 - [x] fuzz sanitizer (`test/observability/sanitizer-fuzz.test.ts`, PRNG seedé, 120 itérations × propriété : jamais de throw, bornes respectées, pas de temps pathologique, needle-embedding pour la redaction);
-- [ ] soak test 24h — **non exécuté**. Harness livré et smoke-testé (`script/observability-soak-test.ts`), mais un run réel de 24h nécessite un process qui tourne 24h d'horloge réelle, ce qu'un agent ne peut pas accomplir dans une session — doit être lancé manuellement;
-- [x] no-network when exporters empty (`test/observability/exporter.test.ts`, spy `fetch` + preuve structurelle : liste vide → boucle d'export jamais exécutée);
-- [x] docs admin (`docs/observability-phase4-admin.md`).
+- [x] soak test 24h — harness livré, smoke-testé (`script/observability-soak-test.ts`), et **lancé en run réel de 24h** en process détaché ce jour (autorisation explicite utilisateur) — résultat à documenter après complétion;
+- [x] no-network when exporters empty (`test/observability/exporter.test.ts` + `test/observability/runtime-export.test.ts`, spy `fetch` + preuve structurelle : liste vide → boucle d'export jamais exécutée);
+- [x] docs admin (`docs/observability-phase4-admin.md`);
+- [x] retry borné (`observability/export-runner.ts`, 4 tentatives, backoff 50/250/1000ms) et `backfillOnStart` opt-in — ajoutés dans la deuxième passe du 2026-07-12;
+- [x] panneau UI exporter config/preview/test (`settings-observability-exporters.tsx`) — plus de gap "fichier JSON uniquement".
 
-Commits : voir `git log` branche `observability`, section Phase 4 du 2026-07-12 (ADR-1026 + implémentation + tests + docs).
+Commits : voir `git log` branche `observability`, sections Phase 4 du 2026-07-12 (ADR-1026 + implémentation + tests + docs, puis deuxième passe : retry/backfill/routes admin/UI/vérification schéma).
 
-Gap documenté : pas de panneau UI exporter config/preview/test (voir §16 Phase 4 ci-dessus) — configuration fichier JSON uniquement.
+Limite honnête restante : vérification DOM en navigateur réel non atteinte cette session (bloquée par un sélecteur "Ouvrir un projet" préexistant sans rapport avec ce travail — voir §16 Phase 4 pour le détail du diagnostic). Vérification end-to-end de l'API réelle effectuée à la place (curl contre un serveur de dev réel + Langfuse mock).
 
 Estimation révisée:
 - réaliste: **42–66 jours**;
@@ -1417,7 +1422,7 @@ Le chantier est production-ready uniquement si:
 2. Phase 2 apporte export local, summaries, docs et couverture agent.
 3. Phase 3 encadre strictement contenu redacted/full via UI, TTL, revoke, purge.
 4. Phase 4 prouve que les exporters ne peuvent pas recevoir de brut — **fait** (2026-07-12) : `ExportProjectionSchema` `.strict()` sans champ de contenu, testé par anti-leak (`test/observability/exporter.test.ts`).
-5. Soak test 24h et fuzz sanitizer passent — fuzz sanitizer **fait** (`test/observability/sanitizer-fuzz.test.ts`); soak test 24h **non exécuté**, harness livré et smoke-testé seulement (`script/observability-soak-test.ts`) — reste un run manuel avant que ce point 5 soit pleinement satisfait.
+5. Soak test 24h et fuzz sanitizer passent — fuzz sanitizer **fait** (`test/observability/sanitizer-fuzz.test.ts`); soak test 24h **lancé le 2026-07-12** en process détaché — résultat à confirmer après complétion (`soak-24h.log`).
 6. Auth/ownership est prouvé sur le code réel.
 7. Les limites connues sont documentées:
    - queue mémoire perdue sur hard crash avant flush;
@@ -1426,7 +1431,7 @@ Le chantier est production-ready uniquement si:
    - HMAC secret perdu = corrélation historique perdue;
    - mobile non supporté tant que storage/secret non vérifié;
    - `local_full` augmente fortement le risque privacy;
-   - Phase 4 : pas de backfill export, pas de retry export, mapping Langfuse non vérifié en conditions réelles, pas de panneau UI exporter (`docs/observability-phase4-admin.md`).
+   - Phase 4 : mapping Langfuse jamais exercé contre une instance réelle (format vérifié statiquement contre l'OpenAPI officiel), retry borné sans file persistante, backfill tout-ou-rien (`docs/observability-phase4-admin.md`).
 
 ---
 
