@@ -5840,6 +5840,74 @@ export type DebateStartResponses = {
 
 export type DebateStartResponse = DebateStartResponses[keyof DebateStartResponses]
 
+export type DebateGetConfigData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/debate/config"
+}
+
+export type DebateGetConfigResponses = {
+  /**
+   * Global debate selection or null
+   */
+  200: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  } | null
+}
+
+export type DebateGetConfigResponse = DebateGetConfigResponses[keyof DebateGetConfigResponses]
+
+export type DebateConfigData = {
+  body?: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/debate/config"
+}
+
+export type DebateConfigResponses = {
+  /**
+   * Saved global debate selection
+   */
+  200: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  }
+}
+
+export type DebateConfigResponse = DebateConfigResponses[keyof DebateConfigResponses]
+
 export type DebateGetSessionConfigData = {
   body?: never
   path: {

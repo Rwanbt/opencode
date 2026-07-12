@@ -25,24 +25,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       primary: { providerID: string; modelID: string }
       participants: Array<{ providerID: string; modelID: string; role?: string }>
     }
-    const [debateStore, setDebateStore] = createStore<{ selection: Record<string, DebateSelection> }>({
+    const [debateStore, setDebateStore] = createStore<{ selection: { global?: DebateSelection } }>({
       selection: {},
     })
     const debate = {
-      current(sessionID: string) {
-        return debateStore.selection[sessionID]
+      current() {
+        return debateStore.selection.global
       },
-      set(sessionID: string, selection: DebateSelection) {
-        setDebateStore("selection", sessionID, selection)
+      set(selection: DebateSelection) {
+        setDebateStore("selection", "global", selection)
       },
-      async load(sessionID: string) {
-        const result = await sdk.client.debate.getSessionConfig({ sessionID }).catch(() => undefined)
+      async load() {
+        const result = await sdk.client.debate.getConfig().catch(() => undefined)
         if (!result?.data) return undefined
-        setDebateStore("selection", sessionID, result.data)
+        setDebateStore("selection", "global", result.data)
         return result.data
       },
     }
-
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]

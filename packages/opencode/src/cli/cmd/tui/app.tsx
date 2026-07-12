@@ -606,7 +606,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(1)
         if (next === "auto") void confirmAutoActivation()
-        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate") dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {
@@ -616,7 +616,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        if (local.agent.current().name !== "debate" || route.data.type !== "session") return
+        if (local.agent.current().name !== "debate") return
         dialog.replace(() => <DialogDebateSetup />)
       },
     },
@@ -650,7 +650,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(-1)
         if (next === "auto") void confirmAutoActivation()
-        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate") dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {

@@ -37,6 +37,43 @@ export const DebateRoutes = lazy(() =>
       },
     )
     .put(
+      "/config",
+      describeRoute({
+        summary: "Configure global debate models",
+        description: "Select the primary synthesis model and parallel participants reused by Debate mode.",
+        operationId: "debate.config",
+        responses: {
+          200: {
+            description: "Saved global debate selection",
+            content: { "application/json": { schema: resolver(Collective.DebateSelection) } },
+          },
+        },
+      }),
+      validator("json", Collective.DebateSelection),
+      async (c) => {
+        const selection = c.req.valid("json" as never) as Collective.DebateSelection
+        await DebateSelection.setGlobal(selection)
+        return c.json(selection)
+      },
+    )
+    .get(
+      "/config",
+      describeRoute({
+        summary: "Get global debate models",
+        description: "Return the Debate mode model selection reused across sessions.",
+        operationId: "debate.getConfig",
+        responses: {
+          200: {
+            description: "Global debate selection or null",
+            content: { "application/json": { schema: resolver(Collective.DebateSelection.nullable()) } },
+          },
+        },
+      }),
+      async (c) => {
+        const selection = await DebateSelection.getGlobal()
+        return c.json(selection ?? null)
+      },
+    )    .put(
       "/session/:sessionID/config",
       describeRoute({
         summary: "Configure session debate models",

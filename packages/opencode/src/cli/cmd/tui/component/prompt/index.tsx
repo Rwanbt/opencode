@@ -104,7 +104,7 @@ export function Prompt(props: PromptProps) {
     if (!current) return provider
     return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
   })
-  const debateSelection = createMemo(() => (props.sessionID ? local.debate.current(props.sessionID) : undefined))
+  const debateSelection = createMemo(() => local.debate.current())
   const debateParticipantsLabel = createMemo(() => {
     const selection = debateSelection()
     if (!selection) return "no annex models"
@@ -116,7 +116,7 @@ export function Prompt(props: PromptProps) {
       .join(", ")
   })
   createEffect(() => {
-    if (props.sessionID && local.agent.current().name === "debate") void local.debate.load(props.sessionID)
+    if (local.agent.current().name === "debate") void local.debate.load()
   })
   const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
@@ -652,10 +652,6 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
-    if (local.agent.current().name === "debate" && !props.sessionID) {
-      toast.show({ variant: "warning", message: "Open a session before using debate mode.", duration: 4000 })
-      return
-    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
@@ -683,7 +679,7 @@ export function Prompt(props: PromptProps) {
     }
 
     if (local.agent.current().name === "debate") {
-      const selection = local.debate.current(sessionID) ?? (await local.debate.load(sessionID))
+      const selection = local.debate.current() ?? (await local.debate.load())
       if (!selection || selection.participants.length < 2) {
         toast.show({ variant: "warning", message: "Select at least two annex models before sending a debate prompt.", duration: 4000 })
         dialog.replace(() => <DialogDebateSetup />)

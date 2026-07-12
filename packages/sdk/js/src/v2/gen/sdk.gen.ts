@@ -35,8 +35,10 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DebateConfigResponses,
   DebateEstimateResponses,
   DebateFeedbackResponses,
+  DebateGetConfigResponses,
   DebateGetResponses,
   DebateGetSessionConfigResponses,
   DebateListResponses,
@@ -3755,6 +3757,82 @@ export class Debate extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<DebateStartResponses, unknown, ThrowOnError>({
       url: "/debate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get global debate models
+   *
+   * Return the Debate mode model selection reused across sessions.
+   */
+  public getConfig<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure global debate models
+   *
+   * Select the primary synthesis model and parallel participants reused by Debate mode.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
       ...options,
       ...params,
       headers: {

@@ -37,9 +37,8 @@ export function DialogDebateSetup() {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
-  const route = useRoute()
   const current = local.model.current()
-  const existing = route.data.type === "session" ? local.debate.current(route.data.sessionID) : undefined
+  const existing = local.debate.current()
   const options = createMemo(() =>
     availableModels(sync).map((model) => ({
       value: { providerID: model.providerID, modelID: model.modelID },
@@ -48,7 +47,7 @@ export function DialogDebateSetup() {
     })),
   )
 
-  if (!current) {
+  if (!current && !existing) {
     return <text>Connect a provider before configuring debate.</text>
   }
 
@@ -98,22 +97,13 @@ function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef
   ])
 
   async function save() {
-    if (route.data.type !== "session") {
-      toast.show({ variant: "warning", message: "Open a session before configuring debate.", duration: 4000 })
-      dialog.clear()
-      return
-    }
     try {
-      await sdk.client.debate.sessionConfig(
-        {
-          sessionID: route.data.sessionID,
-          primary: props.primary,
-          participants: selected(),
-        },
-        { throwOnError: true },
-      )
-      local.debate.set(route.data.sessionID, { primary: props.primary, participants: selected() })
-      toast.show({ variant: "success", message: "Debate models configured for this session.", duration: 3000 })
+      await sdk.client.debate.config({
+        primary: props.primary,
+        participants: selected(),
+      }, { throwOnError: true })
+      local.debate.set({ primary: props.primary, participants: selected() })
+      toast.show({ variant: "success", message: "Debate models configured and saved for Debate mode.", duration: 3000 })
       dialog.clear()
     } catch (error) {
       toast.show({
@@ -123,7 +113,6 @@ function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef
       })
     }
   }
-
   return (
     <DialogSelect<ModelRef | "confirm">
       title={"Debate — annex models (primary: " + modelLabel(sync, props.primary) + ")"}
