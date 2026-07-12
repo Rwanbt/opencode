@@ -12,6 +12,7 @@ import { SettingsRow } from "./settings-row"
 import { SettingsObservabilityPrivacy } from "./settings-observability-privacy"
 import { SettingsObservabilityTimeline } from "./settings-observability-timeline"
 import { SettingsObservabilityCost } from "./settings-observability-cost"
+import { SettingsObservabilityExporters } from "./settings-observability-exporters"
 
 const confirmText = "DELETE"
 
@@ -34,9 +35,10 @@ export const SettingsObservability: Component = () => {
   const [scope, setScope] = createSignal<"session" | "project" | "all">("session")
   const [confirmation, setConfirmation] = createSignal("")
   const [busy, setBusy] = createSignal(false)
-  const [activeSubtab, setActiveSubtab] = createSignal<"overview" | "traces" | "timeline" | "comparisons" | "cost" | "events" | "privacy">("overview")
+  const [activeSubtab, setActiveSubtab] = createSignal<"overview" | "traces" | "timeline" | "comparisons" | "cost" | "events" | "privacy" | "exporters">("overview")
 
   const [settings, settingsActions] = createResource(() => unwrap(sdk.client.observability.settings()))
+  const [exportersConfig] = createResource(() => unwrap(sdk.client.observability.exporters.config()))
   const [health, healthActions] = createResource(() => unwrap(sdk.client.observability.health()))
   const [sessions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
   const [events, eventsActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, limit: 50 })))
@@ -111,6 +113,7 @@ export const SettingsObservability: Component = () => {
           ["cost", "checklist", "Cost"],
           ["events", "bullet-list", "Events"],
           ["privacy", "shield", "Privacy"],
+          ["exporters", "cloud-upload", "Exporters"],
         ] as const).map(([value, icon, label]) => (
           <button
             type="button"
@@ -130,7 +133,7 @@ export const SettingsObservability: Component = () => {
       </div>
 
         <Show when={activeSubtab() === "overview"}><div class="no-scrollbar">
-          <section><h3 class="pb-2 text-14-medium text-text-strong">Capture</h3><SettingsList><SettingsRow title="Enable native observability" description="Stores local LLM and tool metadata only."><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title="Capture mode" description="Neither mode stores readable content."><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? "Metadata only" : "Metadata + redaction classes"} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">Local SQLite storage is not encrypted at rest. No exporter is configured.</div></section>
+          <section><h3 class="pb-2 text-14-medium text-text-strong">Capture</h3><SettingsList><SettingsRow title="Enable native observability" description="Stores local LLM and tool metadata only."><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title="Capture mode" description="Neither mode stores readable content."><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? "Metadata only" : "Metadata + redaction classes"} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">Local SQLite storage is not encrypted at rest. {exportersConfig()?.exporters.length ? `${exportersConfig()!.exporters.length} exporter(s) configured — see the Exporters tab.` : "No exporter is configured."}</div></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">Retention</h3><SettingsList><SettingsRow title="Retention (days)" description="Delete events older than this many days. Empty keeps events until another limit applies."><TextField size="small" variant="normal" type="number" placeholder="e.g. 30" value={String(settings()?.retentionDays ?? "")} onBlur={(v: string) => { update({ retentionDays: v ? parseInt(v, 10) : undefined }) }} /></SettingsRow><SettingsRow title="Max events" description="Maximum local observability event count. Default: 100000."><TextField size="small" variant="normal" type="number" placeholder="100000" value={String(settings()?.maxEvents ?? "")} onBlur={(v: string) => { update({ maxEvents: v ? parseInt(v, 10) : 100000 }) }} /></SettingsRow></SettingsList></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">Service health</h3><div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Metric label="Queue" value={String(health()?.queueSize ?? 0)} />
@@ -227,6 +230,10 @@ export const SettingsObservability: Component = () => {
 
         <Show when={activeSubtab() === "privacy"}><div class="no-scrollbar">
           <SettingsObservabilityPrivacy sessions={sessions() ?? []} sessionId={sessionId()} projectId={selected()?.projectID} onSelectSession={setSessionId} />
+        </div></Show>
+
+        <Show when={activeSubtab() === "exporters"}><div class="no-scrollbar">
+          <SettingsObservabilityExporters events={events() ?? []} />
         </div></Show>
     </div>
   </div>
