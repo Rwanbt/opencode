@@ -1142,15 +1142,17 @@ Pas de prompt/réponse/tool output/error message affiché.
 - data management complet;
 - docs utilisateur.
 
-### Phase 3
+### Phase 3 — **Livré** (2026-07-12, commits `490d15cdf1`/`c369e2f52e`/`c80406ae0b`, branche `observability`)
 
-- PrivacyPanel;
-- opt-in TTL;
-- revoke now;
-- Timeline;
-- TraceDetail;
-- CostDashboard;
-- warnings rouges `local_content_redacted`/`local_full`.
+- [x] PrivacyPanel — `settings-observability-privacy.tsx`, scope session/project, niveau, TTL (max 30j), bouton "Grant opt-in".
+- [x] opt-in TTL — `observability_content_optin` (table dédiée), `expires_at_ms` dérivé, jamais un booléen permanent.
+- [x] revoke now — `POST /observability/privacy/revoke` : supprime l'opt-in ET efface le contenu déjà capturé pour le scope, immédiat.
+- [x] Timeline — `settings-observability-timeline.tsx`, groupe les events d'une session par `traceId`, barre à largeur relative par trace.
+- [x] TraceDetail — drill-down au clic sur une trace, `GET /observability/trace/:traceId`, affiche le contenu capturé inline.
+- [x] CostDashboard — `settings-observability-cost.tsx`, totaux + coût/tour par (modèle, skill), réutilise `/summary/aggregate` et `/compare`.
+- [x] warnings rouges `local_content_redacted`/`local_full` — bannière rouge dans PrivacyPanel (statut actif) et TraceDetail (par event), icône `warning`.
+- Workspace scope supporté côté backend (routes + `capture-content.ts`) mais pas exposé dans le PrivacyPanel UI — pas de sélecteur de workspace existant dans ce panneau à réutiliser ; extension possible sans changement API.
+- Détails : [[OpenCode/Checkpoint-Native-Observability-V3-2026-07-11-Compare-UI]] section "Suite 2026-07-12 (Phase 3)", ADR-1032.
 
 ### Phase 4
 
@@ -1247,15 +1249,17 @@ Gate sortie:
 - docs utilisateur;
 - health history optionnel.
 
-### Phase 3 — UI complète + contenu opt-in (10–16 jours)
+### Phase 3 — UI complète + contenu opt-in (10–16 jours) — **Livré 2026-07-12**
 
-- PrivacyPanel;
-- opt-in table + TTL cleanup;
-- `local_content_redacted`;
-- `local_full`;
-- Timeline/TraceDetail/CostDashboard;
-- purge prioritaire contenu;
-- at-rest threat model renforcé.
+- [x] PrivacyPanel;
+- [x] opt-in table + TTL cleanup (`observability_content_optin`, `purgeExpiredOptIns`);
+- [x] `local_content_redacted`;
+- [x] `local_full`;
+- [x] Timeline/TraceDetail/CostDashboard;
+- [x] purge prioritaire contenu (`purgeExpiredContent`, indépendante de la rétention metadata);
+- [x] at-rest threat model renforcé (`docs/security/observability-threat-model.md`, addendum Phase 3).
+
+Commits : `490d15cdf1` (backend), `c369e2f52e` (fix précision purge), `c80406ae0b` (UI). Voir §16 pour le détail par livrable.
 
 ### Phase 4 — Exporters + durcissement (8–12 jours)
 
