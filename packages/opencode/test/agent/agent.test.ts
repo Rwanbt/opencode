@@ -174,6 +174,17 @@ test("user-defined auto agent is preserved instead of becoming full-auto", async
     },
   })
 })
+test("debate agent exposes the multi-model tool with a dedicated color", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const debate = await Agent.get("debate")
+      expect(debate?.color).toBe("info")
+      expect(evalPerm(debate, "debate")).toBe("allow")
+    },
+  })
+})
 test("custom agent from config creates new agent", async () => {
   await using tmp = await tmpdir({
     config: {

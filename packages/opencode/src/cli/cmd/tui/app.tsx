@@ -453,6 +453,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   )
 
   const connected = useConnected()
+  const confirmAutoActivation = async () => {
+    if (!local.agent.requiresConfirmation("auto")) return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Dangerous auto mode",
+      "Auto mode can run commands and modify files without permission prompts. Continue?",
+    )
+    if (!confirmed) return
+    local.agent.confirmAuto()
+    local.agent.set("auto")
+  }
+
   command.register(() => [
     {
       title: "Switch session",
@@ -591,7 +603,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(1)
+        const next = local.agent.move(1)
+        if (next === "auto") void confirmAutoActivation()
       },
     },
     {
@@ -622,7 +635,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(-1)
+        const next = local.agent.move(-1)
+        if (next === "auto") void confirmAutoActivation()
       },
     },
     {

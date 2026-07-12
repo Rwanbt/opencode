@@ -87,20 +87,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setAgentStore("autoConfirmed", true)
         },
         move(direction: 1 | -1) {
-          batch(() => {
+          return batch(() => {
             let next = agents().findIndex((x) => x.name === agentStore.current) + direction
             if (next < 0) next = agents().length - 1
             if (next >= agents().length) next = 0
             const value = agents()[next]
-            if (value.name === "auto" && value.native && !agentStore.autoConfirmed) {
-              toast.show({
-                variant: "warning",
-                message: "Select auto from the agent dialog and confirm the safety warning first.",
-                duration: 3000,
-              })
-              return
-            }
+            if (value.name === "auto" && value.native && !agentStore.autoConfirmed) return value.name
             setAgentStore("current", value.name)
+            return value.name
           })
         },
         color(name: string) {
