@@ -243,6 +243,7 @@ export namespace Collective {
     timestamp: z.string(),
     tier: DebateTier,
     providers: z.array(z.string()),
+    failedProviders: z.array(z.object({ provider: z.string(), error: z.string() })).default([]),
     roles: z.record(z.string(), z.string()),
     cost: z.number(),
     durationMs: z.number(),

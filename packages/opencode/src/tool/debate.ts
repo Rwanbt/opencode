@@ -47,6 +47,9 @@ export const DebateTool = Tool.define("debate", async () => {
         report.meta?.fragility !== undefined && report.meta.fragility > 0.6
           ? `\n> ⚠️ **CONSENSUS FRAGILE** (fragility: ${(report.meta.fragility * 100).toFixed(0)}%)`
           : "",
+        report.failedProviders.length > 0
+          ? `\n> ⚠️ **Providers indisponibles**\n${report.failedProviders.map((p) => `> - **${p.provider}** — ${p.error}`).join("\n")}`
+          : "",
         report.shadowBaselineDelta
           ? `\n> ${report.shadowBaselineDelta.blindSpotDelta > 0 ? `+${report.shadowBaselineDelta.blindSpotDelta} blind spots vs single-model` : "No additional blind spots vs single-model"}`
           : "",

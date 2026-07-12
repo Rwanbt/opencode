@@ -114,6 +114,15 @@ export namespace Orchestrator {
         const debateID = yield* store.create(config, discovered.length, directory)
         const budgetCfg = config.budget ?? BudgetTracker.tierDefaults(config.tier)
         const budget = BudgetTracker.create(budgetCfg)
+        const failedProviders: Array<{ provider: string; error: string }> = []
+
+        const describeError = (error: unknown): string => {
+          if (error instanceof Error) {
+            const cause = "cause" in error && error.cause ? `; cause: ${describeError(error.cause)}` : ""
+            return `${error.name}: ${error.message}${cause}`
+          }
+          return String(error)
+        }
 
         try {
           // ── Role assignment ───────────────────────────────────────
@@ -172,7 +181,16 @@ export namespace Orchestrator {
           const phase1Responses = yield* Effect.all(
             participants.map((p) =>
               runParticipant(p, config.question, effectiveContext, seeds, bus, debateID).pipe(
-                Effect.catch(() => Effect.succeed(null as Collective.PhaseOneResponse | null)),
+                Effect.catch((error) => {
+                  const provider = `${p.providerID}/${p.modelID}`
+                  const message = describeError(error)
+                  failedProviders.push({ provider, error: message })
+                  log.warn("provider unavailable during divergence", { provider, error: message })
+                  return Effect.gen(function* () {
+                    yield* bus.publish(Events.ProviderFailed, { debateID, provider, error: message })
+                    return null as Collective.PhaseOneResponse | null
+                  })
+                }),
               ),
             ),
             { concurrency: "unbounded" },
@@ -186,7 +204,10 @@ export namespace Orchestrator {
           if (validResponses.length < 2) {
             return yield* Effect.fail(
               new OrchestratorError({
-                message: `Only ${validResponses.length} model(s) responded. Need at least 2.`,
+                message: [
+                  `Only ${validResponses.length} model(s) responded. Need at least 2.`,
+                  ...failedProviders.map((p) => `Unavailable: ${p.provider} — ${p.error}`),
+                ].join("\n"),
               }),
             )
           }
@@ -194,6 +215,9 @@ export namespace Orchestrator {
           for (const r of validResponses) {
             budget.record("phase1_diverge", r.providerID, r.tokenUsage.input, r.tokenUsage.output)
           }
+          const activeProviders = discovered.filter((p) =>
+            validResponses.some((r) => r.providerID === p.providerID && r.modelID === p.modelID),
+          )
           yield* budget.check()
           yield* emitCostUpdate(bus, debateID, budget, budgetCfg)
 
@@ -206,7 +230,7 @@ export namespace Orchestrator {
             yield* bus.publish(Events.DebatePhaseChanged, { debateID, phase: "phase2_extract" })
             log.info("phase 2: extract", { responseCount: validResponses.length })
 
-            const extractorP = discovered[0]!
+            const extractorP = activeProviders[0]!
             const { claims: rawClaims, tokenUsage: extractTokens } = yield* ClaimExtractor.extract(
               validResponses,
               config.question,
@@ -361,11 +385,16 @@ export namespace Orchestrator {
           yield* store.updateStatus(debateID, "phase4_synthesize")
           yield* bus.publish(Events.DebatePhaseChanged, { debateID, phase: "phase4_synthesize" })
 
-          const judge = yield* ProviderDiscovery.selectJudge(
-            discovered,
-            config.judgeProviderID ? ProviderID.make(config.judgeProviderID as string) : undefined,
-            config.judgeModelID ? ModelID.make(config.judgeModelID as string) : undefined,
+          const primaryIsActive = activeProviders.some(
+            (p) => p.providerID === config.judgeProviderID && p.modelID === config.judgeModelID,
           )
+          const judge = primaryIsActive
+            ? yield* ProviderDiscovery.selectJudge(
+                activeProviders,
+                ProviderID.make(config.judgeProviderID as string),
+                ModelID.make(config.judgeModelID as string),
+              )
+            : { ...activeProviders[0]!, role: "judge" as const }
 
           log.info("phase 4: synthesize", {
             claimCount: claims.length,
@@ -460,6 +489,7 @@ export namespace Orchestrator {
             timestamp: new Date(startTime).toISOString(),
             tier: config.tier,
             providers: participants.map((p) => `${p.providerID}/${p.modelID}`),
+            failedProviders,
             roles: rolesMap,
             cost: snap.costUsd,
             durationMs,
@@ -578,15 +608,7 @@ export namespace Orchestrator {
             maxOutputTokens: 4096,
           }),
         catch: (e) => {
-          const err = new Error(`Model ${participant.anonymousHash} failed: ${e}`)
-          Effect.runFork(
-            bus.publish(Events.ProviderFailed, {
-              debateID,
-              provider: `${participant.providerID}/${participant.modelID}`,
-              error: String(e),
-            }),
-          )
-          return err
+          return new Error(`Model ${participant.anonymousHash} failed: ${e}`)
         },
       })
 
