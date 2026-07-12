@@ -57,12 +57,7 @@ export namespace ClaimExtractor {
       outOfRoleInsights: r.outOfRoleInsights,
     }))
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: extractorProviderID,
-        id: extractorModelID,
-      } as Provider.Model),
-    )
+    const model = yield* Effect.promise(() => Provider.getLanguageByID(extractorProviderID, extractorModelID))
 
     // Phase 2a — Extraction
     let rawClaims = yield* extractClaims(model, question, anonymizedResponses)

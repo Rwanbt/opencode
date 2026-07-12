@@ -51,10 +51,7 @@ export namespace SynthesisJudge {
     })
 
     const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: input.judgeProviderID,
-        id: input.judgeModelID,
-      } as Provider.Model),
+      Provider.getLanguageByID(input.judgeProviderID, input.judgeModelID),
     )
 
     const result = yield* Effect.tryPromise({

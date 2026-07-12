@@ -59,12 +59,7 @@ export namespace Metrics {
       provider: `${input.bestProviderID}/${input.bestModelID}`,
     })
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: input.bestProviderID,
-        id: input.bestModelID,
-      } as Provider.Model),
-    )
+    const model = yield* Effect.promise(() => Provider.getLanguageByID(input.bestProviderID, input.bestModelID))
 
     const prompt = input.context
       ? `## Context\n${input.context}\n\n## Question\n${input.question}`

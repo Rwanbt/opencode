@@ -554,12 +554,7 @@ export namespace Orchestrator {
       })
 
       const start = Date.now()
-      const model = yield* Effect.promise(() =>
-        Provider.getLanguage({
-          providerID: participant.providerID,
-          id: participant.modelID,
-        } as Provider.Model),
-      )
+      const model = yield* Effect.promise(() => Provider.getLanguageByID(participant.providerID, participant.modelID))
 
       const systemPrompt = PROMPT_DIVERGE.replace("{{ROLE}}", participant.role ?? "General analyst")
       let userPrompt = context
@@ -646,12 +641,7 @@ export namespace Orchestrator {
     question: string,
   ): Effect.Effect<Collective.ConvergenceResponse, Error> {
     return Effect.gen(function* () {
-      const model = yield* Effect.promise(() =>
-        Provider.getLanguage({
-          providerID: participant.providerID,
-          id: participant.modelID,
-        } as Provider.Model),
-      )
+      const model = yield* Effect.promise(() => Provider.getLanguageByID(participant.providerID, participant.modelID))
 
       const claimsText = targetClaims
         .map((c) => `[${c.claimId}] [${c.category}] ${c.content}`)

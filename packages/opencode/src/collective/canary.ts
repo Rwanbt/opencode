@@ -30,12 +30,7 @@ export namespace Canary {
   ) {
     log.info("generating canary bug")
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: generatorProviderID,
-        id: generatorModelID,
-      } as Provider.Model),
-    )
+    const model = yield* Effect.promise(() => Provider.getLanguageByID(generatorProviderID, generatorModelID))
 
     const result = yield* Effect.tryPromise({
       try: () =>

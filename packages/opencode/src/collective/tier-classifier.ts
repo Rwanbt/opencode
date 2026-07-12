@@ -46,12 +46,7 @@ export namespace TierClassifier {
   ) {
     log.info("classifying question for tier recommendation")
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: classifierProviderID,
-        id: classifierModelID,
-      } as Provider.Model),
-    )
+    const model = yield* Effect.promise(() => Provider.getLanguageByID(classifierProviderID, classifierModelID))
 
     const result = yield* Effect.tryPromise({
       try: () =>

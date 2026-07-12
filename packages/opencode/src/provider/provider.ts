@@ -948,6 +948,11 @@ export namespace Provider {
     return runPromise((svc) => svc.getLanguage(model))
   }
 
+  export async function getLanguageByID(providerID: ProviderID, modelID: ModelID) {
+    const model = await getModel(providerID, modelID)
+    return getLanguage(model)
+  }
+
   export async function closest(providerID: ProviderID, query: string[]) {
     return runPromise((svc) => svc.closest(providerID, query))
   }

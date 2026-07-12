@@ -55,10 +55,7 @@ export namespace RedTeam {
     })
 
     const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: input.attackerProviderID,
-        id: input.attackerModelID,
-      } as Provider.Model),
+      Provider.getLanguageByID(input.attackerProviderID, input.attackerModelID),
     )
 
     const claimsText = input.claims

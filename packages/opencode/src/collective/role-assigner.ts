@@ -55,12 +55,7 @@ export namespace RoleAssigner {
     if (participantCount <= 5) {
       const fallback = FALLBACK_ROLES[participantCount] ?? FALLBACK_ROLES[5]!
       try {
-        const model = yield* Effect.promise(() =>
-          Provider.getLanguage({
-            providerID: assignerProviderID,
-            id: assignerModelID,
-          } as Provider.Model),
-        )
+        const model = yield* Effect.promise(() => Provider.getLanguageByID(assignerProviderID, assignerModelID))
 
         const result = yield* Effect.tryPromise({
           try: () =>
