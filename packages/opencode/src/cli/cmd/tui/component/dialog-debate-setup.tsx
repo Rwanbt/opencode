@@ -35,33 +35,14 @@ function availableModels(sync: ReturnType<typeof useSync>) {
 
 export function DialogDebateSetup() {
   const local = useLocal()
-  const sync = useSync()
-  const dialog = useDialog()
   const current = local.model.current()
   const existing = local.debate.current()
-  const options = createMemo(() =>
-    availableModels(sync).map((model) => ({
-      value: { providerID: model.providerID, modelID: model.modelID },
-      title: model.name,
-      description: model.providerName,
-    })),
-  )
 
-  if (!current && !existing) {
+  if (!current) {
     return <text>Connect a provider before configuring debate.</text>
   }
 
-  return (
-    <DialogSelect<ModelRef>
-      title="Debate — primary synthesis model"
-      placeholder="Select the model that will synthesize the debate"
-      options={options()}
-      current={existing?.primary ?? current}
-      onSelect={(option) => {
-        dialog.replace(() => <DialogDebateParticipants primary={option.value} initial={existing?.participants} />)
-      }}
-    />
-  )
+  return <DialogDebateParticipants primary={current} initial={existing?.participants} />
 }
 
 function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef[] }) {
