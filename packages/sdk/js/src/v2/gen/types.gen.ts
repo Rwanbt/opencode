@@ -521,6 +521,17 @@ export type EventCollectiveDebateBudgetWarning = {
   }
 }
 
+export type EventCollectiveShadowDivergence = {
+  type: "collective.shadow.divergence"
+  properties: {
+    sessionID: string
+    question: string
+    severity: "info" | "warning" | "critical"
+    shadowResponse: string
+    divergenceReason: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -761,17 +772,6 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventCollectiveShadowDivergence = {
-  type: "collective.shadow.divergence"
-  properties: {
-    sessionID: string
-    question: string
-    severity: "info" | "warning" | "critical"
-    shadowResponse: string
-    divergenceReason: string
   }
 }
 
@@ -1269,6 +1269,7 @@ export type Event =
   | EventCollectiveDebateCompleted
   | EventCollectiveDebateFailed
   | EventCollectiveDebateBudgetWarning
+  | EventCollectiveShadowDivergence
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -1286,7 +1287,6 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
-  | EventCollectiveShadowDivergence
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1829,6 +1829,7 @@ export type Config = {
   agent?: {
     plan?: AgentConfig
     build?: AgentConfig
+    auto?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
     title?: AgentConfig
@@ -5838,6 +5839,78 @@ export type DebateStartResponses = {
 }
 
 export type DebateStartResponse = DebateStartResponses[keyof DebateStartResponses]
+
+export type DebateGetSessionConfigData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/debate/session/{sessionID}/config"
+}
+
+export type DebateGetSessionConfigResponses = {
+  /**
+   * Debate selection or null
+   */
+  200: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  } | null
+}
+
+export type DebateGetSessionConfigResponse = DebateGetSessionConfigResponses[keyof DebateGetSessionConfigResponses]
+
+export type DebateSessionConfigData = {
+  body?: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/debate/session/{sessionID}/config"
+}
+
+export type DebateSessionConfigResponses = {
+  /**
+   * Saved debate selection
+   */
+  200: {
+    primary: {
+      providerID: string
+      modelID: string
+    }
+    participants: Array<{
+      providerID: string
+      modelID: string
+      role?: string
+    }>
+  }
+}
+
+export type DebateSessionConfigResponse = DebateSessionConfigResponses[keyof DebateSessionConfigResponses]
 
 export type DebateEstimateData = {
   body?: {

@@ -38,7 +38,9 @@ import type {
   DebateEstimateResponses,
   DebateFeedbackResponses,
   DebateGetResponses,
+  DebateGetSessionConfigResponses,
   DebateListResponses,
+  DebateSessionConfigResponses,
   DebateStartResponses,
   DiskGetResponses,
   EventSubscribeResponses,
@@ -3753,6 +3755,86 @@ export class Debate extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<DebateStartResponses, unknown, ThrowOnError>({
       url: "/debate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get session debate models
+   *
+   * Return the configured debate models for a session, if any.
+   */
+  public getSessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure session debate models
+   *
+   * Select the primary synthesis model and the parallel debate participants for a session.
+   */
+  public sessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
       ...options,
       ...params,
       headers: {

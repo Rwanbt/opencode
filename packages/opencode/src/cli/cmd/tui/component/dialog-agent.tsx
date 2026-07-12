@@ -3,10 +3,13 @@ import { useLocal } from "@tui/context/local"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { useRoute } from "@tui/context/route"
+import { DialogDebateSetup } from "./dialog-debate-setup"
 
 export function DialogAgent() {
   const local = useLocal()
   const dialog = useDialog()
+  const route = useRoute()
 
   const options = createMemo(() =>
     local.agent.list().map((item) => {
@@ -34,6 +37,10 @@ export function DialogAgent() {
           local.agent.confirmAuto()
         }
         local.agent.set(option.value)
+        if (option.value === "debate" && route.data.type === "session") {
+          dialog.replace(() => <DialogDebateSetup />)
+          return
+        }
         dialog.clear()
       }}
     />

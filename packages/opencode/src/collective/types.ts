@@ -2,6 +2,23 @@ import z from "zod"
 import { ProviderID, ModelID } from "../provider/schema"
 
 export namespace Collective {
+  export const DebateSelection = z.object({
+    primary: z.object({
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
+    }),
+    participants: z
+      .array(
+        z.object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
+          role: z.string().optional(),
+        }),
+      )
+      .min(2),
+  })
+
+  export type DebateSelection = z.infer<typeof DebateSelection>
   // ── Identifiers ───────────────────────────────────────────────────────────
 
   export type DebateID = string & { readonly __brand: "DebateID" }

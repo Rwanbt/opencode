@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./debate.txt"
-import { Orchestrator } from "../collective/orchestrator"
+import { DebateSelection, Orchestrator } from "../collective"
 import type { Collective } from "../collective/types"
 
 export const DebateTool = Tool.define("debate", async () => {
@@ -20,11 +20,15 @@ export const DebateTool = Tool.define("debate", async () => {
           "Debate depth tier. 'free'=free models only, 'quick'=2-3 models no convergence, 'standard'=full pipeline with convergence, 'deep'=all features including red team and canary. Default: auto-classified based on question complexity.",
         ),
     }),
-    async execute(args, _ctx) {
+    async execute(args, ctx) {
+      const selection = await DebateSelection.get(ctx.sessionID)
       const config: Collective.DebateConfig = {
         question: args.question,
         context: args.context,
         tier: args.tier ?? "quick",
+        participants: selection?.participants,
+        judgeProviderID: selection?.primary.providerID,
+        judgeModelID: selection?.primary.modelID,
         redTeam: "auto",
         enableMeta: true,
         enableCanary: args.tier === "deep",

@@ -34,6 +34,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogDebateSetup } from "@tui/component/dialog-debate-setup"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
@@ -605,6 +606,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(1)
         if (next === "auto") void confirmAutoActivation()
+        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {
@@ -637,6 +640,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(-1)
         if (next === "auto") void confirmAutoActivation()
+        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {

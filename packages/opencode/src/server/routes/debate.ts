@@ -3,7 +3,8 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { lazy } from "../../util/lazy"
 import { Log } from "../../util/log"
-import { Collective, Orchestrator, DebateStore } from "../../collective"
+import { SessionID } from "../../session/schema"
+import { Collective, DebateSelection, Orchestrator, DebateStore } from "../../collective"
 
 const log = Log.create({ service: "server.debate" })
 
@@ -33,6 +34,45 @@ export const DebateRoutes = lazy(() =>
           log.error("debate failed", { error: String(e) })
           return c.json({ error: String(e) }, 500)
         }
+      },
+    )
+    .put(
+      "/session/:sessionID/config",
+      describeRoute({
+        summary: "Configure session debate models",
+        description: "Select the primary synthesis model and the parallel debate participants for a session.",
+        operationId: "debate.sessionConfig",
+        responses: {
+          200: {
+            description: "Saved debate selection",
+            content: { "application/json": { schema: resolver(Collective.DebateSelection) } },
+          },
+        },
+      }),
+      validator("json", Collective.DebateSelection),
+      async (c) => {
+        const sessionID = c.req.param("sessionID")
+        const selection = c.req.valid("json" as never) as Collective.DebateSelection
+        await DebateSelection.set(SessionID.zod.parse(sessionID), selection)
+        return c.json(selection)
+      },
+    )
+    .get(
+      "/session/:sessionID/config",
+      describeRoute({
+        summary: "Get session debate models",
+        description: "Return the configured debate models for a session, if any.",
+        operationId: "debate.getSessionConfig",
+        responses: {
+          200: {
+            description: "Debate selection or null",
+            content: { "application/json": { schema: resolver(Collective.DebateSelection.nullable()) } },
+          },
+        },
+      }),
+      async (c) => {
+        const selection = await DebateSelection.get(SessionID.zod.parse(c.req.param("sessionID")))
+        return c.json(selection ?? null)
       },
     )
     .post(

@@ -1,5 +1,6 @@
 export { Collective } from "./types"
 export { DebateStore } from "./debate-store"
+export { DebateSelection } from "./debate-selection"
 export { DebateTable, ClaimTable, ClaimFeedbackTable } from "./debate-store.sql"
 export { BudgetTracker } from "./budget-tracker"
 export { ProviderDiscovery } from "./provider-discovery"
