@@ -6,7 +6,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -488,21 +487,45 @@ Texte ajouté au prompt système...`}</pre>
 
 // ─── Main export ────────────────────────────────────────────────────────────
 
+// A nested Kobalte <Tabs> here would sit inside dialog-settings.tsx's own
+// vertical/settings-variant <Tabs>. tabs.css scopes that variant's overrides
+// with plain descendant combinators (no boundary at nested
+// [data-component="tabs"]), so the outer vertical sidebar layout leaks onto
+// this inner sub-nav (same root cause as the observability panel's blank
+// content — see settings-observability.tsx). Plain buttons + Show sidesteps
+// the leak without touching the shared tabs.css.
 export const SettingsPlugins: Component = () => {
+  const [activeSubtab, setActiveSubtab] = createSignal<"mcp" | "skills">("mcp")
   return (
     <div class="flex flex-col gap-6 px-5 py-4">
-      <Tabs defaultValue="mcp" variant="pill">
-        <Tabs.List class="mb-4">
-          <Tabs.Trigger value="mcp">Serveurs MCP</Tabs.Trigger>
-          <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content value="mcp">
-          <McpSection />
-        </Tabs.Content>
-        <Tabs.Content value="skills">
-          <SkillsSection />
-        </Tabs.Content>
-      </Tabs>
+      <div class="flex items-center gap-1 mb-4" role="tablist">
+        {(
+          [
+            ["mcp", "Serveurs MCP"],
+            ["skills", "Skills"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubtab() === value}
+            class="rounded-md px-3 py-1.5 text-12-medium"
+            classList={{
+              "bg-surface-base-active text-text-strong": activeSubtab() === value,
+              "text-text-weak hover:text-text-strong": activeSubtab() !== value,
+            }}
+            onClick={() => setActiveSubtab(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <Show when={activeSubtab() === "mcp"}>
+        <McpSection />
+      </Show>
+      <Show when={activeSubtab() === "skills"}>
+        <SkillsSection />
+      </Show>
     </div>
   )
 }
