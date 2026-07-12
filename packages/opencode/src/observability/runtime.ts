@@ -2,7 +2,8 @@ import { Config } from "@/config/config"
 import { Database } from "@/storage/db"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
-import { purgeByRetention } from "./purge"
+import { purgeByRetention, purgeExpiredContent } from "./purge"
+import { purgeExpiredOptIns } from "./capture-content"
 import { ObservabilityRepository } from "./repository"
 import { ObservabilityService } from "./service"
 
@@ -25,6 +26,14 @@ function boot(): Runtime {
     const config = await Config.get()
     const result = purgeByRetention(config.experimental?.observability)
     if (result.deletedCount > 0) log.info("purged retained observability events", result)
+    // Phase 3 (ADR-1032): opt-in expiry is passive (checked on every
+    // resolveContentCaptureLevel() call) but rows/opt-ins are also swept
+    // here so an abandoned opt-in with no further traffic still gets
+    // cleaned up instead of lingering until the process happens to check it.
+    const expiredContent = purgeExpiredContent()
+    if (expiredContent > 0) log.info("purged expired observability content", { expiredContent })
+    const expiredOptIns = purgeExpiredOptIns()
+    if (expiredOptIns > 0) log.info("purged expired observability content opt-ins", { expiredOptIns })
   })
   const flushTimer = setInterval(() => {
     void flush().catch((error) => log.warn("observability flush failed", { error }))

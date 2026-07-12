@@ -149,10 +149,18 @@ import type {
   ObservabilityExportErrors,
   ObservabilityExportResponses,
   ObservabilityHealthResponses,
+  ObservabilityPrivacyGetErrors,
+  ObservabilityPrivacyGetResponses,
+  ObservabilityPrivacyRevokeErrors,
+  ObservabilityPrivacyRevokeResponses,
+  ObservabilityPrivacySetErrors,
+  ObservabilityPrivacySetResponses,
   ObservabilitySettingsResponses,
   ObservabilitySummaryAggregateResponses,
   ObservabilitySummaryErrors,
   ObservabilitySummaryResponses,
+  ObservabilityTraceGetErrors,
+  ObservabilityTraceGetResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -4004,11 +4012,179 @@ export class Events extends HeyApiClient {
   }
 }
 
+export class Trace extends HeyApiClient {
+  /**
+   * Get all events in a trace
+   *
+   * The full span sequence for one trace (Timeline/TraceDetail UI), oldest first. Ownership is checked against the first event's session — 404s if the trace doesn't exist or belongs to another project.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      traceId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "traceId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityTraceGetResponses,
+      ObservabilityTraceGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/trace/{traceId}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Privacy extends HeyApiClient {
+  /**
+   * Get the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Returns the active, non-expired opt-in for one session/project/workspace, or null if none is active. Ownership-checked like every other route in this file.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: "workspace" | "project" | "session"
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityPrivacyGetResponses,
+      ObservabilityPrivacyGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Grants local_content_redacted or local_full capture for a scope, with a mandatory TTL (max 30 days). Re-opting-in overwrites the previous level/TTL — it never stacks.
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "workspace" | "project" | "session"
+      id?: string
+      level?: "local_content_redacted" | "local_full"
+      ttlDays?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "id" },
+            { in: "body", key: "level" },
+            { in: "body", key: "ttlDays" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      ObservabilityPrivacySetResponses,
+      ObservabilityPrivacySetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Revoke the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Immediately stops future content capture for the scope AND clears content already captured on existing events (metadata rows are kept, only local_content_redacted/local_full are cleared).
+   */
+  public revoke<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "workspace" | "project" | "session"
+      id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ObservabilityPrivacyRevokeResponses,
+      ObservabilityPrivacyRevokeErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy/revoke",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Data extends HeyApiClient {
   /**
    * Delete observability data
    *
-   * Destroys observability events for a scope (session/project/all). Requires header `X-Confirm-Delete: yes`. "workspace" scope is not yet supported (see file header comment).
+   * Destroys observability events for a scope (session/project/workspace/all). Requires header `X-Confirm-Delete: yes`.
    */
   public delete<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -4280,6 +4456,16 @@ export class Observability extends HeyApiClient {
   private _events?: Events
   get events(): Events {
     return (this._events ??= new Events({ client: this.client }))
+  }
+
+  private _trace?: Trace
+  get trace(): Trace {
+    return (this._trace ??= new Trace({ client: this.client }))
+  }
+
+  private _privacy?: Privacy
+  get privacy(): Privacy {
+    return (this._privacy ??= new Privacy({ client: this.client }))
   }
 
   private _data?: Data

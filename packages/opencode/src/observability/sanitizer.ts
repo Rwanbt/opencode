@@ -120,6 +120,54 @@ function failClosed(originalSizeBytes: number): SanitizeResult {
   }
 }
 
+// Phase 3 opt-in content capture (ADR-1032). Unlike sanitizeText() above —
+// which can NEVER return content by construction (storedSizeBytes is a
+// literal 0 in every branch) — this function DOES return bounded text, and
+// is only ever safe to call once a caller has confirmed a non-expired
+// opt-in via capture-content.ts's resolveContentCaptureLevel(). Binary/base64
+// payloads are still short-circuited to undefined regardless of level: an
+// opt-in for readable content was never an opt-in for raw bytes.
+const CONTENT_CAPTURE_MAX_BYTES = 32 * 1024
+
+export interface ContentCaptureResult {
+  content?: string
+  truncated: boolean
+  redacted: boolean
+}
+
+// Same detection surface as scanChunk() (SECRET_PATTERNS, path/file://,
+// email, entropy) but replacing matches instead of only classifying them.
+// The entropy pass runs last and only on whitespace-delimited runs, same as
+// hasHighEntropyRun(), so it catches opaque tokens the named patterns miss
+// without mangling surrounding prose.
+function redactMatches(text: string): string {
+  let result = text
+  for (const pattern of SECRET_PATTERNS) result = result.replace(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g"), "[REDACTED:secret]")
+  result = result.replace(new RegExp(FILE_URL_PATTERN.source, "gi"), "[REDACTED:path]")
+  result = result.replace(new RegExp(PATH_PATTERN.source, PATH_PATTERN.flags.includes("g") ? PATH_PATTERN.flags : PATH_PATTERN.flags + "g"), "[REDACTED:path]")
+  result = result.replace(new RegExp(EMAIL_PATTERN.source, "g"), "[REDACTED:email]")
+  result = result
+    .split(/(\s+)/)
+    .map((run) => (run.length >= ENTROPY_MIN_LENGTH && shannonEntropy(run) >= ENTROPY_THRESHOLD_BITS_PER_CHAR ? "[REDACTED:secret]" : run))
+    .join("")
+  return result
+}
+
+export function captureContent(input: { text: string; filename?: string; level: "local_content_redacted" | "local_full" }): ContentCaptureResult {
+  try {
+    const bounded = input.text.slice(0, CONTENT_CAPTURE_MAX_BYTES)
+    const truncated = Buffer.byteLength(bounded, "utf8") < Buffer.byteLength(input.text, "utf8")
+
+    const signature = detectBinarySignature(bytesFromLatin1Prefix(bounded, 32))
+    if (signature || looksLikeBase64Blob(bounded)) return { truncated, redacted: false }
+
+    if (input.level === "local_full") return { content: bounded, truncated, redacted: false }
+    return { content: redactMatches(bounded), truncated, redacted: true }
+  } catch {
+    return { truncated: false, redacted: false }
+  }
+}
+
 export function sanitizeText(input: { text: string; filename?: string }): SanitizeResult {
   // Tracked outside the try so a failure while measuring the input itself
   // (e.g. a hostile non-string value) still reports 0 instead of re-throwing

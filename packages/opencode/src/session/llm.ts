@@ -30,6 +30,21 @@ import type { ObservabilityService } from "@/observability/service"
 import type { TraceContext } from "@/observability/trace-context"
 import { hmacSha256 } from "@/observability/hmac"
 import { secret as observabilitySecret } from "@/observability/hmac-secret"
+import { resolveContentCaptureLevel, withContentCapture, type ContentOptIn } from "@/observability/capture-content"
+
+// Best-effort text extraction from an AI SDK message's `content` — handles
+// both the plain-string shape and the multi-part array shape (text/file/
+// image parts) without depending on the exact ModelMessage union member.
+function extractMessageText(content: unknown): string {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    return content
+      .filter((part): part is { type: string; text: string } => typeof part === "object" && part !== null && (part as { type?: unknown }).type === "text")
+      .map((part) => part.text)
+      .join("\n")
+  }
+  return ""
+}
 
 function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise
@@ -54,23 +69,31 @@ async function recordLlmFailure(
   startedAtMs: number,
   error: unknown,
   captureLevel: CapturePolicy["level"],
+  contentOptIn?: ContentOptIn,
 ) {
   const terminal = finishLlm(trace, "failed", startedAtMs)
   const errorKind = (error instanceof Error ? error.name : typeof error).slice(0, 128)
+  const message = error instanceof Error ? error.message : String(error)
   let errorMessageHmac: string | undefined
   if (captureLevel === "local_redacted") {
-    const message = error instanceof Error ? error.message : String(error)
     try {
       errorMessageHmac = hmacSha256(await observabilitySecret(), message)
     } catch {
       // Never let a missing/unreadable secret affect the LLM error path.
     }
   }
-  observability.record(terminal.context, {
-    ...terminal.event,
-    metadata: { errorKind },
-    localRedacted: errorMessageHmac ? { classes: [], errorMessageHmac } : { classes: [] },
-  })
+  observability.record(
+    terminal.context,
+    withContentCapture(
+      {
+        ...terminal.event,
+        metadata: { errorKind },
+        localRedacted: errorMessageHmac ? { classes: [], errorMessageHmac } : { classes: [] },
+      },
+      contentOptIn,
+      message,
+    ),
+  )
 }
 
 export namespace LLM {
@@ -456,15 +479,27 @@ export namespace LLM {
 
     const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
     const sessionInfo = observability ? await Session.get(input.sessionID as SessionID).catch(() => undefined) : undefined
+    // Phase 3 opt-in (ADR-1032): checked once per call, session scope first.
+    // undefined (the common case) means every withContentCapture() call below
+    // is a no-op — content capture stays fully off the hot path when no
+    // opt-in is active.
+    const contentOptIn = observability
+      ? resolveContentCaptureLevel({ sessionId: input.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
+      : undefined
+    const promptText = contentOptIn ? extractMessageText([...messages].reverse().find((m) => m.role === "user")?.content) : ""
     const llmStartedAtMs = Date.now()
     const llmSpan = observability
       ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID, workspaceId: sessionInfo?.workspaceID }, llmStartedAtMs)
       : undefined
     if (observability && llmSpan) {
-      observability.record(llmSpan.trace, {
-        ...llmSpan.event,
-        metadata: { modelProvider: input.model.providerID, modelId: input.model.id },
-      })
+      observability.record(
+        llmSpan.trace,
+        withContentCapture(
+          { ...llmSpan.event, metadata: { modelProvider: input.model.providerID, modelId: input.model.id } },
+          contentOptIn,
+          promptText,
+        ),
+      )
     }
 
     return streamText({
@@ -477,27 +512,34 @@ export namespace LLM {
         // guarantees the failed event is queued before the caller observes
         // stream completion.
         if (observability && llmSpan) {
-          await recordLlmFailure(observability, llmSpan.trace, llmStartedAtMs, error.error, capturePolicy.level)
+          await recordLlmFailure(observability, llmSpan.trace, llmStartedAtMs, error.error, capturePolicy.level, contentOptIn)
         }
       },
       onFinish(event) {
         if (!observability || !llmSpan) return
         const usage = Session.getUsage({ model: input.model, usage: event.usage, metadata: event.providerMetadata })
         const terminal = finishLlm(llmSpan.trace, "finished", llmStartedAtMs)
-        observability.record(terminal.context, {
-          ...terminal.event,
-          metadata: {
-            modelProvider: input.model.providerID,
-            modelId: input.model.id,
-            inputTokens: usage.tokens.input,
-            outputTokens: usage.tokens.output,
-            cacheReadTokens: usage.tokens.cache.read,
-            cacheWriteTokens: usage.tokens.cache.write,
-          },
-          costNanoUsd: Math.max(0, Math.round(usage.cost * 1_000_000_000)),
-          pricingSource: "Session.getUsage",
-          costComputedAtMs: Date.now(),
-        })
+        observability.record(
+          terminal.context,
+          withContentCapture(
+            {
+              ...terminal.event,
+              metadata: {
+                modelProvider: input.model.providerID,
+                modelId: input.model.id,
+                inputTokens: usage.tokens.input,
+                outputTokens: usage.tokens.output,
+                cacheReadTokens: usage.tokens.cache.read,
+                cacheWriteTokens: usage.tokens.cache.write,
+              },
+              costNanoUsd: Math.max(0, Math.round(usage.cost * 1_000_000_000)),
+              pricingSource: "Session.getUsage",
+              costComputedAtMs: Date.now(),
+            },
+            contentOptIn,
+            event.text,
+          ),
+        )
       },
       onAbort() {
         if (!observability || !llmSpan) return

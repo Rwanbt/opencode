@@ -72,6 +72,39 @@ export function purgeByRetention(config?: RetentionConfig, now = Date.now()): Re
   return { deletedCount: deletedExpired + deletedOverLimit, deletedExpired, deletedOverLimit }
 }
 
+// Phase 3 priority content purge (ADR-1032, plan §12 "suppression
+// prioritaire contenu"). Clears ONLY the content columns — the metadata row
+// itself stays, following normal retention/maxEvents rules — for any row
+// whose content_expires_at_ms has passed. Runs independently of, and more
+// frequently than, purgeByRetention(): a row's content TTL is almost always
+// shorter than the metadata retention window (plan §3: "opt-in TTL court").
+export function purgeExpiredContent(now = Date.now()): number {
+  // lt() on a NULL column evaluates to NULL (falsy) in SQLite's WHERE clause,
+  // so rows that never had content captured are naturally excluded — no
+  // need to also filter content_expires_at_ms IS NOT NULL.
+  const result = Database.use((db) =>
+    db
+      .update(ObservabilityEventTable)
+      .set({ local_content_redacted_json: null, local_full_json: null, content_expires_at_ms: null })
+      .where(lt(ObservabilityEventTable.content_expires_at_ms, now))
+      .run(),
+  )
+  return changeCount(result)
+}
+
+// Immediate revoke target (used by the /privacy/revoke route, ADR-1032):
+// clears content for every row in a scope right now, independent of any
+// per-row content_expires_at_ms. Unlike deleteByScope() below, this never
+// removes the metadata row — only the opt-in content on it.
+export function purgeContentForScope(scope: DeleteScope): number {
+  const result = Database.use((db) => {
+    const patch = { local_content_redacted_json: null, local_full_json: null, content_expires_at_ms: null }
+    if (scope.scope === "all") return db.update(ObservabilityEventTable).set(patch).run()
+    return db.update(ObservabilityEventTable).set(patch).where(eq(SCOPE_COLUMN[scope.scope], scope.id)).run()
+  })
+  return changeCount(result)
+}
+
 // Manual/API-triggered deletion (DELETE /observability/data, ADR-1030). The
 // automatic session-delete cascade lives in session/projectors.ts instead —
 // it runs inside the same transaction as the SessionTable delete, since

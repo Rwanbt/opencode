@@ -28,6 +28,7 @@ import type { TraceContext } from "@/observability/trace-context"
 import { sanitizeText } from "@/observability/sanitizer"
 import { hmacSha256 } from "@/observability/hmac"
 import { secret as observabilitySecret } from "@/observability/hmac-secret"
+import { resolveContentCaptureLevel, withContentCapture, type ContentOptIn } from "@/observability/capture-content"
 
 // The skill tool is the only tool whose identity (name, absolute path) is
 // itself sensitive — everything else is generic tool args/output already
@@ -123,7 +124,17 @@ export namespace SessionProcessor {
     // there's no later output/error to derive identity from anyway.
     toolSpans: Record<
       string,
-      { trace: TraceContext; startedAtMs: number; toolName: string; identityMetadata: Record<string, string | undefined> }
+      {
+        trace: TraceContext
+        startedAtMs: number
+        toolName: string
+        identityMetadata: Record<string, string | undefined>
+        // Raw args JSON, kept only so the aborted-cleanup path (no
+        // tool-result/tool-error to derive content from) can still capture
+        // args content under Phase 3 opt-in — same rationale as
+        // identityMetadata above.
+        argsText: string
+      }
     >
   }
 
@@ -188,6 +199,12 @@ export namespace SessionProcessor {
           : undefined
         const sessionInfo = observability ? yield* session.get(ctx.sessionID).pipe(Effect.orElseSucceed(() => undefined)) : undefined
         const turnTraceId = observability ? ObservabilityId.create() : undefined
+        // Phase 3 opt-in (ADR-1032), resolved once per turn like capturePolicy.
+        // undefined (the common case) makes every withContentCapture() call
+        // below a no-op.
+        const contentOptIn: ContentOptIn | undefined = observability
+          ? resolveContentCaptureLevel({ sessionId: ctx.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
+          : undefined
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
@@ -291,20 +308,29 @@ export namespace SessionProcessor {
                   mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(value.toolName))
                 }
                 const identityMetadata = { ...skillIdentity, ...fileIdentity, ...mcpIdentity }
+                const argsText = JSON.stringify(value.input ?? {})
                 ctx.toolSpans[value.toolCallId] = {
                   trace: started.trace,
                   startedAtMs: started.event.tsMs,
                   toolName: value.toolName,
                   identityMetadata,
+                  argsText,
                 }
-                observability.record(started.trace, {
-                  ...started.event,
-                  metadata: { toolKind: value.toolName, ...identityMetadata },
-                  originalSizeBytes: argsClassification.originalSizeBytes,
-                  payloadTruncated: argsClassification.payloadTruncated,
-                  redactionStatus: argsClassification.redactionStatus,
-                  localRedacted: { classes: argsClassification.classes },
-                })
+                observability.record(
+                  started.trace,
+                  withContentCapture(
+                    {
+                      ...started.event,
+                      metadata: { toolKind: value.toolName, ...identityMetadata },
+                      originalSizeBytes: argsClassification.originalSizeBytes,
+                      payloadTruncated: argsClassification.payloadTruncated,
+                      redactionStatus: argsClassification.redactionStatus,
+                      localRedacted: { classes: argsClassification.classes },
+                    },
+                    contentOptIn,
+                    argsText,
+                  ),
+                )
               }
 
               // Cross-message tool history. Local 4B models retry failed tool
@@ -439,21 +465,28 @@ export namespace SessionProcessor {
                 } else if (toolName.startsWith("mcp_")) {
                   mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
                 }
-                observability.record(terminal.context, {
-                  ...terminal.event,
-                  metadata: {
-                    toolKind: toolName,
-                    outputFileKind: outputClassification.fileKind,
-                    outputMime: outputClassification.mime,
-                    ...skillIdentity,
-                    ...fileIdentity,
-                    ...mcpIdentity,
-                  },
-                  originalSizeBytes: outputClassification.originalSizeBytes,
-                  payloadTruncated: outputClassification.payloadTruncated,
-                  redactionStatus: outputClassification.redactionStatus,
-                  localRedacted: { classes: outputClassification.classes },
-                })
+                observability.record(
+                  terminal.context,
+                  withContentCapture(
+                    {
+                      ...terminal.event,
+                      metadata: {
+                        toolKind: toolName,
+                        outputFileKind: outputClassification.fileKind,
+                        outputMime: outputClassification.mime,
+                        ...skillIdentity,
+                        ...fileIdentity,
+                        ...mcpIdentity,
+                      },
+                      originalSizeBytes: outputClassification.originalSizeBytes,
+                      payloadTruncated: outputClassification.payloadTruncated,
+                      redactionStatus: outputClassification.redactionStatus,
+                      localRedacted: { classes: outputClassification.classes },
+                    },
+                    contentOptIn,
+                    value.output.output,
+                  ),
+                )
                 delete ctx.toolSpans[value.toolCallId]
               }
               return
@@ -525,10 +558,14 @@ export namespace SessionProcessor {
                 } else if (toolName.startsWith("mcp_")) {
                   mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
                 }
-                observability.record(terminal.context, {
-                  ...terminal.event,
-                  metadata: { toolKind: toolName, errorKind, ...skillIdentity, ...fileIdentity, ...mcpIdentity },
-                })
+                observability.record(
+                  terminal.context,
+                  withContentCapture(
+                    { ...terminal.event, metadata: { toolKind: toolName, errorKind, ...skillIdentity, ...fileIdentity, ...mcpIdentity } },
+                    contentOptIn,
+                    errorMsg,
+                  ),
+                )
                 delete ctx.toolSpans[value.toolCallId]
               }
               return
@@ -699,10 +736,14 @@ export namespace SessionProcessor {
           if (observability) {
             for (const span of Object.values(ctx.toolSpans)) {
               const terminal = finishTool(span.trace, "aborted", span.startedAtMs)
-              observability.record(terminal.context, {
-                ...terminal.event,
-                metadata: { toolKind: span.toolName, ...span.identityMetadata },
-              })
+              observability.record(
+                terminal.context,
+                withContentCapture(
+                  { ...terminal.event, metadata: { toolKind: span.toolName, ...span.identityMetadata } },
+                  contentOptIn,
+                  span.argsText,
+                ),
+              )
             }
             ctx.toolSpans = {}
           }

@@ -3,7 +3,7 @@ import path from "path"
 import { Database, eq } from "../../src/storage/db"
 import { ObservabilityEventTable } from "../../src/observability/event.sql"
 import { ObservabilityRepository, exportEvents } from "../../src/observability/repository"
-import { deleteByScope, purgeByRetention } from "../../src/observability/purge"
+import { deleteByScope, purgeByRetention, purgeExpiredContent, purgeContentForScope } from "../../src/observability/purge"
 import { parseObservabilityEvent } from "../../src/observability/event-schema"
 import { createTraceContext } from "../../src/observability/trace-context"
 import { ObservabilityId } from "../../src/observability/id"
@@ -201,6 +201,87 @@ describe("observability deleteByScope", () => {
 
     expect(result.deletedCount).toBeGreaterThan(0)
     expect(rowsFor(ObservabilityEventTable.session_id, sessionId)).toHaveLength(0)
+  })
+})
+
+function makeEventWithContent(context: ReturnType<typeof createTraceContext>, content: { localFull?: string; localContentRedacted?: string; contentExpiresAtMs?: number }, tsMs = Date.now()) {
+  const parsed = parseObservabilityEvent({
+    eventId: ObservabilityId.create(),
+    context,
+    type: "llm.call.finished",
+    status: "finished",
+    tsMs,
+    enqueueSeq: 1,
+    ...content,
+  })
+  if (!parsed.success) throw new Error("invalid fixture event: " + JSON.stringify(parsed.error))
+  return parsed.data
+}
+
+describe("observability Phase 3 content purge", () => {
+  test("purgeExpiredContent clears content columns on rows past content_expires_at_ms, keeping the row", async () => {
+    const now = 10_000_000
+    const sessionId = "content-purge-expired-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEventWithContent(createTraceContext({ sessionId }), { localFull: "the actual response", contentExpiresAtMs: now - 1000 }),
+    ])
+
+    const cleared = purgeExpiredContent(now)
+
+    expect(cleared).toBeGreaterThan(0)
+    const rows = rowsFor(ObservabilityEventTable.session_id, sessionId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].local_full_json).toBeNull()
+    expect(rows[0].content_expires_at_ms).toBeNull()
+  })
+
+  test("purgeExpiredContent leaves content that has not expired yet", async () => {
+    const now = 11_000_000
+    const sessionId = "content-purge-not-expired-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEventWithContent(createTraceContext({ sessionId }), { localFull: "still valid", contentExpiresAtMs: now + 60_000 }),
+    ])
+
+    purgeExpiredContent(now)
+
+    const rows = rowsFor(ObservabilityEventTable.session_id, sessionId)
+    expect(rows[0].local_full_json).not.toBeNull()
+  })
+
+  test("purgeExpiredContent never touches rows that never had content", async () => {
+    const sessionId = "content-purge-no-content-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([makeEvent(createTraceContext({ sessionId }))])
+
+    const clearedBefore = purgeExpiredContent(Date.now() + 999_999_999)
+    const rows = rowsFor(ObservabilityEventTable.session_id, sessionId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].local_full_json).toBeNull()
+    void clearedBefore
+  })
+
+  test("purgeContentForScope clears content for a session immediately, independent of expiry", async () => {
+    const sessionId = "content-purge-revoke-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEventWithContent(createTraceContext({ sessionId }), { localContentRedacted: "redacted text", contentExpiresAtMs: Date.now() + 999_999_999 }),
+    ])
+
+    const cleared = purgeContentForScope({ scope: "session", id: sessionId })
+
+    expect(cleared).toBeGreaterThan(0)
+    const rows = rowsFor(ObservabilityEventTable.session_id, sessionId)
+    expect(rows[0].local_content_redacted_json).toBeNull()
+    expect(rows[0].content_expires_at_ms).toBeNull()
+  })
+
+  test("purgeContentForScope does not delete the metadata row itself", async () => {
+    const sessionId = "content-purge-keeps-row-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEventWithContent(createTraceContext({ sessionId }), { localFull: "gone after revoke" }),
+    ])
+
+    purgeContentForScope({ scope: "session", id: sessionId })
+
+    expect(rowsFor(ObservabilityEventTable.session_id, sessionId)).toHaveLength(1)
   })
 })
 

@@ -9,3 +9,4 @@ export { BM25DocTable } from "../rag/bm25.sql"
 export { DebateTable, ClaimTable, ClaimFeedbackTable } from "../collective/debate-store.sql"
 
 export { ObservabilityEventTable } from "../observability/event.sql"
+export { ObservabilityContentOptInTable } from "../observability/content-optin.sql"

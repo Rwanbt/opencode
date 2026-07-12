@@ -54,6 +54,14 @@ const RedactedSchema = z.object({
   errorMessageHmac: Hmac.optional(),
 }).strict()
 
+// Phase 3 opt-in content (ADR-1032) — bounded by sanitizer.ts's
+// captureContent() (32 KiB) before ever reaching this schema. Both fields
+// are absent unless a non-expired opt-in was active at capture time
+// (capture-content.ts). Never set together: one event carries at most the
+// single level its scope was opted into when captured.
+const MAX_CONTENT_CHARS = 32 * 1024
+const OptionalContent = z.string().max(MAX_CONTENT_CHARS).optional()
+
 export const ObservabilityEventSchema = z.object({
   eventId: z.string().refine(ObservabilityId.isValid, "Expected eventId ULID").optional(),
   context: TraceContextSchema,
@@ -71,8 +79,14 @@ export const ObservabilityEventSchema = z.object({
   payloadTruncated: z.boolean().default(false),
   metadata: MetadataSchema.default({}),
   localRedacted: RedactedSchema.default({ classes: [] }),
+  localContentRedacted: OptionalContent,
+  localFull: OptionalContent,
+  contentExpiresAtMs: OptionalNonNegativeInteger,
   schemaVersion: z.literal(1).default(1),
 }).strict().superRefine((event, ctx) => {
+  if (event.localContentRedacted !== undefined && event.localFull !== undefined) {
+    ctx.addIssue({ code: "custom", message: "An event carries at most one content capture level", path: ["localFull"] })
+  }
   if (event.status === "started" && event.type.endsWith(".started")) return
   if (event.status !== "started" && !event.type.endsWith("." + event.status)) {
     ctx.addIssue({ code: "custom", message: "Event type and status must agree", path: ["status"] })

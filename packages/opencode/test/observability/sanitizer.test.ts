@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sanitizeText, fingerprintContent, SANITIZER_BOUNDS } from "../../src/observability/sanitizer"
+import { sanitizeText, fingerprintContent, captureContent, SANITIZER_BOUNDS } from "../../src/observability/sanitizer"
 
 describe("sanitizer", () => {
   test("never returns raw content, only sizes/classes/fileKind", () => {
@@ -107,5 +107,69 @@ describe("sanitizer", () => {
     const result = sanitizeText({ text: hostile as unknown as string })
     expect(result.redactionStatus).toBe("failed_closed")
     expect(result.classes).toEqual([])
+  })
+})
+
+// Phase 3 opt-in content capture (ADR-1032) — the only path in this module
+// allowed to return real content, and only ever called by a caller that has
+// already confirmed a non-expired opt-in (capture-content.ts).
+describe("captureContent", () => {
+  test("local_full returns the bounded text as-is, unredacted", () => {
+    const result = captureContent({ text: "the user asked about C:\\Users\\erwan\\project and their key AKIAABCDEFGHIJKLMNOP", level: "local_full" })
+    expect(result.content).toContain("C:\\Users\\erwan\\project")
+    expect(result.content).toContain("AKIAABCDEFGHIJKLMNOP")
+    expect(result.redacted).toBe(false)
+    expect(result.truncated).toBe(false)
+  })
+
+  test("local_content_redacted masks secrets, paths, emails, and high-entropy tokens", () => {
+    const token = "Qx7v9zP2mK8wR4tL6nJ1sB3dF5hG0yC7uE9aX2iV4oW6"
+    const text = `email me at person@example.com re C:\\Users\\erwan\\notes.txt key=AKIAABCDEFGHIJKLMNOP token=${token}`
+    const result = captureContent({ text, level: "local_content_redacted" })
+    expect(result.redacted).toBe(true)
+    expect(result.content).not.toContain("person@example.com")
+    expect(result.content).not.toContain("C:\\Users\\erwan\\notes.txt")
+    expect(result.content).not.toContain("AKIAABCDEFGHIJKLMNOP")
+    expect(result.content).not.toContain(token)
+    expect(result.content).toContain("[REDACTED:email]")
+    expect(result.content).toContain("[REDACTED:path]")
+    expect(result.content).toContain("[REDACTED:secret]")
+  })
+
+  test("local_content_redacted preserves ordinary prose untouched", () => {
+    const result = captureContent({ text: "please refactor the login flow to use the new session store", level: "local_content_redacted" })
+    expect(result.content).toBe("please refactor the login flow to use the new session store")
+  })
+
+  test("returns no content for binary-signature input regardless of level", () => {
+    const png = String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) + "binary payload"
+    expect(captureContent({ text: png, level: "local_full" }).content).toBeUndefined()
+    expect(captureContent({ text: png, level: "local_content_redacted" }).content).toBeUndefined()
+  })
+
+  test("returns no content for a base64-looking blob regardless of level", () => {
+    const blob = "A".repeat(300)
+    expect(captureContent({ text: blob, level: "local_full" }).content).toBeUndefined()
+  })
+
+  test("bounds content size and marks truncated", () => {
+    // A repeated sentence, not a repeated single letter: an all-letter run
+    // this long would false-positive looksLikeBase64Blob() and short-circuit
+    // to undefined before the size bound is even exercised.
+    const huge = "the quick brown fox jumps over the lazy dog. ".repeat(2000)
+    const result = captureContent({ text: huge, level: "local_full" })
+    expect(result.truncated).toBe(true)
+    expect(result.content!.length).toBeLessThan(huge.length)
+  })
+
+  test("fails closed on internal error instead of throwing", () => {
+    const hostile = {
+      slice: () => {
+        throw new Error("boom")
+      },
+    }
+    const result = captureContent({ text: hostile as unknown as string, level: "local_full" })
+    expect(result.content).toBeUndefined()
+    expect(result.truncated).toBe(false)
   })
 })

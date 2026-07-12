@@ -1,22 +1,32 @@
 /**
- * Native observability read endpoints — Phase 1.
+ * Native observability endpoints — Phase 1 metadata + Phase 2 export/compare
+ * + Phase 3 opt-in content capture.
  *
  * Endpoints:
  *   GET /observability/health         Current instance's queue/circuit-breaker
  *                                       state. Per-project-instance
  *                                       (observability/runtime.ts), not global.
- *   GET /observability/settings       Resolved capture policy + Phase 1 storage
+ *   GET /observability/settings       Resolved capture policy + storage
  *                                       disclosure flags for the settings UI.
  *   GET    /observability/events         Keyset-paginated events for one session.
  *   GET    /observability/events/:eventId Single event by its ULID.
+ *   GET    /observability/trace/:traceId  Full span sequence for one trace.
  *   GET    /observability/summary        Aggregate counts/cost for one session.
+ *   GET    /observability/compare        Cohort comparison across configurations.
+ *   GET    /observability/export         NDJSON export of matching events.
+ *   GET    /observability/summary/aggregate Aggregate across sessions/projects.
+ *   GET    /observability/privacy        Content-capture opt-in status for a scope.
+ *   PUT    /observability/privacy        Grant local_content_redacted/local_full,
+ *                                          with a mandatory TTL (ADR-1032).
+ *   POST   /observability/privacy/revoke Revoke an opt-in + clear captured content now.
  *   DELETE /observability/data           Delete events by scope. Requires
  *                                          header `X-Confirm-Delete: yes`.
  *
  * Ownership (ADR-1028): project_id/workspace_id are populated from the
  * owned SessionInfo and verified against the current project/workspace. A
  * foreign scope returns a non-revealing 404; DELETE workspace requires an
- * existing Workspace row belonging to the current project.
+ * existing Workspace row belonging to the current project. The Phase 3
+ * privacy routes reuse the same ownership anchor for all three scopes.
  */
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
@@ -24,8 +34,9 @@ import z from "zod"
 import { Config } from "../../config/config"
 import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
-import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll } from "../../observability/repository"
-import { deleteByScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
+import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll, byTraceId } from "../../observability/repository"
+import { deleteByScope, purgeContentForScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
+import { getOptIn, setOptIn, revokeOptIn, OptInScopeSchema, ContentCaptureLevelSchema, MAX_TTL_DAYS, type OptInScope } from "../../observability/capture-content"
 import { Session } from "../../session"
 import { Workspace } from "../../control-plane/workspace"
 import { WorkspaceID } from "../../control-plane/schema"
@@ -60,6 +71,11 @@ const EventDtoSchema = z.object({
   payloadTruncated: z.boolean(),
   metadata: z.record(z.string(), z.unknown()),
   localRedacted: z.record(z.string(), z.unknown()),
+  // Phase 3 opt-in content (ADR-1032) — both absent on every event unless a
+  // non-expired opt-in was active at capture time (capture-content.ts).
+  localContentRedacted: z.string().optional(),
+  localFull: z.string().optional(),
+  hasSensitiveContent: z.boolean(),
   schemaVersion: z.number(),
 })
 
@@ -82,6 +98,15 @@ async function requireOwnedSession(sessionId: SessionID) {
     throw new NotFoundError({ message: `Session not found: ${sessionId}` })
   }
   return session
+}
+
+// Phase 3 privacy routes (ADR-1032) accept any of the three opt-in scopes —
+// same ownership anchor as every other route in this file, just dispatched
+// by the scope discriminant instead of a fixed shape.
+async function requireOwnedScope(scope: OptInScope, id: string) {
+  if (scope === "session") await requireOwnedSession(id as SessionID)
+  else if (scope === "workspace") await requireOwnedWorkspace(id)
+  else if (id !== Instance.project.id) throw new NotFoundError({ message: `Project not found: ${id}` })
 }
 
 const HealthSchema = z.object({
@@ -153,11 +178,30 @@ const CompareSchema = z.object({
   timeWindowMs: z.number().optional(),
 })
 
+const OptInSchema = z.object({
+  scope: OptInScopeSchema,
+  scopeId: z.string(),
+  level: ContentCaptureLevelSchema,
+  ttlDays: z.number(),
+  createdAtMs: z.number(),
+  expiresAtMs: z.number(),
+})
+
+const TraceDetailSchema = z.object({
+  traceId: z.string(),
+  events: z.array(EventDtoSchema),
+})
+
 const SettingsSchema = z.object({
   enabled: z.boolean(),
   captureMode: z.enum(["local_metadata", "local_redacted"]),
   policyVersion: z.literal(3),
-  localFullAvailable: z.literal(false),
+  // True as of Phase 3: local_full/local_content_redacted are reachable, but
+  // ONLY for a scope with a non-expired opt-in (GET /observability/privacy).
+  // This flag communicates the capability exists at all, not that it's
+  // active for any particular session/project/workspace right now.
+  localFullAvailable: z.literal(true),
+  maxOptInTtlDays: z.number(),
   storage: z.literal("sqlite_unencrypted_local"),
   retentionDays: z.number().optional(),
   maxEvents: z.number(),
@@ -227,7 +271,8 @@ export const ObservabilityRoutes = () =>
           enabled: policy.enabled,
           captureMode: policy.level,
           policyVersion: policy.policyVersion,
-          localFullAvailable: false,
+          localFullAvailable: true,
+          maxOptInTtlDays: MAX_TTL_DAYS,
           storage: "sqlite_unencrypted_local",
           retentionDays: retention.retentionDays,
           maxEvents: retention.maxEvents,
@@ -320,6 +365,33 @@ export const ObservabilityRoutes = () =>
       },
     )
     .get(
+      "/trace/:traceId",
+      describeRoute({
+        summary: "Get all events in a trace",
+        description:
+          "The full span sequence for one trace (Timeline/TraceDetail UI), oldest first. Ownership is " +
+          "checked against the first event's session — 404s if the trace doesn't exist or belongs to another project.",
+        operationId: "observability.trace.get",
+        responses: {
+          200: {
+            description: "Trace detail",
+            content: { "application/json": { schema: resolver(TraceDetailSchema) } },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ traceId: z.string().min(1) })),
+      async (c) => {
+        const { traceId } = c.req.valid("param")
+        const rows = byTraceId(traceId)
+        const anchor = rows.find((row) => row.session_id)
+        if (!rows.length || !anchor?.session_id) throw new NotFoundError({ message: `Trace not found: ${traceId}` })
+        await requireOwnedSession(anchor.session_id as SessionID)
+        const orphaned = derivedOrphanedRows(rows)
+        return c.json({ traceId, events: rows.map((row) => toDto(row, orphaned.get(row.id))) })
+      },
+    )
+    .get(
       "/summary",
       describeRoute({
         summary: "Observability summary for a session",
@@ -340,6 +412,99 @@ export const ObservabilityRoutes = () =>
         await requireOwnedSession(sessionId)
         const summary = ObservabilityRepository.summary(sessionId)
         return c.json({ sessionId, ...summary })
+      },
+    )
+    .get(
+      "/privacy",
+      describeRoute({
+        summary: "Get the content-capture opt-in for a scope",
+        description:
+          "Phase 3 (ADR-1032). Returns the active, non-expired opt-in for one session/project/workspace, " +
+          "or null if none is active. Ownership-checked like every other route in this file.",
+        operationId: "observability.privacy.get",
+        responses: {
+          200: {
+            description: "Opt-in status",
+            content: { "application/json": { schema: resolver(z.object({ optIn: OptInSchema.nullable() })) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("query", z.object({ scope: OptInScopeSchema, id: z.string().min(1) })),
+      async (c) => {
+        const { scope, id } = c.req.valid("query")
+        await requireOwnedScope(scope, id)
+        const optIn = getOptIn(scope, id)
+        return c.json({ optIn: optIn ?? null })
+      },
+    )
+    .put(
+      "/privacy",
+      describeRoute({
+        summary: "Set the content-capture opt-in for a scope",
+        description:
+          "Phase 3 (ADR-1032). Grants local_content_redacted or local_full capture for a scope, with a " +
+          `mandatory TTL (max ${MAX_TTL_DAYS} days). Re-opting-in overwrites the previous level/TTL — it never stacks.`,
+        operationId: "observability.privacy.set",
+        responses: {
+          200: {
+            description: "Opt-in created",
+            content: { "application/json": { schema: resolver(OptInSchema) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          scope: OptInScopeSchema,
+          id: z.string().min(1),
+          level: ContentCaptureLevelSchema,
+          ttlDays: z.number().int().positive().max(MAX_TTL_DAYS),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        await requireOwnedScope(body.scope, body.id)
+        await AuditLog.record({
+          action: "observability.privacy.optIn",
+          force: true,
+          target: body.id,
+          metadata: { scope: body.scope, level: body.level, ttlDays: body.ttlDays },
+        })
+        const optIn = setOptIn({ scope: body.scope, scopeId: body.id, level: body.level, ttlDays: body.ttlDays })
+        return c.json(optIn)
+      },
+    )
+    .post(
+      "/privacy/revoke",
+      describeRoute({
+        summary: "Revoke the content-capture opt-in for a scope",
+        description:
+          "Phase 3 (ADR-1032). Immediately stops future content capture for the scope AND clears content " +
+          "already captured on existing events (metadata rows are kept, only local_content_redacted/local_full are cleared).",
+        operationId: "observability.privacy.revoke",
+        responses: {
+          200: {
+            description: "Revoked",
+            content: { "application/json": { schema: resolver(z.object({ revoked: z.boolean(), contentCleared: z.number() })) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("json", z.object({ scope: OptInScopeSchema, id: z.string().min(1) })),
+      async (c) => {
+        const body = c.req.valid("json")
+        await requireOwnedScope(body.scope, body.id)
+        await AuditLog.record({
+          action: "observability.privacy.revoke",
+          force: true,
+          target: body.id,
+          metadata: { scope: body.scope },
+        })
+        revokeOptIn(body.scope, body.id)
+        const contentCleared = purgeContentForScope({ scope: body.scope, id: body.id } as DeleteScope)
+        return c.json({ revoked: true, contentCleared })
       },
     )
     .get(

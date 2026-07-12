@@ -6018,7 +6018,8 @@ export type ObservabilitySettingsResponses = {
     enabled: boolean
     captureMode: "local_metadata" | "local_redacted"
     policyVersion: 3
-    localFullAvailable: false
+    localFullAvailable: true
+    maxOptInTtlDays: number
     storage: "sqlite_unencrypted_local"
     retentionDays?: number
     maxEvents: number
@@ -6086,6 +6087,9 @@ export type ObservabilityEventsListResponses = {
     localRedacted: {
       [key: string]: unknown
     }
+    localContentRedacted?: string
+    localFull?: string
+    hasSensitiveContent: boolean
     schemaVersion: number
   }>
 }
@@ -6146,11 +6150,80 @@ export type ObservabilityEventsGetResponses = {
     localRedacted: {
       [key: string]: unknown
     }
+    localContentRedacted?: string
+    localFull?: string
+    hasSensitiveContent: boolean
     schemaVersion: number
   }
 }
 
 export type ObservabilityEventsGetResponse = ObservabilityEventsGetResponses[keyof ObservabilityEventsGetResponses]
+
+export type ObservabilityTraceGetData = {
+  body?: never
+  path: {
+    traceId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/trace/{traceId}"
+}
+
+export type ObservabilityTraceGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityTraceGetError = ObservabilityTraceGetErrors[keyof ObservabilityTraceGetErrors]
+
+export type ObservabilityTraceGetResponses = {
+  /**
+   * Trace detail
+   */
+  200: {
+    traceId: string
+    events: Array<{
+      eventId: string
+      traceId: string
+      spanId: string
+      parentSpanId?: string
+      sessionId?: string
+      projectId?: string
+      workspaceId?: string
+      messageId?: string
+      turnId?: string
+      stepIndex?: number
+      type: string
+      status: string
+      derivedStatus?: "orphaned"
+      tsMs: number
+      durationMs?: number
+      costNanoUsd?: number
+      pricingVersion?: string
+      pricingSource?: string
+      costComputedAtMs?: number
+      redactionStatus: string
+      originalSizeBytes?: number
+      payloadTruncated: boolean
+      metadata: {
+        [key: string]: unknown
+      }
+      localRedacted: {
+        [key: string]: unknown
+      }
+      localContentRedacted?: string
+      localFull?: string
+      hasSensitiveContent: boolean
+      schemaVersion: number
+    }>
+  }
+}
+
+export type ObservabilityTraceGetResponse = ObservabilityTraceGetResponses[keyof ObservabilityTraceGetResponses]
 
 export type ObservabilitySummaryData = {
   body?: never
@@ -6196,6 +6269,132 @@ export type ObservabilitySummaryResponses = {
 }
 
 export type ObservabilitySummaryResponse = ObservabilitySummaryResponses[keyof ObservabilitySummaryResponses]
+
+export type ObservabilityPrivacyGetData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: "workspace" | "project" | "session"
+    id: string
+  }
+  url: "/observability/privacy"
+}
+
+export type ObservabilityPrivacyGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacyGetError = ObservabilityPrivacyGetErrors[keyof ObservabilityPrivacyGetErrors]
+
+export type ObservabilityPrivacyGetResponses = {
+  /**
+   * Opt-in status
+   */
+  200: {
+    optIn: {
+      scope: "workspace" | "project" | "session"
+      scopeId: string
+      level: "local_content_redacted" | "local_full"
+      ttlDays: number
+      createdAtMs: number
+      expiresAtMs: number
+    } | null
+  }
+}
+
+export type ObservabilityPrivacyGetResponse = ObservabilityPrivacyGetResponses[keyof ObservabilityPrivacyGetResponses]
+
+export type ObservabilityPrivacySetData = {
+  body?: {
+    scope: "workspace" | "project" | "session"
+    id: string
+    level: "local_content_redacted" | "local_full"
+    ttlDays: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/privacy"
+}
+
+export type ObservabilityPrivacySetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacySetError = ObservabilityPrivacySetErrors[keyof ObservabilityPrivacySetErrors]
+
+export type ObservabilityPrivacySetResponses = {
+  /**
+   * Opt-in created
+   */
+  200: {
+    scope: "workspace" | "project" | "session"
+    scopeId: string
+    level: "local_content_redacted" | "local_full"
+    ttlDays: number
+    createdAtMs: number
+    expiresAtMs: number
+  }
+}
+
+export type ObservabilityPrivacySetResponse = ObservabilityPrivacySetResponses[keyof ObservabilityPrivacySetResponses]
+
+export type ObservabilityPrivacyRevokeData = {
+  body?: {
+    scope: "workspace" | "project" | "session"
+    id: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/privacy/revoke"
+}
+
+export type ObservabilityPrivacyRevokeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacyRevokeError = ObservabilityPrivacyRevokeErrors[keyof ObservabilityPrivacyRevokeErrors]
+
+export type ObservabilityPrivacyRevokeResponses = {
+  /**
+   * Revoked
+   */
+  200: {
+    revoked: boolean
+    contentCleared: number
+  }
+}
+
+export type ObservabilityPrivacyRevokeResponse =
+  ObservabilityPrivacyRevokeResponses[keyof ObservabilityPrivacyRevokeResponses]
 
 export type ObservabilityCompareData = {
   body?: never

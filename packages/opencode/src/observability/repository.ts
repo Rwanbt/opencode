@@ -40,6 +40,8 @@ function row(event: ObservabilityEvent) {
     cost_computed_at_ms: event.costComputedAtMs, redaction_status: event.redactionStatus,
     original_size_bytes: event.originalSizeBytes, payload_truncated: event.payloadTruncated,
     metadata_json: event.metadata, local_redacted_json: event.localRedacted, schema_version: event.schemaVersion,
+    local_content_redacted_json: event.localContentRedacted ?? null, local_full_json: event.localFull ?? null,
+    content_expires_at_ms: event.contentExpiresAtMs ?? null,
   }
 }
 
@@ -394,8 +396,22 @@ export function toDto(row: EventRow, derivedStatus?: "orphaned") {
     payloadTruncated: row.payload_truncated,
     metadata: row.metadata_json,
     localRedacted: row.local_redacted_json,
+    localContentRedacted: (row.local_content_redacted_json as unknown as string) ?? undefined,
+    localFull: (row.local_full_json as unknown as string) ?? undefined,
+    hasSensitiveContent: row.local_content_redacted_json !== null || row.local_full_json !== null,
     schemaVersion: row.schema_version,
   }
+}
+
+// All events sharing one trace_id, oldest first — the full span sequence
+// for TraceDetail/Timeline UI. Ownership is the caller's responsibility
+// (same contract as page(): trust traceId, verify sessionId upstream)
+// since a trace's own events don't carry a separately-verifiable scope
+// beyond the sessionId already on each row.
+export function byTraceId(traceId: string): EventRow[] {
+  return Database.use((db) =>
+    db.select().from(ObservabilityEventTable).where(eq(ObservabilityEventTable.trace_id, traceId)).orderBy(ObservabilityEventTable.ts_ms, ObservabilityEventTable.id).all(),
+  )
 }
 
 /**

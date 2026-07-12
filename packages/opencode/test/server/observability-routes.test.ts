@@ -68,7 +68,7 @@ describe("GET /observability/health", () => {
 })
 
 describe("GET /observability/settings", () => {
-  test("discloses Phase 1 storage flags alongside the resolved policy", async () => {
+  test("discloses storage flags alongside the resolved policy", async () => {
     await using tmp = await tmpdir({
       config: { experimental: { observability: { enabled: true, captureMode: "local_redacted" } } } as any,
     })
@@ -80,12 +80,18 @@ describe("GET /observability/settings", () => {
       captureMode: string
       policyVersion: number
       localFullAvailable: boolean
+      maxOptInTtlDays: number
       storage: string
     }
     expect(body.enabled).toBe(true)
     expect(body.captureMode).toBe("local_redacted")
     expect(body.policyVersion).toBe(3)
-    expect(body.localFullAvailable).toBe(false)
+    // Phase 3 (ADR-1032): local_full/local_content_redacted are reachable as
+    // a capability — via a per-scope opt-in (GET/PUT /observability/privacy),
+    // never on by default. This flag communicates the capability exists, not
+    // that it's currently active for this project.
+    expect(body.localFullAvailable).toBe(true)
+    expect(body.maxOptInTtlDays).toBeGreaterThan(0)
     expect(body.storage).toBe("sqlite_unencrypted_local")
   })
 })

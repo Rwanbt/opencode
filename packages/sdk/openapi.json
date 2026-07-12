@@ -7638,7 +7638,10 @@
                     },
                     "localFullAvailable": {
                       "type": "boolean",
-                      "const": false
+                      "const": true
+                    },
+                    "maxOptInTtlDays": {
+                      "type": "number"
                     },
                     "storage": {
                       "type": "string",
@@ -7651,7 +7654,15 @@
                       "type": "number"
                     }
                   },
-                  "required": ["enabled", "captureMode", "policyVersion", "localFullAvailable", "storage", "maxEvents"]
+                  "required": [
+                    "enabled",
+                    "captureMode",
+                    "policyVersion",
+                    "localFullAvailable",
+                    "maxOptInTtlDays",
+                    "storage",
+                    "maxEvents"
+                  ]
                 }
               }
             }
@@ -7680,7 +7691,8 @@
             "in": "query",
             "name": "workspace",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^wrk.*"
             }
           },
           {
@@ -7757,6 +7769,10 @@
                       "status": {
                         "type": "string"
                       },
+                      "derivedStatus": {
+                        "type": "string",
+                        "const": "orphaned"
+                      },
                       "tsMs": {
                         "type": "number"
                       },
@@ -7798,6 +7814,15 @@
                         },
                         "additionalProperties": {}
                       },
+                      "localContentRedacted": {
+                        "type": "string"
+                      },
+                      "localFull": {
+                        "type": "string"
+                      },
+                      "hasSensitiveContent": {
+                        "type": "boolean"
+                      },
                       "schemaVersion": {
                         "type": "number"
                       }
@@ -7813,6 +7838,7 @@
                       "payloadTruncated",
                       "metadata",
                       "localRedacted",
+                      "hasSensitiveContent",
                       "schemaVersion"
                     ]
                   }
@@ -7923,6 +7949,10 @@
                     "status": {
                       "type": "string"
                     },
+                    "derivedStatus": {
+                      "type": "string",
+                      "const": "orphaned"
+                    },
                     "tsMs": {
                       "type": "number"
                     },
@@ -7964,6 +7994,15 @@
                       },
                       "additionalProperties": {}
                     },
+                    "localContentRedacted": {
+                      "type": "string"
+                    },
+                    "localFull": {
+                      "type": "string"
+                    },
+                    "hasSensitiveContent": {
+                      "type": "boolean"
+                    },
                     "schemaVersion": {
                       "type": "number"
                     }
@@ -7979,6 +8018,7 @@
                     "payloadTruncated",
                     "metadata",
                     "localRedacted",
+                    "hasSensitiveContent",
                     "schemaVersion"
                   ]
                 }
@@ -8000,6 +8040,187 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.events.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/trace/{traceId}": {
+      "get": {
+        "operationId": "observability.trace.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "traceId",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get all events in a trace",
+        "description": "The full span sequence for one trace (Timeline/TraceDetail UI), oldest first. Ownership is checked against the first event's session — 404s if the trace doesn't exist or belongs to another project.",
+        "responses": {
+          "200": {
+            "description": "Trace detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "traceId": {
+                      "type": "string"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "eventId": {
+                            "type": "string"
+                          },
+                          "traceId": {
+                            "type": "string"
+                          },
+                          "spanId": {
+                            "type": "string"
+                          },
+                          "parentSpanId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "workspaceId": {
+                            "type": "string"
+                          },
+                          "messageId": {
+                            "type": "string"
+                          },
+                          "turnId": {
+                            "type": "string"
+                          },
+                          "stepIndex": {
+                            "type": "number"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "derivedStatus": {
+                            "type": "string",
+                            "const": "orphaned"
+                          },
+                          "tsMs": {
+                            "type": "number"
+                          },
+                          "durationMs": {
+                            "type": "number"
+                          },
+                          "costNanoUsd": {
+                            "type": "number"
+                          },
+                          "pricingVersion": {
+                            "type": "string"
+                          },
+                          "pricingSource": {
+                            "type": "string"
+                          },
+                          "costComputedAtMs": {
+                            "type": "number"
+                          },
+                          "redactionStatus": {
+                            "type": "string"
+                          },
+                          "originalSizeBytes": {
+                            "type": "number"
+                          },
+                          "payloadTruncated": {
+                            "type": "boolean"
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "localRedacted": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "localContentRedacted": {
+                            "type": "string"
+                          },
+                          "localFull": {
+                            "type": "string"
+                          },
+                          "hasSensitiveContent": {
+                            "type": "boolean"
+                          },
+                          "schemaVersion": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "eventId",
+                          "traceId",
+                          "spanId",
+                          "type",
+                          "status",
+                          "tsMs",
+                          "redactionStatus",
+                          "payloadTruncated",
+                          "metadata",
+                          "localRedacted",
+                          "hasSensitiveContent",
+                          "schemaVersion"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["traceId", "events"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.trace.get({\n  ...\n})"
           }
         ]
       }
@@ -8106,6 +8327,322 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.summary({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/privacy": {
+      "get": {
+        "operationId": "observability.privacy.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["workspace", "project", "session"]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Returns the active, non-expired opt-in for one session/project/workspace, or null if none is active. Ownership-checked like every other route in this file.",
+        "responses": {
+          "200": {
+            "description": "Opt-in status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "optIn": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "enum": ["workspace", "project", "session"]
+                            },
+                            "scopeId": {
+                              "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["local_content_redacted", "local_full"]
+                            },
+                            "ttlDays": {
+                              "type": "number"
+                            },
+                            "createdAtMs": {
+                              "type": "number"
+                            },
+                            "expiresAtMs": {
+                              "type": "number"
+                            }
+                          },
+                          "required": ["scope", "scopeId", "level", "ttlDays", "createdAtMs", "expiresAtMs"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["optIn"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "observability.privacy.set",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Set the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Grants local_content_redacted or local_full capture for a scope, with a mandatory TTL (max 30 days). Re-opting-in overwrites the previous level/TTL — it never stacks.",
+        "responses": {
+          "200": {
+            "description": "Opt-in created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scope": {
+                      "type": "string",
+                      "enum": ["workspace", "project", "session"]
+                    },
+                    "scopeId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": ["local_content_redacted", "local_full"]
+                    },
+                    "ttlDays": {
+                      "type": "number"
+                    },
+                    "createdAtMs": {
+                      "type": "number"
+                    },
+                    "expiresAtMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["scope", "scopeId", "level", "ttlDays", "createdAtMs", "expiresAtMs"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["workspace", "project", "session"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": ["local_content_redacted", "local_full"]
+                  },
+                  "ttlDays": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 30
+                  }
+                },
+                "required": ["scope", "id", "level", "ttlDays"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.set({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/privacy/revoke": {
+      "post": {
+        "operationId": "observability.privacy.revoke",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Revoke the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Immediately stops future content capture for the scope AND clears content already captured on existing events (metadata rows are kept, only local_content_redacted/local_full are cleared).",
+        "responses": {
+          "200": {
+            "description": "Revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    },
+                    "contentCleared": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["revoked", "contentCleared"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["workspace", "project", "session"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["scope", "id"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.revoke({\n  ...\n})"
           }
         ]
       }
@@ -8276,7 +8813,7 @@
           }
         ],
         "summary": "Delete observability data",
-        "description": "Destroys observability events for a scope (session/project/all). Requires header `X-Confirm-Delete: yes`. \"workspace\" scope is not yet supported (see file header comment).",
+        "description": "Destroys observability events for a scope (session/project/workspace/all). Requires header `X-Confirm-Delete: yes`.",
         "responses": {
           "200": {
             "description": "Deleted",
@@ -8320,6 +8857,20 @@
             "application/json": {
               "schema": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "const": "workspace"
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^wrk.*"
+                      }
+                    },
+                    "required": ["scope", "id"]
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -8395,7 +8946,8 @@
             "schema": {
               "type": "string",
               "pattern": "^ses.*"
-            }
+            },
+            "required": true
           },
           {
             "in": "query",

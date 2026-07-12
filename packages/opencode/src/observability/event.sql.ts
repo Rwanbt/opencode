@@ -35,6 +35,14 @@ export const ObservabilityEventTable = sqliteTable(
     metadata_json: text({ mode: "json" }).notNull(),
     local_redacted_json: text({ mode: "json" }).notNull(),
     schema_version: integer().notNull().default(1),
+    // Phase 3 opt-in content columns (ADR-1032). NULL unless a non-expired
+    // opt-in (observability_content_optin) was active at capture time.
+    // content_expires_at_ms is copied from that opt-in's expiry at write
+    // time so the priority purge (purge.ts) can clear content without a
+    // join, even after the opt-in row itself has been revoked or expired.
+    local_content_redacted_json: text({ mode: "json" }),
+    local_full_json: text({ mode: "json" }),
+    content_expires_at_ms: integer(),
   },
   (table) => [
     uniqueIndex("observability_event_event_id_idx").on(table.event_id),
@@ -44,5 +52,6 @@ export const ObservabilityEventTable = sqliteTable(
     index("observability_event_workspace_ts_id_idx").on(table.workspace_id, table.ts_ms, table.id),
     index("observability_event_trace_ts_id_idx").on(table.trace_id, table.ts_ms, table.id),
     index("observability_event_span_idx").on(table.span_id),
+    index("observability_event_content_expires_idx").on(table.content_expires_at_ms),
   ],
 )
