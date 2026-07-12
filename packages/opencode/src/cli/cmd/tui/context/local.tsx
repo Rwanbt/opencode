@@ -41,6 +41,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         setDebateStore("selection", "global", result.data)
         return result.data
       },
+      isValid(selection: DebateSelection | undefined) {
+        return !!selection && selection.participants.length >= 2
+      },
+      async ensureConfigured() {
+        const selection = debateStore.selection.global ?? (await this.load())
+        return this.isValid(selection)
+      },
     }
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -56,8 +63,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
-      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
+      const agents = createMemo(() =>
+        sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden && !x.cli_hidden),
+      )
+      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden && !x.cli_hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
         autoConfirmed: boolean

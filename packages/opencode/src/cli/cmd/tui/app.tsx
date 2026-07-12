@@ -606,7 +606,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(1)
         if (next === "auto") void confirmAutoActivation()
-        if (next === "debate") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate")
+          void local.debate.ensureConfigured().then((valid) => {
+            if (!valid) dialog.replace(() => <DialogDebateSetup />)
+          })
       },
     },
     {
@@ -650,7 +653,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(-1)
         if (next === "auto") void confirmAutoActivation()
-        if (next === "debate") dialog.replace(() => <DialogDebateSetup />)
+        if (next === "debate")
+          void local.debate.ensureConfigured().then((valid) => {
+            if (!valid) dialog.replace(() => <DialogDebateSetup />)
+          })
       },
     },
     {

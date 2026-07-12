@@ -35,7 +35,9 @@ export function DialogAgent() {
         }
         local.agent.set(option.value)
         if (option.value === "debate") {
-          dialog.replace(() => <DialogDebateSetup />)
+          const valid = await local.debate.ensureConfigured()
+          if (!valid) dialog.replace(() => <DialogDebateSetup />)
+          else dialog.clear()
           return
         }
         dialog.clear()
