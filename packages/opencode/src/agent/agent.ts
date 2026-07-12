@@ -133,6 +133,19 @@ export namespace Agent {
               mode: "primary",
               native: true,
             },
+            ...(cfg.agent?.auto
+              ? {}
+              : {
+                  auto: {
+                    name: "auto",
+                    description: "DANGEROUS — runs all tools without permission prompts.",
+                    options: {},
+                    permission: Permission.fromConfig({ "*": "allow" }),
+                    mode: "primary",
+                    native: true,
+                    color: "error",
+                  },
+                }),
             chat: {
               name: "chat",
               description: "Chat mode. General-purpose conversational AI with no tool access.",
@@ -429,7 +442,7 @@ export namespace Agent {
               if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
               return agent.name
             }
-            const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+            const visible = Object.values(agents).find((a) => a.name !== "auto" && a.mode !== "subagent" && a.hidden !== true)
             if (!visible) throw new Error("no primary visible agent found")
             return visible.name
           })

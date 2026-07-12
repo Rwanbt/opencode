@@ -570,6 +570,7 @@ export const Info = z
         // primary
         plan: Agent.optional(),
         build: Agent.optional(),
+        auto: Agent.optional(),
         // subagent
         general: Agent.optional(),
         explore: Agent.optional(),

@@ -39,8 +39,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
+        autoConfirmed: boolean
       }>({
         current: agents()[0].name,
+        autoConfirmed: false,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -66,7 +68,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
+          const selected = agents().find((x) => x.name === name)
+          if (selected?.name === "auto" && selected.native && !agentStore.autoConfirmed) {
+            toast.show({
+              variant: "warning",
+              message: "Select auto from the agent dialog and confirm the safety warning first.",
+              duration: 3000,
+            })
+            return
+          }
           setAgentStore("current", name)
+        },
+        requiresConfirmation(name: string) {
+          const selected = agents().find((x) => x.name === name)
+          return selected?.name === "auto" && selected.native === true && !agentStore.autoConfirmed
+        },
+        confirmAuto() {
+          setAgentStore("autoConfirmed", true)
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -74,6 +92,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (next < 0) next = agents().length - 1
             if (next >= agents().length) next = 0
             const value = agents()[next]
+            if (value.name === "auto" && value.native && !agentStore.autoConfirmed) {
+              toast.show({
+                variant: "warning",
+                message: "Select auto from the agent dialog and confirm the safety warning first.",
+                duration: 3000,
+              })
+              return
+            }
             setAgentStore("current", value.name)
           })
         },

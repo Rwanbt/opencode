@@ -138,6 +138,42 @@ test("compaction agent denies all permissions", async () => {
   })
 })
 
+test("built-in auto agent allows all permissions without selecting a model", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auto = await Agent.get("auto")
+      expect(auto).toBeDefined()
+      expect(auto?.mode).toBe("primary")
+      expect(auto?.native).toBe(true)
+      expect(auto?.color).toBe("error")
+      expect(auto?.description).toContain("DANGEROUS")
+      expect(auto?.model).toBeUndefined()
+      for (const permission of [
+        "read", "edit", "glob", "grep", "list", "bash", "task", "webfetch", "question", "todowrite",
+        "patch", "multiedit", "apply_patch", "lsp", "codesearch", "websearch", "external_directory", "doom_loop", "skill",
+      ]) {
+        expect(Permission.evaluate(permission, "*", auto!.permission).action).toBe("allow")
+      }
+    },
+  })
+})
+
+test("user-defined auto agent is preserved instead of becoming full-auto", async () => {
+  await using tmp = await tmpdir({
+    config: { agent: { auto: { mode: "subagent", description: "custom automation helper" } } },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auto = await Agent.get("auto")
+      expect(auto?.mode).toBe("subagent")
+      expect(auto?.description).toBe("custom automation helper")
+      expect(auto?.native).toBe(false)
+    },
+  })
+})
 test("custom agent from config creates new agent", async () => {
   await using tmp = await tmpdir({
     config: {
