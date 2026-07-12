@@ -46,7 +46,8 @@ export namespace TierClassifier {
   ) {
     log.info("classifying question for tier recommendation")
 
-    const model = yield* Effect.promise(() => Provider.getLanguageByID(classifierProviderID, classifierModelID))
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(classifierProviderID, classifierModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -55,7 +56,7 @@ export namespace TierClassifier {
           schema: ClassificationSchema,
           system: CLASSIFIER_SYSTEM_PROMPT,
           prompt: buildClassifierPrompt(question, context),
-          temperature: 0.2,
+          temperature: catalogModel.capabilities.temperature ? 0.2 : undefined,
         }),
       catch: (e) => new Error(`Tier classification failed: ${e}`),
     })

@@ -584,7 +584,8 @@ export namespace Orchestrator {
       })
 
       const start = Date.now()
-      const model = yield* Effect.promise(() => Provider.getLanguageByID(participant.providerID, participant.modelID))
+      const catalogModel = yield* Effect.promise(() => Provider.getModel(participant.providerID, participant.modelID))
+      const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
       const systemPrompt = PROMPT_DIVERGE.replace("{{ROLE}}", participant.role ?? "General analyst")
       let userPrompt = context
@@ -604,11 +605,12 @@ export namespace Orchestrator {
             model,
             system: systemPrompt,
             prompt: userPrompt,
-            temperature: 0.7,
+            temperature: catalogModel.capabilities.temperature ? 0.7 : undefined,
             maxOutputTokens: 4096,
           }),
         catch: (e) => {
-          return new Error(`Model ${participant.anonymousHash} failed: ${e}`)
+          const body = (e as any)?.responseBody
+          return new Error(`Model ${participant.anonymousHash} failed: ${e}${body ? ` — ${body}` : ""}`)
         },
       })
 
@@ -663,7 +665,8 @@ export namespace Orchestrator {
     question: string,
   ): Effect.Effect<Collective.ConvergenceResponse, Error> {
     return Effect.gen(function* () {
-      const model = yield* Effect.promise(() => Provider.getLanguageByID(participant.providerID, participant.modelID))
+      const catalogModel = yield* Effect.promise(() => Provider.getModel(participant.providerID, participant.modelID))
+      const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
       const claimsText = targetClaims
         .map((c) => `[${c.claimId}] [${c.category}] ${c.content}`)
@@ -676,7 +679,7 @@ export namespace Orchestrator {
             schema: ConvergenceCritiqueSchema,
             system: PROMPT_CONVERGENCE,
             prompt: `## Question\n${question}\n\n## Claims to review\n${claimsText}`,
-            temperature: 0.5,
+            temperature: catalogModel.capabilities.temperature ? 0.5 : undefined,
           }),
         catch: (e) => new Error(`Convergence failed for ${participant.anonymousHash}: ${e}`),
       })

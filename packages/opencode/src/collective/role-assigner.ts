@@ -55,7 +55,8 @@ export namespace RoleAssigner {
     if (participantCount <= 5) {
       const fallback = FALLBACK_ROLES[participantCount] ?? FALLBACK_ROLES[5]!
       try {
-        const model = yield* Effect.promise(() => Provider.getLanguageByID(assignerProviderID, assignerModelID))
+        const catalogModel = yield* Effect.promise(() => Provider.getModel(assignerProviderID, assignerModelID))
+        const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
         const result = yield* Effect.tryPromise({
           try: () =>
@@ -64,7 +65,7 @@ export namespace RoleAssigner {
               schema: RoleAssignmentSchema,
               system: ROLE_ASSIGNMENT_PROMPT,
               prompt: `Question: ${question}\nNumber of participants: ${participantCount}`,
-              temperature: 0.3,
+              temperature: catalogModel.capabilities.temperature ? 0.3 : undefined,
             }),
           catch: (e) => new Error(`Role assignment failed: ${e}`),
         }).pipe(Effect.orElseSucceed(() => null))

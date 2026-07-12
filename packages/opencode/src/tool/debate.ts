@@ -4,6 +4,17 @@ import DESCRIPTION from "./debate.txt"
 import { DebateSelection, Orchestrator } from "../collective"
 import type { Collective } from "../collective/types"
 
+type DebateMetadata = {
+  failed: boolean
+  debateID?: Collective.DebateID
+  tier?: Collective.DebateTier
+  providerCount?: number
+  blindSpotCount?: number
+  consensusCount?: number
+  cost?: number
+  durationMs?: number
+}
+
 export const DebateTool = Tool.define("debate", async () => {
   return {
     description: DESCRIPTION,
@@ -20,7 +31,7 @@ export const DebateTool = Tool.define("debate", async () => {
           "Debate depth tier. 'free'=free models only, 'quick'=2-3 models no convergence, 'standard'=full pipeline with convergence, 'deep'=all features including red team and canary. Default: auto-classified based on question complexity.",
         ),
     }),
-    async execute(args, ctx) {
+    async execute(args, ctx): Promise<{ title: string; metadata: DebateMetadata; output: string }> {
       const selection = await DebateSelection.get(ctx.sessionID)
       const config: Collective.DebateConfig = {
         question: args.question,
@@ -37,7 +48,23 @@ export const DebateTool = Tool.define("debate", async () => {
         maxRounds: 2,
       }
 
-      const report = await Orchestrator.runPromiseExport(config)
+      let report: Collective.DebateReport
+      try {
+        report = await Orchestrator.runPromiseExport(config)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          title: "Debate: failed to get a quorum of models",
+          metadata: { failed: true },
+          output: [
+            `## Debate Failed`,
+            ``,
+            message,
+            ``,
+            `Tell the user the debate could not run and why. Do not answer the question yourself as a substitute — ask them to pick different annex models or retry.`,
+          ].join("\n"),
+        }
+      }
 
       const summary = [
         `## Debate Complete`,
@@ -62,6 +89,7 @@ export const DebateTool = Tool.define("debate", async () => {
       return {
         title: `Debate: ${report.blindSpots.length} blind spots, ${report.consensus.length} consensus (${report.providers.length} models)`,
         metadata: {
+          failed: false,
           debateID: report.id,
           tier: report.tier,
           providerCount: report.providers.length,

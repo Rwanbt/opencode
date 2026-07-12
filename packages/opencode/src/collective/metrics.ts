@@ -59,7 +59,8 @@ export namespace Metrics {
       provider: `${input.bestProviderID}/${input.bestModelID}`,
     })
 
-    const model = yield* Effect.promise(() => Provider.getLanguageByID(input.bestProviderID, input.bestModelID))
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(input.bestProviderID, input.bestModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
     const prompt = input.context
       ? `## Context\n${input.context}\n\n## Question\n${input.question}`
@@ -72,7 +73,7 @@ export namespace Metrics {
           system:
             "You are an expert analyst. Answer the question thoroughly, covering security, performance, architecture, correctness, and any other relevant dimensions. Be comprehensive.",
           prompt,
-          temperature: 0.3,
+          temperature: catalogModel.capabilities.temperature ? 0.3 : undefined,
           maxOutputTokens: 4096,
         }),
       catch: (e) => new Error(`Shadow baseline failed: ${e}`),

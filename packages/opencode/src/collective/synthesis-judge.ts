@@ -50,24 +50,31 @@ export namespace SynthesisJudge {
       judge: `${input.judgeProviderID}/${input.judgeModelID}`,
     })
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguageByID(input.judgeProviderID, input.judgeModelID),
-    )
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(input.judgeProviderID, input.judgeModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
-    const result = yield* Effect.tryPromise({
+    const structured: any = yield* Effect.tryPromise({
       try: () =>
         generateObject({
           model,
           schema: SynthesisSchema,
           system: PROMPT_SYNTHESIS,
           prompt: buildJudgePrompt(input),
-          temperature: 0.3,
+          temperature: catalogModel.capabilities.temperature ? 0.3 : undefined,
+          abortSignal: AbortSignal.timeout(30_000),
         }),
-      catch: (e) => new Error(`Synthesis failed: ${e}`),
-    })
-
+      catch: (e) => new Error("Synthesis failed: " + e),
+    }).pipe(Effect.orElseSucceed(() => null))
+    const object = structured?.object ?? {
+      synthesis: "Structured synthesis was unavailable; claims are listed below.",
+      claimAdjustments: [],
+      unresolvedConflicts: [],
+      fragility: 0.5,
+      haltingAnalysis: "Fallback synthesis used because structured output was unavailable.",
+    }
+    const usage = structured?.usage
     // Apply cross-validation adjustments
-    const adjustedClaims = applyCrossValidation(input.claims, result.object.claimAdjustments)
+    const adjustedClaims = applyCrossValidation(input.claims, object.claimAdjustments)
 
     // Re-attribute claims from anonymous hashes to real providers
     const reattributedClaims = reattribute(adjustedClaims, input.participants)
@@ -76,32 +83,32 @@ export namespace SynthesisJudge {
     const traceability = buildTraceability(reattributedClaims, input.participants)
 
     // Compute meta
-    const unresolvedCount = result.object.unresolvedConflicts.length
-    const fragility = result.object.fragility
+    const unresolvedCount = object.unresolvedConflicts.length
+    const fragility = object.fragility
     const diversityScore = Metrics.computeDiversityScore(reattributedClaims)
     const _tierCfg = Collective.TIER_CONFIG[input.tier]
 
     const meta: Collective.ReportMeta = {
       fragility,
-      haltingAnalysis: result.object.haltingAnalysis,
+      haltingAnalysis: object.haltingAnalysis,
       diversityScore,
     }
 
     // Format markdown report
     const markdown = formatReport({
       question: input.question,
-      synthesis: result.object.synthesis,
+      synthesis: object.synthesis,
       claims: reattributedClaims,
       blindSpots: reattributedClaims.filter((c) => c.noveltyMarker === "unique"),
       participants: input.participants,
-      unresolvedConflicts: result.object.unresolvedConflicts,
+      unresolvedConflicts: object.unresolvedConflicts,
       meta,
       fragile: fragility > 0.6,
     })
 
     const tokenUsage = {
-      input: result.usage?.inputTokens ?? 0,
-      output: result.usage?.outputTokens ?? 0,
+      input: usage?.inputTokens ?? 0,
+      output: usage?.outputTokens ?? 0,
     }
 
     log.info("synthesis complete", {
@@ -111,10 +118,10 @@ export namespace SynthesisJudge {
     })
 
     return {
-      synthesis: result.object.synthesis,
+      synthesis: object.synthesis,
       markdown,
       adjustedClaims: reattributedClaims,
-      unresolvedConflicts: result.object.unresolvedConflicts,
+      unresolvedConflicts: object.unresolvedConflicts,
       traceability,
       meta,
       tokenUsage,

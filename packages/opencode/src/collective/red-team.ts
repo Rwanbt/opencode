@@ -54,9 +54,10 @@ export namespace RedTeam {
       attacker: `${input.attackerProviderID}/${input.attackerModelID}`,
     })
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguageByID(input.attackerProviderID, input.attackerModelID),
+    const catalogModel = yield* Effect.promise(() =>
+      Provider.getModel(input.attackerProviderID, input.attackerModelID),
     )
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
     const claimsText = input.claims
       .map((c) => `[${c.claimId}] [${c.noveltyMarker}] [${c.category}] ${c.content}`)
@@ -69,7 +70,7 @@ export namespace RedTeam {
           schema: AttackSchema,
           system: PROMPT_RED_TEAM,
           prompt: `## Claims\n${claimsText}\n\n## Synthesis\n${input.synthesis}`,
-          temperature: 0.7,
+          temperature: catalogModel.capabilities.temperature ? 0.7 : undefined,
         }),
       catch: (e) => new Error(`Red team failed: ${e}`),
     })

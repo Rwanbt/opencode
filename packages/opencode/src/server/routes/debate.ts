@@ -31,8 +31,9 @@ export const DebateRoutes = lazy(() =>
           const report = await Orchestrator.runPromiseExport(config)
           return c.json(report)
         } catch (e) {
-          log.error("debate failed", { error: String(e) })
-          return c.json({ error: String(e) }, 500)
+          const message = e instanceof Error ? e.message : String(e)
+          log.error("debate failed", { error: message })
+          return c.json({ error: message }, 500)
         }
       },
     )

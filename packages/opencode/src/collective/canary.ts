@@ -30,7 +30,8 @@ export namespace Canary {
   ) {
     log.info("generating canary bug")
 
-    const model = yield* Effect.promise(() => Provider.getLanguageByID(generatorProviderID, generatorModelID))
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(generatorProviderID, generatorModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -39,7 +40,7 @@ export namespace Canary {
           schema: CanaryGenerationSchema,
           system: CANARY_SYSTEM_PROMPT,
           prompt: buildGenerationPrompt(question, context),
-          temperature: 0.8,
+          temperature: catalogModel.capabilities.temperature ? 0.8 : undefined,
         }),
       catch: (e) => new Error(`Canary generation failed: ${e}`),
     })
