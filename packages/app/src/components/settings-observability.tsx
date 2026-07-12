@@ -6,8 +6,12 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useSDK } from "@/context/sdk"
+import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
+import { SettingsObservabilityPrivacy } from "./settings-observability-privacy"
+import { SettingsObservabilityTimeline } from "./settings-observability-timeline"
+import { SettingsObservabilityCost } from "./settings-observability-cost"
 
 const confirmText = "DELETE"
 
@@ -24,19 +28,13 @@ type CohortMetrics = {
 }
 type CompareResult = { cohorts: CohortMetrics[]; referenceIndex?: number; timeWindowMs?: number }
 
-async function unwrap<T>(request: Promise<{ data?: T; error?: unknown }>) {
-  const result = await request
-  if (result.data !== undefined) return result.data
-  throw new Error(result.error instanceof Error ? result.error.message : "Request failed")
-}
-
 export const SettingsObservability: Component = () => {
   const sdk = useSDK()
   const [sessionId, setSessionId] = createSignal<string>()
   const [scope, setScope] = createSignal<"session" | "project" | "all">("session")
   const [confirmation, setConfirmation] = createSignal("")
   const [busy, setBusy] = createSignal(false)
-  const [activeSubtab, setActiveSubtab] = createSignal<"overview" | "traces" | "comparisons" | "events">("overview")
+  const [activeSubtab, setActiveSubtab] = createSignal<"overview" | "traces" | "timeline" | "comparisons" | "cost" | "events" | "privacy">("overview")
 
   const [settings, settingsActions] = createResource(() => unwrap(sdk.client.observability.settings()))
   const [health, healthActions] = createResource(() => unwrap(sdk.client.observability.health()))
@@ -108,8 +106,11 @@ export const SettingsObservability: Component = () => {
         {([
           ["overview", "sliders", "Overview"],
           ["traces", "branch", "Traces"],
+          ["timeline", "task", "Timeline"],
           ["comparisons", "bullet-list", "Comparisons"],
+          ["cost", "checklist", "Cost"],
           ["events", "bullet-list", "Events"],
+          ["privacy", "shield", "Privacy"],
         ] as const).map(([value, icon, label]) => (
           <button
             type="button"
@@ -214,6 +215,18 @@ export const SettingsObservability: Component = () => {
               {(event) => <div class="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 border-b border-border-weak-base px-4 py-2 text-12-regular last:border-none"><span class="truncate text-text-strong">{event.type}</span><span class="flex items-center gap-1">{event.status}<Show when={event.derivedStatus === "orphaned"}><span class="rounded bg-surface-warning-base px-1.5 py-0.5 text-11-regular text-text-strong">orphelin probable</span></Show></span><span class="text-right text-text-weak">{new Date(event.tsMs).toLocaleTimeString()}</span><span class="text-right text-text-weak">{event.durationMs === undefined ? "—" : `${(event.durationMs / 1000).toFixed(1)}s`} · {event.costNanoUsd === undefined ? "—" : `$${(event.costNanoUsd / 1_000_000_000).toFixed(4)}`}</span></div>}
             </For>
           </div>
+        </div></Show>
+
+        <Show when={activeSubtab() === "timeline"}><div class="no-scrollbar">
+          <SettingsObservabilityTimeline sessions={sessions() ?? []} sessionId={sessionId()} onSelectSession={setSessionId} />
+        </div></Show>
+
+        <Show when={activeSubtab() === "cost"}><div class="no-scrollbar">
+          <SettingsObservabilityCost />
+        </div></Show>
+
+        <Show when={activeSubtab() === "privacy"}><div class="no-scrollbar">
+          <SettingsObservabilityPrivacy sessions={sessions() ?? []} sessionId={sessionId()} projectId={selected()?.projectID} onSelectSession={setSessionId} />
         </div></Show>
     </div>
   </div>
