@@ -20,4 +20,17 @@ describe("Collective.DebateSelection", () => {
     })
     expect(result.success).toBe(false)
   })
+
+  test("rejects zero participants", () => {
+    const result = Collective.DebateSelection.safeParse({ primary, participants: [] })
+    expect(result.success).toBe(false)
+  })
+
+  test("accepts more than two parallel participants", () => {
+    const result = Collective.DebateSelection.safeParse({
+      primary,
+      participants: [...participants, { providerID: "xai", modelID: "grok" }],
+    })
+    expect(result.success).toBe(true)
+  })
 })

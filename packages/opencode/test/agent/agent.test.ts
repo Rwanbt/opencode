@@ -782,6 +782,44 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   })
 })
 
+test("cli_hidden agent stays visible to Agent.list/get (backend never treats it as unavailable)", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "cloud-lean": {
+          description: "Cloud model, lean skills — mobile/remote/fast iteration",
+          mode: "primary",
+          cli_hidden: true,
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("cloud-lean")
+      expect(agent).toBeDefined()
+      expect(agent?.cli_hidden).toBe(true)
+      // cli_hidden must stay independent from the pre-existing `hidden` flag (which
+      // hides an agent from every client, CLI and mobile/app alike).
+      expect(agent?.hidden).toBeUndefined()
+      const names = (await Agent.list()).map((a) => a.name)
+      expect(names).toContain("cloud-lean")
+    },
+  })
+})
+
+test("agents default to cli_hidden undefined when not configured", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build?.cli_hidden).toBeUndefined()
+    },
+  })
+})
+
 test("chat agent denies all tools by default (websearch gated by the session-level web toggle, not baked into the agent)", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
