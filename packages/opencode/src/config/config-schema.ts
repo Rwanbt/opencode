@@ -182,6 +182,12 @@ export const Agent = z
       .boolean()
       .optional()
       .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+    cli_hidden: z
+      .boolean()
+      .optional()
+      .describe(
+        "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
+      ),
     options: z.record(z.string(), z.any()).optional(),
     color: z
       .union([
@@ -218,6 +224,7 @@ export const Agent = z
       "top_p",
       "mode",
       "hidden",
+      "cli_hidden",
       "color",
       "steps",
       "maxSteps",
@@ -322,7 +329,7 @@ export const Keybinds = z
     agent_list: z.string().optional().default("<leader>a").describe("List agents"),
     agent_cycle: z.string().optional().default("tab").describe("Next agent"),
     agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
-    debate_models: z.string().optional().default("<leader>d").describe("Configure debate models"),
+    debate_models: z.string().optional().default("ctrl+alt+m").describe("Configure debate models"),
     variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
     input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
     input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
