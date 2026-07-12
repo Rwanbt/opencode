@@ -1,4 +1,4 @@
-import { Database, and, desc, eq, gt, inArray, lt, or } from "../storage/db"
+import { Database, and, desc, eq, gt, inArray, lt, max, or } from "../storage/db"
 import { ObservabilityEventTable } from "./event.sql"
 import type { ObservabilityEvent } from "./event-schema"
 
@@ -93,6 +93,30 @@ export const ObservabilityRepository = {
   getByEventId(eventId: string): EventRow | undefined {
     return Database.use((db) =>
       db.select().from(ObservabilityEventTable).where(eq(ObservabilityEventTable.event_id, eventId)).get(),
+    )
+  },
+
+  // Current highest `id` — used by runtime.ts to seed the export cursor at
+  // boot so a freshly-configured exporter starts from "now" rather than
+  // replaying every event ever inserted (ADR-1026: no historical backfill).
+  maxId(): number {
+    return Database.use((db) => db.select({ id: max(ObservabilityEventTable.id) }).from(ObservabilityEventTable).get()?.id ?? 0)
+  },
+
+  // Keyset by the internal auto-increment `id`, ascending — feeds the Phase 4
+  // export tick (runtime.ts). Unlike page()'s (ts_ms, id) cursor for reverse
+  // chronological UI reads, export only needs monotonic forward progress
+  // through newly-inserted rows, and `id` alone is already strictly
+  // monotonic on insert order.
+  since(afterId: number, limit: number): EventRow[] {
+    return Database.use((db) =>
+      db
+        .select()
+        .from(ObservabilityEventTable)
+        .where(gt(ObservabilityEventTable.id, afterId))
+        .orderBy(ObservabilityEventTable.id)
+        .limit(limit)
+        .all(),
     )
   },
 

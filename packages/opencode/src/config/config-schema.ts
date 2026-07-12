@@ -2,6 +2,7 @@ import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { LSPServer } from "../lsp/server"
 import { Log } from "../util/log"
+import { ExporterConfigSchema } from "../observability/exporter"
 
 // Zod schemas for opencode configuration. Extracted from config.ts to keep
 // that file under the size budget. config.ts re-binds every export into the
@@ -712,9 +713,15 @@ export const Info = z
               ),
             retentionDays: z.number().int().positive().optional().describe("Delete events older than this many days. Undefined keeps events until another retention limit applies."),
             maxEvents: z.number().int().positive().optional().describe("Maximum local observability event count. Default: 100000."),
+            exporters: z
+              .array(ExporterConfigSchema)
+              .optional()
+              .describe(
+                "Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.",
+              ),
           })
           .optional()
-          .describe("Native local observability: metadata-only event capture, no prompts/responses, no network."),
+          .describe("Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured."),
         primary_tools: z
           .array(z.string())
           .optional()
