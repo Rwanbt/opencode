@@ -37,7 +37,9 @@ export function DialogDebateSetup() {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const route = useRoute()
   const current = local.model.current()
+  const existing = route.data.type === "session" ? local.debate.current(route.data.sessionID) : undefined
   const options = createMemo(() =>
     availableModels(sync).map((model) => ({
       value: { providerID: model.providerID, modelID: model.modelID },
@@ -55,21 +57,22 @@ export function DialogDebateSetup() {
       title="Debate — primary synthesis model"
       placeholder="Select the model that will synthesize the debate"
       options={options()}
-      current={current}
+      current={existing?.primary ?? current}
       onSelect={(option) => {
-        dialog.replace(() => <DialogDebateParticipants primary={option.value} />)
+        dialog.replace(() => <DialogDebateParticipants primary={option.value} initial={existing?.participants} />)
       }}
     />
   )
 }
 
-function DialogDebateParticipants(props: { primary: ModelRef }) {
+function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef[] }) {
   const sync = useSync()
   const sdk = useSDK()
   const route = useRoute()
   const dialog = useDialog()
   const toast = useToast()
-  const [selected, setSelected] = createSignal<ModelRef[]>([])
+  const local = useLocal()
+  const [selected, setSelected] = createSignal<ModelRef[]>(props.initial ?? [])
   const models = createMemo(() =>
     availableModels(sync).filter(
       (model) => model.providerID !== props.primary.providerID || model.modelID !== props.primary.modelID,
@@ -109,6 +112,7 @@ function DialogDebateParticipants(props: { primary: ModelRef }) {
         },
         { throwOnError: true },
       )
+      local.debate.set(route.data.sessionID, { primary: props.primary, participants: selected() })
       toast.show({ variant: "success", message: "Debate models configured for this session.", duration: 3000 })
       dialog.clear()
     } catch (error) {

@@ -16,6 +16,7 @@ import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
+import { DialogDebateSetup } from "../dialog-debate-setup"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useKeyboard, useRenderer, type JSX } from "@opentui/solid"
@@ -102,6 +103,20 @@ export function Prompt(props: PromptProps) {
     const provider = local.model.parsed().provider
     if (!current) return provider
     return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
+  })
+  const debateSelection = createMemo(() => (props.sessionID ? local.debate.current(props.sessionID) : undefined))
+  const debateParticipantsLabel = createMemo(() => {
+    const selection = debateSelection()
+    if (!selection) return "no annex models"
+    return selection.participants
+      .map((item) => {
+        const provider = sync.data.provider.find((entry) => entry.id === item.providerID)
+        return provider?.models[item.modelID]?.name ?? item.modelID
+      })
+      .join(", ")
+  })
+  createEffect(() => {
+    if (props.sessionID && local.agent.current().name === "debate") void local.debate.load(props.sessionID)
   })
   const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
@@ -637,6 +652,10 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
+    if (local.agent.current().name === "debate" && !props.sessionID) {
+      toast.show({ variant: "warning", message: "Open a session before using debate mode.", duration: 4000 })
+      return
+    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
@@ -661,6 +680,15 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+    }
+
+    if (local.agent.current().name === "debate") {
+      const selection = local.debate.current(sessionID) ?? (await local.debate.load(sessionID))
+      if (!selection || selection.participants.length < 2) {
+        toast.show({ variant: "warning", message: "Select at least two annex models before sending a debate prompt.", duration: 4000 })
+        dialog.replace(() => <DialogDebateSetup />)
+        return
+      }
     }
 
     const messageID = MessageID.ascending()
@@ -1129,6 +1157,9 @@ export function Prompt(props: PromptProps) {
                       {local.model.parsed().model}
                     </text>
                     <text fg={theme.textMuted}>{currentProviderLabel()}</text>
+                    <Show when={local.agent.current().name === "debate"}>
+                      <text fg={theme.textMuted}>· {debateParticipantsLabel()}</text>
+                    </Show>
                     <Show when={showVariant()}>
                       <text fg={theme.textMuted}>·</text>
                       <text>
@@ -1285,6 +1316,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <Show when={local.agent.current().name === "debate"}>
+                    <text fg={theme.text}>
+                      {keybind.print("debate_models")} <span style={{ fg: theme.textMuted }}>debate models</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

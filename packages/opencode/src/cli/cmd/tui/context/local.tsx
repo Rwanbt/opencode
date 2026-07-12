@@ -21,6 +21,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const toast = useToast()
 
+    type DebateSelection = {
+      primary: { providerID: string; modelID: string }
+      participants: Array<{ providerID: string; modelID: string; role?: string }>
+    }
+    const [debateStore, setDebateStore] = createStore<{ selection: Record<string, DebateSelection> }>({
+      selection: {},
+    })
+    const debate = {
+      current(sessionID: string) {
+        return debateStore.selection[sessionID]
+      },
+      set(sessionID: string, selection: DebateSelection) {
+        setDebateStore("selection", sessionID, selection)
+      },
+      async load(sessionID: string) {
+        const result = await sdk.client.debate.getSessionConfig({ sessionID }).catch(() => undefined)
+        if (!result?.data) return undefined
+        setDebateStore("selection", sessionID, result.data)
+        return result.data
+      },
+    }
+
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
@@ -426,6 +448,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      debate,
     }
     return result
   },

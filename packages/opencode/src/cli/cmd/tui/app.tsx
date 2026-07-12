@@ -607,7 +607,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         const next = local.agent.move(1)
         if (next === "auto") void confirmAutoActivation()
         if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
-        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
+      },
+    },
+    {
+      title: "Configure debate models",
+      value: "debate.models",
+      keybind: "debate_models",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        if (local.agent.current().name !== "debate" || route.data.type !== "session") return
+        dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {
@@ -640,7 +650,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       onSelect: () => {
         const next = local.agent.move(-1)
         if (next === "auto") void confirmAutoActivation()
-        if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
         if (next === "debate" && route.data.type === "session") dialog.replace(() => <DialogDebateSetup />)
       },
     },
