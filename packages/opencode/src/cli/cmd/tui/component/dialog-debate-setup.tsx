@@ -6,6 +6,7 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
+import { Keybind } from "@/util/keybind"
 
 type ModelRef = {
   providerID: string
@@ -99,6 +100,16 @@ function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef
       title={"Debate — annex models (primary: " + modelLabel(sync, props.primary) + ")"}
       placeholder="Enter toggles a model; confirm when at least two are selected"
       options={options()}
+      keybind={[
+        {
+          keybind: Keybind.parse("ctrl+s")[0],
+          title: "confirm",
+          disabled: selected().length < 2,
+          onTrigger: () => {
+            void save()
+          },
+        },
+      ]}
       onSelect={(option) => {
         if (option.value === "confirm") {
           void save()
