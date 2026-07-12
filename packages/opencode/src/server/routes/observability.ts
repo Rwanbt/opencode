@@ -385,8 +385,8 @@ export const ObservabilityRoutes = () =>
       describeRoute({
         summary: "Delete observability data",
         description:
-          "Destroys observability events for a scope (session/project/all). Requires header " +
-          '`X-Confirm-Delete: yes`. "workspace" scope is not yet supported (see file header comment).',
+          "Destroys observability events for a scope (session/project/workspace/all). Requires header " +
+          "`X-Confirm-Delete: yes`.",
         operationId: "observability.data.delete",
         responses: {
           200: {
