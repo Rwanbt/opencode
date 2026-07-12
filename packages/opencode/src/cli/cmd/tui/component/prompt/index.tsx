@@ -680,10 +680,17 @@ export function Prompt(props: PromptProps) {
 
     if (local.agent.current().name === "debate") {
       const selection = local.debate.current() ?? (await local.debate.load())
-      if (!selection || selection.participants.length < 2) {
+      if (!local.debate.isValid(selection)) {
         toast.show({ variant: "warning", message: "Select at least two annex models before sending a debate prompt.", duration: 4000 })
         dialog.replace(() => <DialogDebateSetup />)
         return
+      }
+      // Primary is always the currently selected model, never a value picked in the debate panel.
+      const current = local.model.current()
+      if (current && (current.providerID !== selection!.primary.providerID || current.modelID !== selection!.primary.modelID)) {
+        const synced = { primary: current, participants: selection!.participants }
+        await sdk.client.debate.config(synced, { throwOnError: true }).catch(() => {})
+        local.debate.set(synced)
       }
     }
 
