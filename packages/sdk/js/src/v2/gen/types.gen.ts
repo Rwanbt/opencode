@@ -1937,7 +1937,7 @@ export type Config = {
      */
     openTelemetry?: boolean
     /**
-     * Native local observability: metadata-only event capture, no prompts/responses, no network.
+     * Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured.
      */
     observability?: {
       /**
@@ -1956,6 +1956,22 @@ export type Config = {
        * Maximum local observability event count. Default: 100000.
        */
       maxEvents?: number
+      /**
+       * Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.
+       */
+      exporters?: Array<{
+        type: "langfuse"
+        /**
+         * Langfuse instance base URL, e.g. https://cloud.langfuse.com
+         */
+        host: string
+        publicKey: string
+        secretKey: string
+      }>
+      /**
+       * When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.
+       */
+      backfillOnStart?: boolean
     }
     /**
      * Tools that should only be available to primary agents.
@@ -6565,6 +6581,137 @@ export type ObservabilitySummaryAggregateResponses = {
 
 export type ObservabilitySummaryAggregateResponse =
   ObservabilitySummaryAggregateResponses[keyof ObservabilitySummaryAggregateResponses]
+
+export type ObservabilityExportersConfigData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/config"
+}
+
+export type ObservabilityExportersConfigResponses = {
+  /**
+   * Exporter config summary
+   */
+  200: {
+    exporters: Array<{
+      type: "langfuse"
+      host: string
+      publicKey: string
+    }>
+    backfillOnStart: boolean
+    lastRun?: {
+      atMs: number
+      results: Array<{
+        exporter: string
+        ok: boolean
+        attempts: number
+        error?: string
+      }>
+    }
+  }
+}
+
+export type ObservabilityExportersConfigResponse =
+  ObservabilityExportersConfigResponses[keyof ObservabilityExportersConfigResponses]
+
+export type ObservabilityExportersPreviewData = {
+  body?: never
+  path: {
+    eventId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/preview/{eventId}"
+}
+
+export type ObservabilityExportersPreviewErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityExportersPreviewError =
+  ObservabilityExportersPreviewErrors[keyof ObservabilityExportersPreviewErrors]
+
+export type ObservabilityExportersPreviewResponses = {
+  /**
+   * Preview
+   */
+  200: {
+    exportable: boolean
+    reason?: string
+    projection?: {
+      eventId: string
+      traceId: string
+      spanId: string
+      parentSpanId?: string
+      sessionIdHmac?: string
+      projectIdHmac?: string
+      workspaceIdHmac?: string
+      type: string
+      status: "started" | "finished" | "failed" | "aborted" | "dropped"
+      tsMs: number
+      durationMs?: number
+      modelProvider?: string
+      modelId?: string
+      inputTokens?: number
+      outputTokens?: number
+      cacheReadTokens?: number
+      cacheWriteTokens?: number
+      costNanoUsd?: number
+      pricingVersion?: string
+      pricingSource?: string
+      redactionStatus: "metadata_only" | "redacted" | "failed_closed"
+      errorKind?: string
+      errorCode?: string
+      errorMessageHmac?: string
+      toolKind?: string
+      toolNameHmac?: string
+      skillHmac?: string
+      pathHmac?: string
+      mcpHmac?: string
+      agentName?: string
+      redactedClasses?: Array<string>
+    }
+  }
+}
+
+export type ObservabilityExportersPreviewResponse =
+  ObservabilityExportersPreviewResponses[keyof ObservabilityExportersPreviewResponses]
+
+export type ObservabilityExportersTestData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/test"
+}
+
+export type ObservabilityExportersTestResponses = {
+  /**
+   * Test results
+   */
+  200: {
+    results: Array<{
+      exporter: string
+      ok: boolean
+      attempts: number
+      error?: string
+    }>
+  }
+}
+
+export type ObservabilityExportersTestResponse =
+  ObservabilityExportersTestResponses[keyof ObservabilityExportersTestResponses]
 
 export type CollabPresenceData = {
   body?: never

@@ -719,6 +719,12 @@ export const Info = z
               .describe(
                 "Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.",
               ),
+            backfillOnStart: z
+              .boolean()
+              .optional()
+              .describe(
+                "When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.",
+              ),
           })
           .optional()
           .describe("Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured."),

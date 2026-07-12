@@ -6,15 +6,21 @@
 // a `langfuse` entry (empty by default).
 //
 // Targets Langfuse's public Ingestion API (POST /api/public/ingestion,
-// Basic auth: public key as username, secret key as password) — verified
-// against https://langfuse.com/docs/api-and-data-platform/features/public-api
-// and the generated OpenAPI spec on 2026-07-12. Langfuse's docs mark this
-// endpoint "legacy" in favor of an OpenTelemetry ingestion endpoint, but it
-// remains supported and requires no extra SDK dependency, which keeps this
-// exporter self-contained. UNVERIFIED: never exercised against a live
-// Langfuse instance (no credentials available in this environment) — treat
-// the request/response handling as best-effort until confirmed against a
-// real project.
+// Basic auth: public key as username, secret key as password). Langfuse's
+// docs mark this endpoint "legacy" in favor of an OpenTelemetry ingestion
+// endpoint, but it remains supported and requires no extra SDK dependency,
+// which keeps this exporter self-contained.
+//
+// VERIFIED (2026-07-12) against the raw OpenAPI spec fetched directly from
+// https://cloud.langfuse.com/generated/api/openapi.yml (component schemas
+// IngestionEvent/BaseEvent/TraceBody/CreateSpanBody/CreateGenerationBody/
+// Usage/ObservationLevel) — every field name and the batch envelope shape
+// below (id/type/timestamp/body) matches that spec exactly, including the
+// deprecated-but-still-accepted flat Usage{input,output,unit} shape and the
+// ObservationLevel enum (DEBUG/DEFAULT/WARNING/ERROR).
+// STILL UNVERIFIED: never exercised against a live Langfuse instance (no
+// credentials available in this environment) — auth acceptance and any
+// server-side validation beyond the documented schema remain unconfirmed.
 import z from "zod"
 import type { Exporter } from "../exporter"
 import type { ExportProjection } from "../export-projection"

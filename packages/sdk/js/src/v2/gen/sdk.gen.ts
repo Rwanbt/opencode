@@ -147,6 +147,10 @@ import type {
   ObservabilityEventsListErrors,
   ObservabilityEventsListResponses,
   ObservabilityExportErrors,
+  ObservabilityExportersConfigResponses,
+  ObservabilityExportersPreviewErrors,
+  ObservabilityExportersPreviewResponses,
+  ObservabilityExportersTestResponses,
   ObservabilityExportResponses,
   ObservabilityHealthResponses,
   ObservabilityPrivacyGetErrors,
@@ -4238,6 +4242,104 @@ export class Data extends HeyApiClient {
   }
 }
 
+export class Exporters extends HeyApiClient {
+  /**
+   * Phase 4 exporter configuration and last run
+   *
+   * Configured exporters (ADR-1026) — secrets are never returned, only type/host/publicKey — plus the most recent periodic export tick's per-exporter outcome, if any exporter has ever run.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityExportersConfigResponses, unknown, ThrowOnError>({
+      url: "/observability/exporters/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Preview the ExportProjection for one event
+   *
+   * Returns exactly what would be sent to a configured exporter for this event — without sending it anywhere. `exportable: false` if the event is not yet a terminal event (shouldExportSpan, ADR-1026) even if it is otherwise valid.
+   */
+  public preview<ThrowOnError extends boolean = false>(
+    parameters: {
+      eventId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "eventId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityExportersPreviewResponses,
+      ObservabilityExportersPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/observability/exporters/preview/{eventId}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send a synthetic test event through every configured exporter
+   *
+   * Exercises each configured exporter right now with a synthetic, non-real ExportProjection (fake trace/span ids, no data derived from any real event) so credentials/connectivity can be validated without waiting for real traffic or risking real content. Returns per-exporter success/failure, with the same bounded retry policy as the periodic export tick.
+   */
+  public test<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ObservabilityExportersTestResponses, unknown, ThrowOnError>({
+      url: "/observability/exporters/test",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Observability extends HeyApiClient {
   /**
    * Observability health
@@ -4471,6 +4573,11 @@ export class Observability extends HeyApiClient {
   private _data?: Data
   get data(): Data {
     return (this._data ??= new Data({ client: this.client }))
+  }
+
+  private _exporters?: Exporters
+  get exporters(): Exporters {
+    return (this._exporters ??= new Exporters({ client: this.client }))
   }
 }
 

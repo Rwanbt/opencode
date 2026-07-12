@@ -8,6 +8,7 @@ import { ObservabilityRepository } from "./repository"
 import { ObservabilityService } from "./service"
 import { ExporterRegistry } from "./exporter"
 import { shouldExportSpan, toExportProjection } from "./export-projection"
+import { exportToAll, type ExportAttemptResult } from "./export-runner"
 import { secret as hmacSecret } from "./hmac-secret"
 
 const log = Log.create({ service: "observability" })
@@ -18,21 +19,38 @@ const RETENTION_INTERVAL_MS = 60 * 60 * 1000
 const EXPORT_INTERVAL_MS = 5_000
 const EXPORT_BATCH_SIZE = 500
 
+export interface ExportRunSnapshot {
+  atMs: number
+  results: ExportAttemptResult[]
+}
+
 interface Runtime {
   service: ObservabilityService
   flushTimer: ReturnType<typeof setInterval>
   retentionTimer: ReturnType<typeof setInterval>
   exportTimer: ReturnType<typeof setInterval>
+  lastExportRun?: ExportRunSnapshot
+  runExportOnce: () => Promise<void>
 }
 
 function boot(): Runtime {
   const service = new ObservabilityService(ObservabilityRepository)
-  // In-memory only, seeded to "now" at boot (ADR-1026: no historical
-  // backfill — a freshly-configured exporter only ever sees events inserted
-  // after this instance started, never the pre-existing backlog). Lost on
-  // restart same as every other in-memory counter in this module (service.ts
-  // stats() has the same limitation, documented in the plan).
-  let exportCursorId = ObservabilityRepository.maxId()
+  // Resolved lazily on the first tick that finds at least one exporter
+  // configured — not eagerly at boot — because the choice depends on
+  // `backfillOnStart` (config, read async) and because an instance that
+  // never configures an exporter should never even decide a cursor value
+  // (ADR-1026, invariants 2/3/4: zero cost while exporters is empty).
+  // "Backfill" here means "from the first tick exporting actually turns on",
+  // which is boot time in the common case but can be later if exporters are
+  // added via a live config reload.
+  let exportCursorId: number | undefined
+  const runtime: Runtime = {
+    service,
+    flushTimer: undefined as unknown as ReturnType<typeof setInterval>,
+    retentionTimer: undefined as unknown as ReturnType<typeof setInterval>,
+    exportTimer: undefined as unknown as ReturnType<typeof setInterval>,
+    runExportOnce: async () => {},
+  }
   const flush = Instance.bind(async () => {
     await service.flush()
   })
@@ -55,25 +73,27 @@ function boot(): Runtime {
   // let alone the network (ADR-1026, invariants 2/3/4).
   const runExport = Instance.bind(async () => {
     const config = await Config.get()
-    const exporters = ExporterRegistry.from(config.experimental?.observability)
+    const obsConfig = config.experimental?.observability
+    const exporters = ExporterRegistry.from(obsConfig)
     if (!exporters.length) return
+    if (exportCursorId === undefined) {
+      exportCursorId = obsConfig?.backfillOnStart ? 0 : ObservabilityRepository.maxId()
+    }
     const rows = ObservabilityRepository.since(exportCursorId, EXPORT_BATCH_SIZE)
     if (!rows.length) return
+    // Cursor advances once per batch regardless of outcome — after
+    // exportWithRetry's bounded retries are exhausted, this batch is given
+    // up on (logged) rather than retried forever, so one poison batch can
+    // never permanently stall every later event's export.
     exportCursorId = rows[rows.length - 1]!.id
     const exportable = rows.filter(shouldExportSpan)
     if (!exportable.length) return
     const secretBytes = await hmacSecret()
     const projections = exportable.map((row) => toExportProjection(row, secretBytes))
-    for (const exporter of exporters) {
-      try {
-        await exporter.export(projections)
-      } catch (error) {
-        // One exporter's failure never blocks another's, and never
-        // re-queues — a dropped export batch is a known Phase 4 limitation
-        // (no retry), same posture as the rest of this module toward
-        // observability-path failures never affecting the product session.
-        log.warn("observability exporter failed", { exporter: exporter.name, error })
-      }
+    const results = await exportToAll(exporters, projections)
+    runtime.lastExportRun = { atMs: Date.now(), results }
+    for (const result of results) {
+      if (!result.ok) log.warn("observability exporter failed after retries", { exporter: result.exporter, attempts: result.attempts, error: result.error })
     }
   })
   const flushTimer = setInterval(() => {
@@ -89,7 +109,11 @@ function boot(): Runtime {
   retentionTimer.unref?.()
   exportTimer.unref?.()
   void purge().catch((error) => log.warn("observability initial retention purge failed", { error }))
-  return { service, flushTimer, retentionTimer, exportTimer }
+  runtime.flushTimer = flushTimer
+  runtime.retentionTimer = retentionTimer
+  runtime.exportTimer = exportTimer
+  runtime.runExportOnce = runExport
+  return runtime
 }
 
 async function shutdown(runtime: Runtime) {
@@ -108,5 +132,18 @@ const state = Instance.state(boot, shutdown)
 export const ObservabilityRuntime = {
   service(): ObservabilityService {
     return state().service
+  },
+  // Last periodic export tick's outcome (per exporter), if any exporter has
+  // ever been configured for this instance. Undefined until the first tick
+  // that found at least one row to export.
+  exportStats(): ExportRunSnapshot | undefined {
+    return state().lastExportRun
+  },
+  // Manually triggers one export tick immediately, instead of waiting for
+  // the 5s timer — used by tests, and available for a future "export now"
+  // affordance. Same zero-cost-when-empty and retry/cursor semantics as the
+  // periodic tick, since it IS the periodic tick's function.
+  runExportOnce(): Promise<void> {
+    return state().runExportOnce()
   },
 }

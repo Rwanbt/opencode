@@ -21,6 +21,13 @@
  *   POST   /observability/privacy/revoke Revoke an opt-in + clear captured content now.
  *   DELETE /observability/data           Delete events by scope. Requires
  *                                          header `X-Confirm-Delete: yes`.
+ *   GET    /observability/exporters/config  Phase 4 (ADR-1026): configured exporters
+ *                                          (secrets never returned) + last periodic
+ *                                          export tick's per-exporter outcome.
+ *   GET    /observability/exporters/preview/:eventId Exact ExportProjection that would be
+ *                                          sent for one event — without sending it.
+ *   POST   /observability/exporters/test    Sends a synthetic (non-real) projection
+ *                                          through every configured exporter right now.
  *
  * Ownership (ADR-1028): project_id/workspace_id are populated from the
  * owned SessionInfo and verified against the current project/workspace. A
@@ -37,6 +44,11 @@ import { resolveCapturePolicy } from "../../observability/capture-policy"
 import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll, byTraceId } from "../../observability/repository"
 import { deleteByScope, purgeContentForScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
 import { getOptIn, setOptIn, revokeOptIn, OptInScopeSchema, ContentCaptureLevelSchema, MAX_TTL_DAYS, type OptInScope } from "../../observability/capture-content"
+import { ExporterRegistry } from "../../observability/exporter"
+import { ExportProjectionSchema, shouldExportSpan, toExportProjection } from "../../observability/export-projection"
+import { exportToAll } from "../../observability/export-runner"
+import { secret as hmacSecret } from "../../observability/hmac-secret"
+import { ObservabilityId } from "../../observability/id"
 import { Session } from "../../session"
 import { Workspace } from "../../control-plane/workspace"
 import { WorkspaceID } from "../../control-plane/schema"
@@ -190,6 +202,42 @@ const OptInSchema = z.object({
 const TraceDetailSchema = z.object({
   traceId: z.string(),
   events: z.array(EventDtoSchema),
+})
+
+// Phase 4 (ADR-1026). secretKey is NEVER included — it's a credential, not
+// something the settings UI needs to display, not even masked.
+const ExporterSummarySchema = z.object({
+  type: z.literal("langfuse"),
+  host: z.string(),
+  publicKey: z.string(),
+})
+
+const ExportAttemptResultSchema = z.object({
+  exporter: z.string(),
+  ok: z.boolean(),
+  attempts: z.number(),
+  error: z.string().optional(),
+})
+
+const ExportConfigSchema = z.object({
+  exporters: z.array(ExporterSummarySchema),
+  backfillOnStart: z.boolean(),
+  lastRun: z
+    .object({
+      atMs: z.number(),
+      results: z.array(ExportAttemptResultSchema),
+    })
+    .optional(),
+})
+
+const ExportPreviewSchema = z.object({
+  exportable: z.boolean(),
+  reason: z.string().optional(),
+  projection: ExportProjectionSchema.optional(),
+})
+
+const ExportTestResultSchema = z.object({
+  results: z.array(ExportAttemptResultSchema),
 })
 
 const SettingsSchema = z.object({
@@ -691,5 +739,108 @@ export const ObservabilityRoutes = () =>
         const scoped = query.sessionId || query.projectId || query.workspaceId ? query : { ...query, projectId: Instance.project.id }
         const summary = summaryAll(scoped)
         return c.json(summary)
+      },
+    )
+    .get(
+      "/exporters/config",
+      describeRoute({
+        summary: "Phase 4 exporter configuration and last run",
+        description:
+          "Configured exporters (ADR-1026) — secrets are never returned, only type/host/publicKey — plus the " +
+          "most recent periodic export tick's per-exporter outcome, if any exporter has ever run.",
+        operationId: "observability.exporters.config",
+        responses: {
+          200: {
+            description: "Exporter config summary",
+            content: { "application/json": { schema: resolver(ExportConfigSchema) } },
+          },
+        },
+      }),
+      async (c) => {
+        const cfg = await Config.get()
+        const obsConfig = cfg.experimental?.observability
+        const exporters = (obsConfig?.exporters ?? []).map((entry) => ({
+          type: entry.type,
+          host: entry.host,
+          publicKey: entry.publicKey,
+        }))
+        const lastRun = ObservabilityRuntime.exportStats()
+        return c.json({
+          exporters,
+          backfillOnStart: obsConfig?.backfillOnStart ?? false,
+          lastRun,
+        })
+      },
+    )
+    .get(
+      "/exporters/preview/:eventId",
+      describeRoute({
+        summary: "Preview the ExportProjection for one event",
+        description:
+          "Returns exactly what would be sent to a configured exporter for this event — without sending it " +
+          "anywhere. `exportable: false` if the event is not yet a terminal event (shouldExportSpan, ADR-1026) " +
+          "even if it is otherwise valid.",
+        operationId: "observability.exporters.preview",
+        responses: {
+          200: {
+            description: "Preview",
+            content: { "application/json": { schema: resolver(ExportPreviewSchema) } },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ eventId: z.string().min(1) })),
+      async (c) => {
+        const { eventId } = c.req.valid("param")
+        const row = ObservabilityRepository.getByEventId(eventId)
+        if (!row || !row.session_id) throw new NotFoundError({ message: `Event not found: ${eventId}` })
+        // Same ownership anchor as GET /events/:eventId — trusted DB column,
+        // not user input.
+        await requireOwnedSession(row.session_id as SessionID)
+        if (!shouldExportSpan(row)) {
+          return c.json({ exportable: false, reason: "not a terminal event (started, no matching finished/failed/aborted yet)" })
+        }
+        const secretBytes = await hmacSecret()
+        const projection = toExportProjection(row, secretBytes)
+        return c.json({ exportable: true, projection })
+      },
+    )
+    .post(
+      "/exporters/test",
+      describeRoute({
+        summary: "Send a synthetic test event through every configured exporter",
+        description:
+          "Exercises each configured exporter right now with a synthetic, non-real ExportProjection (fake " +
+          "trace/span ids, no data derived from any real event) so credentials/connectivity can be validated " +
+          "without waiting for real traffic or risking real content. Returns per-exporter success/failure, " +
+          "with the same bounded retry policy as the periodic export tick.",
+        operationId: "observability.exporters.test",
+        responses: {
+          200: {
+            description: "Test results",
+            content: { "application/json": { schema: resolver(ExportTestResultSchema) } },
+          },
+        },
+      }),
+      async (c) => {
+        const cfg = await Config.get()
+        const exporters = ExporterRegistry.from(cfg.experimental?.observability)
+        if (!exporters.length) return c.json({ results: [] })
+        const now = Date.now()
+        const projection = ExportProjectionSchema.parse({
+          eventId: ObservabilityId.create(),
+          traceId: ObservabilityId.create(),
+          spanId: ObservabilityId.create(),
+          type: "llm.call.finished",
+          status: "finished",
+          tsMs: now,
+          durationMs: 1,
+          modelProvider: "opencode-test",
+          modelId: "export-connection-test",
+          redactionStatus: "metadata_only",
+          redactedClasses: [],
+        })
+        const results = await exportToAll(exporters, [projection])
+        return c.json({ results })
       },
     )
