@@ -1,4 +1,4 @@
-import { asc, count, Database, eq, inArray, lt } from "../storage/db"
+import { and, asc, count, Database, eq, inArray, isNotNull, lt, or } from "../storage/db"
 import { ObservabilityEventTable } from "./event.sql"
 
 export type DeleteScope =
@@ -97,10 +97,15 @@ export function purgeExpiredContent(now = Date.now()): number {
 // per-row content_expires_at_ms. Unlike deleteByScope() below, this never
 // removes the metadata row — only the opt-in content on it.
 export function purgeContentForScope(scope: DeleteScope): number {
+  // Restricted to rows that actually carry content — without this, SQLite's
+  // reported row count includes every row the UPDATE touched (even ones
+  // whose columns were already NULL), which would inflate the
+  // "N events had content cleared" figure shown to the user after a revoke.
+  const hadContent = or(isNotNull(ObservabilityEventTable.local_content_redacted_json), isNotNull(ObservabilityEventTable.local_full_json))
   const result = Database.use((db) => {
     const patch = { local_content_redacted_json: null, local_full_json: null, content_expires_at_ms: null }
-    if (scope.scope === "all") return db.update(ObservabilityEventTable).set(patch).run()
-    return db.update(ObservabilityEventTable).set(patch).where(eq(SCOPE_COLUMN[scope.scope], scope.id)).run()
+    if (scope.scope === "all") return db.update(ObservabilityEventTable).set(patch).where(hadContent).run()
+    return db.update(ObservabilityEventTable).set(patch).where(and(eq(SCOPE_COLUMN[scope.scope], scope.id), hadContent)).run()
   })
   return changeCount(result)
 }

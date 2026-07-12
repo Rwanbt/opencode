@@ -273,6 +273,20 @@ describe("observability Phase 3 content purge", () => {
     expect(rows[0].content_expires_at_ms).toBeNull()
   })
 
+  test("purgeContentForScope's reported count only includes rows that actually had content", async () => {
+    const sessionId = "content-purge-precise-count-" + ObservabilityId.create()
+    await ObservabilityRepository.insert([
+      makeEventWithContent(createTraceContext({ sessionId }), { localFull: "has content" }),
+      makeEvent(createTraceContext({ sessionId })), // no content — must not inflate the count
+      makeEvent(createTraceContext({ sessionId })),
+    ])
+
+    const cleared = purgeContentForScope({ scope: "session", id: sessionId })
+
+    expect(cleared).toBe(1)
+    expect(rowsFor(ObservabilityEventTable.session_id, sessionId)).toHaveLength(3)
+  })
+
   test("purgeContentForScope does not delete the metadata row itself", async () => {
     const sessionId = "content-purge-keeps-row-" + ObservabilityId.create()
     await ObservabilityRepository.insert([
