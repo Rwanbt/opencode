@@ -37,6 +37,7 @@ export namespace Agent {
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
+      cli_hidden: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
@@ -393,6 +394,7 @@ export namespace Agent {
             item.mode = value.mode ?? item.mode
             item.color = value.color ?? item.color
             item.hidden = value.hidden ?? item.hidden
+            item.cli_hidden = value.cli_hidden ?? item.cli_hidden
             item.name = value.name ?? item.name
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
