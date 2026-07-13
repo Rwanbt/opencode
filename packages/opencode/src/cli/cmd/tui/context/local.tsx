@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { performModelCatalogRefresh } from "@tui/util/model-catalog-refresh"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -21,6 +22,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const toast = useToast()
 
+    type DebateSelection = {
+      primary: { providerID: string; modelID: string }
+      participants: Array<{ providerID: string; modelID: string; role?: string }>
+    }
+    const [debateStore, setDebateStore] = createStore<{ selection: { global?: DebateSelection } }>({
+      selection: {},
+    })
+    const debate = {
+      current() {
+        return debateStore.selection.global
+      },
+      set(selection: DebateSelection) {
+        setDebateStore("selection", "global", selection)
+      },
+      async load() {
+        const result = await sdk.client.debate.getConfig().catch(() => undefined)
+        if (!result?.data) return undefined
+        setDebateStore("selection", "global", result.data)
+        return result.data
+      },
+      isValid(selection: DebateSelection | undefined) {
+        return !!selection && selection.participants.length >= 2
+      },
+      async ensureConfigured() {
+        const selection = debateStore.selection.global ?? (await this.load())
+        return this.isValid(selection)
+      },
+    }
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
@@ -35,12 +64,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
-      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
+      const agents = createMemo(() =>
+        sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden && !x.cli_hidden),
+      )
+      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden && !x.cli_hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
+        autoConfirmed: boolean
       }>({
         current: agents()[0].name,
+        autoConfirmed: false,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -66,15 +99,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
+          const selected = agents().find((x) => x.name === name)
+          if (selected?.name === "auto" && selected.native && !agentStore.autoConfirmed) {
+            toast.show({
+              variant: "warning",
+              message: "Select auto from the agent dialog and confirm the safety warning first.",
+              duration: 3000,
+            })
+            return
+          }
           setAgentStore("current", name)
         },
+        requiresConfirmation(name: string) {
+          const selected = agents().find((x) => x.name === name)
+          return selected?.name === "auto" && selected.native === true && !agentStore.autoConfirmed
+        },
+        confirmAuto() {
+          setAgentStore("autoConfirmed", true)
+        },
         move(direction: 1 | -1) {
-          batch(() => {
+          return batch(() => {
             let next = agents().findIndex((x) => x.name === agentStore.current) + direction
             if (next < 0) next = agents().length - 1
             if (next >= agents().length) next = 0
             const value = agents()[next]
+            if (value.name === "auto" && value.native && !agentStore.autoConfirmed) return value.name
             setAgentStore("current", value.name)
+            return value.name
           })
         },
         color(name: string) {
@@ -384,6 +435,50 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    // Shared by any model-selection dialog that offers an Alt+R "refresh
+    // models catalog" footer keybind (currently DialogModel; intended to be
+    // reused by DialogDebateSetup once that dialog lands on this branch) so
+    // the force-refresh + toast + refetch dance lives in exactly one place.
+    // See ModelsDev.refresh in provider/models.ts for what "force" actually
+    // does server-side.
+    const modelCatalog = iife(() => {
+      const [state, setState] = createStore({ refreshing: false })
+
+      function refresh() {
+        return performModelCatalogRefresh({
+          isRefreshing: () => state.refreshing,
+          setRefreshing: (value) => setState("refreshing", value),
+          refresh: async () => {
+            const response = await sdk.fetch(`${sdk.url}/provider/refresh`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            })
+            if (!response.ok) {
+              return { ok: false, error: await response.text().catch(() => `HTTP ${response.status}`) }
+            }
+            return (await response.json()) as { ok: boolean; error?: string }
+          },
+          // Reuse the exact same fetch used at startup rather than
+          // hand-rolling a second copy of the provider/config/default fetch
+          // logic — bootstrap() reconciles sync.data.provider,
+          // sync.data.provider_default and sync.data.provider_next
+          // (including .connected) in one pass.
+          refetch: () => sync.bootstrap(),
+          notifyError: (message) =>
+            toast.show({ variant: "error", message: "Failed to refresh models: " + message, duration: 5000 }),
+          notifySuccess: () =>
+            toast.show({ variant: "success", message: "Models catalog refreshed", duration: 3000 }),
+        })
+      }
+
+      return {
+        get refreshing() {
+          return state.refreshing
+        },
+        refresh,
+      }
+    })
+
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
@@ -406,6 +501,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      debate,
+      modelCatalog,
     }
     return result
   },

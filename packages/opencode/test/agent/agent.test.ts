@@ -138,6 +138,53 @@ test("compaction agent denies all permissions", async () => {
   })
 })
 
+test("built-in auto agent allows all permissions without selecting a model", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auto = await Agent.get("auto")
+      expect(auto).toBeDefined()
+      expect(auto?.mode).toBe("primary")
+      expect(auto?.native).toBe(true)
+      expect(auto?.color).toBe("error")
+      expect(auto?.description).toContain("DANGEROUS")
+      expect(auto?.model).toBeUndefined()
+      for (const permission of [
+        "read", "edit", "glob", "grep", "list", "bash", "task", "webfetch", "question", "todowrite",
+        "patch", "multiedit", "apply_patch", "lsp", "codesearch", "websearch", "external_directory", "doom_loop", "skill",
+      ]) {
+        expect(Permission.evaluate(permission, "*", auto!.permission).action).toBe("allow")
+      }
+    },
+  })
+})
+
+test("user-defined auto agent is preserved instead of becoming full-auto", async () => {
+  await using tmp = await tmpdir({
+    config: { agent: { auto: { mode: "subagent", description: "custom automation helper" } } },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auto = await Agent.get("auto")
+      expect(auto?.mode).toBe("subagent")
+      expect(auto?.description).toBe("custom automation helper")
+      expect(auto?.native).toBe(false)
+    },
+  })
+})
+test("debate agent exposes the multi-model tool with a dedicated color", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const debate = await Agent.get("debate")
+      expect(debate?.color).toBe("info")
+      expect(evalPerm(debate, "debate")).toBe("allow")
+    },
+  })
+})
 test("custom agent from config creates new agent", async () => {
   await using tmp = await tmpdir({
     config: {
@@ -731,6 +778,44 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     fn: async () => {
       // all primary non-hidden agents are disabled, no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
+    },
+  })
+})
+
+test("cli_hidden agent stays visible to Agent.list/get (backend never treats it as unavailable)", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "cloud-lean": {
+          description: "Cloud model, lean skills — mobile/remote/fast iteration",
+          mode: "primary",
+          cli_hidden: true,
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("cloud-lean")
+      expect(agent).toBeDefined()
+      expect(agent?.cli_hidden).toBe(true)
+      // cli_hidden must stay independent from the pre-existing `hidden` flag (which
+      // hides an agent from every client, CLI and mobile/app alike).
+      expect(agent?.hidden).toBeUndefined()
+      const names = (await Agent.list()).map((a) => a.name)
+      expect(names).toContain("cloud-lean")
+    },
+  })
+})
+
+test("agents default to cli_hidden undefined when not configured", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build?.cli_hidden).toBeUndefined()
     },
   })
 })

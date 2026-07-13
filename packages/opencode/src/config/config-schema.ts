@@ -182,6 +182,12 @@ export const Agent = z
       .boolean()
       .optional()
       .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+    cli_hidden: z
+      .boolean()
+      .optional()
+      .describe(
+        "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
+      ),
     options: z.record(z.string(), z.any()).optional(),
     color: z
       .union([
@@ -218,6 +224,7 @@ export const Agent = z
       "top_p",
       "mode",
       "hidden",
+      "cli_hidden",
       "color",
       "steps",
       "maxSteps",
@@ -281,6 +288,7 @@ export const Keybinds = z
     stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
     model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
     model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
+    model_refresh: z.string().optional().default("alt+r").describe("Force-refresh the models.dev catalog"),
     session_share: z.string().optional().default("none").describe("Share current session"),
     session_unshare: z.string().optional().default("none").describe("Unshare current session"),
     session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
@@ -322,6 +330,7 @@ export const Keybinds = z
     agent_list: z.string().optional().default("<leader>a").describe("List agents"),
     agent_cycle: z.string().optional().default("tab").describe("Next agent"),
     agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+    debate_models: z.string().optional().default("alt+w").describe("Configure debate models"),
     variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
     input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
     input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
@@ -570,6 +579,7 @@ export const Info = z
         // primary
         plan: Agent.optional(),
         build: Agent.optional(),
+        auto: Agent.optional(),
         // subagent
         general: Agent.optional(),
         explore: Agent.optional(),

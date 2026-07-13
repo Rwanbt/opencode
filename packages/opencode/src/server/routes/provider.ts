@@ -63,6 +63,34 @@ export const ProviderRoutes = lazy(() =>
         })
       },
     )
+    .post(
+      "/refresh",
+      describeRoute({
+        summary: "Force-refresh the models.dev catalog",
+        description:
+          "Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.",
+        operationId: "provider.refresh",
+        responses: {
+          200: {
+            description: "Refresh result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    ok: z.boolean(),
+                    error: z.string().optional(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const result = await ModelsDev.refresh(true)
+        return c.json(result)
+      },
+    )
     .get(
       "/auth",
       describeRoute({

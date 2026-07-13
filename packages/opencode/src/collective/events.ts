@@ -19,12 +19,18 @@ export const DebatePhaseChanged = BusEvent.define(
   }),
 )
 
+// `phase` distinguishes which debate phase a participant event belongs to
+// (Phase 1 diverge, Phase 2 extract, Phase 3 converge, Phase 4 synthesize,
+// plus canary generation which runs before phase1_diverge). Required so the
+// TUI can render a live per-phase participant list instead of a single
+// generic spinner (see tool/debate.ts).
 export const ProviderStarted = BusEvent.define(
   "collective.provider.started",
   z.object({
     debateID: Collective.DebateID.zod,
     provider: z.string(),
     role: z.string().optional(),
+    phase: Collective.DebateStatus,
   }),
 )
 
@@ -35,6 +41,7 @@ export const ProviderCompleted = BusEvent.define(
     provider: z.string(),
     tokens: z.number(),
     durationMs: z.number(),
+    phase: Collective.DebateStatus,
   }),
 )
 
@@ -44,6 +51,7 @@ export const ProviderFailed = BusEvent.define(
     debateID: Collective.DebateID.zod,
     provider: z.string(),
     error: z.string(),
+    phase: Collective.DebateStatus,
   }),
 )
 

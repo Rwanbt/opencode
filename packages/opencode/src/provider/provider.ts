@@ -605,15 +605,19 @@ export namespace Provider {
         }),
       )
 
-      // When models.dev refreshes in the background (fire-and-forget timer,
-      // no instance context), the provider state cached per-directory is stale.
-      // Invalidate all entries so the next access rebuilds with fresh models —
-      // this is what makes a provider that was missing at boot (empty fetch)
-      // appear once the network fetch completes.
-      ModelsDev.onRefresh(() => {
-        Effect.runPromise(InstanceState.invalidateAll(state)).catch((e) => {
-          log.error("Failed to invalidate provider state after models refresh", { error: e })
-        })
+      // When models.dev refreshes (background timer or a manual force-refresh
+      // from the TUI/HTTP route), the provider state cached per-directory is
+      // stale. Invalidate all entries so the next access rebuilds with fresh
+      // models — this is what makes a provider that was missing at boot
+      // (empty fetch) appear once the network fetch completes.
+      //
+      // This callback is awaited by ModelsDev.refresh() before it resolves
+      // (see refreshCallbacks in models.ts), so a caller awaiting refresh()
+      // is guaranteed InstanceState has already been invalidated — otherwise
+      // a manual refresh could report success before Provider.list() sees
+      // the new catalog.
+      ModelsDev.onRefresh(async () => {
+        await Effect.runPromise(InstanceState.invalidateAll(state))
       })
 
       const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
@@ -946,6 +950,11 @@ export namespace Provider {
 
   export async function getLanguage(model: Model) {
     return runPromise((svc) => svc.getLanguage(model))
+  }
+
+  export async function getLanguageByID(providerID: ProviderID, modelID: ModelID) {
+    const model = await getModel(providerID, modelID)
+    return getLanguage(model)
   }
 
   export async function closest(providerID: ProviderID, query: string[]) {

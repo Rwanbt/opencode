@@ -35,10 +35,14 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DebateConfigResponses,
   DebateEstimateResponses,
   DebateFeedbackResponses,
+  DebateGetConfigResponses,
   DebateGetResponses,
+  DebateGetSessionConfigResponses,
   DebateListResponses,
+  DebateSessionConfigResponses,
   DebateStartResponses,
   DiskGetResponses,
   EventSubscribeResponses,
@@ -162,6 +166,7 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  ProviderRefreshResponses,
   PtyConnectErrors,
   PtyConnectResponses,
   PtyCreateErrors,
@@ -3624,6 +3629,36 @@ export class Provider extends HeyApiClient {
   }
 
   /**
+   * Force-refresh the models.dev catalog
+   *
+   * Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProviderRefreshResponses, unknown, ThrowOnError>({
+      url: "/provider/refresh",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get provider auth methods
    *
    * Retrieve available authentication methods for all AI providers.
@@ -3753,6 +3788,162 @@ export class Debate extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<DebateStartResponses, unknown, ThrowOnError>({
       url: "/debate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get global debate models
+   *
+   * Return the Debate mode model selection reused across sessions.
+   */
+  public getConfig<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure global debate models
+   *
+   * Select the primary synthesis model and parallel participants reused by Debate mode.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get session debate models
+   *
+   * Return the configured debate models for a session, if any.
+   */
+  public getSessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure session debate models
+   *
+   * Select the primary synthesis model and the parallel debate participants for a session.
+   */
+  public sessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
       ...options,
       ...params,
       headers: {

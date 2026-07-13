@@ -5,6 +5,8 @@ import { Provider } from "../provider/provider"
 import type { ProviderID, ModelID } from "../provider/schema"
 import { Collective } from "./types"
 import { Log } from "../util/log"
+import { Bus } from "../bus"
+import * as Events from "./events"
 
 export namespace Canary {
   const log = Log.create({ service: "canary" })
@@ -27,15 +29,23 @@ export namespace Canary {
     context: string | undefined,
     generatorProviderID: ProviderID,
     generatorModelID: ModelID,
+    bus: Bus.Interface,
+    debateID: Collective.DebateID,
   ) {
     log.info("generating canary bug")
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: generatorProviderID,
-        id: generatorModelID,
-      } as Provider.Model),
-    )
+    const provider = `${generatorProviderID}/${generatorModelID}`
+    const phase: Collective.DebateStatus = "pending"
+
+    yield* bus.publish(Events.ProviderStarted, {
+      debateID,
+      provider,
+      phase,
+    })
+    const start = Date.now()
+
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(generatorProviderID, generatorModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -44,9 +54,20 @@ export namespace Canary {
           schema: CanaryGenerationSchema,
           system: CANARY_SYSTEM_PROMPT,
           prompt: buildGenerationPrompt(question, context),
-          temperature: 0.8,
+          temperature: catalogModel.capabilities.temperature ? 0.8 : undefined,
         }),
-      catch: (e) => new Error(`Canary generation failed: ${e}`),
+      catch: (e) => {
+        const err = new Error(`Canary generation failed: ${e}`)
+        Effect.runFork(
+          bus.publish(Events.ProviderFailed, {
+            debateID,
+            provider,
+            error: String(e),
+            phase,
+          }),
+        )
+        return err
+      },
     })
 
     const canary: CanaryBug = {
@@ -56,14 +77,24 @@ export namespace Canary {
       injected: true,
     }
 
+    const tokenUsage = {
+      input: result.usage?.inputTokens ?? 0,
+      output: result.usage?.outputTokens ?? 0,
+    }
+
+    yield* bus.publish(Events.ProviderCompleted, {
+      debateID,
+      provider,
+      tokens: tokenUsage.input + tokenUsage.output,
+      durationMs: Date.now() - start,
+      phase,
+    })
+
     log.info("canary generated", { category: canary.category })
 
     return {
       canary,
-      tokenUsage: {
-        input: result.usage?.inputTokens ?? 0,
-        output: result.usage?.outputTokens ?? 0,
-      },
+      tokenUsage,
     }
   })
 

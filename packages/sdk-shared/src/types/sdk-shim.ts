@@ -235,8 +235,8 @@ export type Project = ProjectListResponses[200][number] & {
 // Agent — the backend Zod schema in
 // packages/opencode/src/agent/agent.ts (Agent.Info) is the runtime contract:
 //   { name, description?, mode: "subagent"|"primary"|"all", native?, hidden?,
-//     topP?, temperature?, color?, permission?, model?, variant?, prompt?,
-//     options?, steps?, mcp? }
+//     cli_hidden?, topP?, temperature?, color?, permission?, model?, variant?,
+//     prompt?, options?, steps?, mcp? }
 // The previous shim derived Agent from ProjectListResponses[200][number]
 // which has fields the runtime Agent.Info never carries (id, worktree, time,
 // sandboxes), causing TS2345 cascade at setStore("agent", reconcile(...))
@@ -250,6 +250,7 @@ export type Agent = {
   mode: "all" | "primary" | "subagent"
   native?: boolean
   hidden?: boolean
+  cli_hidden?: boolean
   topP?: number
   temperature?: number
   color?: string
