@@ -19,6 +19,14 @@ export type ObservabilityWriter = { insert(events: ObservabilityEvent[]): Promis
 // bucket for anything unrecognized (network drivers, mocked writers, etc.).
 type DbFailureKind = "busy" | "full" | "corrupt" | "db"
 
+// WHY a cooldown at all: without one, a single transient write failure
+// (lock contention with the hourly retention purge, a momentary full disk,
+// etc.) permanently disables telemetry for the process lifetime — confirmed
+// via a 24h soak run where one SQLITE_BUSY at t=11h35m froze all inserts for
+// the remaining 11+ hours with zero recovery. 30s balances not hammering a
+// genuinely broken writer against not sitting silent for long stretches.
+const CIRCUIT_COOLDOWN_MS = 30_000
+
 function classifyDbFailure(error: unknown): DbFailureKind {
   const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: unknown }).code) : undefined
   const message = String((error as { message?: unknown })?.message ?? error)
@@ -56,8 +64,15 @@ export class ObservabilityService {
       return { ok: false, reason: "invalid_context" }
     }
     if (this.#circuitOpen) {
-      this.#droppedCircuitOpen++
-      return { ok: false, reason: "circuit_open" }
+      const cooledDown = this.#lastErrorAt !== undefined && Date.now() - this.#lastErrorAt >= CIRCUIT_COOLDOWN_MS
+      if (!cooledDown) {
+        this.#droppedCircuitOpen++
+        return { ok: false, reason: "circuit_open" }
+      }
+      // Cooldown elapsed — close the circuit and let this record through.
+      // If the writer is still broken, the next flush() failure reopens it
+      // and restarts the cooldown from that new failure time.
+      this.#circuitOpen = false
     }
     // Enqueue the Zod-validated, defaulted result (parsed.data) — not the raw
     // input — so NOT NULL columns like redaction_status are never undefined

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
 import { ObservabilityService } from "../../src/observability/service"
 import { createTraceContext } from "../../src/observability/trace-context"
 
@@ -47,6 +47,68 @@ describe("observability service", () => {
     await failing.flush()
     failing.record(createTraceContext(), event())
     expect(failing.stats().eventsDroppedCircuitOpen).toBe(1)
+  })
+
+  describe("circuit breaker recovery", () => {
+    let nowMs = Date.now()
+    const nowSpy = spyOn(Date, "now").mockImplementation(() => nowMs)
+
+    afterEach(() => {
+      nowMs = Date.now()
+    })
+
+    afterAll(() => {
+      nowSpy.mockRestore()
+    })
+
+    // Regression: a 24h soak run showed one SQLITE_BUSY at t=11h35m froze all
+    // inserts for the remaining 11+ hours — #circuitOpen was set on failure
+    // but nothing ever reset it. See CIRCUIT_COOLDOWN_MS in service.ts.
+    test("stays open before the cooldown elapses, even after repeated attempts", async () => {
+      const service = new ObservabilityService({ insert: async () => { throw new Error("SQLITE_BUSY") } })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      nowMs += 29_999
+      expect(service.record(createTraceContext(), event())).toEqual({ ok: false, reason: "circuit_open" })
+    })
+
+    test("closes after the cooldown and lets a healthy writer succeed again", async () => {
+      let broken = true
+      const service = new ObservabilityService({
+        insert: async (events) => {
+          if (broken) throw new Error("SQLITE_BUSY")
+          void events
+        },
+      })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      expect(service.stats().circuitOpen).toBe(true)
+
+      broken = false
+      nowMs += 30_000
+      expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true })
+      expect(service.stats().circuitOpen).toBe(false)
+      // A failed flush() doesn't acknowledge its batch, so the first (never
+      // inserted) event is still queued alongside the newly-recorded one.
+      expect(await service.flush()).toBe(2)
+    })
+
+    test("reopens and restarts its own cooldown if the writer is still broken past the first cooldown", async () => {
+      const service = new ObservabilityService({ insert: async () => { throw new Error("SQLITE_BUSY") } })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      const firstFailureAt = service.stats().lastErrorAt!
+
+      nowMs += 30_000
+      expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true })
+      expect(await service.flush()).toBe(0) // still broken — flush() reopens the circuit
+      expect(service.stats().circuitOpen).toBe(true)
+      expect(service.stats().lastErrorAt).toBeGreaterThan(firstFailureAt)
+
+      // Cooldown restarted from the second failure — not yet elapsed.
+      nowMs += 29_999
+      expect(service.record(createTraceContext(), event())).toEqual({ ok: false, reason: "circuit_open" })
+    })
   })
 
   test("classifies db failures into busy/full/corrupt/generic buckets and records lastError", async () => {
