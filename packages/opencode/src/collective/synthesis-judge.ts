@@ -6,6 +6,8 @@ import type { ProviderID, ModelID } from "../provider/schema"
 import { Collective } from "./types"
 import { Metrics } from "./metrics"
 import { Log } from "../util/log"
+import { Bus } from "../bus"
+import * as Events from "./events"
 
 import PROMPT_SYNTHESIS from "./prompts/synthesis.txt"
 
@@ -41,15 +43,25 @@ export namespace SynthesisJudge {
     tier: Collective.DebateTier
     initialDisagreements?: number
     convergenceResults?: Collective.ConvergenceResponse[]
+    bus: Bus.Interface
+    debateID: Collective.DebateID
   }) {
     const blindSpots = input.claims.filter((c) => c.noveltyMarker === "unique")
+    const provider = `${input.judgeProviderID}/${input.judgeModelID}`
 
     log.info("synthesizing", {
       claimCount: input.claims.length,
       blindSpotCount: blindSpots.length,
-      judge: `${input.judgeProviderID}/${input.judgeModelID}`,
+      judge: provider,
     })
 
+    yield* input.bus.publish(Events.ProviderStarted, {
+      debateID: input.debateID,
+      provider,
+      role: "judge",
+      phase: "phase4_synthesize",
+    })
+    const start = Date.now()
     const catalogModel = yield* Effect.promise(() => Provider.getModel(input.judgeProviderID, input.judgeModelID))
     const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
@@ -63,7 +75,18 @@ export namespace SynthesisJudge {
           temperature: catalogModel.capabilities.temperature ? 0.3 : undefined,
           abortSignal: AbortSignal.timeout(30_000),
         }),
-      catch: (e) => new Error("Synthesis failed: " + e),
+      catch: (e) => {
+        const err = new Error(`Synthesis failed: ${e}`)
+        Effect.runFork(
+          input.bus.publish(Events.ProviderFailed, {
+            debateID: input.debateID,
+            provider,
+            error: String(e),
+            phase: "phase4_synthesize",
+          }),
+        )
+        return err
+      },
     }).pipe(Effect.orElseSucceed(() => null))
     const object = structured?.object ?? {
       synthesis: "Structured synthesis was unavailable; claims are listed below.",
@@ -110,6 +133,14 @@ export namespace SynthesisJudge {
       input: usage?.inputTokens ?? 0,
       output: usage?.outputTokens ?? 0,
     }
+
+    yield* input.bus.publish(Events.ProviderCompleted, {
+      debateID: input.debateID,
+      provider,
+      tokens: tokenUsage.input + tokenUsage.output,
+      durationMs: Date.now() - start,
+      phase: "phase4_synthesize",
+    })
 
     log.info("synthesis complete", {
       adjustedClaims: reattributedClaims.length,

@@ -35,7 +35,14 @@ export namespace Orchestrator {
   )
 
   export interface Interface {
-    readonly run: (config: Collective.DebateConfig) => Effect.Effect<
+    readonly run: (
+      config: Collective.DebateConfig,
+      // Fired synchronously right after the debate row is created (before any
+      // phase runs), so callers can start filtering Bus events for this debate
+      // before the first ProviderStarted event is published. Optional and
+      // backward compatible — existing callers that don't pass it are unaffected.
+      onDebateID?: (id: Collective.DebateID) => void,
+    ) => Effect.Effect<
       Collective.DebateReport,
       | InstanceType<typeof OrchestratorError>
       | InstanceType<typeof BudgetTracker.BudgetExceededError>
@@ -62,7 +69,10 @@ export namespace Orchestrator {
       const store = yield* DebateStore.Service
       const bus = yield* Bus.Service
 
-      const run = Effect.fn("Orchestrator.run")(function* (config: Collective.DebateConfig) {
+      const run = Effect.fn("Orchestrator.run")(function* (
+        config: Collective.DebateConfig,
+        onDebateID?: (id: Collective.DebateID) => void,
+      ) {
         const startTime = Date.now()
         const salt = crypto.randomUUID()
         let directory: string
@@ -112,6 +122,10 @@ export namespace Orchestrator {
         }
 
         const debateID = yield* store.create(config, discovered.length, directory)
+        // Must fire immediately after store.create(), before any other step —
+        // callers (e.g. DebateTool) rely on this to start filtering Bus events
+        // for this debate before Phase 1 publishes its first ProviderStarted.
+        onDebateID?.(debateID)
         const budgetCfg = config.budget ?? BudgetTracker.tierDefaults(config.tier)
         const budget = BudgetTracker.create(budgetCfg)
         const failedProviders: Array<{ provider: string; error: string }> = []
@@ -164,6 +178,8 @@ export namespace Orchestrator {
               config.context,
               cheapP.providerID,
               cheapP.modelID,
+              bus,
+              debateID,
             )
             canaryBug = canary
             effectiveContext = Canary.injectIntoContext(config.context, canary)
@@ -187,7 +203,7 @@ export namespace Orchestrator {
                   failedProviders.push({ provider, error: message })
                   log.warn("provider unavailable during divergence", { provider, error: message })
                   return Effect.gen(function* () {
-                    yield* bus.publish(Events.ProviderFailed, { debateID, provider, error: message })
+                    yield* bus.publish(Events.ProviderFailed, { debateID, provider, error: message, phase: "phase1_diverge" })
                     return null as Collective.PhaseOneResponse | null
                   })
                 }),
@@ -236,6 +252,8 @@ export namespace Orchestrator {
               config.question,
               extractorP.providerID,
               extractorP.modelID,
+              bus,
+              debateID,
             )
 
             budget.record("phase2_extract", extractorP.providerID, extractTokens.input, extractTokens.output)
@@ -298,7 +316,7 @@ export namespace Orchestrator {
 
               const roundResults = yield* Effect.all(
                 participants.map((p) =>
-                  runConvergence(p, targetClaims, config.question).pipe(
+                  runConvergence(p, targetClaims, config.question, bus, debateID).pipe(
                     Effect.catch(() =>
                       Effect.succeed(null as Collective.ConvergenceResponse | null),
                     ),
@@ -374,6 +392,8 @@ export namespace Orchestrator {
               synthesis: "",
               attackerProviderID: cheapestP.providerID,
               attackerModelID: cheapestP.modelID,
+              bus,
+              debateID,
             })
             _redTeamAttacks = attacks
             budget.record("red_team", cheapestP.providerID, rtTokens.input, rtTokens.output)
@@ -417,6 +437,8 @@ export namespace Orchestrator {
             tier: config.tier,
             initialDisagreements,
             convergenceResults,
+            bus,
+            debateID,
           })
 
           budget.record("phase4_synthesize", judge.providerID, synthTokens.input, synthTokens.output)
@@ -558,8 +580,11 @@ export namespace Orchestrator {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function runPromiseExport(config: Collective.DebateConfig) {
-    return runPromise((svc) => svc.run(config))
+  export async function runPromiseExport(
+    config: Collective.DebateConfig,
+    onDebateID?: (id: Collective.DebateID) => void,
+  ) {
+    return runPromise((svc) => svc.run(config, onDebateID))
   }
 
   export async function estimatePromise(config: Collective.DebateConfig) {
@@ -581,6 +606,7 @@ export namespace Orchestrator {
         debateID,
         provider: `${participant.providerID}/${participant.modelID}`,
         role: participant.role,
+        phase: "phase1_diverge",
       })
 
       const start = Date.now()
@@ -610,7 +636,16 @@ export namespace Orchestrator {
           }),
         catch: (e) => {
           const body = (e as any)?.responseBody
-          return new Error(`Model ${participant.anonymousHash} failed: ${e}${body ? ` — ${body}` : ""}`)
+          const err = new Error(`Model ${participant.anonymousHash} failed: ${e}${body ? ` — ${body}` : ""}`)
+          Effect.runFork(
+            bus.publish(Events.ProviderFailed, {
+              debateID,
+              provider: `${participant.providerID}/${participant.modelID}`,
+              error: body ? `${e} — ${body}` : String(e),
+              phase: "phase1_diverge",
+            }),
+          )
+          return err
         },
       })
 
@@ -632,6 +667,7 @@ export namespace Orchestrator {
         provider: `${participant.providerID}/${participant.modelID}`,
         tokens: tokenUsage.input + tokenUsage.output,
         durationMs,
+        phase: "phase1_diverge",
       })
 
       return {
@@ -663,8 +699,18 @@ export namespace Orchestrator {
     participant: Collective.Participant,
     targetClaims: Collective.Claim[],
     question: string,
+    bus: Bus.Interface,
+    debateID: Collective.DebateID,
   ): Effect.Effect<Collective.ConvergenceResponse, Error> {
     return Effect.gen(function* () {
+      const provider = `${participant.providerID}/${participant.modelID}`
+      yield* bus.publish(Events.ProviderStarted, {
+        debateID,
+        provider,
+        role: participant.role,
+        phase: "phase3_converge",
+      })
+      const start = Date.now()
       const catalogModel = yield* Effect.promise(() => Provider.getModel(participant.providerID, participant.modelID))
       const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
 
@@ -681,16 +727,37 @@ export namespace Orchestrator {
             prompt: `## Question\n${question}\n\n## Claims to review\n${claimsText}`,
             temperature: catalogModel.capabilities.temperature ? 0.5 : undefined,
           }),
-        catch: (e) => new Error(`Convergence failed for ${participant.anonymousHash}: ${e}`),
+        catch: (e) => {
+          const err = new Error(`Convergence failed for ${participant.anonymousHash}: ${e}`)
+          Effect.runFork(
+            bus.publish(Events.ProviderFailed, {
+              debateID,
+              provider,
+              error: String(e),
+              phase: "phase3_converge",
+            }),
+          )
+          return err
+        },
+      })
+
+      const tokenUsage = {
+        input: result.usage?.inputTokens ?? 0,
+        output: result.usage?.outputTokens ?? 0,
+      }
+
+      yield* bus.publish(Events.ProviderCompleted, {
+        debateID,
+        provider,
+        tokens: tokenUsage.input + tokenUsage.output,
+        durationMs: Date.now() - start,
+        phase: "phase3_converge",
       })
 
       return {
         participantHash: participant.anonymousHash,
         critiques: result.object.critiques,
-        tokenUsage: {
-          input: result.usage?.inputTokens ?? 0,
-          output: result.usage?.outputTokens ?? 0,
-        },
+        tokenUsage,
       }
     })
   }
