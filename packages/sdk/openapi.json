@@ -6423,6 +6423,56 @@
         ]
       }
     },
+    "/provider/refresh": {
+      "post": {
+        "operationId": "provider.refresh",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Force-refresh the models.dev catalog",
+        "description": "Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.",
+        "responses": {
+          "200": {
+            "description": "Refresh result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider/auth": {
       "get": {
         "operationId": "provider.auth",

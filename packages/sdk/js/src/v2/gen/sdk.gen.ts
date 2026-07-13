@@ -166,6 +166,7 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  ProviderRefreshResponses,
   PtyConnectErrors,
   PtyConnectResponses,
   PtyCreateErrors,
@@ -3622,6 +3623,36 @@ export class Provider extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ProviderListResponses, unknown, ThrowOnError>({
       url: "/provider",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Force-refresh the models.dev catalog
+   *
+   * Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProviderRefreshResponses, unknown, ThrowOnError>({
+      url: "/provider/refresh",
       ...options,
       ...params,
     })

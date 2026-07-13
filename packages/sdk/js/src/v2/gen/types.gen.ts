@@ -5572,6 +5572,28 @@ export type ProviderListResponses = {
 
 export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
 
+export type ProviderRefreshData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/refresh"
+}
+
+export type ProviderRefreshResponses = {
+  /**
+   * Refresh result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type ProviderRefreshResponse = ProviderRefreshResponses[keyof ProviderRefreshResponses]
+
 export type ProviderAuthData = {
   body?: never
   path?: never

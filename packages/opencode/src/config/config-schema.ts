@@ -288,6 +288,7 @@ export const Keybinds = z
     stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
     model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
     model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
+    model_refresh: z.string().optional().default("alt+r").describe("Force-refresh the models.dev catalog"),
     session_share: z.string().optional().default("none").describe("Share current session"),
     session_unshare: z.string().optional().default("none").describe("Unshare current session"),
     session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),

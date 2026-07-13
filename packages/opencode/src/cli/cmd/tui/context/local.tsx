@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { performModelCatalogRefresh } from "@tui/util/model-catalog-refresh"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -434,6 +435,50 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    // Shared by any model-selection dialog that offers an Alt+R "refresh
+    // models catalog" footer keybind (currently DialogModel; intended to be
+    // reused by DialogDebateSetup once that dialog lands on this branch) so
+    // the force-refresh + toast + refetch dance lives in exactly one place.
+    // See ModelsDev.refresh in provider/models.ts for what "force" actually
+    // does server-side.
+    const modelCatalog = iife(() => {
+      const [state, setState] = createStore({ refreshing: false })
+
+      function refresh() {
+        return performModelCatalogRefresh({
+          isRefreshing: () => state.refreshing,
+          setRefreshing: (value) => setState("refreshing", value),
+          refresh: async () => {
+            const response = await sdk.fetch(`${sdk.url}/provider/refresh`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            })
+            if (!response.ok) {
+              return { ok: false, error: await response.text().catch(() => `HTTP ${response.status}`) }
+            }
+            return (await response.json()) as { ok: boolean; error?: string }
+          },
+          // Reuse the exact same fetch used at startup rather than
+          // hand-rolling a second copy of the provider/config/default fetch
+          // logic — bootstrap() reconciles sync.data.provider,
+          // sync.data.provider_default and sync.data.provider_next
+          // (including .connected) in one pass.
+          refetch: () => sync.bootstrap(),
+          notifyError: (message) =>
+            toast.show({ variant: "error", message: "Failed to refresh models: " + message, duration: 5000 }),
+          notifySuccess: () =>
+            toast.show({ variant: "success", message: "Models catalog refreshed", duration: 3000 }),
+        })
+      }
+
+      return {
+        get refreshing() {
+          return state.refreshing
+        },
+        refresh,
+      }
+    })
+
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
@@ -457,6 +502,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       agent,
       mcp,
       debate,
+      modelCatalog,
     }
     return result
   },

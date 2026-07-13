@@ -14,8 +14,8 @@ import { Hash } from "@/util/hash"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
-  const refreshCallbacks: Array<() => void> = []
-  export function onRefresh(cb: () => void) {
+  const refreshCallbacks: Array<() => void | Promise<void>> = []
+  export function onRefresh(cb: () => void | Promise<void>) {
     refreshCallbacks.push(cb)
     return () => {
       const idx = refreshCallbacks.indexOf(cb)
@@ -112,7 +112,7 @@ export namespace ModelsDev {
       headers: { "User-Agent": Installation.USER_AGENT },
       signal: AbortSignal.timeout(10000),
     })
-    return { ok: result.ok, text: await result.text() }
+    return { ok: result.ok, status: result.status, text: await result.text() }
   }
 
   export const Data = lazy(async () => {
@@ -148,26 +148,50 @@ export namespace ModelsDev {
     return result as Record<string, Provider>
   }
 
-  export async function refresh(force = false) {
-    if (skip(force)) return ModelsDev.Data.reset()
-    await Flock.withLock(`models-dev:${filepath}`, async () => {
-      if (skip(force)) return ModelsDev.Data.reset()
-      const result = await fetchApi()
-      if (!result.ok) return
-      await Filesystem.write(filepath, result.text)
+  export async function refresh(force = false): Promise<{ ok: boolean; error?: string }> {
+    // Custom path is managed by the user/another process — refresh() must not
+    // clobber it, and Data() never reads `filepath` while this is set (see
+    // above), so a fetch here would silently do nothing useful anyway.
+    if (Flag.OPENCODE_MODELS_PATH) {
+      return { ok: false, error: "Custom models path is set (OPENCODE_MODELS_PATH) — refresh is managed externally" }
+    }
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+      return { ok: false, error: "Models fetch is disabled (OPENCODE_DISABLE_MODELS_FETCH)" }
+    }
+    if (skip(force)) {
       ModelsDev.Data.reset()
-      for (const cb of refreshCallbacks) {
-        try {
-          cb()
-        } catch (e) {
-          log.error("onRefresh callback failed", { error: e })
+      return { ok: true }
+    }
+    try {
+      return await Flock.withLock(`models-dev:${filepath}`, async () => {
+        if (skip(force)) {
+          ModelsDev.Data.reset()
+          return { ok: true }
         }
-      }
-    }).catch((e) => {
+        const result = await fetchApi()
+        if (!result.ok) {
+          log.warn("models.dev fetch failed", { status: result.status })
+          return { ok: false, error: `models.dev fetch failed (HTTP ${result.status})` }
+        }
+        // Validate BEFORE writing: a corrupted/truncated response body must
+        // never overwrite a previously-good cache on disk.
+        try {
+          JSON.parse(result.text)
+        } catch (e) {
+          log.error("Invalid response from models.dev", { error: e })
+          return { ok: false, error: "Invalid response from models.dev" }
+        }
+        await Filesystem.write(filepath, result.text)
+        ModelsDev.Data.reset()
+        await Promise.all(refreshCallbacks.map((cb) => cb()))
+        return { ok: true }
+      })
+    } catch (e) {
       log.error("Failed to fetch models.dev", {
         error: e,
       })
-    })
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useRoute } from "@tui/context/route"
+import { useKeybind } from "@tui/context/keybind"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
@@ -53,6 +54,7 @@ function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef
   const dialog = useDialog()
   const toast = useToast()
   const local = useLocal()
+  const keybind = useKeybind()
   const [selected, setSelected] = createSignal<ModelRef[]>(props.initial ?? [])
   const models = createMemo(() =>
     availableModels(sync).filter(
@@ -101,6 +103,14 @@ function DialogDebateParticipants(props: { primary: ModelRef; initial?: ModelRef
       placeholder="Enter toggles a model; confirm when at least two are selected"
       options={options()}
       keybind={[
+        {
+          keybind: keybind.all.model_refresh?.[0],
+          title: local.modelCatalog.refreshing ? "refreshing models" : "refresh models",
+          disabled: local.modelCatalog.refreshing,
+          onTrigger: () => {
+            void local.modelCatalog.refresh()
+          },
+        },
         {
           keybind: Keybind.parse("ctrl+s")[0],
           title: "confirm",
