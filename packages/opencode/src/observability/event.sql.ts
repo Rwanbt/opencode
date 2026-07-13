@@ -1,0 +1,57 @@
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
+
+export const ObservabilityEventTable = sqliteTable(
+  "observability_event",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    event_id: text().notNull(),
+    trace_id: text().notNull(),
+    span_id: text().notNull(),
+    parent_span_id: text(),
+    session_id: text(),
+    project_id: text(),
+    workspace_id: text(),
+    message_id: text(),
+    turn_id: text(),
+    step_index: integer(),
+    event_type: text().notNull(),
+    status: text().notNull(),
+    ts_ms: integer().notNull(),
+    duration_ms: integer(),
+    enqueue_seq: integer().notNull(),
+    model_provider: text(),
+    model_id: text(),
+    input_tokens: integer(),
+    output_tokens: integer(),
+    cache_read_tokens: integer(),
+    cache_write_tokens: integer(),
+    cost_nano_usd: integer(),
+    pricing_version: text(),
+    pricing_source: text(),
+    cost_computed_at_ms: integer(),
+    redaction_status: text().notNull(),
+    original_size_bytes: integer(),
+    payload_truncated: integer({ mode: "boolean" }).notNull().default(false),
+    metadata_json: text({ mode: "json" }).notNull(),
+    local_redacted_json: text({ mode: "json" }).notNull(),
+    schema_version: integer().notNull().default(1),
+    // Phase 3 opt-in content columns (ADR-1032). NULL unless a non-expired
+    // opt-in (observability_content_optin) was active at capture time.
+    // content_expires_at_ms is copied from that opt-in's expiry at write
+    // time so the priority purge (purge.ts) can clear content without a
+    // join, even after the opt-in row itself has been revoked or expired.
+    local_content_redacted_json: text({ mode: "json" }),
+    local_full_json: text({ mode: "json" }),
+    content_expires_at_ms: integer(),
+  },
+  (table) => [
+    uniqueIndex("observability_event_event_id_idx").on(table.event_id),
+    index("observability_event_ts_id_idx").on(table.ts_ms, table.id),
+    index("observability_event_session_ts_id_idx").on(table.session_id, table.ts_ms, table.id),
+    index("observability_event_project_ts_id_idx").on(table.project_id, table.ts_ms, table.id),
+    index("observability_event_workspace_ts_id_idx").on(table.workspace_id, table.ts_ms, table.id),
+    index("observability_event_trace_ts_id_idx").on(table.trace_id, table.ts_ms, table.id),
+    index("observability_event_span_idx").on(table.span_id),
+    index("observability_event_content_expires_idx").on(table.content_expires_at_ms),
+  ],
+)

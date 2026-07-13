@@ -1,0 +1,166 @@
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+import { ObservabilityService } from "../../src/observability/service"
+import { createTraceContext } from "../../src/observability/trace-context"
+
+const event = () => ({ type: "llm.call.started" as const, status: "started" as const, tsMs: Date.now(), redactionStatus: "metadata_only" as const, payloadTruncated: false, schemaVersion: 1 as const, metadata: {}, localRedacted: { classes: [] } })
+
+describe("observability service", () => {
+  test("queues and flushes without leaking product errors", async () => {
+    const rows: unknown[] = []
+    const service = new ObservabilityService({ insert: async (events) => void rows.push(...events) })
+    expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true, enqueueSeq: 1 })
+    expect(await service.flush()).toBe(1)
+    expect(rows).toHaveLength(1)
+  })
+
+  test("opens circuit on database failure", async () => {
+    const service = new ObservabilityService({ insert: async () => { throw new Error("SQLITE_BUSY") } })
+    service.record(createTraceContext(), event())
+    expect(await service.flush()).toBe(0)
+    expect(service.record(createTraceContext(), event())).toEqual({ ok: false, reason: "circuit_open" })
+  })
+
+  test("counts accepted, rejected-context, rejected-event, and circuit-open drops separately", async () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true })
+    expect(
+      service.record({ traceId: "not-a-ulid", spanId: "not-a-ulid" }, event()),
+    ).toEqual({ ok: false, reason: "invalid_context" })
+    expect(
+      // Built by hand, not via createTraceContext() — that helper Zod-parses
+      // internally and would throw before record() ever sees this invalid
+      // stepIndex (TraceContextSchema requires it non-negative).
+      service.record({ ...createTraceContext(), stepIndex: -1 }, event()),
+    ).toEqual({ ok: false, reason: "invalid_context" })
+    expect(
+      service.record(createTraceContext(), { ...event(), metadata: { unknownField: "x" } as never }),
+    ).toEqual({ ok: false, reason: "invalid_event" })
+
+    const stats = service.stats()
+    expect(stats.eventsAccepted).toBe(1)
+    expect(stats.eventsRejectedInvalidContext).toBe(2)
+    expect(stats.eventsRejectedInvalidEvent).toBe(1)
+
+    // Now open the circuit and confirm the drop is counted under its own bucket, not eventsRejectedInvalidContext/-Event.
+    const failing = new ObservabilityService({ insert: async () => { throw new Error("boom") } })
+    failing.record(createTraceContext(), event())
+    await failing.flush()
+    failing.record(createTraceContext(), event())
+    expect(failing.stats().eventsDroppedCircuitOpen).toBe(1)
+  })
+
+  describe("circuit breaker recovery", () => {
+    let nowMs = Date.now()
+    const nowSpy = spyOn(Date, "now").mockImplementation(() => nowMs)
+
+    afterEach(() => {
+      nowMs = Date.now()
+    })
+
+    afterAll(() => {
+      nowSpy.mockRestore()
+    })
+
+    // Regression: a 24h soak run showed one SQLITE_BUSY at t=11h35m froze all
+    // inserts for the remaining 11+ hours — #circuitOpen was set on failure
+    // but nothing ever reset it. See CIRCUIT_COOLDOWN_MS in service.ts.
+    test("stays open before the cooldown elapses, even after repeated attempts", async () => {
+      const service = new ObservabilityService({ insert: async () => { throw new Error("SQLITE_BUSY") } })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      nowMs += 29_999
+      expect(service.record(createTraceContext(), event())).toEqual({ ok: false, reason: "circuit_open" })
+    })
+
+    test("closes after the cooldown and lets a healthy writer succeed again", async () => {
+      let broken = true
+      const service = new ObservabilityService({
+        insert: async (events) => {
+          if (broken) throw new Error("SQLITE_BUSY")
+          void events
+        },
+      })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      expect(service.stats().circuitOpen).toBe(true)
+
+      broken = false
+      nowMs += 30_000
+      expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true })
+      expect(service.stats().circuitOpen).toBe(false)
+      // A failed flush() doesn't acknowledge its batch, so the first (never
+      // inserted) event is still queued alongside the newly-recorded one.
+      expect(await service.flush()).toBe(2)
+    })
+
+    test("reopens and restarts its own cooldown if the writer is still broken past the first cooldown", async () => {
+      const service = new ObservabilityService({ insert: async () => { throw new Error("SQLITE_BUSY") } })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      const firstFailureAt = service.stats().lastErrorAt!
+
+      nowMs += 30_000
+      expect(service.record(createTraceContext(), event())).toMatchObject({ ok: true })
+      expect(await service.flush()).toBe(0) // still broken — flush() reopens the circuit
+      expect(service.stats().circuitOpen).toBe(true)
+      expect(service.stats().lastErrorAt).toBeGreaterThan(firstFailureAt)
+
+      // Cooldown restarted from the second failure — not yet elapsed.
+      nowMs += 29_999
+      expect(service.record(createTraceContext(), event())).toEqual({ ok: false, reason: "circuit_open" })
+    })
+  })
+
+  test("classifies db failures into busy/full/corrupt/generic buckets and records lastError", async () => {
+    for (const [message, kind] of [
+      ["SQLITE_BUSY: database is locked", "eventsFailedBusy"],
+      ["SQLITE_FULL: database or disk is full", "eventsFailedFull"],
+      ["SQLITE_CORRUPT: malformed database schema", "eventsFailedCorrupt"],
+      ["ECONNRESET", "eventsFailedDb"],
+    ] as const) {
+      const service = new ObservabilityService({ insert: async () => { throw new Error(message) } })
+      service.record(createTraceContext(), event())
+      await service.flush()
+      const stats = service.stats()
+      expect(stats[kind]).toBe(1)
+      expect(stats.lastErrorAt).toBeGreaterThan(0)
+      expect(typeof stats.lastErrorKind).toBe("string")
+    }
+  })
+
+  test("counts sanitizer fail-closed events without rejecting the record", () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    const result = service.record(createTraceContext(), { ...event(), redactionStatus: "failed_closed" })
+    expect(result).toMatchObject({ ok: true })
+    expect(service.stats().sanitizerFailed).toBe(1)
+  })
+
+  // BoundedEventQueue defaults to maxEvents=500 (queue.ts) — ObservabilityService
+  // doesn't expose a way to inject a smaller queue, so these drive the real
+  // default cap end to end rather than a mock. status !== "started" maps to
+  // "high" priority in record() — see the `priority` line there.
+  const started = () => ({ ...event(), type: "llm.call.started" as const, status: "started" as const })
+  const finished = () => ({ ...event(), type: "llm.call.finished" as const, status: "finished" as const, durationMs: 1 })
+
+  test("eventsDroppedQueueFull counts low-priority evictions made to admit high-priority events", () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    for (let i = 0; i < 500; i++) expect(service.record(createTraceContext(), started())).toMatchObject({ ok: true })
+    expect(service.stats().queueSize).toBe(500)
+
+    for (let i = 0; i < 5; i++) expect(service.record(createTraceContext(), finished())).toMatchObject({ ok: true })
+
+    const stats = service.stats()
+    expect(stats.queueSize).toBe(500) // each high-priority admit evicted one low-priority item
+    expect(stats.eventsDroppedQueueFull).toBe(5)
+    expect(stats.eventsAccepted).toBe(505)
+  })
+
+  test("eventsDroppedQueueFull counts a hard reject once the queue is full of high-priority events only", () => {
+    const service = new ObservabilityService({ insert: async () => {} })
+    for (let i = 0; i < 500; i++) expect(service.record(createTraceContext(), finished())).toMatchObject({ ok: true })
+
+    expect(service.record(createTraceContext(), finished())).toEqual({ ok: false, reason: "queue_full" })
+    expect(service.stats().eventsDroppedQueueFull).toBe(1)
+    expect(service.stats().eventsAccepted).toBe(500)
+  })
+})

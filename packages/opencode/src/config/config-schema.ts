@@ -2,6 +2,7 @@ import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { LSPServer } from "../lsp/server"
 import { Log } from "../util/log"
+import { ExporterConfigSchema } from "../observability/exporter"
 
 // Zod schemas for opencode configuration. Extracted from config.ts to keep
 // that file under the size budget. config.ts re-binds every export into the
@@ -708,6 +709,35 @@ export const Info = z
           .boolean()
           .optional()
           .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+        observability: z
+          .object({
+            enabled: z
+              .boolean()
+              .optional()
+              .describe("Enable native local observability event capture (default: false). See ADR-1020 through 1031."),
+            captureMode: z
+              .enum(["local_metadata", "local_redacted"])
+              .optional()
+              .describe(
+                "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
+              ),
+            retentionDays: z.number().int().positive().optional().describe("Delete events older than this many days. Undefined keeps events until another retention limit applies."),
+            maxEvents: z.number().int().positive().optional().describe("Maximum local observability event count. Default: 100000."),
+            exporters: z
+              .array(ExporterConfigSchema)
+              .optional()
+              .describe(
+                "Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.",
+              ),
+            backfillOnStart: z
+              .boolean()
+              .optional()
+              .describe(
+                "When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.",
+              ),
+          })
+          .optional()
+          .describe("Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured."),
         primary_tools: z
           .array(z.string())
           .optional()

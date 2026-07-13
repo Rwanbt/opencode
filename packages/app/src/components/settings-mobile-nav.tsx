@@ -13,6 +13,7 @@ import { SettingsModels } from "./settings-models"
 import { SettingsBenchmark } from "./settings-benchmark"
 import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
+import { SettingsObservability } from "./settings-observability"
 
 type CategoryId =
   | "general"
@@ -23,6 +24,7 @@ type CategoryId =
   | "configuration"
   | "benchmark"
   | "plugins"
+  | "observability"
   | "android"
 
 // Drill-down list -> detail navigation for narrow viewports, replacing the
@@ -43,6 +45,7 @@ export const SettingsMobileNav: Component = () => {
     { value: "configuration" as const, icon: "console" as const, label: "Configuration" },
     { value: "benchmark" as const, icon: "settings-gear" as const, label: "Benchmark" },
     { value: "plugins" as const, icon: "mcp" as const, label: "Plugins" },
+    { value: "observability" as const, icon: "settings-gear" as const, label: "Observability" },
     ...(platform.os === "android"
       ? [{ value: "android" as const, icon: "settings-gear" as const, label: "Android" }]
       : []),

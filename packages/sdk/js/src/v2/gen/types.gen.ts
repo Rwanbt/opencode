@@ -1969,6 +1969,43 @@ export type Config = {
      */
     openTelemetry?: boolean
     /**
+     * Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured.
+     */
+    observability?: {
+      /**
+       * Enable native local observability event capture (default: false). See ADR-1020 through 1031.
+       */
+      enabled?: boolean
+      /**
+       * Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.
+       */
+      captureMode?: "local_metadata" | "local_redacted"
+      /**
+       * Delete events older than this many days. Undefined keeps events until another retention limit applies.
+       */
+      retentionDays?: number
+      /**
+       * Maximum local observability event count. Default: 100000.
+       */
+      maxEvents?: number
+      /**
+       * Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.
+       */
+      exporters?: Array<{
+        type: "langfuse"
+        /**
+         * Langfuse instance base URL, e.g. https://cloud.langfuse.com
+         */
+        host: string
+        publicKey: string
+        secretKey: string
+      }>
+      /**
+       * When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.
+       */
+      backfillOnStart?: boolean
+    }
+    /**
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
@@ -6139,6 +6176,741 @@ export type DebateFeedbackResponses = {
 }
 
 export type DebateFeedbackResponse = DebateFeedbackResponses[keyof DebateFeedbackResponses]
+
+export type ObservabilityHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/health"
+}
+
+export type ObservabilityHealthResponses = {
+  /**
+   * Health snapshot
+   */
+  200: {
+    enabled: boolean
+    captureMode: "local_metadata" | "local_redacted"
+    circuitOpen: boolean
+    eventsAccepted: number
+    eventsInserted: number
+    eventsRejectedInvalidContext: number
+    eventsRejectedInvalidEvent: number
+    eventsDroppedQueueFull: number
+    eventsDroppedCircuitOpen: number
+    eventsFailedDb: number
+    eventsFailedBusy: number
+    eventsFailedFull: number
+    eventsFailedCorrupt: number
+    sanitizerFailed: number
+    lastErrorAt?: number
+    lastErrorKind?: string
+    queueSize: number
+    queueBytes: number
+  }
+}
+
+export type ObservabilityHealthResponse = ObservabilityHealthResponses[keyof ObservabilityHealthResponses]
+
+export type ObservabilitySettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/settings"
+}
+
+export type ObservabilitySettingsResponses = {
+  /**
+   * Settings
+   */
+  200: {
+    enabled: boolean
+    captureMode: "local_metadata" | "local_redacted"
+    policyVersion: 3
+    localFullAvailable: true
+    maxOptInTtlDays: number
+    storage: "sqlite_unencrypted_local"
+    retentionDays?: number
+    maxEvents: number
+  }
+}
+
+export type ObservabilitySettingsResponse = ObservabilitySettingsResponses[keyof ObservabilitySettingsResponses]
+
+export type ObservabilityEventsListData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionId: string
+    limit?: number
+    before?: string
+  }
+  url: "/observability/events"
+}
+
+export type ObservabilityEventsListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityEventsListError = ObservabilityEventsListErrors[keyof ObservabilityEventsListErrors]
+
+export type ObservabilityEventsListResponses = {
+  /**
+   * Events
+   */
+  200: Array<{
+    eventId: string
+    traceId: string
+    spanId: string
+    parentSpanId?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    messageId?: string
+    turnId?: string
+    stepIndex?: number
+    type: string
+    status: string
+    derivedStatus?: "orphaned"
+    tsMs: number
+    durationMs?: number
+    costNanoUsd?: number
+    pricingVersion?: string
+    pricingSource?: string
+    costComputedAtMs?: number
+    redactionStatus: string
+    originalSizeBytes?: number
+    payloadTruncated: boolean
+    metadata: {
+      [key: string]: unknown
+    }
+    localRedacted: {
+      [key: string]: unknown
+    }
+    localContentRedacted?: string
+    localFull?: string
+    hasSensitiveContent: boolean
+    schemaVersion: number
+  }>
+}
+
+export type ObservabilityEventsListResponse = ObservabilityEventsListResponses[keyof ObservabilityEventsListResponses]
+
+export type ObservabilityEventsGetData = {
+  body?: never
+  path: {
+    eventId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/events/{eventId}"
+}
+
+export type ObservabilityEventsGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityEventsGetError = ObservabilityEventsGetErrors[keyof ObservabilityEventsGetErrors]
+
+export type ObservabilityEventsGetResponses = {
+  /**
+   * Event
+   */
+  200: {
+    eventId: string
+    traceId: string
+    spanId: string
+    parentSpanId?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    messageId?: string
+    turnId?: string
+    stepIndex?: number
+    type: string
+    status: string
+    derivedStatus?: "orphaned"
+    tsMs: number
+    durationMs?: number
+    costNanoUsd?: number
+    pricingVersion?: string
+    pricingSource?: string
+    costComputedAtMs?: number
+    redactionStatus: string
+    originalSizeBytes?: number
+    payloadTruncated: boolean
+    metadata: {
+      [key: string]: unknown
+    }
+    localRedacted: {
+      [key: string]: unknown
+    }
+    localContentRedacted?: string
+    localFull?: string
+    hasSensitiveContent: boolean
+    schemaVersion: number
+  }
+}
+
+export type ObservabilityEventsGetResponse = ObservabilityEventsGetResponses[keyof ObservabilityEventsGetResponses]
+
+export type ObservabilityTraceGetData = {
+  body?: never
+  path: {
+    traceId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/trace/{traceId}"
+}
+
+export type ObservabilityTraceGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityTraceGetError = ObservabilityTraceGetErrors[keyof ObservabilityTraceGetErrors]
+
+export type ObservabilityTraceGetResponses = {
+  /**
+   * Trace detail
+   */
+  200: {
+    traceId: string
+    events: Array<{
+      eventId: string
+      traceId: string
+      spanId: string
+      parentSpanId?: string
+      sessionId?: string
+      projectId?: string
+      workspaceId?: string
+      messageId?: string
+      turnId?: string
+      stepIndex?: number
+      type: string
+      status: string
+      derivedStatus?: "orphaned"
+      tsMs: number
+      durationMs?: number
+      costNanoUsd?: number
+      pricingVersion?: string
+      pricingSource?: string
+      costComputedAtMs?: number
+      redactionStatus: string
+      originalSizeBytes?: number
+      payloadTruncated: boolean
+      metadata: {
+        [key: string]: unknown
+      }
+      localRedacted: {
+        [key: string]: unknown
+      }
+      localContentRedacted?: string
+      localFull?: string
+      hasSensitiveContent: boolean
+      schemaVersion: number
+    }>
+  }
+}
+
+export type ObservabilityTraceGetResponse = ObservabilityTraceGetResponses[keyof ObservabilityTraceGetResponses]
+
+export type ObservabilitySummaryData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionId: string
+  }
+  url: "/observability/summary"
+}
+
+export type ObservabilitySummaryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilitySummaryError = ObservabilitySummaryErrors[keyof ObservabilitySummaryErrors]
+
+export type ObservabilitySummaryResponses = {
+  /**
+   * Summary
+   */
+  200: {
+    sessionId: string
+    totalEvents: number
+    totalCostNanoUsd: number
+    byType: {
+      [key: string]: number
+    }
+    byStatus: {
+      [key: string]: number
+    }
+    firstEventTsMs?: number
+    lastEventTsMs?: number
+  }
+}
+
+export type ObservabilitySummaryResponse = ObservabilitySummaryResponses[keyof ObservabilitySummaryResponses]
+
+export type ObservabilityPrivacyGetData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: "workspace" | "project" | "session"
+    id: string
+  }
+  url: "/observability/privacy"
+}
+
+export type ObservabilityPrivacyGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacyGetError = ObservabilityPrivacyGetErrors[keyof ObservabilityPrivacyGetErrors]
+
+export type ObservabilityPrivacyGetResponses = {
+  /**
+   * Opt-in status
+   */
+  200: {
+    optIn: {
+      scope: "workspace" | "project" | "session"
+      scopeId: string
+      level: "local_content_redacted" | "local_full"
+      ttlDays: number
+      createdAtMs: number
+      expiresAtMs: number
+    } | null
+  }
+}
+
+export type ObservabilityPrivacyGetResponse = ObservabilityPrivacyGetResponses[keyof ObservabilityPrivacyGetResponses]
+
+export type ObservabilityPrivacySetData = {
+  body?: {
+    scope: "workspace" | "project" | "session"
+    id: string
+    level: "local_content_redacted" | "local_full"
+    ttlDays: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/privacy"
+}
+
+export type ObservabilityPrivacySetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacySetError = ObservabilityPrivacySetErrors[keyof ObservabilityPrivacySetErrors]
+
+export type ObservabilityPrivacySetResponses = {
+  /**
+   * Opt-in created
+   */
+  200: {
+    scope: "workspace" | "project" | "session"
+    scopeId: string
+    level: "local_content_redacted" | "local_full"
+    ttlDays: number
+    createdAtMs: number
+    expiresAtMs: number
+  }
+}
+
+export type ObservabilityPrivacySetResponse = ObservabilityPrivacySetResponses[keyof ObservabilityPrivacySetResponses]
+
+export type ObservabilityPrivacyRevokeData = {
+  body?: {
+    scope: "workspace" | "project" | "session"
+    id: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/privacy/revoke"
+}
+
+export type ObservabilityPrivacyRevokeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityPrivacyRevokeError = ObservabilityPrivacyRevokeErrors[keyof ObservabilityPrivacyRevokeErrors]
+
+export type ObservabilityPrivacyRevokeResponses = {
+  /**
+   * Revoked
+   */
+  200: {
+    revoked: boolean
+    contentCleared: number
+  }
+}
+
+export type ObservabilityPrivacyRevokeResponse =
+  ObservabilityPrivacyRevokeResponses[keyof ObservabilityPrivacyRevokeResponses]
+
+export type ObservabilityCompareData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    timeWindowMs?: number
+  }
+  url: "/observability/compare"
+}
+
+export type ObservabilityCompareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityCompareError = ObservabilityCompareErrors[keyof ObservabilityCompareErrors]
+
+export type ObservabilityCompareResponses = {
+  /**
+   * Cohort comparison
+   */
+  200: {
+    cohorts: Array<{
+      modelProvider: string | null
+      modelId: string | null
+      skillHmac: string | null
+      latencyP50Ms: number
+      latencyP95Ms: number
+      costPerTurnNanoUsd: number
+      failureRatePct: number
+      totalEvents: number
+      traceCount: number
+    }>
+    referenceIndex?: number
+    timeWindowMs?: number
+  }
+}
+
+export type ObservabilityCompareResponse = ObservabilityCompareResponses[keyof ObservabilityCompareResponses]
+
+export type ObservabilityDataDeleteData = {
+  body?:
+    | {
+        scope: "workspace"
+        id: string
+      }
+    | {
+        scope: "all"
+      }
+    | {
+        scope: "project"
+        id: string
+      }
+    | {
+        scope: "session"
+        id: string
+      }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/data"
+}
+
+export type ObservabilityDataDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityDataDeleteError = ObservabilityDataDeleteErrors[keyof ObservabilityDataDeleteErrors]
+
+export type ObservabilityDataDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: {
+    deletedCount: number
+  }
+}
+
+export type ObservabilityDataDeleteResponse = ObservabilityDataDeleteResponses[keyof ObservabilityDataDeleteResponses]
+
+export type ObservabilityExportData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionId: string
+    projectId?: string
+    workspaceId?: string
+    sinceMs?: number
+    untilMs?: number
+    limit?: number
+  }
+  url: "/observability/export"
+}
+
+export type ObservabilityExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityExportError = ObservabilityExportErrors[keyof ObservabilityExportErrors]
+
+export type ObservabilityExportResponses = {
+  /**
+   * NDJSON stream of events
+   */
+  200: Blob | File
+}
+
+export type ObservabilityExportResponse = ObservabilityExportResponses[keyof ObservabilityExportResponses]
+
+export type ObservabilitySummaryAggregateData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    sessionId?: string
+    projectId?: string
+    workspaceId?: string
+    sinceMs?: number
+    untilMs?: number
+  }
+  url: "/observability/summary/aggregate"
+}
+
+export type ObservabilitySummaryAggregateResponses = {
+  /**
+   * Summary
+   */
+  200: {
+    totalEvents: number
+    totalCostNanoUsd: number
+    byType: {
+      [key: string]: number
+    }
+    byStatus: {
+      [key: string]: number
+    }
+    firstEventTsMs?: number
+    lastEventTsMs?: number
+  }
+}
+
+export type ObservabilitySummaryAggregateResponse =
+  ObservabilitySummaryAggregateResponses[keyof ObservabilitySummaryAggregateResponses]
+
+export type ObservabilityExportersConfigData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/config"
+}
+
+export type ObservabilityExportersConfigResponses = {
+  /**
+   * Exporter config summary
+   */
+  200: {
+    exporters: Array<{
+      type: "langfuse"
+      host: string
+      publicKey: string
+    }>
+    backfillOnStart: boolean
+    lastRun?: {
+      atMs: number
+      results: Array<{
+        exporter: string
+        ok: boolean
+        attempts: number
+        error?: string
+      }>
+    }
+  }
+}
+
+export type ObservabilityExportersConfigResponse =
+  ObservabilityExportersConfigResponses[keyof ObservabilityExportersConfigResponses]
+
+export type ObservabilityExportersPreviewData = {
+  body?: never
+  path: {
+    eventId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/preview/{eventId}"
+}
+
+export type ObservabilityExportersPreviewErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ObservabilityExportersPreviewError =
+  ObservabilityExportersPreviewErrors[keyof ObservabilityExportersPreviewErrors]
+
+export type ObservabilityExportersPreviewResponses = {
+  /**
+   * Preview
+   */
+  200: {
+    exportable: boolean
+    reason?: string
+    projection?: {
+      eventId: string
+      traceId: string
+      spanId: string
+      parentSpanId?: string
+      sessionIdHmac?: string
+      projectIdHmac?: string
+      workspaceIdHmac?: string
+      type: string
+      status: "started" | "finished" | "failed" | "aborted" | "dropped"
+      tsMs: number
+      durationMs?: number
+      modelProvider?: string
+      modelId?: string
+      inputTokens?: number
+      outputTokens?: number
+      cacheReadTokens?: number
+      cacheWriteTokens?: number
+      costNanoUsd?: number
+      pricingVersion?: string
+      pricingSource?: string
+      redactionStatus: "metadata_only" | "redacted" | "failed_closed"
+      errorKind?: string
+      errorCode?: string
+      errorMessageHmac?: string
+      toolKind?: string
+      toolNameHmac?: string
+      skillHmac?: string
+      pathHmac?: string
+      mcpHmac?: string
+      agentName?: string
+      redactedClasses?: Array<string>
+    }
+  }
+}
+
+export type ObservabilityExportersPreviewResponse =
+  ObservabilityExportersPreviewResponses[keyof ObservabilityExportersPreviewResponses]
+
+export type ObservabilityExportersTestData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/observability/exporters/test"
+}
+
+export type ObservabilityExportersTestResponses = {
+  /**
+   * Test results
+   */
+  200: {
+    results: Array<{
+      exporter: string
+      ok: boolean
+      attempts: number
+      error?: string
+    }>
+  }
+}
+
+export type ObservabilityExportersTestResponse =
+  ObservabilityExportersTestResponses[keyof ObservabilityExportersTestResponses]
 
 export type CollabPresenceData = {
   body?: never

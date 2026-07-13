@@ -15,6 +15,7 @@ import { SettingsModels } from "./settings-models"
 import { SettingsBenchmark } from "./settings-benchmark"
 import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
+import { SettingsObservability } from "./settings-observability"
 
 export const DialogSettings: Component = () => {
   const mobileLayout = useMobileLayout()
@@ -75,6 +76,10 @@ const DialogSettingsDesktop: Component = () => {
                     <Icon name="settings-gear" />
                     Benchmark
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="observability">
+                    <Icon name="settings-gear" />
+                    Observability
+                  </Tabs.Trigger>
                   <Tabs.Trigger value="plugins">
                     <Icon name="mcp" />
                     Plugins
@@ -115,6 +120,9 @@ const DialogSettingsDesktop: Component = () => {
       </Tabs.Content>
       <Tabs.Content value="benchmark" class="no-scrollbar">
         <SettingsBenchmark />
+      </Tabs.Content>
+      <Tabs.Content value="observability" class="no-scrollbar">
+        <SettingsObservability />
       </Tabs.Content>
       <Tabs.Content value="plugins" class="no-scrollbar">
         <SettingsPlugins />

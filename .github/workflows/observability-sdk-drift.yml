@@ -1,0 +1,26 @@
+name: observability-sdk-drift
+
+on:
+  pull_request:
+    paths:
+      - 'packages/opencode/src/server/routes/observability.ts'
+      - 'packages/sdk/**'
+      - 'script/generate.ts'
+      - 'packages/opencode/package.json'
+      - 'packages/sdk/js/package.json'
+      - '.github/workflows/observability-sdk-drift.yml'
+  workflow_dispatch:
+
+jobs:
+  sdk-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+      - name: Regenerate SDK
+        run: ./script/generate.ts
+      - name: Fail on generated SDK drift
+        run: git diff --exit-code -- packages/sdk/openapi.json packages/sdk/js/src/v2/gen
