@@ -416,6 +416,15 @@ export type EventCollectiveProviderStarted = {
     debateID: string
     provider: string
     role?: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
   }
 }
 
@@ -426,6 +435,15 @@ export type EventCollectiveProviderCompleted = {
     provider: string
     tokens: number
     durationMs: number
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
   }
 }
 
@@ -435,6 +453,15 @@ export type EventCollectiveProviderFailed = {
     debateID: string
     provider: string
     error: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
   }
 }
 
@@ -1498,6 +1525,10 @@ export type AgentConfig = {
    * Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)
    */
   hidden?: boolean
+  /**
+   * Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).
+   */
+  cli_hidden?: boolean
   options?: {
     [key: string]: unknown
   }
@@ -2639,6 +2670,7 @@ export type Agent = {
   mode: "subagent" | "primary" | "all"
   native?: boolean
   hidden?: boolean
+  cli_hidden?: boolean
   topP?: number
   temperature?: number
   color?: string
@@ -5765,6 +5797,10 @@ export type DebateStartResponses = {
     timestamp: string
     tier: "free" | "quick" | "standard" | "deep"
     providers: Array<string>
+    failedProviders?: Array<{
+      provider: string
+      error: string
+    }>
     roles: {
       [key: string]: string
     }

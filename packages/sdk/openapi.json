@@ -6738,6 +6738,22 @@
                         "type": "string"
                       }
                     },
+                    "failedProviders": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["provider", "error"]
+                      }
+                    },
                     "roles": {
                       "type": "object",
                       "propertyNames": {
@@ -7220,6 +7236,418 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/config": {
+      "put": {
+        "operationId": "debate.config",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Configure global debate models",
+        "description": "Select the primary synthesis model and parallel participants reused by Debate mode.",
+        "responses": {
+          "200": {
+            "description": "Saved global debate selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "primary": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    },
+                    "participants": {
+                      "minItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "modelID"]
+                      }
+                    }
+                  },
+                  "required": ["primary", "participants"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "participants": {
+                    "minItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  }
+                },
+                "required": ["primary", "participants"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.config({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "debate.getConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get global debate models",
+        "description": "Return the Debate mode model selection reused across sessions.",
+        "responses": {
+          "200": {
+            "description": "Global debate selection or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "primary": {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["providerID", "modelID"]
+                        },
+                        "participants": {
+                          "minItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string"
+                              },
+                              "modelID": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["providerID", "modelID"]
+                          }
+                        }
+                      },
+                      "required": ["primary", "participants"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.getConfig({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/session/{sessionID}/config": {
+      "put": {
+        "operationId": "debate.sessionConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionID",
+            "required": true
+          }
+        ],
+        "summary": "Configure session debate models",
+        "description": "Select the primary synthesis model and the parallel debate participants for a session.",
+        "responses": {
+          "200": {
+            "description": "Saved debate selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "primary": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    },
+                    "participants": {
+                      "minItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "modelID"]
+                      }
+                    }
+                  },
+                  "required": ["primary", "participants"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "participants": {
+                    "minItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  }
+                },
+                "required": ["primary", "participants"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.sessionConfig({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "debate.getSessionConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionID",
+            "required": true
+          }
+        ],
+        "summary": "Get session debate models",
+        "description": "Return the configured debate models for a session, if any.",
+        "responses": {
+          "200": {
+            "description": "Debate selection or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "primary": {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["providerID", "modelID"]
+                        },
+                        "participants": {
+                          "minItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string"
+                              },
+                              "modelID": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["providerID", "modelID"]
+                          }
+                        }
+                      },
+                      "required": ["primary", "participants"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.getSessionConfig({\n  ...\n})"
           }
         ]
       }
@@ -13075,9 +13503,22 @@
               },
               "role": {
                 "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider"]
+            "required": ["debateID", "provider", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13104,9 +13545,22 @@
               },
               "durationMs": {
                 "type": "number"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider", "tokens", "durationMs"]
+            "required": ["debateID", "provider", "tokens", "durationMs", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13130,9 +13584,22 @@
               },
               "error": {
                 "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider", "error"]
+            "required": ["debateID", "provider", "error", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13373,6 +13840,38 @@
               }
             },
             "required": ["debateID", "percentUsed", "tokensUsed", "tokenLimit"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.shadow.divergence": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.shadow.divergence"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "critical"]
+              },
+              "shadowResponse": {
+                "type": "string"
+              },
+              "divergenceReason": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
           }
         },
         "required": ["type", "properties"]
@@ -14022,38 +14521,6 @@
               }
             },
             "required": ["message"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.shadow.divergence": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.shadow.divergence"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "question": {
-                "type": "string"
-              },
-              "severity": {
-                "type": "string",
-                "enum": ["info", "warning", "critical"]
-              },
-              "shadowResponse": {
-                "type": "string"
-              },
-              "divergenceReason": {
-                "type": "string"
-              }
-            },
-            "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
           }
         },
         "required": ["type", "properties"]
@@ -15558,6 +16025,9 @@
             "$ref": "#/components/schemas/Event.collective.debate.budget_warning"
           },
           {
+            "$ref": "#/components/schemas/Event.collective.shadow.divergence"
+          },
+          {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
           },
           {
@@ -15607,9 +16077,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.shadow.divergence"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -16273,6 +16740,10 @@
             "description": "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
             "type": "boolean"
           },
+          "cli_hidden": {
+            "description": "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
+            "type": "boolean"
+          },
           "options": {
             "type": "object",
             "propertyNames": {
@@ -16870,6 +17341,9 @@
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "build": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "auto": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "general": {
@@ -18800,6 +19274,9 @@
             "type": "boolean"
           },
           "hidden": {
+            "type": "boolean"
+          },
+          "cli_hidden": {
             "type": "boolean"
           },
           "topP": {
