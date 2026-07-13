@@ -24,7 +24,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
-import type { DebateTool } from "@/tool/debate"
+import { DebateLive, type DebateTool } from "@/tool/debate"
 import { useRenderer, type JSX } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
 import { TodoItem } from "../../component/todo-item"
@@ -437,6 +437,32 @@ type ToolProps<T> = {
   output?: string
   part: ToolPart
 }
+// Debate messages persisted before this feature shipped have no
+// `.participants` in their metadata — DebateLive.viewParticipants must
+// return undefined for that legacy shape so the component falls back to the
+// plain spinner instead of crashing on a missing field.
+export function debateLiveParticipants(metadata: unknown): DebateLive.ParticipantMap | undefined {
+  if (!metadata || typeof metadata !== "object") return undefined
+  const participants = (metadata as Record<string, unknown>).participants
+  if (!participants || typeof participants !== "object") return undefined
+  return participants as DebateLive.ParticipantMap
+}
+
+const DEBATE_PHASE_LABELS: Partial<Record<string, string>> = {
+  pending: "starting",
+  phase1_diverge: "diverge",
+  phase2_extract: "extract",
+  phase3_converge: "converge",
+  phase4_synthesize: "synthesize",
+}
+
+export function debateParticipantStatusIcon(status: DebateLive.ParticipantStatus): string {
+  if (status === "done") return "✓"
+  if (status === "failed") return "✗"
+  if (status === "running") return "…"
+  return "·"
+}
+
 function Debate(props: ToolProps<typeof DebateTool>) {
   const { theme } = useTheme()
   const isRunning = createMemo(() => props.part.state.status === "running")
@@ -448,6 +474,13 @@ function Debate(props: ToolProps<typeof DebateTool>) {
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, maxLines), `… ${lines().length - maxLines} more lines`].join("\n")
+  })
+
+  const liveParticipants = createMemo(() => {
+    const participants = debateLiveParticipants(props.metadata)
+    if (!participants) return undefined
+    const entries = Object.entries(participants)
+    return entries.length > 0 ? entries : undefined
   })
 
   const title = createMemo(() => {
@@ -470,6 +503,19 @@ function Debate(props: ToolProps<typeof DebateTool>) {
       spinner={isRunning()}
       onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
     >
+      <Show when={isRunning() && liveParticipants()}>
+        <box gap={0}>
+          <For each={liveParticipants()}>
+            {([provider, state]) => (
+              <text fg={state.status === "failed" ? theme.error : state.status === "done" ? theme.textMuted : theme.text}>
+                {debateParticipantStatusIcon(state.status)} {provider}
+                {state.role ? ` — ${state.role}` : ""} [{DEBATE_PHASE_LABELS[state.currentPhase] ?? state.currentPhase}]
+                {state.status === "failed" && state.error ? `: ${state.error}` : ""}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
       <Show when={!isRunning() && output()}>
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>

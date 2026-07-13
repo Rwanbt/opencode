@@ -5,6 +5,8 @@ import { Provider } from "../provider/provider"
 import type { ProviderID, ModelID } from "../provider/schema"
 import { Collective } from "./types"
 import { Log } from "../util/log"
+import { Bus } from "../bus"
+import * as Events from "./events"
 
 import PROMPT_RED_TEAM from "./prompts/red-team.txt"
 
@@ -48,12 +50,23 @@ export namespace RedTeam {
     synthesis: string
     attackerProviderID: ProviderID
     attackerModelID: ModelID
+    bus: Bus.Interface
+    debateID: Collective.DebateID
   }) {
+    const provider = `${input.attackerProviderID}/${input.attackerModelID}`
     log.info("red team activated", {
       claimCount: input.claims.length,
-      attacker: `${input.attackerProviderID}/${input.attackerModelID}`,
+      attacker: provider,
     })
 
+    const phase: Collective.DebateStatus = "phase3_converge"
+    yield* input.bus.publish(Events.ProviderStarted, {
+      debateID: input.debateID,
+      provider,
+      role: "red_team",
+      phase,
+    })
+    const start = Date.now()
     const catalogModel = yield* Effect.promise(() =>
       Provider.getModel(input.attackerProviderID, input.attackerModelID),
     )
@@ -72,11 +85,35 @@ export namespace RedTeam {
           prompt: `## Claims\n${claimsText}\n\n## Synthesis\n${input.synthesis}`,
           temperature: catalogModel.capabilities.temperature ? 0.7 : undefined,
         }),
-      catch: (e) => new Error(`Red team failed: ${e}`),
+      catch: (e) => {
+        const err = new Error(`Red team failed: ${e}`)
+        Effect.runFork(
+          input.bus.publish(Events.ProviderFailed, {
+            debateID: input.debateID,
+            provider,
+            error: String(e),
+            phase,
+          }),
+        )
+        return err
+      },
     })
 
     const attacks = result.object.attacks
     const critical = attacks.filter((a) => a.severity === "critical")
+
+    const tokenUsage = {
+      input: result.usage?.inputTokens ?? 0,
+      output: result.usage?.outputTokens ?? 0,
+    }
+
+    yield* input.bus.publish(Events.ProviderCompleted, {
+      debateID: input.debateID,
+      provider,
+      tokens: tokenUsage.input + tokenUsage.output,
+      durationMs: Date.now() - start,
+      phase,
+    })
 
     log.info("red team complete", {
       totalAttacks: attacks.length,
@@ -85,10 +122,7 @@ export namespace RedTeam {
 
     return {
       attacks,
-      tokenUsage: {
-        input: result.usage?.inputTokens ?? 0,
-        output: result.usage?.outputTokens ?? 0,
-      },
+      tokenUsage,
     }
   })
 }
