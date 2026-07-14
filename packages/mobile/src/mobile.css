@@ -252,6 +252,7 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 [data-component="prompt-agent-control"] button,
 [data-component="prompt-model-control"] button,
 [data-component="prompt-variant-control"] button,
+[data-component="prompt-debate-model-control"] button,
 [data-action="prompt-agent"],
 [data-action="prompt-model"],
 [data-action="prompt-model-variant"],
@@ -268,15 +269,31 @@ header .hidden.xl\:flex.shrink-0.ml-14 {
 [data-component="prompt-agent-control"],
 [data-component="prompt-model-control"],
 [data-component="prompt-mode-control"],
-[data-component="prompt-variant-control"] {
+[data-component="prompt-variant-control"],
+[data-component="prompt-debate-model-control"] {
   flex: 1 1 0 !important;
   min-width: 0 !important;
+}
+
+/* Debate adds a fifth selector; two compact columns prevent overlap on phones. */
+.prompt-controls-debate {
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+.prompt-controls-debate > [data-component="prompt-agent-control"],
+.prompt-controls-debate > [data-component="prompt-model-control"],
+.prompt-controls-debate > [data-component="prompt-mode-control"],
+.prompt-controls-debate > [data-component="prompt-debate-model-control"],
+.prompt-controls-debate > [data-component="prompt-variant-control"] {
+  flex: 1 1 calc(50% - 4px) !important;
+  max-width: calc(50% - 4px) !important;
 }
 
 /* Remove max-width constraints that cause unequal sizing */
 [data-component="prompt-model-control"] .max-w-\[320px\],
 [data-component="prompt-agent-control"] .max-w-\[160px\],
 [data-component="prompt-variant-control"] .max-w-\[160px\],
+[data-component="prompt-debate-model-control"] button,
 [data-component="prompt-mode-control"] .max-w-\[120px\] {
   max-width: none !important;
   width: 100% !important;

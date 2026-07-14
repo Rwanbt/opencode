@@ -1309,7 +1309,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
                 <div class="size-4 shrink-0" />
               </div>
-              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 min-w-0 flex-1" classList={{ "prompt-controls-debate": local.agent.current()?.name === "debate" }}>
                 <div data-component="prompt-agent-control">
                   <TooltipKeybind
                     placement="top"
