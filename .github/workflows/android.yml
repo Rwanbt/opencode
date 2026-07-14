@@ -258,28 +258,25 @@ jobs:
         run: bunx tauri android build --target aarch64
 
       # ─── Sign APK ─────────────────────────────────────────────────
-      - name: Sign APK
+      # ─── Sign APK ─────────────────────────────────────────────────
+      - name: Sign APK with release key
+        env:
+          OPENCODE_ANDROID_KEYSTORE_B64: ${{ secrets.OPENCODE_ANDROID_KEYSTORE_B64 }}
+          OPENCODE_ANDROID_KEY_ALIAS: ${{ secrets.OPENCODE_ANDROID_KEY_ALIAS }}
+          OPENCODE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OPENCODE_ANDROID_KEYSTORE_PASSWORD }}
+          OPENCODE_ANDROID_KEY_PASSWORD: ${{ secrets.OPENCODE_ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          test -n "${OPENCODE_ANDROID_KEYSTORE_B64}" || { echo "Release keystore secret is required"; exit 1; }
+          echo "${OPENCODE_ANDROID_KEYSTORE_B64}" | base64 --decode > /tmp/opencode-release.keystore
           APK="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           SIGNED="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk"
-
-          # Create a debug keystore for CI
-          keytool -genkey -v \
-            -keystore /tmp/ci.keystore \
-            -alias opencode -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=OpenCode CI, OU=Dev, O=OpenCode, L=Paris, ST=IDF, C=FR"
-
           cp "$APK" "$SIGNED"
-          java -jar "$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | tail -1)/lib/apksigner.jar" sign \
-            --ks /tmp/ci.keystore \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            "$SIGNED"
-
-          echo "Signed APK: $(du -sh "$SIGNED" | cut -f1)"
-
-      - name: Upload APK
+          apksigner sign --ks /tmp/opencode-release.keystore --ks-key-alias "${OPENCODE_ANDROID_KEY_ALIAS}" --ks-pass pass:"${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" --key-pass pass:"${OPENCODE_ANDROID_KEY_PASSWORD}" "$SIGNED"
+          apksigner verify --verbose "$SIGNED"
+          ! apksigner verify --print-certs "$SIGNED" 2>&1 | grep -qi 'androiddebugkey'
+          sha256sum "$SIGNED" | tee "$SIGNED.sha256"
+          rm -f /tmp/opencode-release.keystore
         uses: actions/upload-artifact@v4
         with:
           name: opencode-mobile-apk
