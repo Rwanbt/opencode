@@ -127,6 +127,7 @@ const HealthSchema = z.object({
   circuitOpen: z.boolean(),
   eventsAccepted: z.number(),
   eventsInserted: z.number(),
+  eventsPersisted: z.number(),
   eventsRejectedInvalidContext: z.number(),
   eventsRejectedInvalidEvent: z.number(),
   eventsDroppedQueueFull: z.number(),
@@ -275,12 +276,14 @@ export const ObservabilityRoutes = () =>
         const cfg = await Config.get()
         const policy = resolveCapturePolicy(cfg.experimental?.observability)
         const stats = ObservabilityRuntime.service().stats()
+        const persisted = summaryAll({ projectId: Instance.project.id })
         return c.json({
           enabled: policy.enabled,
           captureMode: policy.level,
           circuitOpen: stats.circuitOpen,
           eventsAccepted: stats.eventsAccepted,
           eventsInserted: stats.eventsInserted,
+          eventsPersisted: persisted.totalEvents,
           eventsRejectedInvalidContext: stats.eventsRejectedInvalidContext,
           eventsRejectedInvalidEvent: stats.eventsRejectedInvalidEvent,
           eventsDroppedQueueFull: stats.eventsDroppedQueueFull,

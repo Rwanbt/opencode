@@ -6202,6 +6202,7 @@ export type ObservabilityHealthResponses = {
     circuitOpen: boolean
     eventsAccepted: number
     eventsInserted: number
+    eventsPersisted: number
     eventsRejectedInvalidContext: number
     eventsRejectedInvalidEvent: number
     eventsDroppedQueueFull: number

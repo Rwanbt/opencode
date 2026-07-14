@@ -151,6 +151,7 @@ export const SettingsObservability: Component = () => {
             <Metric label="Queue bytes" value={`${((health()?.queueBytes ?? 0) / 1024).toFixed(1)} KiB`} />
             <Metric label="Accepted" value={String(health()?.eventsAccepted ?? 0)} />
             <Metric label="Inserted" value={String(health()?.eventsInserted ?? 0)} />
+            <Metric label="Persisted" value={String(health()?.eventsPersisted ?? 0)} />
             <Metric label="Rejected context" value={String(health()?.eventsRejectedInvalidContext ?? 0)} />
             <Metric label="Rejected event" value={String(health()?.eventsRejectedInvalidEvent ?? 0)} />
             <Metric label="Dropped queue" value={String(health()?.eventsDroppedQueueFull ?? 0)} />

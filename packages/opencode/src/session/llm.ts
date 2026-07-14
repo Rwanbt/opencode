@@ -505,7 +505,7 @@ export namespace LLM {
     const promptText = contentOptIn ? extractMessageText([...messages].reverse().find((m) => m.role === "user")?.content) : ""
     const llmStartedAtMs = Date.now()
     const llmSpan = observability
-      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID, workspaceId: sessionInfo?.workspaceID }, llmStartedAtMs)
+      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID }, llmStartedAtMs)
       : undefined
     if (observability && llmSpan) {
       observability.record(

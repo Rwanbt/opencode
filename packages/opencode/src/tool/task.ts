@@ -281,7 +281,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           const agentStartedAtMs = Date.now()
           let agentSpan: { trace: TraceContext; startedAtMs: number } | undefined
           if (observability) {
-            const started = startAgent({ traceId: agentTraceId, sessionId: session.id })
+            const started = startAgent({ traceId: agentTraceId, sessionId: session.id, projectId: session.projectID })
             agentSpan = { trace: started.trace, startedAtMs: started.event.tsMs }
             observability.record(started.trace, {
               ...started.event,
@@ -415,7 +415,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const agentStartedAtMs = Date.now()
       let agentSpan: { trace: TraceContext; startedAtMs: number } | undefined
       if (observability) {
-        const started = startAgent({ traceId: agentTraceId, sessionId: session.id })
+        const started = startAgent({ traceId: agentTraceId, sessionId: session.id, projectId: session.projectID })
         agentSpan = { trace: started.trace, startedAtMs: started.event.tsMs }
         observability.record(started.trace, {
           ...started.event,

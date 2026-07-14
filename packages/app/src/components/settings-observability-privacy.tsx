@@ -86,8 +86,8 @@ export const SettingsObservabilityPrivacy: Component<{
       </div>
 
       <SettingsList>
-        <SettingsRow title="Scope" description="Session covers only the selected session below; project covers every session in the current project.">
-          <Select size="small" variant="secondary" options={["session", "project"] as const} current={scope()} label={(item) => (item === "session" ? "Current session" : "Current project")} onSelect={(item) => item && setScope(item)} />
+        <SettingsRow title="Scope" description="Session covers only the selected session below; current project covers every session in this project, including future sessions, until the TTL expires.">
+          <Select size="small" variant="secondary" options={["session", "project"] as const} current={scope()} label={(item) => (item === "session" ? "Current session" : "Current project (all sessions)")} onSelect={(item) => item && setScope(item)} />
         </SettingsRow>
         <Show when={scope() === "session"}>
           <SettingsRow title="Session" description="Which session's content capture opt-in to view or change.">

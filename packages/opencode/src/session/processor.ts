@@ -289,7 +289,7 @@ export namespace SessionProcessor {
               } satisfies MessageV2.ToolPart)
 
               if (observability && turnTraceId) {
-                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID, workspaceId: sessionInfo?.workspaceID })
+                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
                 const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
                 let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
                 let fileIdentity: { pathHmac?: string } = {}
