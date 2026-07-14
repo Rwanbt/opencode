@@ -1,7 +1,7 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
 import { type Component, type ComponentProps, createMemo, type JSX, Show, type ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocal } from "@/context/local"
+import type { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
@@ -24,9 +24,9 @@ const ModelList: Component<{
   class?: string
   onSelect: () => void
   action?: JSX.Element
-  model?: ModelState
+  model: ModelState
 }> = (props) => {
-  const model = props.model ?? useLocal().model
+  const model = props.model
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -45,10 +45,14 @@ const ModelList: Component<{
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
       current={model.current()}
+      scrollbar
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => (model.favorite({ providerID: x.provider.id, modelID: x.id }) ? "Favorites" : x.provider.name)}
+      groupHeader={(group) => <span class="px-2 pt-2 pb-1 text-12-medium text-text-muted">{group.category}</span>}
       sortGroupsBy={(a, b) => {
+        if (a.category === "Favorites") return -1
+        if (b.category === "Favorites") return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
@@ -81,6 +85,25 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
+          <span
+            class="ml-auto shrink-0 cursor-pointer text-14-regular text-text-muted hover:text-text-base"
+            role="button"
+            tabindex="0"
+            title={model.favorite({ providerID: i.provider.id, modelID: i.id }) ? "Remove from favorites" : "Add to favorites"}
+            aria-label={model.favorite({ providerID: i.provider.id, modelID: i.id }) ? "Remove from favorites" : "Add to favorites"}
+            onClick={(event) => {
+              event.stopPropagation()
+              model.setFavorite({ providerID: i.provider.id, modelID: i.id }, !model.favorite({ providerID: i.provider.id, modelID: i.id }))
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              event.stopPropagation()
+              model.setFavorite({ providerID: i.provider.id, modelID: i.id }, !model.favorite({ providerID: i.provider.id, modelID: i.id }))
+            }}
+          >
+            {model.favorite({ providerID: i.provider.id, modelID: i.id }) ? "★" : "☆"}
+          </span>
           <Show when={isFree(i.provider.id, i.cost)}>
             <Tag>{language.t("model.tag.free")}</Tag>
           </Show>
@@ -98,7 +121,7 @@ type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
   provider?: string
-  model?: ModelState
+  model: ModelState
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
@@ -122,7 +145,7 @@ export function ModelSelectorPopover(props: {
   const handleManage = () => {
     close("manage")
     void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
+      dialog.show(() => <x.DialogManageModels model={props.model} />)
     })
   }
 
@@ -209,7 +232,7 @@ export function ModelSelectorPopover(props: {
   )
 }
 
-export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
+export const DialogSelectModel: Component<{ provider?: string; model: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -221,7 +244,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
 
   const manage = () => {
     void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
+      dialog.show(() => <x.DialogManageModels model={props.model} />)
     })
   }
 

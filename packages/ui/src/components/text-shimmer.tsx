@@ -1,6 +1,14 @@
 import { createEffect, createMemo, createSignal, onCleanup, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
+export const ActivityDots = (props: { label?: string }) => (
+  <span data-component="activity-dots" aria-label={props.label ?? "Working"} aria-hidden={props.label ? undefined : "true"}>
+    <span data-slot="activity-dot" />
+    <span data-slot="activity-dot" />
+    <span data-slot="activity-dot" />
+  </span>
+)
+
 export const TextShimmer = <T extends ValidComponent = "span">(props: {
   text: string
   class?: string

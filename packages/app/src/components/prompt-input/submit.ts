@@ -311,6 +311,31 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    if (currentAgent.name === "debate") {
+      const configured = local.debate.current() ?? (await local.debate.load())
+      const currentPrimary = { providerID: currentModel.provider.id, modelID: currentModel.id }
+      if (!configured) {
+        showToast({ title: language.t("dialog.debate.invalid"), description: language.t("dialog.debate.minimum") })
+        return
+      }
+      const synced = {
+        primary: currentPrimary,
+        participants: configured.participants,
+      }
+      if (!local.debate.isValid(synced)) {
+        showToast({ title: language.t("dialog.debate.invalid"), description: language.t("dialog.debate.minimum") })
+        return
+      }
+      if (configured.primary.providerID !== currentPrimary.providerID || configured.primary.modelID !== currentPrimary.modelID) {
+        try {
+          await local.debate.save(synced)
+        } catch (error) {
+          showToast({ title: language.t("common.requestFailed"), description: error instanceof Error ? error.message : String(error) })
+          return
+        }
+      }
+    }
+
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
     promptProbe.start()

@@ -235,7 +235,7 @@ export type Project = ProjectListResponses[200][number] & {
 // Agent — the backend Zod schema in
 // packages/opencode/src/agent/agent.ts (Agent.Info) is the runtime contract:
 //   { name, description?, mode: "subagent"|"primary"|"all", native?, hidden?,
-//     cli_hidden?, topP?, temperature?, color?, permission?, model?, variant?,
+//     cli_hidden?, app_hidden?, topP?, temperature?, color?, permission?, model?, variant?,
 //     prompt?, options?, steps?, mcp? }
 // The previous shim derived Agent from ProjectListResponses[200][number]
 // which has fields the runtime Agent.Info never carries (id, worktree, time,
@@ -251,6 +251,7 @@ export type Agent = {
   native?: boolean
   hidden?: boolean
   cli_hidden?: boolean
+  app_hidden?: boolean
   topP?: number
   temperature?: number
   color?: string

@@ -4,14 +4,16 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Button } from "@opencode-ai/ui/button"
 import type { Component } from "solid-js"
-import { useLocal } from "@/context/local"
+import type { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 // DialogSelectProvider loaded on-demand (keeps manage-models chunk slim).
 
-export const DialogManageModels: Component = () => {
-  const local = useLocal()
+type ModelState = ReturnType<typeof useLocal>["model"]
+
+export const DialogManageModels: Component<{ model: ModelState }> = (props) => {
+  const local = { model: props.model }
   const language = useLanguage()
   const dialog = useDialog()
 

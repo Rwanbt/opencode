@@ -34,6 +34,7 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { DebateModelSelector } from "@/components/debate-model-selector"
 import {
   createTextFragment,
   getCursorPosition,
@@ -1251,7 +1252,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!working() && blank())}
+                  disabled={store.mode !== "normal" || (!working() && blank()) || !local.agent.current()}
                   tabIndex={store.mode === "normal" ? undefined : -1}
                   icon={stopping() ? "stop" : "arrow-up"}
                   variant="primary"
@@ -1420,6 +1421,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       variant="ghost"
                     />
                   </div>
+                  <Show when={local.agent.current()?.name === "debate"}>
+                    <div data-component="prompt-debate-model-control">
+                      <DebateModelSelector local={local} />
+                    </div>
+                  </Show>
                   <Show when={variants().length > 1}>
                     <div data-component="prompt-variant-control">
                       <TooltipKeybind

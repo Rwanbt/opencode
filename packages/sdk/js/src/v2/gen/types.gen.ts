@@ -1529,6 +1529,10 @@ export type AgentConfig = {
    * Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).
    */
   cli_hidden?: boolean
+  /**
+   * Hide this agent from the desktop/mobile app agent selector only. Does not affect the CLI or programmatic/explicit invocation (default: false).
+   */
+  app_hidden?: boolean
   options?: {
     [key: string]: unknown
   }
@@ -2708,6 +2712,7 @@ export type Agent = {
   native?: boolean
   hidden?: boolean
   cli_hidden?: boolean
+  app_hidden?: boolean
   topP?: number
   temperature?: number
   color?: string

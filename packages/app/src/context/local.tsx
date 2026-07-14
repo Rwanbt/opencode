@@ -10,6 +10,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import { visibleAgents } from "./global-sync/utils"
+import { modelKey, type DebateSelection, validateDebateSelection } from "@/components/debate-selection"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -62,7 +64,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = useModels()
 
     const id = createMemo(() => params.id || undefined)
-    const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
+    const list = createMemo(() => visibleAgents(sync.data.agent))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     const [saved, setSaved] = persisted(
@@ -89,6 +91,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       draft: undefined,
       last: undefined,
     })
+
+    const [debateStore, setDebateStore] = createStore<{
+      selection?: DebateSelection
+      loading: boolean
+    }>({ loading: false })
 
     const validModel = (model: ModelKey) => {
       const provider = providers.all().find((item) => item.id === model.providerID)
@@ -317,6 +324,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setVisibility(item: ModelKey, visible: boolean) {
         models.setVisibility(item, visible)
       },
+      favorite(item: ModelKey) {
+        return models.favorite(item)
+      },
+      setFavorite(item: ModelKey, favorite: boolean) {
+        models.setFavorite(item, favorite)
+      },
       variant: {
         configured,
         selected,
@@ -358,10 +371,51 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const debate = {
+      current: () => debateStore.selection,
+      async load() {
+        if (debateStore.loading) return debateStore.selection
+        setDebateStore("loading", true)
+        try {
+          const response = await sdk.client.debate.getConfig()
+          if (response.error) throw new Error("Failed to load global Debate configuration")
+          const selection = response.data ?? undefined
+          setDebateStore("selection", selection)
+          return selection
+        } finally {
+          setDebateStore("loading", false)
+        }
+      },
+      set(selection: DebateSelection | undefined) {
+        setDebateStore("selection", selection)
+      },
+      isValid(selection: DebateSelection | undefined) {
+        const available = new Set(
+          providers
+            .connected()
+            .flatMap((provider) =>
+              Object.values(provider.models).map((item) => modelKey({ providerID: provider.id, modelID: item.id })),
+            ),
+        )
+        return validateDebateSelection(selection, available) === undefined
+      },
+      async save(selection: DebateSelection) {
+        const response = await sdk.client.debate.config({
+          primary: selection.primary,
+          participants: selection.participants,
+        })
+        if (response.error || !response.data) throw new Error("Failed to save global Debate configuration")
+        setDebateStore("selection", response.data)
+        return response.data
+      },
+      loading: () => debateStore.loading,
+    }
+
     const result = {
       slug: createMemo(() => base64Encode(sdk.directory)),
       model,
       agent,
+      debate,
       session: {
         reset() {
           setStore("draft", undefined)

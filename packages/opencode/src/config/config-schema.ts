@@ -189,6 +189,9 @@ export const Agent = z
       .describe(
         "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
       ),
+    app_hidden: z.boolean().optional().describe(
+      "Hide this agent from the desktop/mobile app agent selector only. Does not affect the CLI or programmatic/explicit invocation (default: false).",
+    ),
     options: z.record(z.string(), z.any()).optional(),
     color: z
       .union([
@@ -226,6 +229,7 @@ export const Agent = z
       "mode",
       "hidden",
       "cli_hidden",
+      "app_hidden",
       "color",
       "steps",
       "maxSteps",

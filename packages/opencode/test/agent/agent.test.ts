@@ -702,7 +702,7 @@ test("defaultAgent respects default_agent config set to custom agent with mode a
   })
 })
 
-test("defaultAgent throws when default_agent points to subagent", async () => {
+test("defaultAgent falls back when default_agent points to subagent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "explore",
@@ -711,12 +711,12 @@ test("defaultAgent throws when default_agent points to subagent", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "explore" is a subagent')
+      await expect(Agent.defaultAgent()).resolves.toBe("build")
     },
   })
 })
 
-test("defaultAgent throws when default_agent points to hidden agent", async () => {
+test("defaultAgent falls back when default_agent points to hidden agent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "compaction",
@@ -725,12 +725,12 @@ test("defaultAgent throws when default_agent points to hidden agent", async () =
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "compaction" is hidden')
+      await expect(Agent.defaultAgent()).resolves.toBe("build")
     },
   })
 })
 
-test("defaultAgent throws when default_agent points to non-existent agent", async () => {
+test("defaultAgent falls back when default_agent points to non-existent agent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "does_not_exist",
@@ -739,7 +739,7 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "does_not_exist" not found')
+      await expect(Agent.defaultAgent()).resolves.toBe("build")
     },
   })
 })
@@ -805,6 +805,17 @@ test("cli_hidden agent stays visible to Agent.list/get (backend never treats it 
       expect(agent?.hidden).toBeUndefined()
       const names = (await Agent.list()).map((a) => a.name)
       expect(names).toContain("cloud-lean")
+    },
+  })
+})
+
+test("app_hidden agent stays invocable while the app can filter it", async () => {
+  await using tmp = await tmpdir({ config: { agent: { auto: { app_hidden: true } } } })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Agent.get("auto"))?.app_hidden).toBe(true)
+      expect((await Agent.list()).find((item) => item.name === "auto")?.app_hidden).toBe(true)
     },
   })
 })

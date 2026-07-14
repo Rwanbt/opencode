@@ -14,7 +14,7 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
-import { TextShimmer } from "./text-shimmer"
+import { ActivityDots, TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
@@ -422,6 +422,7 @@ export function SessionTurn(
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
                   <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                  <ActivityDots label={i18n.t("ui.sessionTurn.status.thinking")} />
                   <Show when={!showReasoningSummaries()}>
                     <TextReveal
                       text={reasoningHeading()}

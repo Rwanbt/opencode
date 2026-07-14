@@ -47,6 +47,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   divider?: boolean
   add?: ListAddProps
   groupHeader?: (group: { category: string; items: T[] }) => JSX.Element
+  scrollbar?: boolean
 }
 
 export interface ListRef {
@@ -260,7 +261,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   return (
-    <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
+    <div
+      data-component="list"
+      data-scrollbar={props.scrollbar ? "visible" : undefined}
+      classList={{ [props.class ?? ""]: !!props.class }}
+    >
       <Show when={!!props.search}>
         <div data-slot="list-search-wrapper">
           <div

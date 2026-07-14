@@ -48,7 +48,7 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
-import { TextShimmer } from "./text-shimmer"
+import { ActivityDots, TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
@@ -1233,6 +1233,47 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
   )
 }
 
+function debatePhaseLabel(value: unknown) {
+  if (typeof value !== "string" || !value) return "Debate"
+  return value.replace(/^phase\d+_/, "").replaceAll("_", " ")
+}
+
+function debateStatusIcon(value: unknown) {
+  if (value === "done") return "✓"
+  if (value === "failed") return "✗"
+  return "·"
+}
+
+function DebateToolPart(props: { metadata: Record<string, any>; status?: string }) {
+  const participants = () => Object.entries((props.metadata.participants ?? {}) as Record<string, { status?: string }>)
+  const pending = () => props.status === "pending" || props.status === "running"
+
+  return (
+    <div data-component="debate-tool-part" class="flex flex-col gap-1.5 py-1.5 text-13-regular text-text-weak">
+      <div class="flex items-center gap-2 text-text-strong">
+        <Icon name="brain" size="small" />
+        <TextShimmer text={debatePhaseLabel(props.metadata.phase)} active={pending()} />
+      </div>
+      <Show when={participants().length > 0}>
+        <div class="flex flex-col gap-0.5 pl-6">
+          <For each={participants()}>
+            {(entry) => (
+              <div class="flex items-center gap-2">
+                <span class="w-4 text-center text-text-muted">
+                  <Show when={entry[1].status === "running"} fallback={debateStatusIcon(entry[1].status)}>
+                    <ActivityDots label={"Running " + entry[0]} />
+                  </Show>
+                </span>
+                <span class="truncate">{entry[0]}</span>
+                <span class="text-text-muted capitalize">{entry[1].status ?? "pending"}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  )
+}
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
@@ -1271,6 +1312,9 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper">
         <Switch>
+          <Match when={part().tool === "debate" && part().state.status !== "error"}>
+            <DebateToolPart metadata={partMetadata()} status={part().state.status} />
+          </Match>
           <Match when={part().state.status === "error" && (part().state as any).error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
