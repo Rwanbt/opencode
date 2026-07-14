@@ -38,11 +38,11 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
     }
     setBusy(true)
     try {
-      const cfg = await unwrap(sdk.client.config.get())
+      const cfg = await unwrap(sdk.client.global.config.get())
       const existing = (cfg.experimental?.observability?.exporters ?? []).filter((e: { type: string }) => e.type !== "langfuse")
       const next = [...existing, { type: "langfuse" as const, host: host(), publicKey: publicKey(), secretKey: secretKey() }]
       await unwrap(
-        sdk.client.config.update({
+        sdk.client.global.config.update({
           config: { ...cfg, experimental: { ...cfg.experimental, observability: { ...cfg.experimental?.observability, exporters: next } } },
         }),
       )
@@ -59,10 +59,10 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
   const removeExporter = async (type: string) => {
     setBusy(true)
     try {
-      const cfg = await unwrap(sdk.client.config.get())
+      const cfg = await unwrap(sdk.client.global.config.get())
       const next = (cfg.experimental?.observability?.exporters ?? []).filter((e: { type: string }) => e.type !== type)
       await unwrap(
-        sdk.client.config.update({
+        sdk.client.global.config.update({
           config: { ...cfg, experimental: { ...cfg.experimental, observability: { ...cfg.experimental?.observability, exporters: next } } },
         }),
       )
@@ -78,9 +78,9 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
   const setBackfill = async (backfillOnStart: boolean) => {
     setBusy(true)
     try {
-      const cfg = await unwrap(sdk.client.config.get())
+      const cfg = await unwrap(sdk.client.global.config.get())
       await unwrap(
-        sdk.client.config.update({
+        sdk.client.global.config.update({
           config: { ...cfg, experimental: { ...cfg.experimental, observability: { ...cfg.experimental?.observability, backfillOnStart } } },
         }),
       )

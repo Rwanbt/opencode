@@ -12,10 +12,10 @@ function formatCost(nano: number) {
   return `$${(nano / 1_000_000_000).toFixed(4)}`
 }
 
-export const SettingsObservabilityCost: Component = () => {
+export const SettingsObservabilityCost: Component<{ refreshKey?: number }> = (props) => {
   const sdk = useSDK()
-  const [summary] = createResource(() => unwrap(sdk.client.observability.summaryAggregate({ sinceMs: Date.now() - WINDOW_MS })))
-  const [comparison] = createResource(() => unwrap(sdk.client.observability.compare({ timeWindowMs: WINDOW_MS })))
+  const [summary] = createResource(() => props.refreshKey, () => unwrap(sdk.client.observability.summaryAggregate({ sinceMs: Date.now() - WINDOW_MS })))
+  const [comparison] = createResource(() => props.refreshKey, () => unwrap(sdk.client.observability.compare({ timeWindowMs: WINDOW_MS })))
 
   const cohorts = createMemo(() => {
     const list = comparison()?.cohorts ?? []

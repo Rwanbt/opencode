@@ -1,4 +1,4 @@
-import { type Component, createEffect, createResource, createSignal, For, Show } from "solid-js"
+import { type Component, createEffect, createResource, createSignal, For, onCleanup, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch as SwitchComponent } from "@opencode-ai/ui/switch"
@@ -40,10 +40,11 @@ export const SettingsObservability: Component = () => {
   const [settings, settingsActions] = createResource(() => unwrap(sdk.client.observability.settings()))
   const [exportersConfig] = createResource(() => unwrap(sdk.client.observability.exporters.config()))
   const [health, healthActions] = createResource(() => unwrap(sdk.client.observability.health()))
-  const [sessions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
+  const [sessions, sessionsActions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
   const [events, eventsActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, limit: 50 })))
   const [summary, summaryActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.summary({ sessionId: id })))
   const [comparison, comparisonActions] = createResource(activeSubtab, (tab) => tab === "comparisons" ? unwrap(sdk.client.observability.compare({ timeWindowMs: 7 * 24 * 60 * 60 * 1000 })) : Promise.resolve(null)) as unknown as [() => CompareResult | null, { refetch: () => Promise<void> }]
+  const [refreshKey, setRefreshKey] = createSignal(0)
 
   createEffect(() => {
     const first = sessions()?.[0]
@@ -51,13 +52,23 @@ export const SettingsObservability: Component = () => {
   })
 
   const selected = () => sessions()?.find((item) => item.id === sessionId())
-  const refresh = () => void Promise.all([settingsActions.refetch(), healthActions.refetch(), eventsActions.refetch(), summaryActions.refetch(), comparisonActions.refetch()])
+  const refresh = () => {
+    setRefreshKey((value) => value + 1)
+    void Promise.all([settingsActions.refetch(), healthActions.refetch(), sessionsActions.refetch(), eventsActions.refetch(), summaryActions.refetch(), comparisonActions.refetch()])
+  }
+
+  createEffect(() => {
+    const unsubscribe = sdk.event.on("session.idle", (event) => {
+      if (event.properties.sessionID === sessionId() || !sessionId()) refresh()
+    })
+    onCleanup(unsubscribe)
+  })
 
   const update = async (patch: { enabled?: boolean; captureMode?: "local_metadata" | "local_redacted"; retentionDays?: number; maxEvents?: number }) => {
     setBusy(true)
     try {
-      const config = await unwrap(sdk.client.config.get())
-      await unwrap(sdk.client.config.update({ config: { ...config, experimental: { ...config.experimental, observability: { ...config.experimental?.observability, ...patch } } } }))
+      const config = await unwrap(sdk.client.global.config.get())
+      await unwrap(sdk.client.global.config.update({ config: { ...config, experimental: { ...config.experimental, observability: { ...config.experimental?.observability, ...patch } } } }))
       await Promise.all([settingsActions.refetch(), healthActions.refetch()])
       showToast({ variant: "success", title: "Observability settings saved" })
     } catch (error) {
@@ -221,11 +232,11 @@ export const SettingsObservability: Component = () => {
         </div></Show>
 
         <Show when={activeSubtab() === "timeline"}><div class="no-scrollbar">
-          <SettingsObservabilityTimeline sessions={sessions() ?? []} sessionId={sessionId()} onSelectSession={setSessionId} />
+          <SettingsObservabilityTimeline refreshKey={refreshKey()} sessions={sessions() ?? []} sessionId={sessionId()} onSelectSession={setSessionId} />
         </div></Show>
 
         <Show when={activeSubtab() === "cost"}><div class="no-scrollbar">
-          <SettingsObservabilityCost />
+          <SettingsObservabilityCost refreshKey={refreshKey()} />
         </div></Show>
 
         <Show when={activeSubtab() === "privacy"}><div class="no-scrollbar">

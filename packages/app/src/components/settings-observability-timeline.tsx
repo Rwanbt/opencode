@@ -46,6 +46,7 @@ function groupByTrace(events: EventDto[]) {
 export const SettingsObservabilityTimeline: Component<{
   sessions: SessionItem[]
   sessionId?: string
+  refreshKey?: number
   onSelectSession: (id: string) => void
 }> = (props) => {
   const sdk = useSDK()
@@ -53,8 +54,8 @@ export const SettingsObservabilityTimeline: Component<{
   const [expandedTraceId, setExpandedTraceId] = createSignal<string>()
 
   const [events] = createResource(
-    () => props.sessionId,
-    (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, limit: 200 })) as Promise<EventDto[]>,
+    () => props.sessionId ? { sessionId: props.sessionId, refreshKey: props.refreshKey } : undefined,
+    (source) => unwrap(sdk.client.observability.events.list({ sessionId: source.sessionId, limit: 200 })) as Promise<EventDto[]>,
   )
 
   const traces = createMemo(() => groupByTrace(events() ?? []))
