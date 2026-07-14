@@ -281,6 +281,8 @@ jobs:
           ! apksigner verify --print-certs "$SIGNED" 2>&1 | grep -qi 'androiddebugkey'
           sha256sum "$SIGNED" | tee "$SIGNED.sha256"
           rm -f /tmp/opencode-release.keystore
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: opencode-mobile-apk
