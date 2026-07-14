@@ -87,7 +87,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
         type: "button",
         variant: "ghost",
         size: "normal",
-        class: "min-w-0 max-w-[220px] text-text-base",
+        class: "min-w-0 w-full max-w-[220px] text-text-base",
         "data-action": "prompt-debate-models",
         "aria-label": language.t("dialog.debate.annexLabel"),
         disabled: saving(),
@@ -96,7 +96,9 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
       class="w-[min(520px,calc(100vw-48px))]"
       modal
     >
-      <List
+      <div class="flex flex-col gap-2">
+        <div class="px-1 text-12-regular text-text-muted">{language.t("dialog.debate.primary", { model: primary()?.name ?? "" })}</div>
+        <List
         class="w-full h-[min(520px,60vh)] [&_[data-slot=list-scroll]]:h-[min(460px,calc(60vh-60px))]"
         search={{ placeholder: language.t("dialog.debate.search"), autofocus: true }}
         emptyMessage={language.t("dialog.debate.empty")}
@@ -142,6 +144,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
           </div>
         )}
       </List>
+      </div>
     </Popover>
   )
 }
