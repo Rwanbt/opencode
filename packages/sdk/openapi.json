@@ -8003,6 +8003,9 @@
                     "eventsInserted": {
                       "type": "number"
                     },
+                    "eventsPersisted": {
+                      "type": "number"
+                    },
                     "eventsRejectedInvalidContext": {
                       "type": "number"
                     },
@@ -8041,6 +8044,14 @@
                     },
                     "queueBytes": {
                       "type": "number"
+                    },
+                    "runtimeCounterScope": {
+                      "type": "string",
+                      "const": "current_process"
+                    },
+                    "persistedCounterScope": {
+                      "type": "string",
+                      "const": "all_projects_local_sqlite"
                     }
                   },
                   "required": [
@@ -8049,6 +8060,7 @@
                     "circuitOpen",
                     "eventsAccepted",
                     "eventsInserted",
+                    "eventsPersisted",
                     "eventsRejectedInvalidContext",
                     "eventsRejectedInvalidEvent",
                     "eventsDroppedQueueFull",
@@ -8059,7 +8071,9 @@
                     "eventsFailedCorrupt",
                     "sanitizerFailed",
                     "queueSize",
-                    "queueBytes"
+                    "queueBytes",
+                    "runtimeCounterScope",
+                    "persistedCounterScope"
                   ]
                 }
               }
@@ -8154,6 +8168,80 @@
         ]
       }
     },
+    "/observability/sessions": {
+      "get": {
+        "operationId": "observability.sessions.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "summary": "List sessions with observability data",
+        "description": "Lists local sessions with persisted observability events, independent of the current project directory.",
+        "responses": {
+          "200": {
+            "description": "Sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "projectID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.sessions.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/observability/events": {
       "get": {
         "operationId": "observability.events.list",
@@ -8181,6 +8269,15 @@
               "pattern": "^ses.*"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
           },
           {
             "in": "query",
@@ -8548,6 +8645,15 @@
               "minLength": 1
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
           }
         ],
         "summary": "Get all events in a trace",
@@ -8729,6 +8835,15 @@
               "pattern": "^ses.*"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
           }
         ],
         "summary": "Observability summary for a session",
@@ -8832,7 +8947,7 @@
             "name": "scope",
             "schema": {
               "type": "string",
-              "enum": ["workspace", "project", "session"]
+              "enum": ["workspace", "project", "session", "all"]
             },
             "required": true
           },
@@ -8863,7 +8978,7 @@
                           "properties": {
                             "scope": {
                               "type": "string",
-                              "enum": ["workspace", "project", "session"]
+                              "enum": ["workspace", "project", "session", "all"]
                             },
                             "scopeId": {
                               "type": "string"
@@ -8953,7 +9068,7 @@
                   "properties": {
                     "scope": {
                       "type": "string",
-                      "enum": ["workspace", "project", "session"]
+                      "enum": ["workspace", "project", "session", "all"]
                     },
                     "scopeId": {
                       "type": "string"
@@ -9006,7 +9121,7 @@
                 "properties": {
                   "scope": {
                     "type": "string",
-                    "enum": ["workspace", "project", "session"]
+                    "enum": ["workspace", "project", "session", "all"]
                   },
                   "id": {
                     "type": "string",
@@ -9105,7 +9220,7 @@
                 "properties": {
                   "scope": {
                     "type": "string",
-                    "enum": ["workspace", "project", "session"]
+                    "enum": ["workspace", "project", "session", "all"]
                   },
                   "id": {
                     "type": "string",
@@ -9150,6 +9265,15 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
             }
           }
         ],
@@ -9563,6 +9687,15 @@
             "name": "untilMs",
             "schema": {
               "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
             }
           }
         ],
