@@ -29,6 +29,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify generated mobile bundle
+        run: node scripts/verify-mobile-bundle.mjs
+
       - name: Install Tauri Linux system dependencies
         run: |
           sudo apt-get update
