@@ -35,6 +35,12 @@ if (!src) {
 console.log(`[copy-sidecar] using source: ${src}`)
 const srcFile = Bun.file(src)
 
+// WHY: Tauri resolves bundle.externalBin before Cargo starts, so the source
+// sidecar must exist in src-tauri/sidecars before the official build command.
+const bundleDestination = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
+mkdirSync(dirname(bundleDestination), { recursive: true })
+await Bun.write(bundleDestination, srcFile)
+console.log(`[copy-sidecar] bundle <- ${bundleDestination}`)
 for (const profile of ["debug", "release"]) {
   const dest = windowsify(`src-tauri/target/${profile}/opencode-cli`)
   mkdirSync(dirname(dest), { recursive: true })

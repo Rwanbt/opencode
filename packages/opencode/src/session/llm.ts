@@ -7,6 +7,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { PromptCache } from "@/provider/cache"
 import { resolveFallbackDirection, withStreamingFallback } from "@/provider/fallback"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -418,7 +419,22 @@ export namespace LLM {
         ? undefined
         : localLLMLimits?.maxTokens ?? ProviderTransform.maxOutputTokens(input.model)
 
-    const tools = await resolveTools(input)
+    let tools = await resolveTools(input)
+
+    // Deferred prompt-cache-after-compaction chantier (plan v3.1, Phase 3).
+    // Gated behind the flag (not unconditional): reordering tools, even just
+    // alphabetically, can shift which tool a model is more inclined to call
+    // (plan §11 risk table) — flag off must stay bit-for-bit identical to the
+    // pre-Phase-3 caller-provided order. Canonicalizing lets the same
+    // effective toolset serialize identically across an agent switch, and
+    // annotating the last tool reserves a cache breakpoint that can carry
+    // over too — see ProviderTransform.message()'s matching slot reservation.
+    if (Flag.OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING) {
+      tools = PromptCache.canonicalizeToolOrder(tools)
+      const cacheCapabilities = PromptCache.getCapabilities(input.model)
+      tools = PromptCache.annotateLastToolForCache(tools, cacheCapabilities)
+    }
+    l.info("resolved tools", { toolCount: Object.keys(tools).length, toolNames: Object.keys(tools) })
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.

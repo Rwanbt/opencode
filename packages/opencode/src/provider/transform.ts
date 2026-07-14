@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { PromptCache } from "./cache"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -340,7 +341,20 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-    if (
+    if (Flag.OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING) {
+      const capabilities = PromptCache.getCapabilities(model)
+      if (capabilities.supported) {
+        // Reserve 1 slot whenever this model supports a tool breakpoint (see
+        // session/llm.ts's resolveTools/annotateLastToolForCache), even on
+        // calls with no tools (e.g. compaction) — a per-model, not per-call,
+        // fact so both call sites can derive the same budget independently
+        // without threading state through the AI SDK middleware boundary.
+        const reservedForTools = capabilities.toolBreakpointSupported ? 1 : 0
+        const budget = PromptCache.MAX_BREAKPOINTS - capabilities.automaticCachingSlots - reservedForTools
+        const breakpoints = PromptCache.selectMessageBreakpoints(msgs, budget)
+        msgs = PromptCache.applyMessageCacheMarkers(msgs, { capabilities, breakpoints })
+      }
+    } else if (
       (model.providerID === "anthropic" ||
         model.providerID === "google-vertex-anthropic" ||
         model.api.id.includes("anthropic") ||
@@ -379,6 +393,10 @@ export namespace ProviderTransform {
         } as typeof msg
       })
     }
+
+    // Unconditional — the transient opencodeCacheInternal marker (see cache.ts)
+    // must never reach a provider adapter, whether the flag is on or off.
+    msgs = PromptCache.stripInternalProviderMetadata(msgs)
 
     return msgs
   }

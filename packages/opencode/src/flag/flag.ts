@@ -69,6 +69,10 @@ export namespace Flag {
   export const OPENCODE_DISABLE_FILETIME_CHECK = Config.boolean("OPENCODE_DISABLE_FILETIME_CHECK").pipe(
     Config.withDefault(false),
   )
+  // Deferred prompt-cache-after-compaction chantier (plan v3.1). Off by default:
+  // flag off must reproduce ProviderTransform's legacy applyCaching() bit-for-bit.
+  // Declared here (dynamic getter defined below) so tests can toggle it per-call.
+  export declare const OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING: boolean
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_WORKSPACES = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = !falsy("OPENCODE_EXPERIMENTAL_MARKDOWN")
@@ -149,6 +153,18 @@ Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING
+// This must be evaluated at access time, not module load time, so tests can
+// exercise the flag-on path without needing a fresh process (bun test shares
+// one module registry — and therefore one process.env — across test files).
+Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING", {
+  get() {
+    return truthy("OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING")
   },
   enumerable: true,
   configurable: false,

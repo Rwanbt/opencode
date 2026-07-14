@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
+import { mergeDeep } from "remeda"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -701,13 +702,28 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
+        // Deferred prompt-cache-after-compaction chantier (plan v3.1, Phase 2):
+        // tag the compaction summary's text part with a transient
+        // opencodeCacheInternal.cacheAnchor marker, independent of the
+        // differentModel gate below — this bookkeeping marker identifies
+        // "this message IS the compaction summary" regardless of which model
+        // continues the conversation. PromptCache.stripInternalProviderMetadata()
+        // (provider/cache.ts) removes it unconditionally before any adapter
+        // sees it, whether OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING is on or off.
+        const isCompactionSummary = msg.info.mode === "compaction" && msg.info.summary === true
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text") {
+            const providerMetadata = iife(() => {
+              const base = differentModel ? undefined : part.metadata
+              if (!isCompactionSummary || part.text.trim() === "") return base
+              return mergeDeep(base ?? {}, { opencodeCacheInternal: { cacheAnchor: true } })
+            })
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              ...(providerMetadata ? { providerMetadata } : {}),
             })
+          }
           if (part.type === "step-start")
             assistantMessage.parts.push({
               type: "step-start",

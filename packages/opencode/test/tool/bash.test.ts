@@ -5,6 +5,7 @@ import { Shell } from "../../src/shell/shell"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
+import { Process } from "../../src/util/process"
 import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncate"
@@ -69,6 +70,13 @@ const forms = (dir: string) => {
   const slash = full.replaceAll("\\", "/")
   const msys = slash.replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`)
   return Array.from(new Set([full, slash, msys, msys.toLowerCase()]))
+}
+
+// Git Bash mounts /tmp via its own fstab (usertemp), independent of TEMP/TMP/TMPDIR,
+// so the expected Windows path must come from cygpath itself, not os.tmpdir().
+const gitBashTmp = async (shell: string) => {
+  const out = await Process.text([shell, "-lc", 'cygpath -w -- "$1"', "_", "/tmp"], { nothrow: true })
+  return Filesystem.normalizePath(out.text.trim())
 }
 
 const withShell = (item: { label: string; shell: string }, fn: () => Promise<void>) => async () => {
@@ -328,6 +336,7 @@ describe("tool.bash permissions", () => {
         `asks for external_directory permission for drive-relative PowerShell paths [${item.label}]`,
         withShell(item, async () => {
           await using tmp = await tmpdir()
+          const drive = path.parse(tmp.path).root.replace(/[\\/]+$/, "")
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
@@ -337,7 +346,7 @@ describe("tool.bash permissions", () => {
               await expect(
                 bash.execute(
                   {
-                    command: 'Get-Content "C:../outside.txt"',
+                    command: `Get-Content "${drive}../outside.txt"`,
                     description: "Read drive-relative file",
                   },
                   capture(requests, err),
@@ -701,16 +710,17 @@ describe("tool.bash permissions", () => {
     })
 
     if (bash) {
+      const shell = bash
       test(
         "uses Git Bash /tmp semantics for external workdir",
-        withShell({ label: "bash", shell: bash }, async () => {
+        withShell({ label: "bash", shell }, async () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await BashTool.init()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-              const want = glob(path.join(os.tmpdir(), "*"))
+              const want = glob(path.join(await gitBashTmp(shell), "*"))
               await expect(
                 bash.execute(
                   {
@@ -733,14 +743,14 @@ describe("tool.bash permissions", () => {
 
       test(
         "uses Git Bash /tmp semantics for external file paths",
-        withShell({ label: "bash", shell: bash }, async () => {
+        withShell({ label: "bash", shell }, async () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await BashTool.init()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-              const want = glob(path.join(os.tmpdir(), "*"))
+              const want = glob(path.join(await gitBashTmp(shell), "*"))
               await expect(
                 bash.execute(
                   {
