@@ -18782,6 +18782,10 @@
             "description": "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
             "type": "boolean"
           },
+          "app_hidden": {
+            "description": "Hide this agent from the desktop/mobile app agent selector only. Does not affect the CLI or programmatic/explicit invocation (default: false).",
+            "type": "boolean"
+          },
           "options": {
             "type": "object",
             "propertyNames": {
@@ -21378,6 +21382,9 @@
             "type": "boolean"
           },
           "cli_hidden": {
+            "type": "boolean"
+          },
+          "app_hidden": {
             "type": "boolean"
           },
           "topP": {
