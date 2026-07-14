@@ -11,7 +11,9 @@ RUNTIME_DIR="$MOBILE_DIR/src-tauri/assets/runtime"
 BIN_DIR="$RUNTIME_DIR/bin"
 TEMP_DIR="$(mktemp -d)"
 
-trap "rm -rf $TEMP_DIR" EXIT
+# Keep the temporary path expanded when the trap runs so cleanup remains safe
+# if the temporary directory is recreated or the script is interrupted.
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 mkdir -p "$BIN_DIR"
 
@@ -29,14 +31,18 @@ if command -v wsl.exe &>/dev/null; then
   # Running on Windows — delegate to WSL
   SCRIPT_WSL="$(wsl.exe wslpath -a "$SCRIPT_DIR/build-alpine-rootfs.sh" 2>/dev/null || echo "")"
   if [ -n "$SCRIPT_WSL" ]; then
-    wsl.exe bash "$SCRIPT_WSL"
+if ! wsl.exe bash "$SCRIPT_WSL"; then
+      echo "  WARNING: WSL failed; continuing without the offline Alpine rootfs."
+    fi
   else
     echo "  WARNING: Could not resolve WSL path for build-alpine-rootfs.sh"
     echo "  Run manually: wsl bash /mnt/d/App/OpenCode/opencode/packages/mobile/scripts/build-alpine-rootfs.sh"
   fi
 elif command -v wsl &>/dev/null; then
   # Running inside WSL directly
-  bash "$SCRIPT_DIR/build-alpine-rootfs.sh"
+if ! bash "$SCRIPT_DIR/build-alpine-rootfs.sh"; then
+    echo "  WARNING: WSL rootfs build failed; continuing without the offline Alpine rootfs."
+  fi
 else
   echo "  WARNING: WSL not available. Build rootfs manually and place at:"
   echo "    $ROOTFS_TAR"
@@ -104,15 +110,12 @@ echo "[2/6] Git: bundled via Alpine apk in install_extended_env (skipped here)"
 # libmusl_exec.so is included in rootfs.tar.gz at /usr/lib/libmusl_exec.so.
 
 # ─── Ripgrep (aarch64-linux-musl) ───────────────────────────────────
-echo "[3/6] Downloading Ripgrep (aarch64-linux-musl)..."
-RG_VERSION=$(curl -fsSL "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
-RG_URL="https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-aarch64-unknown-linux-musl.tar.gz"
-curl -fsSL "$RG_URL" -o "$TEMP_DIR/rg.tar.gz"
-tar -xzf "$TEMP_DIR/rg.tar.gz" -C "$TEMP_DIR"
-find "$TEMP_DIR" -name "rg" -type f | head -1 | xargs -I{} cp {} "$BIN_DIR/rg"
-chmod 755 "$BIN_DIR/rg"
-echo "  Ripgrep: $(du -sh "$BIN_DIR/rg" | cut -f1)"
-
+echo "[3/6] Preparing Ripgrep (aarch64)..."
+if [ -x "$BIN_DIR/rg" ]; then
+  echo "  Ripgrep: existing compatible binary ($(du -sh "$BIN_DIR/rg" | cut -f1))"
+else
+  echo "  WARNING: no compatible aarch64 ripgrep binary is bundled; code search will use its fallback."
+fi
 # ─── Bash (static musl from Alpine) ─────────────────────────────────
 echo "[4/6] Downloading Bash (static musl)..."
 # Use a pre-built static bash or build from Alpine package

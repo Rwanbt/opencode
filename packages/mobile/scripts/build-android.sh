@@ -37,7 +37,7 @@ if [ ! -f "$ORT_SO" ]; then
     unzip -q ort.aar "jni/arm64-v8a/libonnxruntime.so" 2>/dev/null || true
     if [ -f "jni/arm64-v8a/libonnxruntime.so" ]; then
       cp "jni/arm64-v8a/libonnxruntime.so" "$ORT_SO"
-      echo "ONNX Runtime installed: $(ls -lh "$ORT_SO" | awk '{print $5}')"
+      echo "ONNX Runtime installed: $(du -h -- "$ORT_SO" | cut -f1)"
     else
       echo "WARNING: Could not extract libonnxruntime.so from AAR"
       echo "Please manually place libonnxruntime.so (arm64-v8a) in $JNILIBS/"
