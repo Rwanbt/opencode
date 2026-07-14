@@ -15,7 +15,21 @@ export namespace Collective {
           role: z.string().optional(),
         }),
       )
-      .min(2),
+      .min(1)
+      .superRefine((participants, context) => {
+        const seen = new Set<string>()
+        for (const [index, participant] of participants.entries()) {
+          const key = `${participant.providerID}:${participant.modelID}`
+          if (seen.has(key)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index],
+              message: "Participants must reference distinct models",
+            })
+          }
+          seen.add(key)
+        }
+      }),
   })
 
   export type DebateSelection = z.infer<typeof DebateSelection>

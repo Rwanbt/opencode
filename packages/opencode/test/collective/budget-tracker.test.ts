@@ -74,6 +74,15 @@ describe("BudgetTracker.estimate", () => {
   })
 })
 
+describe('BudgetTracker.unlimited', () => {
+  test('does not impose a practical default stop', async () => {
+    const tracker = BudgetTracker.create(BudgetTracker.unlimited())
+    tracker.record('phase1', 'test', 1_000, 50)
+    await Effect.runPromise(tracker.check())
+    expect(tracker.checkWarn('dbt_test' as any).warn).toBe(false)
+  })
+})
+
 describe("BudgetTracker.create", () => {
   test("tracks tokens and cost", () => {
     const tracker = BudgetTracker.create({

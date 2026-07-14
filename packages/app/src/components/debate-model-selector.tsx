@@ -49,7 +49,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
   const save = async (next: DebateModel[]) => {
     const current = primary()
     const participants = next.filter((item) => available().some((candidate) => modelKey(candidate) === modelKey(item)))
-    if (!current || participants.length < 2 || saving()) return
+    if (!current || participants.length < 1 || saving()) return
 
     const selection = {
       primary: { providerID: current.provider.id, modelID: current.id },

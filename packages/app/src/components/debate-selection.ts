@@ -15,7 +15,7 @@ export function validateDebateSelection(
   available: ReadonlySet<string>,
 ): DebateSelectionError | undefined {
   if (!selection || !available.has(modelKey(selection.primary))) return "missing-primary"
-  if (selection.participants.length < 2) return "too-few-participants"
+  if (selection.participants.length < 1) return "too-few-participants"
 
   const seen = new Set<string>()
   for (const participant of selection.participants) {

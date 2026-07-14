@@ -14,8 +14,8 @@ describe("validateDebateSelection", () => {
     expect(validateDebateSelection(selection, available)).toBeUndefined()
   })
 
-  test("requires at least two annexes", () => {
-    expect(validateDebateSelection({ primary, participants: annexes.slice(0, 1) }, available)).toBe("too-few-participants")
+  test("accepts one annex because the primary counts as the second distinct model", () => {
+    expect(validateDebateSelection({ primary, participants: annexes.slice(0, 1) }, available)).toBeUndefined()
   })
 
   test("rejects duplicates and the primary model", () => {

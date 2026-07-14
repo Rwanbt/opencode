@@ -13,12 +13,12 @@ describe("Collective.DebateSelection", () => {
     expect(result.success).toBe(true)
   })
 
-  test("rejects a single participant", () => {
+  test("accepts one annex because the primary is the second model", () => {
     const result = Collective.DebateSelection.safeParse({
       primary,
       participants: [participants[0]],
     })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 
   test("rejects zero participants", () => {

@@ -26,6 +26,14 @@ export namespace BudgetTracker {
     }
   }
 
+  export function unlimited(): Collective.BudgetConfig {
+    return {
+      maxTotalTokens: Number.MAX_SAFE_INTEGER,
+      maxCostUsd: Number.MAX_SAFE_INTEGER,
+      warnAtPercent: 80,
+    }
+  }
+
   export function estimate(
     config: Collective.DebateConfig,
     participants: Array<{ providerID: string; modelID: string; cost?: { input: number; output: number } }>,

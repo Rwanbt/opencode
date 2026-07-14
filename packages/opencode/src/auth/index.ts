@@ -410,19 +410,14 @@ export namespace Auth {
   // The selection happens once per Auth.layer evaluation (runtime is memoized
   // via makeRuntime's internal cache). Tests that flip the env var between
   // cases must call `makeRuntime` fresh or override the layer explicitly.
-  let keychainFallbackWarned = false
   function selectKeychain(): KeychainStorage | undefined {
     if (AUTH_STORAGE_BACKEND !== "keychain") return undefined
     const kc = new KeychainStorage()
     if (!kc.available()) {
-      if (!keychainFallbackWarned) {
-        keychainFallbackWarned = true
-        console.warn(
-          "[auth] OPENCODE_AUTH_STORAGE=keychain but OPENCODE_KEYCHAIN_URL is not set — falling back to FileStorage. " +
-            "This is expected on headless CLI runs; desktop sidecar should inject the URL automatically.",
-        )
-      }
-      return undefined
+      throw new Error(
+        "OS keychain storage is required but the keychain endpoint is unavailable. " +
+          "Run the desktop shell or set OPENCODE_AUTH_STORAGE=file explicitly for headless CLI use.",
+      )
     }
     return kc
   }
@@ -436,29 +431,13 @@ export namespace Auth {
 
       const all = Effect.fn("Auth.all")(function* () {
         if (keychain) {
-          // Keychain path: best-effort read; on transport error, degrade to the
-          // file (prevents a transient endpoint glitch from locking out the user).
-          // The Promise/catch is handled *inside* tryPromise's `try` callback
-          // so the Effect itself never fails (returns {} on any error).
           const loaded = yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                return await keychain.load()
-              } catch (e) {
-                console.warn(
-                  `[auth] keychain read failed, falling back to auth.json: ${(e as Error)?.message ?? String(e)}`,
-                )
-                return undefined
-              }
-            },
+            try: () => keychain.load(),
             catch: (cause) => new AuthError({ message: "Failed to read keychain", cause }),
           })
-          if (loaded !== undefined) {
-            return Record.filterMap(loaded as Record<string, unknown>, (value) =>
-              Result.fromOption(decode(value), () => undefined),
-            )
-          }
-          // Fallthrough: file read below.
+          return Record.filterMap(loaded as Record<string, unknown>, (value) =>
+            Result.fromOption(decode(value), () => undefined),
+          )
         }
         const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
         return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))

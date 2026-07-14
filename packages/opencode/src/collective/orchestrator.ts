@@ -115,7 +115,6 @@ export namespace Orchestrator {
         // ── Discover providers ─────────────────────────────────────
         const { providers: discovered, ghostWarnings } = yield* ProviderDiscovery.discover(
           config.participants,
-          tierCfg.maxProviders,
         )
         if (ghostWarnings.length > 0) {
           log.info("ghost model warnings", { warnings: ghostWarnings })
@@ -126,7 +125,7 @@ export namespace Orchestrator {
         // callers (e.g. DebateTool) rely on this to start filtering Bus events
         // for this debate before Phase 1 publishes its first ProviderStarted.
         onDebateID?.(debateID)
-        const budgetCfg = config.budget ?? BudgetTracker.tierDefaults(config.tier)
+        const budgetCfg = config.budget ?? BudgetTracker.unlimited()
         const budget = BudgetTracker.create(budgetCfg)
         const failedProviders: Array<{ provider: string; error: string }> = []
 
