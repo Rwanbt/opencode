@@ -145,7 +145,6 @@ export namespace Agent {
                     permission: Permission.fromConfig({ "*": "allow" }),
                     mode: "primary",
                     native: true,
-                    app_hidden: true,
                     color: "error",
                   },
                 }),

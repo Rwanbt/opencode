@@ -119,7 +119,7 @@ export const SettingsObservability: Component = () => {
         outer sidebar, collapsing this panel's actual content to 0 height
         (invisible, though present in the DOM) every time this tab was opened.
       */}
-      <div class="flex items-center gap-1 mb-4" role="tablist">
+      <div class="grid grid-cols-2 gap-1 mb-4 sm:flex sm:flex-wrap" role="tablist">
         {([
           ["overview", "sliders", "Overview"],
           ["traces", "branch", "Traces"],
@@ -134,7 +134,7 @@ export const SettingsObservability: Component = () => {
             type="button"
             role="tab"
             aria-selected={activeSubtab() === value}
-            class="flex items-center gap-2 rounded-md px-3 py-1.5 text-12-medium"
+            class="flex min-w-0 items-center justify-center gap-2 rounded-md px-2 py-2 text-center text-12-medium"
             classList={{
               "bg-surface-base-active text-text-strong": activeSubtab() === value,
               "text-text-weak hover:text-text-strong": activeSubtab() !== value,
