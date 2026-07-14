@@ -18,7 +18,8 @@ import { SettingsRow } from "./settings-row"
 
 type SessionItem = { id: string; title?: string; projectID: string }
 type ContentCaptureLevel = "local_content_redacted" | "local_full"
-type OptInScope = "session" | "project"
+type OptInScope = "session" | "project" | "all"
+const ALL_PROJECTS_SCOPE_ID = "local"
 
 const LEVEL_LABEL: Record<ContentCaptureLevel, string> = {
   local_content_redacted: "Redacted content (secrets/paths/emails masked)",
@@ -37,7 +38,7 @@ export const SettingsObservabilityPrivacy: Component<{
   const [ttlDays, setTtlDays] = createSignal("7")
   const [busy, setBusy] = createSignal(false)
 
-  const scopeId = () => (scope() === "session" ? props.sessionId : props.projectId)
+  const scopeId = () => scope() === "session" ? props.sessionId : scope() === "project" ? props.projectId : ALL_PROJECTS_SCOPE_ID
   const selectedSession = () => props.sessions.find((s) => s.id === props.sessionId)
 
   const [optIn, optInActions] = createResource(
@@ -86,8 +87,8 @@ export const SettingsObservabilityPrivacy: Component<{
       </div>
 
       <SettingsList>
-        <SettingsRow title="Scope" description="Session covers only the selected session below; current project covers every session in this project, including future sessions, until the TTL expires.">
-          <Select size="small" variant="secondary" options={["session", "project"] as const} current={scope()} label={(item) => (item === "session" ? "Current session" : "Current project (all sessions)")} onSelect={(item) => item && setScope(item)} />
+        <SettingsRow title="Scope" description="Session covers one session; Current project covers this project; All projects covers only local SQLite data across known projects. Each opt-in is explicit and TTL-bound.">
+          <Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All projects"} onSelect={(item) => item && setScope(item)} />
         </SettingsRow>
         <Show when={scope() === "session"}>
           <SettingsRow title="Session" description="Which session's content capture opt-in to view or change.">

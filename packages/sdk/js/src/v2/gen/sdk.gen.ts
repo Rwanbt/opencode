@@ -4140,6 +4140,7 @@ export class Sessions extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      scope?: "project" | "all"
       limit?: number
     },
     options?: Options<never, ThrowOnError>,
@@ -4151,6 +4152,7 @@ export class Sessions extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
             { in: "query", key: "limit" },
           ],
         },
@@ -4294,7 +4296,7 @@ export class Privacy extends HeyApiClient {
     parameters: {
       directory?: string
       workspace?: string
-      scope: "workspace" | "project" | "session"
+      scope: "workspace" | "project" | "session" | "all"
       id: string
     },
     options?: Options<never, ThrowOnError>,
@@ -4332,7 +4334,7 @@ export class Privacy extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      scope?: "workspace" | "project" | "session"
+      scope?: "workspace" | "project" | "session" | "all"
       id?: string
       level?: "local_content_redacted" | "local_full"
       ttlDays?: number
@@ -4379,7 +4381,7 @@ export class Privacy extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      scope?: "workspace" | "project" | "session"
+      scope?: "workspace" | "project" | "session" | "all"
       id?: string
     },
     options?: Options<never, ThrowOnError>,

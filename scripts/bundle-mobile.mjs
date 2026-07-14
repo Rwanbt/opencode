@@ -25,6 +25,8 @@ const outdir = process.argv.includes("--outdir")
   : join(ROOT, "packages/mobile/src-tauri/assets/runtime")
 
 const assetsDir = join(ROOT, "packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime")
+const runtimeVersion = process.env.OPENCODE_VERSION || "local"
+const runtimeChannel = process.env.OPENCODE_CHANNEL || "local"
 
 // ── 1. Read SQL migrations ──────────────────────────────────────────
 const migrationDir = join(ROOT, "packages/opencode/migration")
@@ -75,7 +77,7 @@ if (existsSync(outputPath)) {
 // This MUST be at the very top so globalThis.OPENCODE_MIGRATIONS is set
 // before any module code (including db.ts lazy init) executes.
 const bundle = readFileSync(finalPath, "utf8")
-const prefix = `// AUTO-GENERATED: Inlined SQL migrations for Android mobile\nglobalThis.OPENCODE_MIGRATIONS = ${JSON.stringify(entries)};\n`
+const prefix = `// AUTO-GENERATED: Inlined SQL migrations for Android mobile\nglobalThis.OPENCODE_VERSION = ${JSON.stringify(runtimeVersion)};\nglobalThis.OPENCODE_CHANNEL = ${JSON.stringify(runtimeChannel)};\nglobalThis.OPENCODE_MIGRATIONS = ${JSON.stringify(entries)};\n`
 writeFileSync(finalPath, prefix + bundle)
 
 // ── 4. Copy to gen/android assets ───────────────────────────────────

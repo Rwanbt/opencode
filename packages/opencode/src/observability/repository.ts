@@ -57,7 +57,7 @@ export function derivedOrphanedRows(rows: EventRow[], nowMs = Date.now()): Map<n
   return new Map(started.filter((item) => !completed.has(item.span_id)).map((item) => [item.id, "orphaned" as const]))
 }
 export const ObservabilityRepository = {
-  sessions(limit = 100): Array<{ id: string; title?: string; projectID?: string }> {
+  sessions(limit = 100, projectId?: string): Array<{ id: string; title?: string; projectID?: string }> {
     return Database.use((db) =>
       db
         .selectDistinct({
@@ -67,7 +67,11 @@ export const ObservabilityRepository = {
         })
         .from(ObservabilityEventTable)
         .leftJoin(SessionTable, eq(SessionTable.id, ObservabilityEventTable.session_id))
-        .where(isNotNull(ObservabilityEventTable.session_id))
+        .where(
+          projectId
+            ? and(isNotNull(ObservabilityEventTable.session_id), eq(ObservabilityEventTable.project_id, projectId))
+            : isNotNull(ObservabilityEventTable.session_id),
+        )
         .orderBy(desc(ObservabilityEventTable.ts_ms))
         .limit(limit)
         .all()

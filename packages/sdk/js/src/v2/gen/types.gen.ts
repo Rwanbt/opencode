@@ -6216,6 +6216,8 @@ export type ObservabilityHealthResponses = {
     lastErrorKind?: string
     queueSize: number
     queueBytes: number
+    runtimeCounterScope: "current_process"
+    persistedCounterScope: "all_projects_local_sqlite"
   }
 }
 
@@ -6255,6 +6257,7 @@ export type ObservabilitySessionsListData = {
   query?: {
     directory?: string
     workspace?: string
+    scope?: "project" | "all"
     limit?: number
   }
   url: "/observability/sessions"
@@ -6525,7 +6528,7 @@ export type ObservabilityPrivacyGetData = {
   query: {
     directory?: string
     workspace?: string
-    scope: "workspace" | "project" | "session"
+    scope: "workspace" | "project" | "session" | "all"
     id: string
   }
   url: "/observability/privacy"
@@ -6550,7 +6553,7 @@ export type ObservabilityPrivacyGetResponses = {
    */
   200: {
     optIn: {
-      scope: "workspace" | "project" | "session"
+      scope: "workspace" | "project" | "session" | "all"
       scopeId: string
       level: "local_content_redacted" | "local_full"
       ttlDays: number
@@ -6564,7 +6567,7 @@ export type ObservabilityPrivacyGetResponse = ObservabilityPrivacyGetResponses[k
 
 export type ObservabilityPrivacySetData = {
   body?: {
-    scope: "workspace" | "project" | "session"
+    scope: "workspace" | "project" | "session" | "all"
     id: string
     level: "local_content_redacted" | "local_full"
     ttlDays: number
@@ -6595,7 +6598,7 @@ export type ObservabilityPrivacySetResponses = {
    * Opt-in created
    */
   200: {
-    scope: "workspace" | "project" | "session"
+    scope: "workspace" | "project" | "session" | "all"
     scopeId: string
     level: "local_content_redacted" | "local_full"
     ttlDays: number
@@ -6608,7 +6611,7 @@ export type ObservabilityPrivacySetResponse = ObservabilityPrivacySetResponses[k
 
 export type ObservabilityPrivacyRevokeData = {
   body?: {
-    scope: "workspace" | "project" | "session"
+    scope: "workspace" | "project" | "session" | "all"
     id: string
   }
   path?: never

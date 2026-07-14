@@ -43,7 +43,7 @@ import { ObservabilityRuntime } from "../../observability/runtime"
 import { resolveCapturePolicy } from "../../observability/capture-policy"
 import { ObservabilityRepository, cursor, toDto, derivedOrphanedRows, exportEvents, summaryAll, byTraceId } from "../../observability/repository"
 import { deleteByScope, purgeContentForScope, resolveRetentionConfig, type DeleteScope } from "../../observability/purge"
-import { getOptIn, setOptIn, revokeOptIn, OptInScopeSchema, ContentCaptureLevelSchema, MAX_TTL_DAYS, type OptInScope } from "../../observability/capture-content"
+import { getOptIn, setOptIn, revokeOptIn, OptInScopeSchema, ContentCaptureLevelSchema, MAX_TTL_DAYS, ALL_PROJECTS_SCOPE_ID, type OptInScope } from "../../observability/capture-content"
 import { ExporterRegistry } from "../../observability/exporter"
 import { ExportProjectionSchema, shouldExportSpan, toExportProjection } from "../../observability/export-projection"
 import { exportToAll } from "../../observability/export-runner"
@@ -118,6 +118,9 @@ async function requireOwnedSession(sessionId: SessionID) {
 async function requireOwnedScope(scope: OptInScope, id: string) {
   if (scope === "session") await requireOwnedSession(id as SessionID)
   else if (scope === "workspace") await requireOwnedWorkspace(id)
+  else if (scope === "all") {
+    if (id !== ALL_PROJECTS_SCOPE_ID) throw new NotFoundError({ message: "All-projects scope is local only" })
+  }
   else if (id !== Instance.project.id) throw new NotFoundError({ message: `Project not found: ${id}` })
 }
 
@@ -141,6 +144,8 @@ const HealthSchema = z.object({
   lastErrorKind: z.string().optional(),
   queueSize: z.number(),
   queueBytes: z.number(),
+  runtimeCounterScope: z.literal("current_process"),
+  persistedCounterScope: z.literal("all_projects_local_sqlite"),
 })
 
 const ObservabilitySessionSchema = z.object({ id: z.string(), title: z.string().optional(), projectID: z.string().optional() })
@@ -299,6 +304,8 @@ export const ObservabilityRoutes = () =>
           lastErrorKind: stats.lastErrorKind,
           queueSize: stats.queueSize,
           queueBytes: stats.queueBytes,
+          runtimeCounterScope: "current_process",
+          persistedCounterScope: "all_projects_local_sqlite",
         })
       },
     )
@@ -340,8 +347,11 @@ export const ObservabilityRoutes = () =>
         operationId: "observability.sessions.list",
         responses: { 200: { description: "Sessions", content: { "application/json": { schema: resolver(ObservabilitySessionSchema.array()) } } } },
       }),
-      validator("query", z.object({ limit: z.coerce.number().int().min(1).max(200).optional() })),
-      async (c) => c.json(ObservabilityRepository.sessions(c.req.valid("query").limit ?? 100)),
+      validator("query", z.object({ scope: z.enum(["project", "all"]).default("project"), limit: z.coerce.number().int().min(1).max(200).optional() })),
+      async (c) => {
+        const query = c.req.valid("query")
+        return c.json(ObservabilityRepository.sessions(query.limit ?? 100, query.scope === "project" ? Instance.project.id : undefined))
+      },
     )
     .get(
       "/events",

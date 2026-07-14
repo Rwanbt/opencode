@@ -48,14 +48,15 @@ export const SettingsObservabilityTimeline: Component<{
   sessionId?: string
   refreshKey?: number
   onSelectSession: (id: string) => void
+  scope: "project" | "all"
 }> = (props) => {
   const sdk = useSDK()
   const selected = () => props.sessions.find((s) => s.id === props.sessionId)
   const [expandedTraceId, setExpandedTraceId] = createSignal<string>()
 
   const [events] = createResource(
-    () => props.sessionId ? { sessionId: props.sessionId, refreshKey: props.refreshKey } : undefined,
-    (source) => unwrap(sdk.client.observability.events.list({ sessionId: source.sessionId, scope: "all", limit: 200 })) as Promise<EventDto[]>,
+    () => props.sessionId ? { sessionId: props.sessionId, refreshKey: props.refreshKey, scope: props.scope } : undefined,
+    (source) => unwrap(sdk.client.observability.events.list({ sessionId: source.sessionId, scope: props.scope, limit: 200 })) as Promise<EventDto[]>,
   )
 
   const traces = createMemo(() => groupByTrace(events() ?? []))
@@ -68,7 +69,7 @@ export const SettingsObservabilityTimeline: Component<{
   })
   const windowStart = createMemo(() => (traces().length ? Math.min(...traces().map((t) => t.startMs)) : 0))
 
-  const [trace, traceActions] = createResource(expandedTraceId, (traceId) => unwrap(sdk.client.observability.trace.get({ traceId, scope: "all" })) as Promise<{ traceId: string; events: EventDto[] }>)
+  const [trace, traceActions] = createResource(expandedTraceId, (traceId) => unwrap(sdk.client.observability.trace.get({ traceId, scope: props.scope })) as Promise<{ traceId: string; events: EventDto[] }>)
 
   const toggle = (traceId: string) => {
     if (expandedTraceId() === traceId) {

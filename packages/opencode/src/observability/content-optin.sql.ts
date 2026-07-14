@@ -10,7 +10,7 @@ export const ObservabilityContentOptInTable = sqliteTable(
   "observability_content_optin",
   {
     id: integer().primaryKey({ autoIncrement: true }),
-    scope: text().notNull(), // "workspace" | "project" | "session"
+    scope: text().notNull(), // "workspace" | "project" | "session" | "all"
     scope_id: text().notNull(),
     level: text().notNull(), // "local_content_redacted" | "local_full"
     ttl_days: integer().notNull(),

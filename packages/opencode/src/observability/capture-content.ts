@@ -14,8 +14,12 @@ import { captureContent } from "./sanitizer"
 export const ContentCaptureLevelSchema = z.enum(["local_content_redacted", "local_full"])
 export type ContentCaptureLevel = z.infer<typeof ContentCaptureLevelSchema>
 
-export const OptInScopeSchema = z.enum(["workspace", "project", "session"])
+export const OptInScopeSchema = z.enum(["workspace", "project", "session", "all"])
 export type OptInScope = z.infer<typeof OptInScopeSchema>
+
+// Stable local identifier for the explicit all-projects opt-in. It is not a
+// project identifier and is never resolved against a remote or current project.
+export const ALL_PROJECTS_SCOPE_ID = "local"
 
 const DAY_MS = 86_400_000
 export const MAX_TTL_DAYS = 30
@@ -107,6 +111,8 @@ export function resolveContentCaptureLevel(
     const found = getOptIn("workspace", scopeIds.workspaceId, now)
     if (found) return found
   }
+  const allProjects = getOptIn("all", ALL_PROJECTS_SCOPE_ID, now)
+  if (allProjects) return allProjects
   return undefined
 }
 

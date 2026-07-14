@@ -90,6 +90,16 @@ describe("observability capture-content opt-in", () => {
     const sessionId = "capture-content-none-" + ObservabilityId.create()
     expect(resolveContentCaptureLevel({ sessionId })).toBeUndefined()
   })
+
+  test("resolveContentCaptureLevel accepts the explicit local all-projects opt-in", () => {
+    const now = 7_000_000
+    setOptIn({ scope: "all", scopeId: "local", level: "local_content_redacted", ttlDays: 1 }, now)
+
+    const resolved = resolveContentCaptureLevel({ sessionId: "unknown-session", projectId: "unknown-project" }, now)
+
+    expect(resolved?.scope).toBe("all")
+    expect(resolved?.scopeId).toBe("local")
+  })
 })
 
 describe("withContentCapture", () => {

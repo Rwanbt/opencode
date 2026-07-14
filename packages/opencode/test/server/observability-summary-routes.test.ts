@@ -57,13 +57,13 @@ describe("GET /observability/summary", () => {
     const session = await createSession(tmp.path)
 
     await ObservabilityRepository.insert([
-      makeEvent(createTraceContext({ sessionId: session.id }), { type: "llm.call.started", status: "started" }),
-      makeEvent(createTraceContext({ sessionId: session.id }), {
+      makeEvent(createTraceContext({ sessionId: session.id, projectId: session.projectID }), { type: "llm.call.started", status: "started" }),
+      makeEvent(createTraceContext({ sessionId: session.id, projectId: session.projectID }), {
         type: "llm.call.finished",
         status: "finished",
         costNanoUsd: 1_000,
       }),
-      makeEvent(createTraceContext({ sessionId: session.id }), {
+      makeEvent(createTraceContext({ sessionId: session.id, projectId: session.projectID }), {
         type: "llm.call.finished",
         status: "finished",
         costNanoUsd: 2_500,
@@ -106,5 +106,29 @@ describe("GET /observability/summary", () => {
 
     const r = await call("GET", `/observability/summary?sessionId=${sessionB.id}`, tmpA.path)
     expect(r.status).toBe(404)
+  })
+
+  test("defaults aggregate to the current project and allows explicit all-projects aggregation", async () => {
+    await using tmpA = await tmpdir({ git: true })
+    await using tmpB = await tmpdir({ git: true })
+    const sessionA = await createSession(tmpA.path)
+    const sessionB = await createSession(tmpB.path)
+
+    const beforeAll = await call("GET", "/observability/summary/aggregate?scope=all", tmpA.path)
+    expect(beforeAll.status).toBe(200)
+    const baselineTotalEvents = (await beforeAll.json() as { totalEvents: number }).totalEvents
+
+    await ObservabilityRepository.insert([
+      makeEvent(createTraceContext({ sessionId: sessionA.id, projectId: sessionA.projectID }), { type: "llm.call.finished", status: "finished" }),
+      makeEvent(createTraceContext({ sessionId: sessionB.id, projectId: sessionB.projectID }), { type: "llm.call.finished", status: "finished" }),
+    ])
+
+    const projectScoped = await call("GET", "/observability/summary/aggregate", tmpA.path)
+    expect(projectScoped.status).toBe(200)
+    expect((await projectScoped.json() as { totalEvents: number }).totalEvents).toBe(1)
+
+    const allScoped = await call("GET", "/observability/summary/aggregate?scope=all", tmpA.path)
+    expect(allScoped.status).toBe(200)
+    expect((await allScoped.json() as { totalEvents: number }).totalEvents).toBe(baselineTotalEvents + 2)
   })
 })

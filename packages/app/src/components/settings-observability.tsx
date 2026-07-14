@@ -32,7 +32,8 @@ type CompareResult = { cohorts: CohortMetrics[]; referenceIndex?: number; timeWi
 export const SettingsObservability: Component = () => {
   const sdk = useSDK()
   const [sessionId, setSessionId] = createSignal<string>()
-  const [scope, setScope] = createSignal<"session" | "project" | "all">("session")
+  const [dashboardScope, setDashboardScope] = createSignal<"project" | "all">("project")
+  const [deleteScope, setDeleteScope] = createSignal<"session" | "project" | "all">("session")
   const [confirmation, setConfirmation] = createSignal("")
   const [busy, setBusy] = createSignal(false)
   const [activeSubtab, setActiveSubtab] = createSignal<"overview" | "traces" | "timeline" | "comparisons" | "cost" | "events" | "privacy" | "exporters">("overview")
@@ -40,11 +41,11 @@ export const SettingsObservability: Component = () => {
   const [settings, settingsActions] = createResource(() => unwrap(sdk.client.observability.settings()))
   const [exportersConfig] = createResource(() => unwrap(sdk.client.observability.exporters.config()))
   const [health, healthActions] = createResource(() => unwrap(sdk.client.observability.health()))
-  const [sessions, sessionsActions] = createResource(() => unwrap(sdk.client.observability.sessions.list({ limit: 100 })))
+  const [sessions, sessionsActions] = createResource(() => unwrap(sdk.client.observability.sessions.list({ scope: dashboardScope(), limit: 100 })))
   const [privacySessions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
-  const [events, eventsActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, scope: "all", limit: 50 })))
-  const [summary, summaryActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.summary({ sessionId: id, scope: "all" })))
-  const [comparison, comparisonActions] = createResource(activeSubtab, (tab) => tab === "comparisons" ? unwrap(sdk.client.observability.compare({ timeWindowMs: 7 * 24 * 60 * 60 * 1000, scope: "all" })) : Promise.resolve(null)) as unknown as [() => CompareResult | null, { refetch: () => Promise<void> }]
+  const [events, eventsActions] = createResource(() => [sessionId(), dashboardScope()] as const, ([id, scope]) => id ? unwrap(sdk.client.observability.events.list({ sessionId: id, scope, limit: 50 })) : Promise.resolve([]))
+  const [summary, summaryActions] = createResource(() => [sessionId(), dashboardScope()] as const, ([id, scope]) => id ? unwrap(sdk.client.observability.summary({ sessionId: id, scope })) : Promise.resolve(undefined))
+  const [comparison, comparisonActions] = createResource(activeSubtab, (tab) => tab === "comparisons" ? unwrap(sdk.client.observability.compare({ timeWindowMs: 7 * 24 * 60 * 60 * 1000, scope: dashboardScope() })) : Promise.resolve(null)) as unknown as [() => CompareResult | null, { refetch: () => Promise<void> }]
   const [refreshKey, setRefreshKey] = createSignal(0)
 
   createEffect(() => {
@@ -79,11 +80,11 @@ export const SettingsObservability: Component = () => {
 
   const remove = async () => {
     const session = selected()
-    if (scope() !== "all" && !session) return
-    if (scope() === "project" && !session?.projectID) return
+    if (deleteScope() !== "all" && !session) return
+    if (deleteScope() === "project" && !session?.projectID) return
     setBusy(true)
     try {
-      const body = scope() === "all" ? { scope: "all" as const } : scope() === "project" ? { scope: "project" as const, id: session!.projectID! } : { scope: "session" as const, id: session!.id }
+      const body = deleteScope() === "all" ? { scope: "all" as const } : deleteScope() === "project" ? { scope: "project" as const, id: session!.projectID! } : { scope: "session" as const, id: session!.id }
       const result = await unwrap(sdk.client.observability.data.delete({ body }, { headers: { "X-Confirm-Delete": "yes" } }))
       setConfirmation("")
       refresh()
@@ -104,6 +105,7 @@ export const SettingsObservability: Component = () => {
 
   return <div class="flex h-full flex-col overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
     <div class="flex items-start justify-between gap-4 pt-6 pb-8"><div><h2 class="text-16-medium text-text-strong">Observability</h2><p class="text-12-regular text-text-weak">Local metadata only. No prompts, responses, tool payloads, or raw errors are displayed.</p></div><Button size="small" variant="secondary" onClick={refresh}>Refresh</Button></div>
+    <SettingsList><SettingsRow title="Data scope" description="Current project shows all sessions in this project. All projects reads only local SQLite data from every known project."><Select size="small" variant="secondary" options={["project", "all"] as const} current={dashboardScope()} label={(item) => item === "project" ? "Current project" : "All projects"} onSelect={(item) => item && setDashboardScope(item)} /></SettingsRow></SettingsList>
     <div class="flex flex-col gap-8">
       {/*
         Plain buttons, not the shared <Tabs> component: this panel already
@@ -148,12 +150,12 @@ export const SettingsObservability: Component = () => {
         <Show when={activeSubtab() === "overview"}><div class="no-scrollbar">
           <section><h3 class="pb-2 text-14-medium text-text-strong">Capture</h3><SettingsList><SettingsRow title="Enable native observability" description="Stores local LLM and tool metadata only."><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title="Capture mode" description="Neither mode stores readable content."><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? "Metadata only" : "Metadata + redaction classes"} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">Local SQLite storage is not encrypted at rest. {exportersConfig()?.exporters.length ? `${exportersConfig()!.exporters.length} exporter(s) configured — see the Exporters tab.` : "No exporter is configured."}</div></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">Retention</h3><SettingsList><SettingsRow title="Retention (days)" description="Delete events older than this many days. Empty keeps events until another limit applies."><TextField size="small" variant="normal" type="number" placeholder="e.g. 30" value={String(settings()?.retentionDays ?? "")} onBlur={(v: string) => { update({ retentionDays: v ? parseInt(v, 10) : undefined }) }} /></SettingsRow><SettingsRow title="Max events" description="Maximum local observability event count. Default: 100000."><TextField size="small" variant="normal" type="number" placeholder="100000" value={String(settings()?.maxEvents ?? "")} onBlur={(v: string) => { update({ maxEvents: v ? parseInt(v, 10) : 100000 }) }} /></SettingsRow></SettingsList></section>
-          <section><h3 class="pb-2 text-14-medium text-text-strong">Service health</h3><div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <section><h3 class="pb-2 text-14-medium text-text-strong">Service health</h3><p class="pb-2 text-12-regular text-text-weak">Runtime counters cover the current process only. Persisted is the cumulative local SQLite total across all projects and survives restarts.</p><div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Metric label="Queue" value={String(health()?.queueSize ?? 0)} />
             <Metric label="Queue bytes" value={`${((health()?.queueBytes ?? 0) / 1024).toFixed(1)} KiB`} />
-            <Metric label="Accepted" value={String(health()?.eventsAccepted ?? 0)} />
-            <Metric label="Inserted" value={String(health()?.eventsInserted ?? 0)} />
-            <Metric label="Persisted" value={String(health()?.eventsPersisted ?? 0)} />
+            <Metric label="Accepted (runtime)" value={String(health()?.eventsAccepted ?? 0)} />
+            <Metric label="Inserted (runtime)" value={String(health()?.eventsInserted ?? 0)} />
+            <Metric label="Persisted (all local projects)" value={String(health()?.eventsPersisted ?? 0)} />
             <Metric label="Rejected context" value={String(health()?.eventsRejectedInvalidContext ?? 0)} />
             <Metric label="Rejected event" value={String(health()?.eventsRejectedInvalidEvent ?? 0)} />
             <Metric label="Dropped queue" value={String(health()?.eventsDroppedQueueFull ?? 0)} />
@@ -165,7 +167,7 @@ export const SettingsObservability: Component = () => {
             <Metric label="Sanitizer failed" value={String(health()?.sanitizerFailed ?? 0)} />
             <Metric label="Last error" value={health()?.lastErrorKind ?? "—"} />
           </div><Show when={health()?.circuitOpen}><div class="mt-2 rounded-md bg-surface-critical-base px-3 py-2 text-12-regular text-text-on-critical-base">The write circuit is open; product requests still continue.</div></Show></section>
-          <section><h3 class="pb-2 text-14-medium text-icon-critical-base">Delete local observability data</h3><div class="rounded-lg border border-border-critical-base bg-surface-critical-weak p-4"><div class="flex flex-col gap-3"><Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All local observability data"} onSelect={(item) => item && setScope(item)} /><TextField label="Confirmation" value={confirmation()} placeholder="Type DELETE to confirm" onChange={setConfirmation} /><div><Button variant="primary" disabled={busy() || confirmation() !== confirmText || (scope() !== "all" && !selected())} onClick={() => void remove()}>Delete data</Button></div></div></div></section>
+          <section><h3 class="pb-2 text-14-medium text-icon-critical-base">Delete local observability data</h3><div class="rounded-lg border border-border-critical-base bg-surface-critical-weak p-4"><div class="flex flex-col gap-3"><Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={deleteScope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All projects"} onSelect={(item) => item && setDeleteScope(item)} /><TextField label="Confirmation" value={confirmation()} placeholder="Type DELETE to confirm" onChange={setConfirmation} /><div><Button variant="primary" disabled={busy() || confirmation() !== confirmText || (deleteScope() !== "all" && !selected())} onClick={() => void remove()}>Delete data</Button></div></div></div></section>
         </div></Show>
 
         <Show when={activeSubtab() === "traces"}><div class="no-scrollbar">
@@ -235,11 +237,11 @@ export const SettingsObservability: Component = () => {
         </div></Show>
 
         <Show when={activeSubtab() === "timeline"}><div class="no-scrollbar">
-          <SettingsObservabilityTimeline refreshKey={refreshKey()} sessions={sessions() ?? []} sessionId={sessionId()} onSelectSession={setSessionId} />
+          <SettingsObservabilityTimeline refreshKey={refreshKey()} sessions={sessions() ?? []} sessionId={sessionId()} scope={dashboardScope()} onSelectSession={setSessionId} />
         </div></Show>
 
         <Show when={activeSubtab() === "cost"}><div class="no-scrollbar">
-          <SettingsObservabilityCost refreshKey={refreshKey()} />
+          <SettingsObservabilityCost refreshKey={refreshKey()} scope={dashboardScope()} />
         </div></Show>
 
         <Show when={activeSubtab() === "privacy"}><div class="no-scrollbar">
