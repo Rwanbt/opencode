@@ -163,6 +163,7 @@ import type {
   ObservabilityPrivacyRevokeResponses,
   ObservabilityPrivacySetErrors,
   ObservabilityPrivacySetResponses,
+  ObservabilitySessionsListResponses,
   ObservabilitySettingsResponses,
   ObservabilitySummaryAggregateResponses,
   ObservabilitySummaryErrors,
@@ -4129,6 +4130,40 @@ export class Debate extends HeyApiClient {
   }
 }
 
+export class Sessions extends HeyApiClient {
+  /**
+   * List sessions with observability data
+   *
+   * Lists local sessions with persisted observability events, independent of the current project directory.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySessionsListResponses, unknown, ThrowOnError>({
+      url: "/observability/sessions",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Events extends HeyApiClient {
   /**
    * List observability events for a session
@@ -4140,6 +4175,7 @@ export class Events extends HeyApiClient {
       directory?: string
       workspace?: string
       sessionId: string
+      scope?: "project" | "all"
       limit?: number
       before?: string
     },
@@ -4153,6 +4189,7 @@ export class Events extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "sessionId" },
+            { in: "query", key: "scope" },
             { in: "query", key: "limit" },
             { in: "query", key: "before" },
           ],
@@ -4218,6 +4255,7 @@ export class Trace extends HeyApiClient {
       traceId: string
       directory?: string
       workspace?: string
+      scope?: "project" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4229,6 +4267,7 @@ export class Trace extends HeyApiClient {
             { in: "path", key: "traceId" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
           ],
         },
       ],
@@ -4602,6 +4641,7 @@ export class Observability extends HeyApiClient {
       directory?: string
       workspace?: string
       sessionId: string
+      scope?: "project" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4613,6 +4653,7 @@ export class Observability extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "sessionId" },
+            { in: "query", key: "scope" },
           ],
         },
       ],
@@ -4638,6 +4679,7 @@ export class Observability extends HeyApiClient {
       directory?: string
       workspace?: string
       timeWindowMs?: number
+      scope?: "project" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4649,6 +4691,7 @@ export class Observability extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "timeWindowMs" },
+            { in: "query", key: "scope" },
           ],
         },
       ],
@@ -4720,6 +4763,7 @@ export class Observability extends HeyApiClient {
       workspaceId?: string
       sinceMs?: number
       untilMs?: number
+      scope?: "project" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4735,6 +4779,7 @@ export class Observability extends HeyApiClient {
             { in: "query", key: "workspaceId" },
             { in: "query", key: "sinceMs" },
             { in: "query", key: "untilMs" },
+            { in: "query", key: "scope" },
           ],
         },
       ],
@@ -4744,6 +4789,11 @@ export class Observability extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _sessions?: Sessions
+  get sessions(): Sessions {
+    return (this._sessions ??= new Sessions({ client: this.client }))
   }
 
   private _events?: Events

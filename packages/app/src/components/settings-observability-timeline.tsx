@@ -55,7 +55,7 @@ export const SettingsObservabilityTimeline: Component<{
 
   const [events] = createResource(
     () => props.sessionId ? { sessionId: props.sessionId, refreshKey: props.refreshKey } : undefined,
-    (source) => unwrap(sdk.client.observability.events.list({ sessionId: source.sessionId, limit: 200 })) as Promise<EventDto[]>,
+    (source) => unwrap(sdk.client.observability.events.list({ sessionId: source.sessionId, scope: "all", limit: 200 })) as Promise<EventDto[]>,
   )
 
   const traces = createMemo(() => groupByTrace(events() ?? []))
@@ -68,7 +68,7 @@ export const SettingsObservabilityTimeline: Component<{
   })
   const windowStart = createMemo(() => (traces().length ? Math.min(...traces().map((t) => t.startMs)) : 0))
 
-  const [trace, traceActions] = createResource(expandedTraceId, (traceId) => unwrap(sdk.client.observability.trace.get({ traceId })) as Promise<{ traceId: string; events: EventDto[] }>)
+  const [trace, traceActions] = createResource(expandedTraceId, (traceId) => unwrap(sdk.client.observability.trace.get({ traceId, scope: "all" })) as Promise<{ traceId: string; events: EventDto[] }>)
 
   const toggle = (traceId: string) => {
     if (expandedTraceId() === traceId) {

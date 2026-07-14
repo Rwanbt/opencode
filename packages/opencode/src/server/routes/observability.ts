@@ -143,6 +143,8 @@ const HealthSchema = z.object({
   queueBytes: z.number(),
 })
 
+const ObservabilitySessionSchema = z.object({ id: z.string(), title: z.string().optional(), projectID: z.string().optional() })
+
 const DeleteBodySchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("workspace"), id: WorkspaceID.zod }),
   z.object({ scope: z.literal("all") }),
@@ -276,7 +278,7 @@ export const ObservabilityRoutes = () =>
         const cfg = await Config.get()
         const policy = resolveCapturePolicy(cfg.experimental?.observability)
         const stats = ObservabilityRuntime.service().stats()
-        const persisted = summaryAll({ projectId: Instance.project.id })
+        const persisted = summaryAll()
         return c.json({
           enabled: policy.enabled,
           captureMode: policy.level,
@@ -331,6 +333,17 @@ export const ObservabilityRoutes = () =>
       },
     )
     .get(
+      "/sessions",
+      describeRoute({
+        summary: "List sessions with observability data",
+        description: "Lists local sessions with persisted observability events, independent of the current project directory.",
+        operationId: "observability.sessions.list",
+        responses: { 200: { description: "Sessions", content: { "application/json": { schema: resolver(ObservabilitySessionSchema.array()) } } } },
+      }),
+      validator("query", z.object({ limit: z.coerce.number().int().min(1).max(200).optional() })),
+      async (c) => c.json(ObservabilityRepository.sessions(c.req.valid("query").limit ?? 100)),
+    )
+    .get(
       "/events",
       describeRoute({
         summary: "List observability events for a session",
@@ -350,6 +363,7 @@ export const ObservabilityRoutes = () =>
         "query",
         z.object({
           sessionId: SessionID.zod,
+          scope: z.enum(["project", "all"]).default("project"),
           workspace: WorkspaceID.zod.optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
           before: z
@@ -371,7 +385,7 @@ export const ObservabilityRoutes = () =>
       ),
       async (c) => {
         const query = c.req.valid("query")
-        await requireOwnedSession(query.sessionId)
+        if (query.scope === "project") await requireOwnedSession(query.sessionId)
         if (query.workspace) await requireOwnedWorkspace(query.workspace)
         const limit = query.limit ?? 50
         const page = ObservabilityRepository.page({ sessionId: query.sessionId, workspaceId: query.workspace, limit, before: query.before })
@@ -432,12 +446,14 @@ export const ObservabilityRoutes = () =>
         },
       }),
       validator("param", z.object({ traceId: z.string().min(1) })),
+      validator("query", z.object({ scope: z.enum(["project", "all"]).default("project") })),
       async (c) => {
         const { traceId } = c.req.valid("param")
+        const traceScope = c.req.valid("query").scope
         const rows = byTraceId(traceId)
         const anchor = rows.find((row) => row.session_id)
         if (!rows.length || !anchor?.session_id) throw new NotFoundError({ message: `Trace not found: ${traceId}` })
-        await requireOwnedSession(anchor.session_id as SessionID)
+        if (traceScope === "project") await requireOwnedSession(anchor.session_id as SessionID)
         const orphaned = derivedOrphanedRows(rows)
         return c.json({ traceId, events: rows.map((row) => toDto(row, orphaned.get(row.id))) })
       },
@@ -457,10 +473,10 @@ export const ObservabilityRoutes = () =>
           ...errors(400, 404),
         },
       }),
-      validator("query", z.object({ sessionId: SessionID.zod })),
+      validator("query", z.object({ sessionId: SessionID.zod, scope: z.enum(["project", "all"]).default("project") })),
       async (c) => {
-        const { sessionId } = c.req.valid("query")
-        await requireOwnedSession(sessionId)
+        const { sessionId, scope } = c.req.valid("query")
+        if (scope === "project") await requireOwnedSession(sessionId)
         const summary = ObservabilityRepository.summary(sessionId)
         return c.json({ sessionId, ...summary })
       },
@@ -578,13 +594,14 @@ export const ObservabilityRoutes = () =>
         "query",
         z.object({
           timeWindowMs: z.coerce.number().int().positive().optional(),
+          scope: z.enum(["project", "all"]).default("project"),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
         const now = Date.now()
         const cohorts = ObservabilityRepository.compareCohorts({
-          projectId: Instance.project.id,
+          projectId: query.scope === "all" ? undefined : Instance.project.id,
           sinceMs: query.timeWindowMs ? now - query.timeWindowMs : undefined,
         })
         // CompareSchema (and settings-observability.tsx's `data.cohorts`
@@ -732,14 +749,17 @@ export const ObservabilityRoutes = () =>
         operationId: "observability.summaryAggregate",
         responses: { 200: { description: "Summary", content: { "application/json": { schema: resolver(SummaryAllSchema) } } } },
       }),
-      validator("query", z.object({ sessionId: z.string().optional(), projectId: z.string().optional(), workspaceId: z.string().optional(), sinceMs: z.coerce.number().optional(), untilMs: z.coerce.number().optional() })),
+      validator("query", z.object({ sessionId: z.string().optional(), projectId: z.string().optional(), workspaceId: z.string().optional(), sinceMs: z.coerce.number().optional(), untilMs: z.coerce.number().optional(), scope: z.enum(["project", "all"]).default("project") })),
       async (c) => {
         const query = c.req.valid("query")
-        if (query.sessionId) await requireOwnedSession(SessionID.make(query.sessionId))
-        if (query.projectId && query.projectId !== Instance.project.id) throw new NotFoundError({ message: "Project not found" })
+        if (query.scope === "project") {
+          if (query.sessionId) await requireOwnedSession(SessionID.make(query.sessionId))
+          if (query.projectId && query.projectId !== Instance.project.id) throw new NotFoundError({ message: "Project not found" })
+        }
         // Same ownership anchor as every other route in this file (ADR-1028):
         // an unscoped request must never see another project's aggregates.
-        const scoped = query.sessionId || query.projectId || query.workspaceId ? query : { ...query, projectId: Instance.project.id }
+        const { scope, ...filters } = query
+        const scoped = scope === "all" ? filters : { ...filters, projectId: Instance.project.id }
         const summary = summaryAll(scoped)
         return c.json(summary)
       },

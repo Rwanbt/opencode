@@ -40,10 +40,11 @@ export const SettingsObservability: Component = () => {
   const [settings, settingsActions] = createResource(() => unwrap(sdk.client.observability.settings()))
   const [exportersConfig] = createResource(() => unwrap(sdk.client.observability.exporters.config()))
   const [health, healthActions] = createResource(() => unwrap(sdk.client.observability.health()))
-  const [sessions, sessionsActions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
-  const [events, eventsActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, limit: 50 })))
-  const [summary, summaryActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.summary({ sessionId: id })))
-  const [comparison, comparisonActions] = createResource(activeSubtab, (tab) => tab === "comparisons" ? unwrap(sdk.client.observability.compare({ timeWindowMs: 7 * 24 * 60 * 60 * 1000 })) : Promise.resolve(null)) as unknown as [() => CompareResult | null, { refetch: () => Promise<void> }]
+  const [sessions, sessionsActions] = createResource(() => unwrap(sdk.client.observability.sessions.list({ limit: 100 })))
+  const [privacySessions] = createResource(() => unwrap(sdk.client.session.list({ limit: 50 })))
+  const [events, eventsActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.events.list({ sessionId: id, scope: "all", limit: 50 })))
+  const [summary, summaryActions] = createResource(sessionId, (id) => unwrap(sdk.client.observability.summary({ sessionId: id, scope: "all" })))
+  const [comparison, comparisonActions] = createResource(activeSubtab, (tab) => tab === "comparisons" ? unwrap(sdk.client.observability.compare({ timeWindowMs: 7 * 24 * 60 * 60 * 1000, scope: "all" })) : Promise.resolve(null)) as unknown as [() => CompareResult | null, { refetch: () => Promise<void> }]
   const [refreshKey, setRefreshKey] = createSignal(0)
 
   createEffect(() => {
@@ -79,9 +80,10 @@ export const SettingsObservability: Component = () => {
   const remove = async () => {
     const session = selected()
     if (scope() !== "all" && !session) return
+    if (scope() === "project" && !session?.projectID) return
     setBusy(true)
     try {
-      const body = scope() === "all" ? { scope: "all" as const } : scope() === "project" ? { scope: "project" as const, id: session!.projectID } : { scope: "session" as const, id: session!.id }
+      const body = scope() === "all" ? { scope: "all" as const } : scope() === "project" ? { scope: "project" as const, id: session!.projectID! } : { scope: "session" as const, id: session!.id }
       const result = await unwrap(sdk.client.observability.data.delete({ body }, { headers: { "X-Confirm-Delete": "yes" } }))
       setConfirmation("")
       refresh()
@@ -241,7 +243,7 @@ export const SettingsObservability: Component = () => {
         </div></Show>
 
         <Show when={activeSubtab() === "privacy"}><div class="no-scrollbar">
-          <SettingsObservabilityPrivacy sessions={sessions() ?? []} sessionId={sessionId()} projectId={selected()?.projectID} onSelectSession={setSessionId} />
+          <SettingsObservabilityPrivacy sessions={privacySessions() ?? []} sessionId={privacySessions()?.some((item) => item.id === sessionId()) ? sessionId() : privacySessions()?.[0]?.id} projectId={privacySessions()?.find((item) => item.id === sessionId())?.projectID} onSelectSession={setSessionId} />
         </div></Show>
 
         <Show when={activeSubtab() === "exporters"}><div class="no-scrollbar">

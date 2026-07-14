@@ -1,5 +1,7 @@
-import { Database, and, desc, eq, gt, inArray, lt, max, or } from "../storage/db"
+import { Database, and, desc, eq, gt, inArray, isNotNull, lt, max, or } from "../storage/db"
 import { ObservabilityEventTable } from "./event.sql"
+import { SessionTable } from "../session/session.sql"
+import type { SessionID } from "../session/schema"
 import type { ObservabilityEvent } from "./event-schema"
 
 type EventRow = typeof ObservabilityEventTable.$inferSelect
@@ -55,6 +57,27 @@ export function derivedOrphanedRows(rows: EventRow[], nowMs = Date.now()): Map<n
   return new Map(started.filter((item) => !completed.has(item.span_id)).map((item) => [item.id, "orphaned" as const]))
 }
 export const ObservabilityRepository = {
+  sessions(limit = 100): Array<{ id: string; title?: string; projectID?: string }> {
+    return Database.use((db) =>
+      db
+        .selectDistinct({
+          id: ObservabilityEventTable.session_id,
+          title: SessionTable.title,
+          projectID: ObservabilityEventTable.project_id,
+        })
+        .from(ObservabilityEventTable)
+        .leftJoin(SessionTable, eq(SessionTable.id, ObservabilityEventTable.session_id))
+        .where(isNotNull(ObservabilityEventTable.session_id))
+        .orderBy(desc(ObservabilityEventTable.ts_ms))
+        .limit(limit)
+        .all()
+        .map((item) => ({ id: item.id!, title: item.title ?? undefined, projectID: item.projectID ?? undefined })),
+    )
+  },
+
+  hasSession(sessionId: string): boolean {
+    return Database.use((db) => Boolean(db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, sessionId as SessionID)).get()))
+  },
   async insert(events: ObservabilityEvent[]) {
     if (!events.length) return
     Database.use((db) => db.insert(ObservabilityEventTable).values(events.map(row)).run())

@@ -6249,6 +6249,31 @@ export type ObservabilitySettingsResponses = {
 
 export type ObservabilitySettingsResponse = ObservabilitySettingsResponses[keyof ObservabilitySettingsResponses]
 
+export type ObservabilitySessionsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+  }
+  url: "/observability/sessions"
+}
+
+export type ObservabilitySessionsListResponses = {
+  /**
+   * Sessions
+   */
+  200: Array<{
+    id: string
+    title?: string
+    projectID?: string
+  }>
+}
+
+export type ObservabilitySessionsListResponse =
+  ObservabilitySessionsListResponses[keyof ObservabilitySessionsListResponses]
+
 export type ObservabilityEventsListData = {
   body?: never
   path?: never
@@ -6256,6 +6281,7 @@ export type ObservabilityEventsListData = {
     directory?: string
     workspace?: string
     sessionId: string
+    scope?: "project" | "all"
     limit?: number
     before?: string
   }
@@ -6388,6 +6414,7 @@ export type ObservabilityTraceGetData = {
   query?: {
     directory?: string
     workspace?: string
+    scope?: "project" | "all"
   }
   url: "/observability/trace/{traceId}"
 }
@@ -6453,6 +6480,7 @@ export type ObservabilitySummaryData = {
     directory?: string
     workspace?: string
     sessionId: string
+    scope?: "project" | "all"
   }
   url: "/observability/summary"
 }
@@ -6624,6 +6652,7 @@ export type ObservabilityCompareData = {
     directory?: string
     workspace?: string
     timeWindowMs?: number
+    scope?: "project" | "all"
   }
   url: "/observability/compare"
 }
@@ -6762,6 +6791,7 @@ export type ObservabilitySummaryAggregateData = {
     workspaceId?: string
     sinceMs?: number
     untilMs?: number
+    scope?: "project" | "all"
   }
   url: "/observability/summary/aggregate"
 }
