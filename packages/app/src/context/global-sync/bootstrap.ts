@@ -64,6 +64,12 @@ function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
+function responseData<T>(response: { data?: T; error?: unknown }, resource: string) {
+  if (response.error) throw response.error
+  if (response.data === undefined) throw new Error(`The ${resource} response did not contain data`)
+  return response.data
+}
+
 function showErrors(input: {
   errors: unknown[]
   title: string
@@ -101,7 +107,7 @@ export async function bootstrapGlobal(input: {
     () =>
       retry(() =>
         input.globalSDK.provider.list().then((x) => {
-          if (x.data) input.setGlobalStore("provider", normalizeProviderList(x.data))
+          input.setGlobalStore("provider", normalizeProviderList(responseData(x, "provider list")))
         }),
       ),
   ]
@@ -228,7 +234,7 @@ export async function bootstrapDirectory(input: {
   // A failed request resolves with `data: undefined` — never overwrite an
   // initialized slice with undefined (see the same guard in bootstrapGlobal).
   const fast = [
-    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
+    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(responseData(x, "agent list"))))),
     () => retry(() => input.sdk.config.get().then((x) => x.data && input.setStore("config", x.data))),
     () => retry(() => input.sdk.session.status().then((x) => x.data && input.setStore("session_status", x.data))),
   ]
@@ -351,8 +357,7 @@ export async function bootstrapDirectory(input: {
   void retry(() => input.sdk.provider.list())
     .then((x) => {
       if (providerRev.get(input.directory) !== rev) return
-      if (!x.data) return
-      input.setStore("provider", normalizeProviderList(x.data))
+      input.setStore("provider", normalizeProviderList(responseData(x, "provider list")))
       input.setStore("provider_ready", true)
     })
     .catch((err) => {
