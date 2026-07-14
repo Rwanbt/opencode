@@ -96,9 +96,10 @@ import { AppFileSystem } from "../filesystem"
 // behaviour verbatim.
 
 /** Backend selector. Read from env at module init so tests can override. */
-const AUTH_STORAGE_BACKEND = (process.env.OPENCODE_AUTH_STORAGE ?? "file").toLowerCase() as
+const AUTH_STORAGE_BACKEND = (process.env.OPENCODE_AUTH_STORAGE ?? (process.env.OPENCODE_CLIENT === "mobile-embedded" ? "encrypted-file" : "file")).toLowerCase() as
   | "file"
   | "keychain"
+  | "encrypted-file"
 
 /** Minimal storage abstraction for provider credentials. */
 export interface AuthStorage {
@@ -253,6 +254,7 @@ export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
 const migratedMarker = path.join(Global.Path.data, "auth.json.migrated")
+const encryptedFile = path.join(Global.Path.data, "auth.enc.json")
 
 // ─── Migration (Sprint 5 item 5) ────────────────────────────────────────────
 //
@@ -268,6 +270,46 @@ const migratedMarker = path.join(Global.Path.data, "auth.json.migrated")
 // the env var back" case.
 
 let migrationDone = false
+async function readEncryptedAuth(): Promise<Record<string, unknown>> {
+  const fs = await import("node:fs/promises")
+  const crypto = await import("node:crypto")
+  try {
+    const envelope = JSON.parse(await fs.readFile(encryptedFile, "utf8")) as { v: number; iv: string; tag: string; ciphertext: string }
+    if (envelope.v !== 1) throw new Error("Unsupported encrypted auth version")
+    const key = Buffer.from(process.env.OPENCODE_AUTH_ENCRYPTION_KEY ?? "", "base64")
+    if (key.length !== 32) throw new Error("OPENCODE_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"))
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64"))
+    return JSON.parse(Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, "base64")), decipher.final()]).toString("utf8"))
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return {}
+    throw error
+  }
+}
+
+async function writeEncryptedAuth(data: Record<string, unknown>): Promise<void> {
+  const fs = await import("node:fs/promises")
+  const crypto = await import("node:crypto")
+  const key = Buffer.from(process.env.OPENCODE_AUTH_ENCRYPTION_KEY ?? "", "base64")
+  if (key.length !== 32) throw new Error("OPENCODE_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(data), "utf8"), cipher.final()])
+  await fs.mkdir(path.dirname(encryptedFile), { recursive: true })
+  await fs.writeFile(encryptedFile, JSON.stringify({ v: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") }), { mode: 0o600 })
+}
+
+async function maybeMigrateToEncryptedFile(): Promise<void> {
+  const fs = await import("node:fs/promises")
+  try {
+    const legacy = JSON.parse(await fs.readFile(file, "utf8")) as Record<string, unknown>
+    await writeEncryptedAuth(legacy)
+    await fs.rename(file, migratedMarker)
+    console.warn(`[auth] migrated auth.json to encrypted Android storage; backup kept at ${migratedMarker}`)
+  } catch (error: any) {
+    if (error?.code !== "ENOENT") throw error
+  }
+}
 
 async function maybeMigrateToKeychain(storage: KeychainStorage): Promise<void> {
   if (migrationDone) return
@@ -345,7 +387,9 @@ async function maybePurgeMigratedBackup(): Promise<void> {
 export async function initAuthStorage(): Promise<void> {
   try {
     await maybePurgeMigratedBackup()
-    if (AUTH_STORAGE_BACKEND === "keychain") {
+    if (AUTH_STORAGE_BACKEND === "encrypted-file") {
+      await maybeMigrateToEncryptedFile()
+    } else if (AUTH_STORAGE_BACKEND === "keychain") {
       const kc = new KeychainStorage()
       if (!kc.available()) return
       await maybeMigrateToKeychain(kc)
@@ -430,6 +474,13 @@ export namespace Auth {
       const keychain = selectKeychain()
 
       const all = Effect.fn("Auth.all")(function* () {
+        if (AUTH_STORAGE_BACKEND === "encrypted-file") {
+          const data = yield* Effect.tryPromise({
+            try: () => readEncryptedAuth(),
+            catch: (cause) => new AuthError({ message: "Failed to read encrypted auth data", cause }),
+          })
+          return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+        }
         if (keychain) {
           const loaded = yield* Effect.tryPromise({
             try: () => keychain.load(),
@@ -453,7 +504,12 @@ export namespace Auth {
         if (norm !== key) delete data[key]
         delete data[norm + "/"]
         const next = { ...data, [norm]: info }
-        if (keychain) {
+        if (AUTH_STORAGE_BACKEND === "encrypted-file") {
+          yield* Effect.tryPromise({
+            try: () => writeEncryptedAuth(next),
+            catch: (cause) => new AuthError({ message: "Failed to write encrypted auth data", cause }),
+          })
+        } else if (keychain) {
           yield* Effect.tryPromise({
             try: () => keychain.save(next),
             catch: (cause) => new AuthError({ message: "Failed to write keychain", cause }),
@@ -476,7 +532,12 @@ export namespace Auth {
         const data = yield* all()
         delete data[key]
         delete data[norm]
-        if (keychain) {
+        if (AUTH_STORAGE_BACKEND === "encrypted-file") {
+          yield* Effect.tryPromise({
+            try: () => writeEncryptedAuth(data as Record<string, unknown>),
+            catch: (cause) => new AuthError({ message: "Failed to write encrypted auth data", cause }),
+          })
+        } else if (keychain) {
           yield* Effect.tryPromise({
             try: () => keychain.save(data as Record<string, unknown>),
             catch: (cause) => new AuthError({ message: "Failed to write keychain", cause }),

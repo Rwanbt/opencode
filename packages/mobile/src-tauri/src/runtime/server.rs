@@ -27,6 +27,25 @@ fn server_start_lock() -> &'static tokio::sync::Mutex<()> {
     SERVER_START_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
+#[cfg(target_os = "android")]
+fn auth_storage_key() -> Result<String, String> {
+    use jni::objects::JObject;
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
+        .map_err(|e| format!("JavaVM::from_raw: {e:?}"))?;
+    let mut env = vm.attach_current_thread().map_err(|e| format!("attach: {e:?}"))?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let value = env
+        .call_method(&activity, "getAuthStorageKey", "()Ljava/lang/String;", &[])
+        .map_err(|e| format!("getAuthStorageKey: {e:?}"))?
+        .l()
+        .map_err(|e| format!("getAuthStorageKey return: {e:?}"))?;
+    let value: String = env
+        .get_string((&value).into())
+        .map_err(|e| format!("auth key string: {e:?}"))?
+        .into();
+    Ok(value)
+}
 /// Start the embedded OpenCode server.
 /// Spawns bun with the bundled CLI and stores the child process handle.
 /// On Android, executables are in nativeLibraryDir (packaged as JNI libs)
@@ -46,6 +65,8 @@ pub async fn start_embedded_server(
     let dir = runtime_dir(&app);
     let home_dir = dir.join("home");
     let cli_path = dir.join("opencode-cli.js");
+
+    let auth_key = auth_storage_key().map_err(|e| format!("Secure auth storage unavailable: {e}"))?;
 
     // Start local CONNECT proxy (Rust/tokio uses Android's native DNS)
     let proxy_port = crate::proxy::start_proxy()
@@ -185,7 +206,7 @@ pub async fn start_embedded_server(
     let bash_path = bin_link_dir.join("bash");
     let bash_env_path = home_dir.join(".bashrc");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
         home = home_dir.display(),
         bash_env = bash_env_path.display(),
         cert = ca_bundle_path.display(),
@@ -201,6 +222,7 @@ pub async fn start_embedded_server(
         path_val = path,
         lib_path_val = lib_path,
         proxy = proxy_url,
+
     );
     // Also add NO_PROXY for local connections
     let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
@@ -254,6 +276,8 @@ pub async fn start_embedded_server(
         .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", &password)
         .env("OPENCODE_CLIENT", "mobile-embedded")
+        .env("OPENCODE_AUTH_STORAGE", "encrypted-file")
+        .env("OPENCODE_AUTH_ENCRYPTION_KEY", &auth_key)
         .env("OPENCODE_CARGO_PROXY", if cargo_proxy_active { "1" } else { "0" })
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
