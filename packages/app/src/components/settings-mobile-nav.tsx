@@ -71,6 +71,8 @@ export const SettingsMobileNav: Component = () => {
         return <SettingsBenchmark />
       case "plugins":
         return <SettingsPlugins />
+      case "observability":
+        return <SettingsObservability />
       case "android":
         return <SettingsAndroid />
     }
