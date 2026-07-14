@@ -28,7 +28,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Android runtime preparation failed' }
 Write-Host 'Building unsigned Android release'
 Push-Location $mobile
 try {
-  & bunx tauri android build --target aarch64
+  & bash (Join-Path $mobile 'scripts/build-android.sh')
   if ($LASTEXITCODE -ne 0) { throw 'Tauri Android build failed' }
 } finally {
   Pop-Location

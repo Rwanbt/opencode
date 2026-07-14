@@ -26,6 +26,10 @@ JNILIBS="$SCRIPT_DIR/../src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
 ORT_VERSION="${ORT_VERSION:-1.19.2}"
 ORT_SHA256="${ORT_SHA256:-}"
 ORT_SO="$JNILIBS/libonnxruntime.so"
+if [ -n "${ORT_LIB_LOCATION:-}" ] && [ ! -f "$ORT_LIB_LOCATION/libonnxruntime.so" ]; then
+  echo "ERROR: ORT_LIB_LOCATION does not contain libonnxruntime.so: $ORT_LIB_LOCATION" >&2
+  exit 1
+fi
 if [ ! -f "$ORT_SO" ]; then
   echo "Downloading ONNX Runtime $ORT_VERSION for Android arm64..."
   # Try Maven Central (official Qualcomm/Microsoft distribution)
@@ -49,13 +53,19 @@ if [ ! -f "$ORT_SO" ]; then
     fi
     rm -rf "$TMPDIR"
   else
-    echo "WARNING: Failed to download ONNX Runtime"
-    echo "Please set ORT_LIB_LOCATION or place libonnxruntime.so in $JNILIBS/"
+    echo "ERROR: Failed to obtain ONNX Runtime $ORT_VERSION for Android." >&2
+    echo "Set ORT_LIB_LOCATION to a directory containing libonnxruntime.so or provide a verified ORT_SHA256." >&2
     rm -rf "$TMPDIR"
+    exit 1
   fi
   cd "$SCRIPT_DIR"
 else
   echo "ONNX Runtime already present."
+fi
+
+if [ ! -f "$ORT_SO" ] && [ -z "${ORT_LIB_LOCATION:-}" ]; then
+  echo "ERROR: Android ONNX Runtime is unavailable; refusing to start Cargo with an opaque ort-sys failure." >&2
+  exit 1
 fi
 
 # Set ORT_LIB_LOCATION for cargo build if not already set

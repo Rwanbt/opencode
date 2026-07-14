@@ -236,7 +236,7 @@ jobs:
       - name: Download ONNX Runtime for Android
         run: |
           echo "Downloading ONNX Runtime for Android (aarch64)..."
-          ORT_VERSION="1.22.0"
+          ORT_VERSION="1.19.2"
 
           # Download Microsoft's official ONNX Runtime Android AAR
           curl -fsSL "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
@@ -259,7 +259,7 @@ jobs:
 
       - name: Build Android APK
         working-directory: packages/mobile
-        run: bunx tauri android build --target aarch64
+        run: bash scripts/build-android.sh
 
       # ─── Sign APK ─────────────────────────────────────────────────
       # ─── Sign APK ─────────────────────────────────────────────────
