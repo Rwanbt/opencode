@@ -13,9 +13,12 @@ import { secret as hmacSecret } from "./hmac-secret"
 
 const log = Log.create({ service: "observability" })
 const FLUSH_INTERVAL_MS = 250
-const RETENTION_INTERVAL_MS = 60 * 60 * 1000
-// Phase 4 (ADR-1026): separate, shorter interval than retention — exporters
-// are meant to mirror events out close to real time, not once an hour.
+// At 20 events/s, a 5s cadence sees at most 100 new rows between runs.
+// The bounded purge batch therefore catches up without making the capture path
+// wait for a large historical delete.
+const RETENTION_INTERVAL_MS = 5_000
+// Phase 4 (ADR-1026): exporters run on their own timer and mirror events close
+// to real time without coupling export work to retention cleanup.
 const EXPORT_INTERVAL_MS = 5_000
 const EXPORT_BATCH_SIZE = 500
 
@@ -58,6 +61,7 @@ function boot(): Runtime {
     const config = await Config.get()
     const result = purgeByRetention(config.experimental?.observability)
     if (result.deletedCount > 0) log.info("purged retained observability events", result)
+    if (result.deletedCount > 0) Database.use((db) => db.run("PRAGMA wal_checkpoint(PASSIVE)"))
     // Phase 3 (ADR-1032): opt-in expiry is passive (checked on every
     // resolveContentCaptureLevel() call) but rows/opt-ins are also swept
     // here so an abandoned opt-in with no further traffic still gets

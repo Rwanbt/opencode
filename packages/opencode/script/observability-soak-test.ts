@@ -19,7 +19,7 @@
 // human reviewing the log afterwards can judge whether the queue, circuit
 // breaker, or process memory trended toward a problem over the full run.
 // Ends with a final flush and `PRAGMA integrity_check`.
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, statSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -46,6 +46,8 @@ const DURATION_MS = parseArg("duration-ms", 24 * 60 * 60 * 1000)
 const RATE_PER_SEC = parseArg("rate-per-sec", 20)
 const LOG_INTERVAL_MS = parseArg("log-interval-ms", 60_000)
 const TICK_MS = Math.max(1, Math.round(1000 / RATE_PER_SEC))
+const CIRCUIT_COOLDOWN_MS = 30_000
+const MAX_RSS_GROWTH_MB = 256
 
 const EVENT_KINDS: Array<{ type: string; status: string }> = [
   { type: "llm.call.started", status: "started" },
@@ -93,6 +95,10 @@ async function main() {
   let recorded = 0
   let recordErrors = 0
   let lastLogAt = startedAt
+  let peakRssMb = startRssMb
+  let circuitOpenStartedAt: number | undefined
+  let circuitOpenCount = 0
+  let maxCircuitOpenDurationMs = 0
   let stop = false
 
   process.on("SIGINT", () => {
@@ -111,16 +117,24 @@ async function main() {
         if (!result.ok) recordErrors++
 
         const now = Date.now()
+        const stats = service.stats()
+        const rssMb = process.memoryUsage().rss / (1024 * 1024)
+        peakRssMb = Math.max(peakRssMb, rssMb)
+        if (stats.circuitOpen && circuitOpenStartedAt === undefined) {
+          circuitOpenStartedAt = now
+          circuitOpenCount++
+        } else if (!stats.circuitOpen && circuitOpenStartedAt !== undefined) {
+          maxCircuitOpenDurationMs = Math.max(maxCircuitOpenDurationMs, now - circuitOpenStartedAt)
+          circuitOpenStartedAt = undefined
+        }
         if (now - lastLogAt >= LOG_INTERVAL_MS) {
           lastLogAt = now
-          const stats = service.stats()
-          const rssMb = process.memoryUsage().rss / (1024 * 1024)
           console.log(
             `[soak] t=${formatDuration(now - startedAt)} recorded=${recorded} recordErrors=${recordErrors} ` +
               `rssMb=${rssMb.toFixed(1)} (Δ${(rssMb - startRssMb).toFixed(1)}) ` +
               `queueSize=${stats.queueSize} queueBytes=${stats.queueBytes} circuitOpen=${stats.circuitOpen} ` +
-              `inserted=${stats.eventsInserted} droppedQueueFull=${stats.eventsDroppedQueueFull} ` +
-              `failedDb=${stats.eventsFailedDb} failedBusy=${stats.eventsFailedBusy} sanitizerFailed=${stats.sanitizerFailed}`,
+              `accepted=${stats.eventsAccepted} inserted=${stats.eventsInserted} droppedQueueFull=${stats.eventsDroppedQueueFull} droppedCircuit=${stats.eventsDroppedCircuitOpen} ` +
+              `failedDb=${stats.eventsFailedDb} failedBusy=${stats.eventsFailedBusy} failedFull=${stats.eventsFailedFull} failedCorrupt=${stats.eventsFailedCorrupt} sanitizerFailed=${stats.sanitizerFailed}`,
           )
           if (stats.circuitOpen) {
             console.warn(`[soak] WARNING: circuit breaker is open at t=${formatDuration(now - startedAt)}`)
@@ -133,20 +147,43 @@ async function main() {
       console.log("[soak] loop ended, flushing remaining queue...")
       await service.flush(10_000)
       const finalStats = service.stats()
-      console.log("[soak] final stats:", finalStats)
+      const finalNow = Date.now()
+      if (circuitOpenStartedAt !== undefined) maxCircuitOpenDurationMs = Math.max(maxCircuitOpenDurationMs, finalNow - circuitOpenStartedAt)
 
       const integrity = Database.use((db) => db.all(sql.raw("PRAGMA integrity_check")))
-      console.log("[soak] PRAGMA integrity_check:", integrity)
-
+      const integrityOk = integrity.length === 1 && Object.values(integrity[0] as Record<string, unknown>)[0] === "ok"
+      const databasePath = Database.Path
+      const databaseSize = statSync(databasePath, { throwIfNoEntry: false })?.size ?? 0
+      const walSize = statSync(`${databasePath}-wal`, { throwIfNoEntry: false })?.size ?? 0
+      const shmSize = statSync(`${databasePath}-shm`, { throwIfNoEntry: false })?.size ?? 0
+      const accountedAccepted = finalStats.eventsInserted + finalStats.queueSize + finalStats.eventsDroppedQueueFull
+      const unexplainedDivergence = finalStats.eventsAccepted !== accountedAccepted
       const finalRssMb = process.memoryUsage().rss / (1024 * 1024)
+      const rssDeltaMb = finalRssMb - startRssMb
+      const failed = [
+        finalStats.eventsDroppedCircuitOpen > 0,
+        finalStats.eventsFailedFull > 0,
+        finalStats.eventsFailedCorrupt > 0,
+        maxCircuitOpenDurationMs > CIRCUIT_COOLDOWN_MS,
+        finalStats.queueSize > 0,
+        unexplainedDivergence,
+        !integrityOk,
+        rssDeltaMb > MAX_RSS_GROWTH_MB,
+      ]
+
       console.log(
-        `[soak] done: recorded=${recorded} recordErrors=${recordErrors} ` +
-          `rssMb start=${startRssMb.toFixed(1)} end=${finalRssMb.toFixed(1)} delta=${(finalRssMb - startRssMb).toFixed(1)}`,
+        `[soak] summary verdict=${failed.some(Boolean) ? "FAIL" : "PASS"} duration=${formatDuration(finalNow - startedAt)} ` +
+          `rate=${(recorded / Math.max(1, (finalNow - startedAt) / 1000)).toFixed(2)}/s ` +
+          `recorded=${recorded} accepted=${finalStats.eventsAccepted} inserted=${finalStats.eventsInserted} ` +
+          `recordErrors=${recordErrors} invalidContext=${finalStats.eventsRejectedInvalidContext} invalidEvent=${finalStats.eventsRejectedInvalidEvent} ` +
+          `queueDrops=${finalStats.eventsDroppedQueueFull} circuitDrops=${finalStats.eventsDroppedCircuitOpen} queueSize=${finalStats.queueSize} ` +
+          `sqliteErrors={db:${finalStats.eventsFailedDb},busy:${finalStats.eventsFailedBusy},full:${finalStats.eventsFailedFull},corrupt:${finalStats.eventsFailedCorrupt}} ` +
+          `circuitOpenCount=${circuitOpenCount} maxCircuitOpen=${formatDuration(maxCircuitOpenDurationMs)} ` +
+          `rssMb={start:${startRssMb.toFixed(1)},peak:${peakRssMb.toFixed(1)},final:${finalRssMb.toFixed(1)},delta:${rssDeltaMb.toFixed(1)}} ` +
+          `dbBytes={main:${databaseSize},wal:${walSize},shm:${shmSize}} integrity=${integrityOk ? "ok" : "FAIL"}`,
       )
-      if (finalStats.circuitOpen) {
-        console.error("[soak] FAIL: circuit breaker still open at end of run")
-        process.exitCode = 1
-      }
+      if (failed.some(Boolean)) process.exitCode = 1
+
     },
   })
 

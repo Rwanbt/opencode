@@ -23,7 +23,10 @@ export interface RetentionResult {
 }
 
 export const DEFAULT_MAX_EVENTS = 100_000
-export const RETENTION_BATCH_SIZE = 1_000
+// Keep each cleanup bounded so retention never monopolizes the synchronous
+// SQLite connection, while still leaving enough headroom for sustained
+// ingestion at the supported soak rate.
+export const RETENTION_BATCH_SIZE = 5_000
 const DAY_MS = 86_400_000
 
 const SCOPE_COLUMN = {

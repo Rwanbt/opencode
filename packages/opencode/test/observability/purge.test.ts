@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Database, eq } from "../../src/storage/db"
+import { Database, eq, sql } from "../../src/storage/db"
 import { ObservabilityEventTable } from "../../src/observability/event.sql"
 import { ObservabilityRepository, exportEvents } from "../../src/observability/repository"
 import { deleteByScope, purgeByRetention, purgeExpiredContent, purgeContentForScope } from "../../src/observability/purge"
@@ -187,6 +187,15 @@ describe("observability deleteByScope", () => {
     expect(rowsFor(ObservabilityEventTable.session_id, oldest)).toHaveLength(0)
     expect(rowsFor(ObservabilityEventTable.session_id, newest)).toHaveLength(1)
   })
+  test("retention removes a small overflow above 100000 without deleting recent rows", async () => {
+    await deleteByScope({ scope: "all" })
+    const sessionId = "purge-retention-over-100k-" + ObservabilityId.create()
+    Database.use((db) => db.run(sql.raw(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 100050) INSERT INTO observability_event (event_id, trace_id, span_id, session_id, event_type, status, ts_ms, enqueue_seq, redaction_status, payload_truncated, metadata_json, local_redacted_json, schema_version) SELECT "purge-over-" || n, "trace-" || n, "span-" || n, "${sessionId}", "llm.call.started", "started", n, n, "metadata_only", 0, "{}", "{}", 1 FROM seq`)))
+    const result = purgeByRetention({ maxEvents: 100_000 })
+    expect(result.deletedOverLimit).toBe(50)
+    expect(rowsFor(ObservabilityEventTable.session_id, sessionId)).toHaveLength(100_000)
+  })
+
   // Runs last on purpose: {scope: "all"} has no WHERE clause and truly wipes
   // the shared test-process SQLite instance (bun test runs files/tests
   // sequentially by default, same shared :memory: DB convention already used
