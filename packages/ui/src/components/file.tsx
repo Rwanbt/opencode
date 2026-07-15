@@ -30,6 +30,7 @@ import {
   getViewerRoot,
   notifyShadowReady,
   observeViewerScheme,
+  watchViewerTokenStyles,
 } from "../pierre/file-runtime"
 import {
   findCodeSelectionSide,
@@ -727,6 +728,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
   let viewer!: Viewer
   let stopSubgridWatch: (() => void) | undefined
+  let stopTokenStyleWatch: (() => void) | undefined
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -877,6 +879,8 @@ function TextViewer<T>(props: TextFileProps<T>) {
       onReady: () => {
         stopSubgridWatch?.()
         stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
+        stopTokenStyleWatch?.()
+        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
@@ -933,6 +937,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     instance = undefined
     virtuals.cleanup()
     stopSubgridWatch?.()
+    stopTokenStyleWatch?.()
   })
 
   return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
@@ -948,6 +953,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   let dragEndSide: DiffSelectionSide | undefined
   let viewer!: Viewer
   let stopSubgridWatch: (() => void) | undefined
+  let stopTokenStyleWatch: (() => void) | undefined
 
   const [local, others] = splitProps(props, diffKeys)
 
@@ -1071,6 +1077,8 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       onReady: () => {
         stopSubgridWatch?.()
         stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
+        stopTokenStyleWatch?.()
+        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
         done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
@@ -1138,6 +1146,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     dragSide = undefined
     dragEndSide = undefined
     stopSubgridWatch?.()
+    stopTokenStyleWatch?.()
   })
 
   return <ViewerShell mode="diff" viewer={viewer} class={local.class} classList={local.classList} />

@@ -17,7 +17,8 @@ import {
 import { EditorState, Compartment, Annotation } from "@codemirror/state"
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search"
-import { indentOnInput, bracketMatching, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
+import { indentOnInput, bracketMatching, syntaxHighlighting } from "@codemirror/language"
+import { classHighlighter } from "@lezer/highlight"
 import { buildLspExtensions, type LspCallbacks, type LspLocation } from "./code-mirror-lsp"
 
 // Used to tag programmatic (non-user) document changes so the updateListener
@@ -173,7 +174,9 @@ export function CodeMirrorEditor(props: {
         highlightSpecialChars(),
         bracketMatching(),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        // Use literal token classes so syntax colours come from the static CSS.
+        // HighlightStyle would inject a runtime <style>, which mobile CSP drops.
+        syntaxHighlighting(classHighlighter),
         search({ top: true }),
         // Placeholder slot: reconfigured after the async language import resolves.
         langCompartment.of([]),
