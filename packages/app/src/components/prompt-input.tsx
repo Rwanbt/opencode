@@ -1309,8 +1309,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
                 <div class="size-4 shrink-0" />
               </div>
-              <div class="flex items-center gap-1.5 min-w-0 flex-1" classList={{ "prompt-controls-debate": local.agent.current()?.name === "debate", "grid grid-cols-2 w-full items-stretch md:flex md:items-center": local.agent.current()?.name === "debate" }}>
-                <div data-component="prompt-agent-control" classList={{ "min-w-0 w-full": local.agent.current()?.name === "debate" }}>
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <div data-component="prompt-agent-control">
                   <TooltipKeybind
                     placement="top"
                     gutter={4}
@@ -1325,7 +1325,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         local.agent.set(value)
                         restoreFocus()
                       }}
-                      class={local.agent.current()?.name === "debate" ? "capitalize min-w-0 w-full max-w-none text-text-base" : "capitalize max-w-[160px] text-text-base"}
+                      class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
                       triggerProps={{ "data-action": "prompt-agent" }}
@@ -1334,7 +1334,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </TooltipKeybind>
                 </div>
                 <Show when={store.mode !== "shell"}>
-                  <div data-component="prompt-model-control" classList={{ "min-w-0 w-full": local.agent.current()?.name === "debate" }}>
+                <Show when={local.agent.current()?.name !== "debate"}>
+                  <div data-component="prompt-model-control">
                     <Show
                       when={providers.paid().length > 0}
                       fallback={
@@ -1405,7 +1406,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipKeybind>
                     </Show>
                   </div>
-                  <div data-component="prompt-mode-control" classList={{ "min-w-0 w-full": local.agent.current()?.name === "debate" }}>
+                </Show>
+                <Show when={local.agent.current()?.name === "debate"}>
+                  <div data-component="prompt-debate-model-control">
+                    <DebateModelSelector local={local} />
+                  </div>
+                </Show>
+                  <div data-component="prompt-mode-control">
                     <Select
                       size="normal"
                       options={["Ask", "Auto Edit", "Full Auto"]}
@@ -1414,20 +1421,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         if (value) setAcceptMode(value)
                         restoreFocus()
                       }}
-                      class={local.agent.current()?.name === "debate" ? "min-w-0 w-full max-w-none text-text-base" : "max-w-[120px] text-text-base"}
+                      class="max-w-[120px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
                       triggerProps={{ "data-action": "prompt-permissions" }}
                       variant="ghost"
                     />
                   </div>
-                  <Show when={local.agent.current()?.name === "debate"}>
-                    <div data-component="prompt-debate-model-control" classList={{ "min-w-0 w-full": local.agent.current()?.name === "debate" }}>
-                      <DebateModelSelector local={local} />
-                    </div>
-                  </Show>
                   <Show when={variants().length > 1}>
-                    <div data-component="prompt-variant-control" classList={{ "min-w-0 w-full": local.agent.current()?.name === "debate" }}>
+                    <div data-component="prompt-variant-control">
                       <TooltipKeybind
                         placement="top"
                         gutter={4}
@@ -1443,7 +1445,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             local.model.variant.set(value === "default" ? undefined : value)
                             restoreFocus()
                           }}
-                          class={local.agent.current()?.name === "debate" ? "capitalize min-w-0 w-full max-w-none text-text-base" : "capitalize max-w-[160px] text-text-base"}
+                          class="capitalize max-w-[160px] text-text-base"
                           valueClass="truncate text-13-regular text-text-base"
                           triggerStyle={control()}
                           triggerProps={{ "data-action": "prompt-model-variant" }}

@@ -113,8 +113,13 @@ export namespace Orchestrator {
         }
 
         // ── Discover providers ─────────────────────────────────────
-        const { providers: discovered, ghostWarnings } = yield* ProviderDiscovery.discover(
+        const { providers: discoveredParticipants, ghostWarnings } = yield* ProviderDiscovery.discover(
           config.participants,
+        )
+        const discovered = ProviderDiscovery.includeJudge(
+          discoveredParticipants,
+          config.judgeProviderID,
+          config.judgeModelID,
         )
         if (ghostWarnings.length > 0) {
           log.info("ghost model warnings", { warnings: ghostWarnings })
@@ -404,16 +409,14 @@ export namespace Orchestrator {
           yield* store.updateStatus(debateID, "phase4_synthesize")
           yield* bus.publish(Events.DebatePhaseChanged, { debateID, phase: "phase4_synthesize" })
 
-          const primaryIsActive = activeProviders.some(
-            (p) => p.providerID === config.judgeProviderID && p.modelID === config.judgeModelID,
-          )
-          const judge = primaryIsActive
-            ? yield* ProviderDiscovery.selectJudge(
-                activeProviders,
-                ProviderID.make(config.judgeProviderID as string),
-                ModelID.make(config.judgeModelID as string),
-              )
-            : { ...activeProviders[0]!, role: "judge" as const }
+          const requestedJudge =
+            config.judgeProviderID && config.judgeModelID
+              ? activeProviders.find(
+                  (provider) =>
+                    provider.providerID === config.judgeProviderID && provider.modelID === config.judgeModelID,
+                )
+              : undefined
+          const judge = requestedJudge ?? { ...activeProviders[0]!, role: "judge" as const }
 
           log.info("phase 4: synthesize", {
             claimCount: claims.length,

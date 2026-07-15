@@ -12,6 +12,18 @@ describe("ProviderDiscovery explicit participants", () => {
     expect(result.providers).toHaveLength(10)
   })
 
+  test("includes the primary judge once without duplicating an existing participant", () => {
+    const providers = [
+      { providerID: "provider-a" as any, modelID: "model-a" as any, authMethod: "api_key" as const },
+    ]
+    const withJudge = ProviderDiscovery.includeJudge(providers, "provider-judge" as any, "model-judge" as any)
+    expect(withJudge.map((provider) => `${provider.providerID}/${provider.modelID}`)).toEqual([
+      "provider-judge/model-judge",
+      "provider-a/model-a",
+    ])
+    expect(ProviderDiscovery.includeJudge(withJudge, "provider-judge" as any, "model-judge" as any)).toHaveLength(2)
+  })
+
   test("deduplicates the same model and rejects a one-model debate", async () => {
     const result = await Effect.runPromise(
       ProviderDiscovery.discover([

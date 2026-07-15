@@ -200,6 +200,29 @@ export namespace ProviderDiscovery {
     return { providers: available, ghostWarnings }
   })
 
+  export function includeJudge(
+    providers: DiscoveredProvider[],
+    judgeProviderID?: ProviderID,
+    judgeModelID?: ModelID,
+  ): DiscoveredProvider[] {
+    if (!judgeProviderID || !judgeModelID) return providers
+
+    const alreadyIncluded = providers.some(
+      (provider) => provider.providerID === judgeProviderID && provider.modelID === judgeModelID,
+    )
+    if (alreadyIncluded) return providers
+
+    return [
+      {
+        providerID: judgeProviderID,
+        modelID: judgeModelID,
+        role: "judge",
+        authMethod: "api_key",
+      },
+      ...providers,
+    ]
+  }
+
   export function selectJudge(
     participants: DiscoveredProvider[],
     explicitProviderID?: ProviderID,

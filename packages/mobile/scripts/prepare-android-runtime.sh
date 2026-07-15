@@ -47,11 +47,12 @@ else
   echo "  WARNING: WSL not available. Build rootfs manually and place at:"
   echo "    $ROOTFS_TAR"
 fi
-if [ -f "$ROOTFS_TAR" ]; then
-  echo "  rootfs.tar.gz: $(du -sh "$ROOTFS_TAR" | cut -f1)"
-else
-  echo "  WARNING: rootfs.tar.gz not found — APK will lack offline dev tools."
+if [ ! -f "$ROOTFS_TAR" ] || [ ! -s "$ROOTFS_TAR" ] || [ ! -f "$RUNTIME_DIR/rootfs_version.txt" ]; then
+  echo "  ERROR: rootfs.tgz not found or empty at $ROOTFS_TAR" >&2
+  echo "  Build aborted: the Android APK would be unable to start its embedded runtime." >&2
+  exit 1
 fi
+echo "  rootfs.tgz: $(du -sh "$ROOTFS_TAR" | cut -f1)"
 echo ""
 
 # ─── Bun (aarch64-linux-musl, for Android Bionic compatibility) ──────

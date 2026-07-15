@@ -221,7 +221,11 @@ class MainActivity : TauriActivity() {
       packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
     } catch (_: Exception) { "unknown" }
     val installedVersion = if (versionFile.exists()) versionFile.readText().trim() else ""
-    val needsExtract = !File(runtimeDir, "opencode-cli.js").exists() || installedVersion != currentVersion
+    // The APK version marker alone is insufficient: a previous install may have
+    // skipped rootfs extraction while leaving the CLI bundle present.
+    val rootfsVersionFile = File(runtimeDir, ".rootfs_version")
+    val needsExtract = !File(runtimeDir, "opencode-cli.js").exists() ||
+      installedVersion != currentVersion || !rootfsVersionFile.exists()
     if (needsExtract) {
       Thread {
         android.util.Log.i("OpenCode", "Extracting runtime assets to ${runtimeDir.absolutePath}")
