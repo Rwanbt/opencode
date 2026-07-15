@@ -683,24 +683,44 @@ function ViewerShell(props: {
 // and only the last one paints. Verified live via DevTools — giving each
 // container its own explicit `repeat(N, auto)` track list (bypassing the
 // subgrid inheritance) fixes it immediately. Desktop Chrome is unaffected by
-// this rewrite since `auto` sizing resolves the same way per-row when rows
-// don't wrap; only wrapped multi-line rows in `overflow: wrap` mode can lose
-// the subgrid's cross-column row-height matching (known limitation).
-function fixSubgridLineRowCollapse(root: ShadowRoot) {
-  const containers = root.querySelectorAll<HTMLElement>("[data-gutter], [data-content]")
-  for (const container of containers) {
-    // WHY children.length, not querySelectorAll("[data-line]"): the gutter's
-    // row items carry [data-column-number], not [data-line] — only the
-    // content side uses that attribute. Counting DOM children instead
-    // works for both, since each row is always a direct child.
-    const rowCount = container.children.length
-    if (rowCount === 0) continue
-    const rows = `repeat(${rowCount}, auto)`
-    if (container.style.gridTemplateRows === rows) continue
-    container.style.gridTemplateRows = rows
-  }
+// The pixel tracks below preserve the cross-column row-height matching for
+// wrapped multi-line rows while keeping the workaround scoped to the viewer.
+function getSynchronizedGridRows(gutter: HTMLElement, content: HTMLElement) {
+  const gutterRows = Array.from(gutter.children) as HTMLElement[]
+  const contentRows = Array.from(content.children) as HTMLElement[]
+  if (gutterRows.length === 0 || gutterRows.length !== contentRows.length) return
+
+  return gutterRows
+    .map((row, index) => {
+      const contentRow = contentRows[index]
+      const lineHeight = Number.parseFloat(getComputedStyle(contentRow).lineHeight)
+      const contentHeight = contentRow.scrollHeight
+      const gutterHeight = row.scrollHeight
+      const minimumHeight = Number.isFinite(lineHeight) ? lineHeight : 1
+      return `${Math.max(1, Math.ceil(Math.max(contentHeight, gutterHeight, minimumHeight)))}px`
+    })
+    .join(" ")
 }
 
+// WHY: Android WebView reports support for CSS subgrid but does not preserve
+// the shared row tracks used by Pierre. Independent `auto` tracks align normal
+// lines but drift as soon as a wrapped content row becomes taller than its
+// number cell. Measuring both columns and applying the same pixel tracks keeps
+// every number aligned with its corresponding content row.
+function fixSubgridLineRowCollapse(root: ShadowRoot) {
+  for (const gutter of root.querySelectorAll<HTMLElement>("[data-gutter]")) {
+    const parent = gutter.parentElement
+    const content = Array.from(parent?.children ?? []).find(
+      (child) => child !== gutter && child.matches("[data-content]"),
+    ) as HTMLElement | undefined
+    if (!content) continue
+
+    const rows = getSynchronizedGridRows(gutter, content)
+    if (!rows) continue
+    if (gutter.style.gridTemplateRows !== rows) gutter.style.gridTemplateRows = rows
+    if (content.style.gridTemplateRows !== rows) content.style.gridTemplateRows = rows
+  }
+}
 // WHY a persistent observer instead of a one-shot fix in onReady:
 // @pierre/diffs can re-render its shadow DOM more than once per file open
 // (e.g. once the file's initial DOM is inserted, and again as reactive
