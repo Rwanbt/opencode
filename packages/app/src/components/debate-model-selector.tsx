@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onMount, For, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
 import { List } from "@opencode-ai/ui/list"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,12 +11,17 @@ import { modelKey, type DebateModel, validateDebateSelection } from "./debate-se
 
 type LocalContext = ReturnType<typeof useLocal>
 type SelectableModel = DebateModel & { name: string; providerName: string }
+type DebateAnnexSlot = { id: string; model?: DebateModel }
 
 export const DebateModelSelector: Component<{ local: LocalContext }> = (props) => {
   const language = useLanguage()
   const providers = useProviders()
-  const [annexes, setAnnexes] = createSignal<DebateModel[]>([])
+  const [annexSlots, setAnnexSlots] = createStore<DebateAnnexSlot[]>([])
+  const [openPicker, setOpenPicker] = createSignal<string | null>(null)
   const [saving, setSaving] = createSignal(false)
+  let nextAnnexSlotId = 0
+
+  const createAnnexSlot = (model?: DebateModel): DebateAnnexSlot => ({ id: "annex-" + nextAnnexSlotId++, model })
 
   const primary = () => props.local.model.current()
   const available = createMemo<SelectableModel[]>(() => {
@@ -40,9 +46,14 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
     ]
   })
 
+  const selectedModel = (slot: DebateAnnexSlot) => {
+    if (!slot.model) return undefined
+    return available().find((candidate) => modelKey(candidate) === modelKey(slot.model!))
+  }
+
   const selectedModels = createMemo(() =>
-    annexes().flatMap((item) => {
-      const model = available().find((candidate) => modelKey(candidate) === modelKey(item))
+    annexSlots.flatMap((slot) => {
+      const model = selectedModel(slot)
       return model ? [model] : []
     }),
   )
@@ -51,12 +62,13 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
     const existing = props.local.debate.current() ?? (await props.local.debate.load())
     if (!existing) return
     const keys = new Set(available().map(modelKey))
-    setAnnexes(existing.participants.filter((item) => keys.has(modelKey(item))))
+    setAnnexSlots(existing.participants.filter((item) => keys.has(modelKey(item))).map(createAnnexSlot))
   })
 
   const selectPrimary = (item: SelectableModel | undefined) => {
     if (!item || saving()) return
-    props.local.model.set({ providerID: item.providerID, modelID: item.modelID })
+    setOpenPicker(null)
+    queueMicrotask(() => props.local.model.set({ providerID: item.providerID, modelID: item.modelID }))
   }
 
   const save = async (next: DebateModel[]) => {
@@ -84,28 +96,39 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
     }
   }
 
-  const select = (current: SelectableModel | undefined, next: SelectableModel | undefined) => {
+  const participants = (slots: DebateAnnexSlot[]) => slots.flatMap((slot) => (slot.model ? [slot.model] : []))
+
+  const select = (slotId: string, next: SelectableModel | undefined) => {
     if (!next || saving()) return
     const nextKey = modelKey(next)
-    const currentKey = current ? modelKey(current) : undefined
-    if (annexes().some((item) => modelKey(item) === nextKey && nextKey !== currentKey)) return
+    if (annexSlots.some((slot) => slot.id !== slotId && slot.model && modelKey(slot.model) === nextKey)) return
 
-    const updated = current
-      ? annexes().map((item) => (modelKey(item) === currentKey ? next : item))
-      : [...annexes(), next]
-    setAnnexes(updated)
-    void save(updated)
+    setOpenPicker(null)
+    queueMicrotask(() => {
+      if (slotId === "add-annex") {
+        setAnnexSlots(annexSlots.length, createAnnexSlot(next))
+      } else {
+        const index = annexSlots.findIndex((slot) => slot.id === slotId)
+        if (index < 0) return
+        setAnnexSlots(index, "model", next)
+      }
+      void save(participants(annexSlots))
+    })
   }
 
-  const remove = (item: SelectableModel) => {
+  const remove = (slotId: string) => {
     if (saving()) return
-    const updated = annexes().filter((candidate) => modelKey(candidate) !== modelKey(item))
-    setAnnexes(updated)
-    void save(updated)
+    setOpenPicker(null)
+    queueMicrotask(() => {
+      setAnnexSlots(annexSlots.filter((slot) => slot.id !== slotId))
+      void save(participants(annexSlots))
+    })
   }
 
-  const picker = (current?: SelectableModel) => (
+  const picker = (pickerId: string, current?: SelectableModel) => (
     <Popover
+      open={openPicker() === pickerId}
+      onOpenChange={(open) => setOpenPicker(open ? pickerId : null)}
       triggerAs={Button}
       triggerProps={{
         type: "button",
@@ -124,7 +147,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
         </span>
       }
       class="w-[min(520px,calc(100vw-48px))]"
-      modal
+      modal={false}
       portal={false}
     >
       <List
@@ -147,7 +170,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
           if (b.category === "Favorites") return 1
           return a.category.localeCompare(b.category)
         }}
-        onSelect={(item) => select(current, item)}
+        onSelect={(item) => select(pickerId, item)}
       >
         {(item) => <span class="truncate">{item.name}</span>}
       </List>
@@ -156,6 +179,9 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
 
   return (
     <Popover
+      onOpenChange={(open) => {
+        if (!open) setOpenPicker(null)
+      }}
       triggerAs={Button}
       triggerProps={{
         type: "button",
@@ -172,12 +198,14 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
       <div class="flex w-full flex-col gap-3">
         <div class="text-12-medium text-text-muted">{language.t("dialog.debate.primary", { model: primary()?.name ?? "" })}</div>
         <Popover
+          open={openPicker() === "primary"}
+          onOpenChange={(open) => setOpenPicker(open ? "primary" : null)}
           triggerAs={Button}
           triggerProps={{
             type: "button",
             variant: "ghost",
             size: "normal",
-                    class: "w-full justify-between text-text-base",
+            class: "w-full justify-between text-text-base",
           }}
           trigger={<span class="truncate">{primary()?.name ?? language.t("dialog.model.select.title")}</span>}
           portal={false}
@@ -197,23 +225,26 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
           </List>
         </Popover>
         <div class="text-12-medium text-text-muted">{language.t("dialog.debate.annexLabel")}</div>
-        <For each={selectedModels()}>
-          {(item) => (
-            <div class="flex w-full min-w-0 items-center gap-1.5">
-              <div class="min-w-0 flex-1">{picker(item)}</div>
-              <button
-                type="button"
-                class="size-7 shrink-0 rounded text-14-regular text-text-muted hover:bg-background-strong hover:text-text-base"
-                aria-label={language.t("dialog.debate.remove")}
-                onClick={() => remove(item)}
-                disabled={saving()}
-              >
-                ×
-              </button>
-            </div>
-          )}
+        <For each={annexSlots}>
+          {(slot) => {
+            const current = selectedModel(slot)
+            return (
+              <div class="flex w-full min-w-0 items-center gap-1.5">
+                <div class="min-w-0 flex-1">{picker(slot.id, current)}</div>
+                <button
+                  type="button"
+                  class="size-7 shrink-0 rounded text-14-regular text-text-muted hover:bg-background-strong hover:text-text-base"
+                  aria-label={language.t("dialog.debate.remove")}
+                  onClick={() => remove(slot.id)}
+                  disabled={saving()}
+                >
+                  ×
+                </button>
+              </div>
+            )
+          }}
         </For>
-        {picker()}
+        {picker("add-annex")}
       </div>
     </Popover>
   )
