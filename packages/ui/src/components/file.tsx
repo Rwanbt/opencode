@@ -715,10 +715,20 @@ function fixSubgridLineRowCollapse(root: ShadowRoot) {
     ) as HTMLElement | undefined
     if (!content) continue
 
+    const previousGutterRows = gutter.style.gridTemplateRows
+    const previousContentRows = content.style.gridTemplateRows
+    gutter.style.gridTemplateRows = "none"
+    content.style.gridTemplateRows = "none"
+
     const rows = getSynchronizedGridRows(gutter, content)
-    if (!rows) continue
-    if (gutter.style.gridTemplateRows !== rows) gutter.style.gridTemplateRows = rows
-    if (content.style.gridTemplateRows !== rows) content.style.gridTemplateRows = rows
+    if (!rows) {
+      gutter.style.gridTemplateRows = previousGutterRows
+      content.style.gridTemplateRows = previousContentRows
+      continue
+    }
+
+    gutter.style.gridTemplateRows = rows
+    content.style.gridTemplateRows = rows
   }
 }
 // WHY a persistent observer instead of a one-shot fix in onReady:
