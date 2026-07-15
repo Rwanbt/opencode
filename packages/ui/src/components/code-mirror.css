@@ -103,3 +103,92 @@
   min-height: 100%;
   overflow: hidden;
 }
+
+/*
+ * CSP-safe syntax highlighting.
+ *
+ * classHighlighter adds these literal classes to token spans. Keeping the
+ * rules in this statically linked stylesheet avoids CodeMirror's runtime
+ * StyleModule, which is blocked by the mobile CSP.
+ */
+.cm-opencode .tok-comment,
+.cm-opencode .tok-meta {
+  color: var(--syntax-comment, currentColor);
+}
+
+.cm-opencode .tok-string {
+  color: var(--syntax-string, currentColor);
+}
+
+.cm-opencode .tok-string2 {
+  color: var(--syntax-regexp, currentColor);
+}
+
+.cm-opencode .tok-url,
+.cm-opencode .tok-link {
+  color: var(--syntax-info, currentColor);
+}
+
+.cm-opencode .tok-keyword {
+  color: var(--syntax-keyword, currentColor);
+}
+
+.cm-opencode .tok-atom,
+.cm-opencode .tok-bool,
+.cm-opencode .tok-literal,
+.cm-opencode .tok-number {
+  color: var(--syntax-constant, currentColor);
+}
+
+.cm-opencode .tok-variableName,
+.cm-opencode .tok-variableName2 {
+  color: var(--syntax-variable, currentColor);
+}
+
+.cm-opencode .tok-propertyName,
+.cm-opencode .tok-labelName {
+  color: var(--syntax-property, currentColor);
+}
+
+.cm-opencode .tok-typeName,
+.cm-opencode .tok-namespace,
+.cm-opencode .tok-className {
+  color: var(--syntax-type, currentColor);
+}
+
+.cm-opencode .tok-macroName {
+  color: var(--syntax-primitive, currentColor);
+}
+
+.cm-opencode .tok-operator {
+  color: var(--syntax-operator, currentColor);
+}
+
+.cm-opencode .tok-punctuation {
+  color: var(--syntax-punctuation, currentColor);
+}
+
+.cm-opencode .tok-invalid {
+  color: var(--syntax-critical, currentColor);
+}
+
+.cm-opencode .tok-heading {
+  color: var(--syntax-type, currentColor);
+  font-weight: 600;
+}
+
+.cm-opencode .tok-emphasis {
+  font-style: italic;
+}
+
+.cm-opencode .tok-strong {
+  font-weight: 600;
+}
+
+.cm-opencode .tok-inserted {
+  color: var(--syntax-diff-add, currentColor);
+}
+
+.cm-opencode .tok-deleted {
+  color: var(--syntax-diff-delete, currentColor);
+}

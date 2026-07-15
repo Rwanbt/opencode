@@ -48,6 +48,24 @@ export function observeViewerScheme(getHost: () => HTMLElement | undefined) {
   return () => monitor.disconnect()
 }
 
+export function repairViewerTokenStyles(root: ShadowRoot | undefined) {
+  if (!root) return
+
+  for (const span of root.querySelectorAll<HTMLElement>("[data-line] span[style]")) {
+    const raw = span.getAttribute("style")
+    if (!raw || span.style.cssText === raw) continue
+    span.style.cssText = raw
+  }
+}
+
+export function watchViewerTokenStyles(root: ShadowRoot | undefined) {
+  if (!root || typeof MutationObserver === "undefined") return () => {}
+
+  repairViewerTokenStyles(root)
+  const observer = new MutationObserver(() => repairViewerTokenStyles(root))
+  observer.observe(root, { childList: true, subtree: true })
+  return () => observer.disconnect()
+}
 export function notifyShadowReady(opts: {
   state: ReadyWatcher
   container: HTMLElement

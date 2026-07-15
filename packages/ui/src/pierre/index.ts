@@ -155,6 +155,27 @@ const unsafeCSS = `
   }
 }
 
+/*
+ * Pierre renders Shiki tokens with inline color: var(--syntax-*) styles.
+ * Android WebView may keep the style attribute while rejecting the declaration
+ * under the asset CSP. These rules run inside Pierre's Shadow DOM and preserve
+ * the token palette without another runtime style injection.
+ */
+[data-diff] [data-line] span[style*="--syntax-comment"], [data-file] [data-line] span[style*="--syntax-comment"] { color: var(--syntax-comment) !important; }
+[data-diff] [data-line] span[style*="--syntax-regexp"], [data-file] [data-line] span[style*="--syntax-regexp"] { color: var(--syntax-regexp) !important; }
+[data-diff] [data-line] span[style*="--syntax-string"], [data-file] [data-line] span[style*="--syntax-string"] { color: var(--syntax-string) !important; }
+[data-diff] [data-line] span[style*="--syntax-keyword"], [data-file] [data-line] span[style*="--syntax-keyword"] { color: var(--syntax-keyword) !important; }
+[data-diff] [data-line] span[style*="--syntax-primitive"], [data-file] [data-line] span[style*="--syntax-primitive"] { color: var(--syntax-primitive) !important; }
+[data-diff] [data-line] span[style*="--syntax-operator"], [data-file] [data-line] span[style*="--syntax-operator"] { color: var(--syntax-operator) !important; }
+[data-diff] [data-line] span[style*="--syntax-variable"], [data-file] [data-line] span[style*="--syntax-variable"] { color: var(--syntax-variable) !important; }
+[data-diff] [data-line] span[style*="--syntax-property"], [data-file] [data-line] span[style*="--syntax-property"] { color: var(--syntax-property) !important; }
+[data-diff] [data-line] span[style*="--syntax-type"], [data-file] [data-line] span[style*="--syntax-type"] { color: var(--syntax-type) !important; }
+[data-diff] [data-line] span[style*="--syntax-constant"], [data-file] [data-line] span[style*="--syntax-constant"] { color: var(--syntax-constant) !important; }
+[data-diff] [data-line] span[style*="--syntax-punctuation"], [data-file] [data-line] span[style*="--syntax-punctuation"] { color: var(--syntax-punctuation) !important; }
+[data-diff] [data-line] span[style*="--syntax-object"], [data-file] [data-line] span[style*="--syntax-object"] { color: var(--syntax-object) !important; }
+[data-diff] [data-line] span[style*="--syntax-critical"], [data-file] [data-line] span[style*="--syntax-critical"] { color: var(--syntax-critical) !important; }
+[data-diff] [data-line] span[style*="--syntax-warning"], [data-file] [data-line] span[style*="--syntax-warning"] { color: var(--syntax-warning) !important; }
+[data-diff] [data-line] span[style*="--syntax-info"], [data-file] [data-line] span[style*="--syntax-info"], [data-diff] [data-line] span[style*="--syntax-unknown"], [data-file] [data-line] span[style*="--syntax-unknown"] { color: var(--syntax-info) !important; }
 ${lineCommentStyles}
 
 `
