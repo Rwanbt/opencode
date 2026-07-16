@@ -13,6 +13,14 @@ Log.init({ print: false })
 // Uses Gemini's free tier (no per-call billing) rather than a paid provider,
 // since this suite makes real network calls against the live API to verify
 // structured-output behavior a mocked LLM can't catch.
+//
+// Each real-API test below retries twice (see the { retry: 2 } option): the
+// free tier occasionally rate-limits or the model skips the forced tool call
+// on a given attempt, and retrying absorbs both without masking a real
+// regression — a genuinely broken integration still fails all 3 attempts.
+// CI also runs this file as its own non-blocking step (see test.yml), since
+// exhausted quota shouldn't fail unit (linux) for reasons unrelated to any
+// actual regression.
 const model = { providerID: ProviderID.make("google"), modelID: ModelID.make("gemini-2.5-flash") }
 const realApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_API_KEY
 const hasApiKey = !!realApiKey
@@ -84,7 +92,7 @@ describe("StructuredOutput Integration", () => {
         // Note: Not removing session to avoid race with background SessionSummary.summarize
       })
     },
-    60000,
+    { timeout: 60000, retry: 2 },
   )
 
   test.skipIf(!hasApiKey)(
@@ -148,7 +156,7 @@ describe("StructuredOutput Integration", () => {
         // Note: Not removing session to avoid race with background SessionSummary.summarize
       })
     },
-    60000,
+    { timeout: 60000, retry: 2 },
   )
 
   test.skipIf(!hasApiKey)(
@@ -185,7 +193,7 @@ describe("StructuredOutput Integration", () => {
         // Note: Not removing session to avoid race with background SessionSummary.summarize
       })
     },
-    60000,
+    { timeout: 60000, retry: 2 },
   )
 
   test.skipIf(!hasApiKey)(
@@ -234,7 +242,7 @@ describe("StructuredOutput Integration", () => {
         // Note: Not removing session to avoid race with background SessionSummary.summarize
       })
     },
-    60000,
+    { timeout: 60000, retry: 2 },
   )
 
   test("unit test: StructuredOutputError is properly structured", () => {

@@ -75,12 +75,22 @@ jobs:
           # reliably (network restrictions, Hub rate-limits). isDockerAvailable()
           # honours this flag and returns false so test.skipIf works correctly.
           CI_DOCKER_DISABLED: ${{ runner.os == 'Windows' && 'true' || 'false' }}
-          # Enables the structured-output-integration suite, which makes real
-          # network calls (a mocked LLM can't validate the provider actually
-          # honours our JSON-schema constraints). Google's free tier avoids
-          # per-call billing; the secret is optional — tests skip if unset.
+
+      # Runs separately from the main suite above (which excludes this file via
+      # --path-ignore-patterns) and is allowed to fail: it makes real network
+      # calls against Gemini's free tier to verify structured-output behavior a
+      # mocked LLM can't catch, but the free tier's quota gets exhausted often
+      # enough that treating it as a blocking check made unit (linux) flaky for
+      # reasons unrelated to any actual regression. Linux-only to conserve quota
+      # (one real run instead of two identical ones per push).
+      - name: Run structured-output integration tests (non-blocking, real API)
+        if: matrix.settings.name == 'linux'
+        continue-on-error: true
+        working-directory: packages/opencode
+        run: bun test test/session/structured-output-integration.test.ts --timeout 180000 --reporter=junit --reporter-outfile=.artifacts/unit/junit-structured-output.xml
+        env:
           # @ai-sdk/google only reads GOOGLE_GENERATIVE_AI_API_KEY itself, so
-          # set both names from the same secret.
+          # set both names from the same secret. Optional — tests skip if unset.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
@@ -88,7 +98,7 @@ jobs:
         if: always()
         uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386  # v6.4.0
         with:
-          report_paths: packages/*/.artifacts/unit/junit.xml
+          report_paths: packages/*/.artifacts/unit/junit*.xml
           check_name: "unit results (${{ matrix.settings.name }})"
           detailed_summary: true
           include_time_in_summary: true
