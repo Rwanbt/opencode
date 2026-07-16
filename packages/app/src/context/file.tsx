@@ -222,11 +222,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
+      sdk.client.find.files({ query: query.replaceAll("\\", "/"), dirs }).then(
         (x) => (x.data ?? []).map(path.normalize),
         () => [],
       )
-
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,

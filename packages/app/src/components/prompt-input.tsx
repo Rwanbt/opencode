@@ -578,12 +578,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const agents = agentList()
       const open = recent()
       const seen = new Set(open)
-      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
+      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path.replaceAll("\\", "/"), recent: true }))
       if (!query.trim()) return [...agents, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
+        .map((path) => ({ type: "file", path, display: path.replaceAll("\\", "/") }))
       return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
@@ -760,7 +760,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        atOnInput(atMatch[1])
+        atOnInput(atMatch[1].replaceAll("\\", "/"))
         setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])

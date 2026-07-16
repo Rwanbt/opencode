@@ -728,6 +728,18 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
+    test("matches file paths with either path separator", async () => {
+      await using tmp = await setupSearchableRepo()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.search({ query: "src\\main.ts", type: "file" })
+          expect(result.some((f) => f.replaceAll("\\", "/") === "src/main.ts")).toBe(true)
+        },
+      })
+    })
+
     test("fuzzy matches file names", async () => {
       await using tmp = await setupSearchableRepo()
 

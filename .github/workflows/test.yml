@@ -232,9 +232,9 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
-          # 4vCPU runners: 3 workers leaves 1 CPU free for the backend process.
-          # Measured 22 min total with 3 workers on a passing run (26639359779).
-          PLAYWRIGHT_WORKERS: "3"
+          # One worker keeps shared browser/server state deterministic on standard runners.
+          # Parallel workers caused intermittent focus and file-tab flakes in the full suite.
+          PLAYWRIGHT_WORKERS: "1"
           # Standard GitHub-hosted runners are slower than Blacksmith — give terminal
           # tests more time to start and respond (was 60s, now 90s).
           PLAYWRIGHT_TIMEOUT: "90000"
