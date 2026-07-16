@@ -246,7 +246,7 @@ jobs:
           cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
           mkdir -p /tmp/ort-android
           cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/libonnxruntime.so
-          ls -la /tmp/ort-android/lib/
+          ls -la /tmp/ort-android/
 
           # Also need the headers — download the full release for headers
           curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
