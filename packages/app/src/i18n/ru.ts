@@ -16,11 +16,9 @@ export const dict = {
   "command.category.permissions": "Разрешения",
   "command.category.workspace": "Рабочее пространство",
   "command.category.settings": "Настройки",
-
   "theme.scheme.system": "Системная",
   "theme.scheme.light": "Светлая",
   "theme.scheme.dark": "Тёмная",
-
   "command.sidebar.toggle": "Переключить боковую панель",
   "command.project.open": "Открыть проект",
   "command.provider.connect": "Подключить провайдера",
@@ -31,17 +29,13 @@ export const dict = {
   "command.session.previous.unseen": "Предыдущая непрочитанная сессия",
   "command.session.next.unseen": "Следующая непрочитанная сессия",
   "command.session.archive": "Архивировать сессию",
-
   "command.palette": "Палитра команд",
-
   "command.theme.cycle": "Цикл тем",
   "command.theme.set": "Использовать тему: {{theme}}",
   "command.theme.scheme.cycle": "Цикл цветовой схемы",
   "command.theme.scheme.set": "Использовать цветовую схему: {{scheme}}",
-
   "command.language.cycle": "Цикл языков",
   "command.language.set": "Использовать язык: {{language}}",
-
   "command.session.new": "Новая сессия",
   "command.file.open": "Открыть файл",
   "command.tab.close": "Закрыть вкладку",
@@ -87,12 +81,10 @@ export const dict = {
   "command.session.share.description": "Поделиться сессией и скопировать URL в буфер обмена",
   "command.session.unshare": "Отменить публикацию",
   "command.session.unshare.description": "Прекратить публикацию сессии",
-
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
-
   "dialog.provider.search.placeholder": "Поиск провайдеров",
   "dialog.provider.empty": "Провайдеры не найдены",
   "dialog.provider.group.popular": "Популярные",
@@ -107,19 +99,15 @@ export const dict = {
   "dialog.provider.google.note": "Модели Gemini для быстрых и структурированных ответов",
   "dialog.provider.openrouter.note": "Доступ ко всем поддерживаемым моделям через одного провайдера",
   "dialog.provider.vercel.note": "Единый доступ к ИИ-моделям с умной маршрутизацией",
-
   "dialog.model.select.title": "Выбрать модель",
   "dialog.model.search.placeholder": "Поиск моделей",
   "dialog.model.empty": "Модели не найдены",
   "dialog.model.manage": "Управление моделями",
   "dialog.model.manage.description": "Настройте какие модели появляются в выборе модели",
   "dialog.model.manage.provider.toggle": "Переключить все модели {{provider}}",
-
   "dialog.model.unpaid.freeModels.title": "Бесплатные модели от OpenCode",
   "dialog.model.unpaid.addMore.title": "Добавьте больше моделей от популярных провайдеров",
-
   "dialog.provider.viewAll": "Показать больше провайдеров",
-
   "provider.connect.title": "Подключить {{provider}}",
   "provider.connect.title.anthropicProMax": "Войти с помощью Claude Pro/Max",
   "provider.connect.selectMethod": "Выберите способ входа для {{provider}}.",
@@ -154,7 +142,6 @@ export const dict = {
   "provider.connect.oauth.auto.confirmationCode": "Код подтверждения",
   "provider.connect.toast.connected.title": "{{provider}} подключён",
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",
-
   "provider.custom.title": "Пользовательский провайдер",
   "provider.custom.description.prefix": "Настройте OpenAI-совместимого провайдера. См. ",
   "provider.custom.description.link": "документацию по настройке провайдера",
@@ -192,7 +179,6 @@ export const dict = {
   "provider.custom.error.baseURL.format": "Должен начинаться с http:// или https://",
   "provider.custom.error.required": "Обязательно",
   "provider.custom.error.duplicate": "Дубликат",
-
   "provider.disconnect.toast.disconnected.title": "{{provider}} отключён",
   "provider.disconnect.toast.disconnected.description": "Модели {{provider}} больше недоступны.",
   "model.tag.free": "Бесплатно",
@@ -211,7 +197,6 @@ export const dict = {
   "model.tooltip.reasoning.allowed": "Разрешает рассуждение",
   "model.tooltip.reasoning.none": "Без рассуждения",
   "model.tooltip.context": "Лимит контекста {{limit}}",
-
   "common.search.placeholder": "Поиск",
   "common.goBack": "Назад",
   "common.goForward": "Вперёд",
@@ -226,7 +211,6 @@ export const dict = {
   "common.saving": "Сохранение...",
   "common.default": "По умолчанию",
   "common.attachment": "вложение",
-
   "prompt.placeholder.shell": "Введите команду оболочки...",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.simple": "Спросите что угодно...",
@@ -235,7 +219,6 @@ export const dict = {
   "prompt.mode.shell": "Оболочка",
   "prompt.mode.normal": "Промпт",
   "prompt.mode.shell.exit": "esc для выхода",
-
   "prompt.example.1": "Исправить TODO в коде",
   "prompt.example.2": "Какой технологический стек этого проекта?",
   "prompt.example.3": "Исправить сломанные тесты",
@@ -261,7 +244,6 @@ export const dict = {
   "prompt.example.23": "Добавить пагинацию в этот список",
   "prompt.example.24": "Создать CLI команду для...",
   "prompt.example.25": "Как работают переменные окружения здесь?",
-
   "prompt.popover.emptyResults": "Нет совпадений",
   "prompt.popover.emptyCommands": "Нет совпадающих команд",
   "prompt.dropzone.label": "Перетащите сюда изображения, PDF или текстовые файлы",
@@ -277,7 +259,6 @@ export const dict = {
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
-
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
   "prompt.toast.pasteUnsupported.description": "Здесь можно прикрепить только изображения, PDF или текстовые файлы.",
   "prompt.toast.modelAgentRequired.title": "Выберите агента и модель",
@@ -288,24 +269,18 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Не удалось отправить команду",
   "prompt.toast.promptSendFailed.title": "Не удалось отправить запрос",
   "prompt.toast.promptSendFailed.description": "Не удалось получить сессию",
-
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{enabled}} из {{total}} включено",
   "dialog.mcp.empty": "MCP не настроены",
-
   "dialog.lsp.empty": "LSP автоматически обнаружены по типам файлов",
   "dialog.plugins.empty": "Плагины настроены в opencode.json",
-
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
   "mcp.status.needs_auth": "требуется авторизация",
   "mcp.status.disabled": "отключено",
-
   "dialog.fork.empty": "Нет сообщений для ответвления",
-
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
-
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Переключите сервер OpenCode к которому подключается приложение.",
   "dialog.server.search.placeholder": "Поиск серверов",
@@ -328,14 +303,12 @@ export const dict = {
   "dialog.server.default.set": "Установить текущий сервер по умолчанию",
   "dialog.server.default.clear": "Очистить",
   "dialog.server.action.remove": "Удалить сервер",
-
   "dialog.server.menu.edit": "Редактировать",
   "dialog.server.menu.default": "Сделать по умолчанию",
   "dialog.server.menu.defaultRemove": "Удалить по умолчанию",
   "dialog.server.menu.delete": "Удалить",
   "dialog.server.current": "Текущий сервер",
   "dialog.server.status.default": "По умолч.",
-
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.name": "Название",
   "dialog.project.edit.icon": "Иконка",
@@ -344,7 +317,6 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "Рекомендуется: 128x128px",
   "dialog.project.edit.color": "Цвет",
   "dialog.project.edit.color.select": "Выбрать цвет {{color}}",
-
   "dialog.project.edit.worktree.startup": "Скрипт запуска рабочего пространства",
   "dialog.project.edit.worktree.startup.description":
     "Запускается после создания нового рабочего пространства (worktree).",
@@ -357,10 +329,8 @@ export const dict = {
   "context.breakdown.assistant": "Ассистент",
   "context.breakdown.tool": "Вызовы инструментов",
   "context.breakdown.other": "Другое",
-
   "context.systemPrompt.title": "Системный промпт",
   "context.rawMessages.title": "Исходные сообщения",
-
   "context.stats.session": "Сессия",
   "context.stats.messages": "Сообщения",
   "context.stats.provider": "Провайдер",
@@ -377,13 +347,11 @@ export const dict = {
   "context.stats.totalCost": "Общая стоимость",
   "context.stats.sessionCreated": "Сессия создана",
   "context.stats.lastActivity": "Последняя активность",
-
   "context.usage.tokens": "Токены",
   "context.usage.usage": "Использование",
   "context.usage.cost": "Стоимость",
   "context.usage.clickToView": "Нажмите для просмотра контекста",
   "context.usage.view": "Показать использование контекста",
-
   "language.en": "English",
   "language.zh": "简体中文",
   "language.zht": "繁體中文",
@@ -401,28 +369,21 @@ export const dict = {
   "language.bs": "Bosanski",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
-
   "toast.language.title": "Язык",
   "toast.language.description": "Переключено на {{language}}",
-
   "toast.theme.title": "Тема переключена",
   "toast.scheme.title": "Цветовая схема",
-
   "toast.permissions.autoaccept.on.title": "Разрешения принимаются автоматически",
   "toast.permissions.autoaccept.on.description": "Запросы на разрешения будут одобряться автоматически",
   "toast.permissions.autoaccept.off.title": "Автоматическое принятие разрешений остановлено",
   "toast.permissions.autoaccept.off.description": "Запросы на разрешения будут требовать одобрения",
-
   "toast.workspace.enabled.title": "Рабочие пространства включены",
   "toast.workspace.enabled.description": "В боковой панели теперь отображаются несколько рабочих деревьев",
   "toast.workspace.disabled.title": "Рабочие пространства отключены",
   "toast.workspace.disabled.description": "В боковой панели отображается только главное рабочее дерево",
-
   "toast.model.none.title": "Модель не выбрана",
   "toast.model.none.description": "Подключите провайдера для суммаризации сессии",
-
   "toast.file.loadFailed.title": "Не удалось загрузить файл",
-
   "toast.file.listFailed.title": "Не удалось получить список файлов",
   "toast.context.noLineSelection.title": "Нет выделения строк",
   "toast.context.noLineSelection.description": "Сначала выберите диапазон строк во вкладке файла.",
@@ -431,19 +392,15 @@ export const dict = {
   "toast.session.share.success.description": "URL скопирован в буфер обмена!",
   "toast.session.share.failed.title": "Не удалось опубликовать сессию",
   "toast.session.share.failed.description": "Произошла ошибка при публикации сессии",
-
   "toast.session.unshare.success.title": "Публикация отменена",
   "toast.session.unshare.success.description": "Публикация успешно отменена!",
   "toast.session.unshare.failed.title": "Не удалось отменить публикацию",
   "toast.session.unshare.failed.description": "Произошла ошибка при отмене публикации",
-
   "toast.session.listFailed.title": "Не удалось загрузить сессии для {{project}}",
-
   "toast.update.title": "Доступно обновление",
   "toast.update.description": "Новая версия OpenCode ({{version}}) доступна для установки.",
   "toast.update.action.installRestart": "Установить и перезапустить",
   "toast.update.action.notYet": "Пока нет",
-
   "error.page.title": "Что-то пошло не так",
   "error.page.description": "Произошла ошибка при загрузке приложения.",
   "error.page.details.label": "Детали ошибки",
@@ -454,13 +411,10 @@ export const dict = {
   "error.page.report.prefix": "Пожалуйста, сообщите об этой ошибке команде OpenCode",
   "error.page.report.github": "в GitHub",
   "error.page.version": "Версия: {{version}}",
-
   "error.dev.rootNotFound":
     "Корневой элемент не найден. Вы забыли добавить его в index.html? Или, может быть, атрибут id был написан неправильно?",
-
   "error.globalSync.connectFailed": "Не удалось подключиться к серверу. Запущен ли сервер по адресу `{{url}}`?",
   "directory.error.invalidUrl": "Недопустимая директория в URL.",
-
   "error.chain.unknown": "Неизвестная ошибка",
   "error.chain.causedBy": "Причина:",
   "error.chain.apiError": "Ошибка API",
@@ -483,21 +437,17 @@ export const dict = {
   "error.chain.configFrontmatterError": "Не удалось разобрать frontmatter в {{path}}:\n{{message}}",
   "error.chain.configInvalid": "Конфигурационный файл по адресу {{path}} невалиден",
   "error.chain.configInvalidWithMessage": "Конфигурационный файл по адресу {{path}} невалиден: {{message}}",
-
   "notification.permission.title": "Требуется разрешение",
   "notification.permission.description": "{{sessionTitle}} в {{projectName}} требуется разрешение",
   "notification.question.title": "Вопрос",
   "notification.question.description": "У {{sessionTitle}} в {{projectName}} есть вопрос",
   "notification.action.goToSession": "Перейти к сессии",
-
   "notification.session.responseReady.title": "Ответ готов",
   "notification.session.error.title": "Ошибка сессии",
   "notification.session.error.fallbackDescription": "Произошла ошибка",
-
   "home.recentProjects": "Недавние проекты",
   "home.empty.title": "Нет недавних проектов",
   "home.empty.description": "Начните с открытия локального проекта",
-
   "session.tab.session": "Сессия",
   "session.tab.review": "Обзор",
   "session.tab.context": "Контекст",
@@ -519,7 +469,6 @@ export const dict = {
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",
   "session.messages.loading": "Загрузка сообщений...",
   "session.messages.jumpToLatest": "Перейти к последнему",
-
   "session.context.addToContext": "Добавить {{selection}} в контекст",
   "session.todo.title": "Задачи",
   "session.todo.collapse": "Свернуть",
@@ -535,13 +484,11 @@ export const dict = {
   "session.revertDock.collapse": "Свернуть возвращённые сообщения",
   "session.revertDock.expand": "Развернуть возвращённые сообщения",
   "session.revertDock.restore": "Восстановить сообщение",
-
   "session.new.title": "Создавайте что угодно",
   "session.new.worktree.main": "Основная ветка",
   "session.new.worktree.mainWithBranch": "Основная ветка ({{branch}})",
   "session.new.worktree.create": "Создать новый worktree",
   "session.new.lastModified": "Последнее изменение",
-
   "session.header.search.placeholder": "Поиск {{project}}",
   "session.header.searchFiles": "Поиск файлов",
   "session.header.openIn": "Открыть в",
@@ -549,7 +496,6 @@ export const dict = {
   "session.header.open.ariaLabel": "Открыть в {{app}}",
   "session.header.open.menu": "Варианты открытия",
   "session.header.open.copyPath": "Копировать путь",
-
   "status.popover.trigger": "Статус",
   "status.popover.ariaLabel": "Настройки серверов",
   "status.popover.tab.servers": "Серверы",
@@ -557,7 +503,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Плагины",
   "status.popover.action.manageServers": "Управлять серверами",
-
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":
     "Эта сессия общедоступна. Доступ к ней может получить любой, у кого есть ссылка.",
@@ -571,10 +516,8 @@ export const dict = {
   "session.share.action.view": "Посмотреть",
   "session.share.copy.copied": "Скопировано",
   "session.share.copy.copyLink": "Копировать ссылку",
-
   "lsp.tooltip.none": "Нет LSP серверов",
   "lsp.label.connected": "{{count}} LSP",
-
   "prompt.loading": "Загрузка запроса...",
   "terminal.loading": "Загрузка терминала...",
   "terminal.title": "Терминал",
@@ -583,7 +526,6 @@ export const dict = {
   "terminal.connectionLost.title": "Соединение потеряно",
   "terminal.connectionLost.description":
     "Соединение с терминалом прервано. Это может произойти при перезапуске сервера.",
-
   "common.closeTab": "Закрыть вкладку",
   "common.dismiss": "Закрыть",
   "common.requestFailed": "Запрос не выполнен",
@@ -597,7 +539,6 @@ export const dict = {
   "common.edit": "Редактировать",
   "common.loadMore": "Загрузить ещё",
   "common.key.esc": "ESC",
-
   "sidebar.menu.toggle": "Переключить меню",
   "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
@@ -611,7 +552,6 @@ export const dict = {
   "sidebar.project.recentSessions": "Недавние сессии",
   "sidebar.project.viewAllSessions": "Посмотреть все сессии",
   "sidebar.project.clearNotifications": "Очистить уведомления",
-
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Приложение",
   "settings.section.server": "Сервер",
@@ -620,14 +560,12 @@ export const dict = {
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "Интеграция с WSL",
   "settings.desktop.wsl.description": "Запускать сервер OpenCode внутри WSL на Windows.",
-
   "settings.general.section.appearance": "Внешний вид",
   "settings.general.section.notifications": "Системные уведомления",
   "settings.general.section.updates": "Обновления",
   "settings.general.section.sounds": "Звуковые эффекты",
   "settings.general.section.feed": "Лента",
   "settings.general.section.display": "Дисплей",
-
   "settings.general.row.language.title": "Язык",
   "settings.general.row.language.description": "Изменить язык отображения OpenCode",
   "settings.general.row.appearance.title": "Внешний вид",
@@ -647,7 +585,6 @@ export const dict = {
   "settings.general.row.followup.option.steer": "Направлять",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
-
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Показывать элементы инструмента shell в ленте развернутыми по умолчанию",
@@ -658,10 +595,8 @@ export const dict = {
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":
     "На Linux с мониторами разной частоты обновления нативный Wayland может быть стабильнее.",
-
   "settings.general.row.releaseNotes.title": "Примечания к выпуску",
   "settings.general.row.releaseNotes.description": 'Показывать всплывающие окна "Что нового" после обновлений',
-
   "settings.updates.row.startup.title": "Проверять обновления при запуске",
   "settings.updates.row.startup.description": "Автоматически проверять обновления при запуске OpenCode",
   "settings.updates.row.check.title": "Проверить обновления",
@@ -716,7 +651,6 @@ export const dict = {
   "sound.option.yup04": "Yup 04",
   "sound.option.yup05": "Yup 05",
   "sound.option.yup06": "Yup 06",
-
   "settings.general.notifications.agent.title": "Агент",
   "settings.general.notifications.agent.description":
     "Показывать системное уведомление когда агент завершён или требует внимания",
@@ -725,14 +659,12 @@ export const dict = {
     "Показывать системное уведомление когда требуется разрешение",
   "settings.general.notifications.errors.title": "Ошибки",
   "settings.general.notifications.errors.description": "Показывать системное уведомление когда происходит ошибка",
-
   "settings.general.sounds.agent.title": "Агент",
   "settings.general.sounds.agent.description": "Воспроизводить звук когда агент завершён или требует внимания",
   "settings.general.sounds.permissions.title": "Разрешения",
   "settings.general.sounds.permissions.description": "Воспроизводить звук когда требуется разрешение",
   "settings.general.sounds.errors.title": "Ошибки",
   "settings.general.sounds.errors.description": "Воспроизводить звук когда происходит ошибка",
-
   "settings.shortcuts.title": "Горячие клавиши",
   "settings.shortcuts.reset.button": "Сбросить к умолчаниям",
   "settings.shortcuts.reset.toast.title": "Горячие клавиши сброшены",
@@ -743,14 +675,12 @@ export const dict = {
   "settings.shortcuts.pressKeys": "Нажмите клавиши",
   "settings.shortcuts.search.placeholder": "Поиск горячих клавиш",
   "settings.shortcuts.search.empty": "Горячие клавиши не найдены",
-
   "settings.shortcuts.group.general": "Основные",
   "settings.shortcuts.group.session": "Сессия",
   "settings.shortcuts.group.navigation": "Навигация",
   "settings.shortcuts.group.modelAndAgent": "Модель и агент",
   "settings.shortcuts.group.terminal": "Терминал",
   "settings.shortcuts.group.prompt": "Запрос",
-
   "settings.providers.title": "Провайдеры",
   "settings.providers.description": "Настройки провайдеров будут доступны здесь.",
   "settings.providers.section.connected": "Подключённые провайдеры",
@@ -768,16 +698,13 @@ export const dict = {
   "settings.commands.description": "Настройки команд будут доступны здесь.",
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "Настройки MCP будут доступны здесь.",
-
   "settings.permissions.title": "Разрешения",
   "settings.permissions.description": "Контролируйте какие инструменты сервер может использовать по умолчанию.",
   "settings.permissions.section.tools": "Инструменты",
   "settings.permissions.toast.updateFailed.title": "Не удалось обновить разрешения",
-
   "settings.permissions.action.allow": "Разрешить",
   "settings.permissions.action.ask": "Спрашивать",
   "settings.permissions.action.deny": "Запретить",
-
   "settings.permissions.tool.read.title": "Чтение",
   "settings.permissions.tool.read.description": "Чтение файла (по совпадению пути)",
   "settings.permissions.tool.edit.title": "Редактирование",
@@ -810,12 +737,10 @@ export const dict = {
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description":
     "Обнаружение повторяющихся вызовов инструментов с одинаковыми входными данными",
-
   "session.delete.failed.title": "Не удалось удалить сессию",
   "session.delete.title": "Удалить сессию",
   "session.delete.confirm": 'Удалить сессию "{{name}}"?',
   "session.delete.button": "Удалить сессию",
-
   "workspace.new": "Новое рабочее пространство",
   "workspace.type.local": "локальное",
   "workspace.type.sandbox": "песочница",
@@ -855,7 +780,6 @@ export const dict = {
   "common.time.daysAgo.short": "{{count}} д назад",
   "settings.providers.connected.environmentDescription": "Подключено из ваших переменных окружения",
   "settings.providers.custom.description": "Добавить провайдера, совместимого с OpenAI, по базовому URL.",
-
   "app.server.unreachable": "Не удалось связаться с {{server}}",
   "app.server.retrying": "Автоматическая повторная попытка...",
   "app.server.otherServers": "Другие серверы",
@@ -1495,7 +1419,6 @@ export const dict = {
   "keyboard.clear": "Clear",
   "keyboard.eof": "EOF",
   "keyboard.newTerminal": "New terminal",
-
   "settings.fork.plugins.serverNamePlaceholder": "my-server",
   "sourceControl.commitSuccess": "Commit {{hash}}",
 }

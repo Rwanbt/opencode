@@ -16,11 +16,9 @@ export const dict = {
   "command.category.permissions": "Permissions",
   "command.category.workspace": "Workspace",
   "command.category.settings": "Settings",
-
   "theme.scheme.system": "System",
   "theme.scheme.light": "Light",
   "theme.scheme.dark": "Dark",
-
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
   "command.project.previous": "Previous project",
@@ -33,17 +31,13 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
-
   "command.palette": "Command palette",
-
   "command.theme.cycle": "Cycle theme",
   "command.theme.set": "Use theme: {{theme}}",
   "command.theme.scheme.cycle": "Cycle color scheme",
   "command.theme.scheme.set": "Use color scheme: {{scheme}}",
-
   "command.language.cycle": "Cycle language",
   "command.language.set": "Use language: {{language}}",
-
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.editor.symbols": "Go to Symbol in File",
@@ -103,14 +97,12 @@ export const dict = {
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
-
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
   "palette.symbols.placeholder": "Search symbols in current file",
   "palette.symbols.empty": "No symbols found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
-
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",
   "dialog.provider.group.popular": "Popular",
@@ -126,7 +118,6 @@ export const dict = {
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
   "dialog.provider.openrouter.note": "Access all supported models from one provider",
   "dialog.provider.vercel.note": "Unified access to AI models with smart routing",
-
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
   "dialog.model.empty": "No model results",
@@ -149,12 +140,9 @@ export const dict = {
   "dialog.debate.invalid": "Select one or more distinct connected annex models.",
   "dialog.debate.noPrimary": "Select a model before configuring Debate.",
   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",
-
   "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
-
   "dialog.provider.viewAll": "Show more providers",
-
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.title.anthropicProMax": "Login with Claude Pro/Max",
   "provider.connect.selectMethod": "Select login method for {{provider}}.",
@@ -189,7 +177,6 @@ export const dict = {
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
-
   "provider.custom.title": "Custom provider",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",
@@ -226,10 +213,8 @@ export const dict = {
   "provider.custom.error.baseURL.format": "Must start with http:// or https://",
   "provider.custom.error.required": "Required",
   "provider.custom.error.duplicate": "Duplicate",
-
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
-
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
   "model.provider.anthropic": "Anthropic",
@@ -246,7 +231,6 @@ export const dict = {
   "model.tooltip.reasoning.allowed": "Allows reasoning",
   "model.tooltip.reasoning.none": "No reasoning",
   "model.tooltip.context": "Context limit {{limit}}",
-
   "common.search.placeholder": "Search",
   "common.goBack": "Navigate back",
   "common.goForward": "Navigate forward",
@@ -262,7 +246,6 @@ export const dict = {
   "common.saving": "Saving...",
   "common.default": "Default",
   "common.attachment": "attachment",
-
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
   "prompt.placeholder.simple": "Ask anything...",
@@ -271,7 +254,6 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc to exit",
-
   "prompt.example.1": "Fix a TODO in the codebase",
   "prompt.example.2": "What is the tech stack of this project?",
   "prompt.example.3": "Fix broken tests",
@@ -297,7 +279,6 @@ export const dict = {
   "prompt.example.23": "Add pagination to this list",
   "prompt.example.24": "Create a CLI command for...",
   "prompt.example.25": "How do environment variables work here?",
-
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop images, PDFs, or text files here",
@@ -313,7 +294,6 @@ export const dict = {
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
-
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
@@ -324,28 +304,21 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Failed to send command",
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
   "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
-
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
   "dialog.mcp.empty": "No MCPs configured",
-
   "dialog.lsp.empty": "LSPs auto-detected from file types",
   "dialog.plugins.empty": "Plugins configured in opencode.json",
-
   "mcp.status.connected": "connected",
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",
-
   "dialog.fork.empty": "No messages to fork from",
-
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
-
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
   "app.server.otherServers": "Other servers",
-
   "dialog.server.title": "Servers",
   "dialog.server.description": "Switch which OpenCode server this app connects to.",
   "dialog.server.search.placeholder": "Search servers",
@@ -370,7 +343,6 @@ export const dict = {
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",
   "dialog.server.action.remove": "Remove server",
-
   "dialog.server.menu.edit": "Edit",
   "dialog.server.menu.default": "Set as default",
   "dialog.server.menu.defaultRemove": "Remove default",
@@ -378,7 +350,6 @@ export const dict = {
   "dialog.server.current": "Current Server",
   "dialog.server.status.default": "Default",
   "server.row.noUsername": "no username",
-
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",
   "dialog.project.edit.icon": "Icon",
@@ -390,7 +361,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Workspace startup script",
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
-
   "dialog.file.create.title.file": "New File",
   "dialog.file.create.title.folder": "New Folder",
   "dialog.file.create.placeholder.file": "filename.ts",
@@ -411,7 +381,6 @@ export const dict = {
   "dialog.dirtyClose.save": "Save",
   "dialog.dirtyClose.discard": "Don't save",
   "dialog.dirtyClose.cancel": "Cancel",
-
   "fileOps.newFile": "New File",
   "fileOps.newFolder": "New Folder",
   "fileOps.rename": "Rename",
@@ -419,12 +388,10 @@ export const dict = {
   "fileOps.moveTo": "Move to...",
   "fileOps.copyPath": "Copy Path",
   "fileOps.copyRelativePath": "Copy Relative Path",
-
   "dialog.releaseNotes.action.getStarted": "Get started",
   "dialog.releaseNotes.action.next": "Next",
   "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
   "dialog.releaseNotes.media.alt": "Release preview",
-
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
   "context.breakdown.system": "System",
@@ -432,10 +399,8 @@ export const dict = {
   "context.breakdown.assistant": "Assistant",
   "context.breakdown.tool": "Tool Calls",
   "context.breakdown.other": "Other",
-
   "context.systemPrompt.title": "System Prompt",
   "context.rawMessages.title": "Raw messages",
-
   "context.stats.session": "Session",
   "context.stats.messages": "Messages",
   "context.stats.provider": "Provider",
@@ -452,13 +417,11 @@ export const dict = {
   "context.stats.totalCost": "Total Cost",
   "context.stats.sessionCreated": "Session Created",
   "context.stats.lastActivity": "Last Activity",
-
   "context.usage.tokens": "Tokens",
   "context.usage.usage": "Usage",
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
-
   "language.en": "English",
   "language.zh": "简体中文",
   "language.zht": "繁體中文",
@@ -476,26 +439,20 @@ export const dict = {
   "language.bs": "Bosanski",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
-
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
-
   "toast.theme.title": "Theme switched",
   "toast.scheme.title": "Color scheme",
-
   "toast.workspace.enabled.title": "Workspaces enabled",
   "toast.workspace.enabled.description": "Multiple worktrees are now shown in the sidebar",
   "toast.workspace.disabled.title": "Workspaces disabled",
   "toast.workspace.disabled.description": "Only the main worktree is shown in the sidebar",
-
   "toast.permissions.autoaccept.on.title": "Auto-accepting permissions",
   "toast.permissions.autoaccept.on.description": "Permission requests will be automatically approved",
   "toast.permissions.autoaccept.off.title": "Stopped auto-accepting permissions",
   "toast.permissions.autoaccept.off.description": "Permission requests will require approval",
-
   "toast.model.none.title": "No model selected",
   "toast.model.none.description": "Connect a provider to summarize this session",
-
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",
   "toast.file.openFailed": "Failed to open file",
@@ -515,29 +472,23 @@ export const dict = {
   "toast.file.moveFailed": "Failed to move",
   "toast.file.exists": "A file or folder with that name already exists",
   "toast.file.denied": "Access denied",
-
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
-
   "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
   "toast.session.share.success.title": "Session shared",
   "toast.session.share.success.description": "Share URL copied to clipboard!",
   "toast.session.share.failed.title": "Failed to share session",
   "toast.session.share.failed.description": "An error occurred while sharing the session",
-
   "toast.session.unshare.success.title": "Session unshared",
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
-
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
-
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
   "toast.update.action.installRestart": "Install and restart",
   "toast.update.action.notYet": "Not yet",
-
   "error.page.title": "Something went wrong",
   "error.page.description": "An error occurred while loading the application.",
   "error.page.details.label": "Error Details",
@@ -549,10 +500,8 @@ export const dict = {
   "error.page.report.prefix": "Please report this error to the OpenCode team",
   "error.page.report.github": "on GitHub",
   "error.page.version": "Version: {{version}}",
-
   "error.dev.rootNotFound":
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
-
   "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
   "error.globalSDK.noServerAvailable": "No server available",
   "error.globalSDK.serverNotAvailable": "Server not available",
@@ -561,7 +510,6 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Failed to create persisted project icon",
   "error.childStore.storeCreateFailed": "Failed to create store",
   "directory.error.invalidUrl": "Invalid directory in URL.",
-
   "error.chain.unknown": "Unknown error",
   "error.server.invalidConfiguration": "Invalid configuration",
   "error.chain.causedBy": "Caused by:",
@@ -583,26 +531,21 @@ export const dict = {
   "error.chain.configFrontmatterError": "Failed to parse frontmatter in {{path}}:\n{{message}}",
   "error.chain.configInvalid": "Config file at {{path}} is invalid",
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
-
   "notification.permission.title": "Permission required",
   "notification.permission.description": "{{sessionTitle}} in {{projectName}} needs permission",
   "notification.question.title": "Question",
   "notification.question.description": "{{sessionTitle}} in {{projectName}} has a question",
   "notification.action.goToSession": "Go to session",
-
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
-
   "notification.vcs.branchBehind.title": "Branch behind upstream",
   "notification.vcs.branchBehind.description": "{{branch}} is {{behind}} commit(s) behind {{upstream}}",
   "notification.vcs.branchAhead.description": "{{branch}} is {{ahead}} commit(s) ahead of {{upstream}}",
   "notification.vcs.branchDiverged.description": "{{branch}} is {{behind}} behind / {{ahead}} ahead of {{upstream}}",
-
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
-
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
@@ -621,18 +564,15 @@ export const dict = {
   "session.review.noChanges": "No changes",
   "session.review.noUncommittedChanges": "No uncommitted changes yet",
   "session.review.noBranchChanges": "No branch changes yet",
-
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
   "session.files.empty": "No files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
-
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
   "session.messages.loadEarlier": "Load earlier messages",
   "session.messages.loading": "Loading messages...",
   "session.messages.jumpToLatest": "Jump to latest",
-
   "session.context.addToContext": "Add {{selection}} to context",
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse",
@@ -650,13 +590,11 @@ export const dict = {
   "session.revertDock.collapse": "Collapse rolled back messages",
   "session.revertDock.expand": "Expand rolled back messages",
   "session.revertDock.restore": "Restore message",
-
   "session.new.title": "Build anything",
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
   "session.new.worktree.create": "Create new worktree",
   "session.new.lastModified": "Last modified",
-
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
   "session.header.openIn": "Open in",
@@ -680,7 +618,6 @@ export const dict = {
   "session.header.open.app.androidStudio": "Android Studio",
   "session.header.open.app.powershell": "PowerShell",
   "session.header.open.app.sublimeText": "Sublime Text",
-
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
   "status.popover.tab.servers": "Servers",
@@ -689,7 +626,6 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
   "status.popover.lsp.diagnostics": "Diagnostics",
-
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
     "This session is public on the web. It is accessible to anyone with the link.",
@@ -703,10 +639,8 @@ export const dict = {
   "session.share.action.view": "View",
   "session.share.copy.copied": "Copied",
   "session.share.copy.copyLink": "Copy link",
-
   "lsp.tooltip.none": "No LSP servers",
   "lsp.label.connected": "{{count}} LSP",
-
   "prompt.loading": "Loading prompt...",
   "terminal.loading": "Loading terminal...",
   "terminal.title": "Terminal",
@@ -719,7 +653,6 @@ export const dict = {
   "terminal.selection.copy": "Copy",
   "terminal.selection.paste": "Paste",
   "terminal.selection.copied": "Copied to clipboard",
-
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",
   "common.moreCountSuffix": " (+{{count}} more)",
@@ -749,12 +682,10 @@ export const dict = {
   "common.key.pageDown": "Page Down",
   "common.key.insert": "Insert",
   "common.unknown": "unknown",
-
   "common.time.justNow": "Just now",
   "common.time.minutesAgo.short": "{{count}}m ago",
   "common.time.hoursAgo.short": "{{count}}h ago",
   "common.time.daysAgo.short": "{{count}}d ago",
-
   "sidebar.menu.toggle": "Toggle menu",
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
@@ -769,7 +700,6 @@ export const dict = {
   "sidebar.project.clearNotifications": "Clear notifications",
   "sidebar.empty.title": "No projects open",
   "sidebar.empty.description": "Open a project to get started",
-
   "debugBar.ariaLabel": "Development performance diagnostics",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",
@@ -793,9 +723,7 @@ export const dict = {
   "debugBar.mem.label": "MEM",
   "debugBar.mem.tipUnavailable": "Used JS heap vs heap limit. Chromium only.",
   "debugBar.mem.tip": "Used JS heap vs heap limit. {{used}} of {{limit}}.",
-
   "app.name.desktop": "OpenCode Desktop",
-
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
   "settings.tab.general": "General",
@@ -803,7 +731,6 @@ export const dict = {
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "WSL integration",
   "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
-
   "settings.desktop.section.remote": "Remote access",
   "settings.desktop.remote.mode.title": "Access mode",
   "settings.desktop.remote.mode.description": "Choose which machines can reach the OpenCode server.",
@@ -838,14 +765,12 @@ export const dict = {
   "settings.desktop.remote.warning": "Remote access exposes OpenCode on your local network. Use a strong password and trust your Wi-Fi.",
   "settings.desktop.remote.warning.firewall": "First-time setup: allow OpenCode (or Node.js) through the Windows Firewall when prompted, otherwise inbound connections from your phone will silently drop.",
   "settings.desktop.remote.connection.manualHint": "No LAN address detected — check that you are on Wi-Fi and run `ipconfig` (Windows) or `ifconfig` (macOS/Linux) to find your machine's address manually.",
-
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
-
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
   "settings.general.row.appearance.title": "Appearance",
@@ -870,15 +795,12 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
   "settings.general.row.wayland.tooltip":
     "On Linux with mixed refresh-rate monitors, native Wayland can be more stable.",
-
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
-
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",
   "settings.updates.row.check.title": "Check for updates",
@@ -933,7 +855,6 @@ export const dict = {
   "sound.option.yup04": "Yup 04",
   "sound.option.yup05": "Yup 05",
   "sound.option.yup06": "Yup 06",
-
   "settings.general.notifications.agent.title": "Agent",
   "settings.general.notifications.agent.description":
     "Show system notification when the agent is complete or needs attention",
@@ -941,14 +862,12 @@ export const dict = {
   "settings.general.notifications.permissions.description": "Show system notification when a permission is required",
   "settings.general.notifications.errors.title": "Errors",
   "settings.general.notifications.errors.description": "Show system notification when an error occurs",
-
   "settings.general.sounds.agent.title": "Agent",
   "settings.general.sounds.agent.description": "Play sound when the agent is complete or needs attention",
   "settings.general.sounds.permissions.title": "Permissions",
   "settings.general.sounds.permissions.description": "Play sound when a permission is required",
   "settings.general.sounds.errors.title": "Errors",
   "settings.general.sounds.errors.description": "Play sound when an error occurs",
-
   "settings.shortcuts.title": "Keyboard shortcuts",
   "settings.shortcuts.reset.button": "Reset to defaults",
   "settings.shortcuts.reset.toast.title": "Shortcuts reset",
@@ -959,14 +878,12 @@ export const dict = {
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.search.placeholder": "Search shortcuts",
   "settings.shortcuts.search.empty": "No shortcuts found",
-
   "settings.shortcuts.group.general": "General",
   "settings.shortcuts.group.session": "Session",
   "settings.shortcuts.group.navigation": "Navigation",
   "settings.shortcuts.group.modelAndAgent": "Model and agent",
   "settings.shortcuts.group.terminal": "Terminal",
   "settings.shortcuts.group.prompt": "Prompt",
-
   "settings.providers.title": "Providers",
   "settings.providers.description": "Provider settings will be configurable here.",
   "settings.providers.section.connected": "Connected providers",
@@ -986,16 +903,13 @@ export const dict = {
   "settings.commands.description": "Command settings will be configurable here.",
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "MCP settings will be configurable here.",
-
   "settings.permissions.title": "Permissions",
   "settings.permissions.description": "Control what tools the server can use by default.",
   "settings.permissions.section.tools": "Tools",
   "settings.permissions.toast.updateFailed.title": "Failed to update permissions",
-
   "settings.permissions.action.allow": "Allow",
   "settings.permissions.action.ask": "Ask",
   "settings.permissions.action.deny": "Deny",
-
   "settings.permissions.tool.read.title": "Read",
   "settings.permissions.tool.read.description": "Reading a file (matches the file path)",
   "settings.permissions.tool.edit.title": "Edit",
@@ -1026,12 +940,10 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
-
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
-
   "workspace.new": "New workspace",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
@@ -1057,7 +969,6 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
-
   // FORK (Phase 4.2) — editor status banners (ADR-0005 ⑥) and LSP-action
   // panel strings. Previously hardcoded English fallbacks (banner) or French
   // literals (dialog/panel) — kept verbatim here so existing components
@@ -1505,7 +1416,6 @@ export const dict = {
   "keyboard.clear": "Clear",
   "keyboard.eof": "EOF",
   "keyboard.newTerminal": "New terminal",
-
   "settings.fork.plugins.serverNamePlaceholder": "my-server",
   "sourceControl.commitSuccess": "Commit {{hash}}",
 }
