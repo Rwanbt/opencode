@@ -32,6 +32,10 @@ function rowsFor(column: typeof ObservabilityEventTable.session_id, value: strin
 
 describe("observability exportEvents", () => {
   test("exports all events as NDJSON ordered by ts_ms ASC", async () => {
+    // Unscoped query below counts every row in the shared test-process DB
+    // (see the "all" scope comment further down in this file), so this test
+    // must start from a clean table like the other full-table assertions do.
+    await deleteByScope({ scope: "all" })
     const now = Date.now()
     const sessionA = "export-test-session-a-" + ObservabilityId.create()
     const sessionB = "export-test-session-b-" + ObservabilityId.create()
@@ -173,6 +177,11 @@ describe("observability deleteByScope", () => {
   })
 
   test("retention keeps the newest events when the event cap is exceeded", async () => {
+    // purgeByRetention's maxEvents cap is a global table-wide limit (not
+    // scoped to a session), so leftover rows from earlier tests in the
+    // shared test-process DB would make "top 1 by ts_ms" not be our own
+    // "newest" row. Reset first, same as the other full-table assertions.
+    await deleteByScope({ scope: "all" })
     const now = Date.now()
     const oldest = "purge-retention-oldest-" + ObservabilityId.create()
     const newest = "purge-retention-newest-" + ObservabilityId.create()

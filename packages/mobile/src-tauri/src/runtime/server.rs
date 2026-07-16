@@ -46,6 +46,15 @@ fn auth_storage_key() -> Result<String, String> {
         .into();
     Ok(value)
 }
+
+/// Non-Android unix targets have no Keystore-backed storage; the embedded
+/// server is Android-only at runtime, but this crate still compiles for
+/// desktop unix targets so `cargo test` can run without an Android target.
+#[cfg(not(target_os = "android"))]
+fn auth_storage_key() -> Result<String, String> {
+    Err("Secure auth storage is only available on Android".to_string())
+}
+
 /// Start the embedded OpenCode server.
 /// Spawns bun with the bundled CLI and stores the child process handle.
 /// On Android, executables are in nativeLibraryDir (packaged as JNI libs)

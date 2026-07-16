@@ -672,9 +672,8 @@
     },
   },
   "trustedDependencies": [
-    "esbuild",
-    "tree-sitter-powershell",
     "electron",
+    "esbuild",
     "web-tree-sitter",
     "tree-sitter-bash",
   ],
