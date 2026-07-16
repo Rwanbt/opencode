@@ -6,6 +6,7 @@
 // FORK: Stretch Phase 4b — test explorer: module grouping + re-run per test.
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
+import { useLanguage } from "@/context/language"
 
 type TaskKind = "npm" | "cargo" | "make"
 export type DetectedTask = { name: string; command: string; kind: TaskKind }
@@ -46,7 +47,7 @@ function cargoTasks(): DetectedTask[] {
 
 function parseMakeTasks(content: string): DetectedTask[] {
   return content
-    .split("\n")
+    .split("\\n")
     .filter((line) => /^[a-zA-Z0-9_][a-zA-Z0-9_-]*\s*:(?!=)/.test(line))
     .map((line) => line.split(":")[0]!.trim())
     .filter(Boolean)
@@ -84,12 +85,12 @@ function parseProblems(text: string): Problem[] {
 
   let m: RegExpExecArray | null
   // Rust: previous line holds the "error[E0xxx]: message"
-  const lines = text.split("\n")
+  const lines = text.split("\\n")
   const linesBefore = new Map<number, string>()
   for (let i = 0; i < lines.length; i++) linesBefore.set(i, lines[i] ?? "")
   RUST_RE.lastIndex = 0
   while ((m = RUST_RE.exec(text)) !== null) {
-    const lineIdx = text.slice(0, m.index).split("\n").length - 1
+    const lineIdx = text.slice(0, m.index).split("\\n").length - 1
     const msgLine = linesBefore.get(lineIdx - 1) ?? ""
     const sev = /^error/.test(msgLine.trim()) ? "error" : "warning"
     const msg = msgLine.replace(/^(error|warning)(\[E\d+\])?:\s*/, "").trim() || msgLine.trim()
@@ -243,6 +244,7 @@ export function TaskPanel(props: {
   directory: string
   onRunTask: (command: string, title: string) => string
 }) {
+  const language = useLanguage()
   const sdk = useSDK()
   const [lastPtyId, setLastPtyId] = createSignal<string | null>(null)
   const [lastCommand, setLastCommand] = createSignal<string | null>(null)
@@ -311,15 +313,15 @@ export function TaskPanel(props: {
   return (
     <div class="flex flex-col h-full overflow-y-auto">
       <Show when={tasks.loading}>
-        <div class="text-text-weak text-12-regular px-3 py-2">Détection…</div>
+        <div class="text-text-weak text-12-regular px-3 py-2">{language.t("taskPanel.detecting")}</div>
       </Show>
 
       <Show when={!tasks.loading && (tasks()?.length ?? 0) === 0 && !tasks.error}>
         <div class="text-text-weak text-12-regular px-4 py-6 text-center leading-relaxed">
-          Aucune tâche détectée.
+          {language.t("taskPanel.noTasks")}
           <br />
           <span class="text-11-regular opacity-70">
-            Ajoute un package.json, Cargo.toml ou Makefile.
+            {language.t("taskPanel.addBuildFile")}
           </span>
         </div>
       </Show>
@@ -365,14 +367,14 @@ export function TaskPanel(props: {
               onClick={analyseProblems}
               class="text-10-regular text-text-weak hover:text-text-base px-1.5 py-0.5 rounded border border-border-weak-base hover:border-border-base transition-colors disabled:opacity-40 shrink-0"
             >
-              {analysing() ? "…" : "Analyser"}
+              {analysing() ? "…" : language.t("taskPanel.analyze")}
             </button>
 
             {/* Problem badges */}
             <Show when={problems().length > 0}>
-              <span class="text-11-regular text-[#ef4444]">{errCount()} erreur{errCount() !== 1 ? "s" : ""}</span>
+              <span class="text-11-regular text-[#ef4444]">{errCount()} {language.t("taskPanel.errors")}</span>
               <Show when={warnCount() > 0}>
-                <span class="text-11-regular text-[#f59e0b]">{warnCount()} avert.</span>
+                <span class="text-11-regular text-[#f59e0b]">{warnCount()} {language.t("taskPanel.warnings")}</span>
               </Show>
             </Show>
 
@@ -383,18 +385,18 @@ export function TaskPanel(props: {
                 when={(testSummary()?.failed ?? 0) === 0}
                 fallback={
                   <span class="text-11-regular text-[#ef4444]">
-                    {testSummary()!.failed} échec{testSummary()!.failed !== 1 ? "s" : ""} / {testSummary()!.total}
+                    {testSummary()!.failed} {language.t("taskPanel.failures")} / {testSummary()!.total}
                   </span>
                 }
               >
                 <span class="text-11-regular text-[#22c55e]">
-                  {testSummary()!.passed}/{testSummary()!.total} tests ok
+                  {testSummary()!.passed}/{testSummary()!.total} {language.t("taskPanel.testsOk")}
                 </span>
               </Show>
             </Show>
 
             <Show when={!analysing() && problems().length === 0 && testResults().length === 0 && lastPtyId()}>
-              <span class="text-11-regular text-text-weaker">Aucun résultat</span>
+              <span class="text-11-regular text-text-weaker">{language.t("taskPanel.noResults")}</span>
             </Show>
           </div>
 
@@ -454,7 +456,7 @@ export function TaskPanel(props: {
                       onClick={rerunAllFailed}
                       class="text-10-regular text-[#ef4444] hover:text-text-base px-3 py-0.5 text-left self-start"
                     >
-                      ▶ Re-run {failedTests().length} échec{failedTests().length !== 1 ? "s" : ""}
+                      ▶ {language.t("taskPanel.rerun")} {failedTests().length} {language.t("taskPanel.failures")}
                     </button>
                   )
                 }}
@@ -571,7 +573,7 @@ export function TaskPanel(props: {
                   onClick={() => setShowAllTests((v) => !v)}
                   class="text-10-regular text-text-weaker hover:text-text-base px-3 py-0.5 text-left"
                 >
-                  {showAllTests() ? "Masquer les succès" : `Voir tous (${testResults().length})`}
+                  {showAllTests() ? language.t("taskPanel.hideSuccesses") : language.t("taskPanel.viewAll", { count: testResults().length })}
                 </button>
               </Show>
             </div>

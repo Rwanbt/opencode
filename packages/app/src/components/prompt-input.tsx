@@ -1143,7 +1143,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar5" />
                   <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
                 </div>
-                <span class="text-13-regular text-text-critical-base ml-2">Listening...</span>
+                <span class="text-13-regular text-text-critical-base ml-2">{language.t("prompt.listening")}</span>
               </div>
             </Show>
           </div>
@@ -1179,7 +1179,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   value={
                     local.model.variant.current()
                       ? `Thinking: ${local.model.variant.current()}`
-                      : "Enable thinking"
+                       : language.t("prompt.enableThinking")
                   }
                 >
                   <IconButton
@@ -1188,7 +1188,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant={local.model.variant.current() ? "primary" : "ghost"}
                     class="size-8"
                     style={buttons()}
-                    aria-label="Toggle thinking"
+                    aria-label={language.t("prompt.toggleThinking")}
                     onClick={(e: MouseEvent) => {
                       e.preventDefault()
                       e.stopPropagation()
@@ -1206,7 +1206,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Show>
               <Tooltip
                 placement="top"
-                value={webSearch() ? "Disable web search" : "Enable web search"}
+                value={webSearch() ? language.t("prompt.disableWebSearch") : language.t("prompt.enableWebSearch")}
               >
                 <IconButton
                   data-action="prompt-web-search-toggle"
@@ -1214,7 +1214,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant={webSearch() ? "primary" : "ghost"}
                   class="size-8"
                   style={buttons()}
-                  aria-label="Toggle web search"
+                  aria-label={language.t("prompt.toggleWebSearch")}
                   onClick={(e: MouseEvent) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -1224,7 +1224,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Tooltip>
               <Tooltip
                 placement="top"
-                value={recording() ? "Stop recording" : "Voice input"}
+                value={recording() ? language.t("prompt.stopRecording") : language.t("prompt.voiceInput")}
               >
                 <IconButton
                   data-action="prompt-stt-toggle"
@@ -1232,7 +1232,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant={recording() ? "primary" : "ghost"}
                   class="size-8"
                   style={buttons()}
-                  aria-label={recording() ? "Stop recording" : "Voice input"}
+                  aria-label={recording() ? language.t("prompt.stopRecording") : language.t("prompt.voiceInput")}
                   onClick={(e: MouseEvent) => {
                     e.preventDefault()
                     e.stopPropagation()

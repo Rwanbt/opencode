@@ -262,7 +262,7 @@ const McpSection: Component = () => {
             label={language.t("settings.fork.plugins.name")}
             value={addName()}
             onChange={setAddName}
-            placeholder="mon-serveur"
+            placeholder={language.t("settings.fork.plugins.serverNamePlaceholder")}
           />
 
           <Show

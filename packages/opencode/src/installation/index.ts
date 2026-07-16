@@ -13,6 +13,12 @@ import { CHANNEL as channel, VERSION as version } from "./meta"
 
 import semver from "semver"
 
+// This fork publishes its own releases (tags `v<semver>-fork[.N]`, see
+// .github/workflows/fork-release.yml) instead of anomalyco/opencode's. Update
+// checks must compare against this repo, or every install looks perpetually
+// out of date against upstream's own (unrelated) version numbering.
+const FORK_REPO = "Rwanbt/opencode"
+
 export namespace Installation {
   const log = Log.create({ service: "installation" })
 
@@ -253,12 +259,15 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+            HttpClientRequest.get(`https://api.github.com/repos/${FORK_REPO}/releases/latest`).pipe(
               HttpClientRequest.acceptJson,
             ),
           )
           const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
-          return data.tag_name.replace(/^v/, "")
+          // Strip the same `-fork[.N]` suffix the release workflow strips when
+          // computing OPENCODE_VERSION, so this matches Installation.VERSION
+          // exactly instead of comparing "1.2.3" against "1.2.3-fork".
+          return data.tag_name.replace(/^v/, "").replace(/-fork.*$/, "")
         }, Effect.orDie)
 
         const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {

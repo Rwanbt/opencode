@@ -3,8 +3,8 @@ import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
 import oc2ThemeJson from "./themes/oc-2.json"
-import { resolveThemeVariant, themeToCss } from "./resolve"
-import type { DesktopTheme } from "./types"
+import { resolveThemeVariant } from "./resolve"
+import type { DesktopTheme, ResolvedTheme } from "./types"
 
 export type ColorScheme = "light" | "dark" | "system"
 
@@ -15,7 +15,6 @@ const STORAGE_KEYS = {
   THEME_CSS_DARK: "opencode-theme-css-dark",
 } as const
 
-const THEME_STYLE_ID = "oc-theme"
 let files: Record<string, () => Promise<{ default: DesktopTheme }>> | undefined
 let ids: string[] | undefined
 let known: Set<string> | undefined
@@ -113,38 +112,46 @@ function clear() {
   drop(STORAGE_KEYS.THEME_CSS_DARK)
 }
 
-function ensureThemeStyleElement(): HTMLStyleElement {
-  const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
-  if (existing) return existing
-  const element = document.createElement("style")
-  element.id = THEME_STYLE_ID
-  document.head.appendChild(element)
-  return element
-}
-
 function getSystemMode(): "light" | "dark" {
   if (typeof window !== "object") return "light"
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+}
+
+// Applying theme colors via a runtime <style> element's textContent is the
+// same pattern that broke syntax highlighting under Android WebView's CSP
+// (see code-mirror.tsx / pierre/index.ts): the declaration is silently
+// dropped even though the element and its text land in the DOM correctly.
+// Direct CSSStyleDeclaration writes on an already-present element (here,
+// <html>'s own style attribute) survive it instead — the same fix
+// pierre/file-runtime.ts uses for the read-only viewer's token colors.
+let appliedThemeKeys = new Set<string>()
+
+function applyTokensToRoot(tokens: ResolvedTheme, mode: "light" | "dark") {
+  const root = document.documentElement.style
+  const nextKeys = new Set(Object.keys(tokens))
+  for (const key of appliedThemeKeys) {
+    if (!nextKeys.has(key)) root.removeProperty(`--${key}`)
+  }
+  for (const [key, value] of Object.entries(tokens)) {
+    root.setProperty(`--${key}`, value)
+  }
+  root.setProperty("color-scheme", mode)
+  root.setProperty("--text-mix-blend-mode", mode === "dark" ? "plus-lighter" : "multiply")
+  appliedThemeKeys = nextKeys
 }
 
 function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
   const isDark = mode === "dark"
   const variant = isDark ? theme.dark : theme.light
   const tokens = resolveThemeVariant(variant, isDark)
-  const css = themeToCss(tokens)
 
   if (themeId !== "oc-2") {
-    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
+    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, JSON.stringify(tokens))
   }
 
-  const fullCss = `:root {
-  color-scheme: ${mode};
-  --text-mix-blend-mode: ${isDark ? "plus-lighter" : "multiply"};
-  ${css}
-}`
-
   document.getElementById("oc-theme-preload")?.remove()
-  ensureThemeStyleElement().textContent = fullCss
+  document.getElementById("oc-theme")?.remove()
+  applyTokensToRoot(tokens, mode)
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 }
@@ -155,8 +162,7 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
     const tokens = resolveThemeVariant(variant, isDark)
-    const css = themeToCss(tokens)
-    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
+    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, JSON.stringify(tokens))
   }
 }
 

@@ -383,7 +383,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   /** The "current" directory the user is browsing. Derived from the search bar
    *  if it parses as a path, otherwise the start directory. Used by mobile
-   *  "Open here" and "New folder" actions. */
+   *  "{language.t("dialog.directory.openHere")}" and "{language.t("dialog.directory.newFolder")}" actions. */
   function currentDir(): string | null {
     const v = cleanInput(filter())
     if (v) {
@@ -415,16 +415,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   async function handleCreateFolder() {
     const name = newFolderName().trim()
     if (!name) {
-      setCreateError("Folder name is required")
+      setCreateError(language.t("dialog.directory.folderNameRequired"))
       return
     }
     if (/[\\/]/.test(name)) {
-      setCreateError("Folder name cannot contain slashes")
+      setCreateError(language.t("dialog.directory.folderNameSlashes"))
       return
     }
     const base = currentDir()
     if (!base) {
-      setCreateError("No current directory")
+      setCreateError(language.t("dialog.directory.noCurrentDirectory"))
       return
     }
     setCreating(true)
@@ -477,7 +477,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                 }
               }}
             >
-              &#8592; Back
+              {language.t("dialog.directory.back")}
             </Button>
             <Button size="small" variant="secondary" onClick={() => { const d = currentDir(); if (d) resolve(d) }}>
               Open here
@@ -488,7 +488,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
             variant="secondary"
             onClick={() => { setCreatingFolder(true); setNewFolderName(""); setCreateError(null) }}
           >
-            New folder
+            {language.t("dialog.directory.newFolder")}
           </Button>
         </div>
       </Show>
@@ -497,23 +497,23 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       <Show when={creatingFolder()}>
         <div class="flex flex-col gap-2 px-3 pb-3">
           <div class="text-12-regular text-text-weak">
-            Create in: {currentDir() ?? "?"}
+            {language.t("dialog.directory.createIn")} {currentDir() ?? "?"}
           </div>
           <div class="flex gap-2">
             <input
               type="text"
               class="flex-1 rounded border border-border-base bg-background-base px-2 py-1 text-14-regular text-text-strong outline-none focus:border-border-focus"
-              placeholder="Folder name"
+              placeholder={language.t("dialog.directory.folderName")}
               value={newFolderName()}
               onInput={(e) => setNewFolderName(e.currentTarget.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") setCreatingFolder(false) }}
               autofocus
             />
             <Button size="small" disabled={creating()} onClick={handleCreateFolder}>
-              {creating() ? "..." : "Create"}
+              {creating() ? "..." : language.t("dialog.directory.create")}
             </Button>
             <Button size="small" variant="ghost" onClick={() => setCreatingFolder(false)}>
-              Cancel
+              {language.t("dialog.directory.cancel")}
             </Button>
           </div>
           <Show when={createError()}>

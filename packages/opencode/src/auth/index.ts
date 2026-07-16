@@ -458,10 +458,13 @@ export namespace Auth {
     if (AUTH_STORAGE_BACKEND !== "keychain") return undefined
     const kc = new KeychainStorage()
     if (!kc.available()) {
-      throw new Error(
-        "OS keychain storage is required but the keychain endpoint is unavailable. " +
-          "Run the desktop shell or set OPENCODE_AUTH_STORAGE=file explicitly for headless CLI use.",
+      // WHY: the sidecar can start before the Tauri keychain endpoint is reachable,
+      // and WSL/headless launches cannot use the Windows endpoint.
+      // Preserve the existing auth.json path until the host endpoint is ready.
+      console.warn(
+        "[auth] keychain storage requested but the endpoint is unavailable; falling back to auth.json",
       )
+      return undefined
     }
     return kc
   }

@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js"
+import { useLanguage } from "@/context/language"
 
 export interface DiffFile {
   path: string
@@ -13,6 +14,7 @@ export interface MobileDiffProps {
  * Mobile-optimized unified diff viewer with swipe navigation between files.
  */
 export function MobileDiff(props: MobileDiffProps) {
+  const language = useLanguage()
   const [currentIndex, setCurrentIndex] = createSignal(0)
   let touchStartX = 0
 
@@ -55,10 +57,10 @@ export function MobileDiff(props: MobileDiffProps) {
           disabled={!hasPrev()}
           onClick={() => setCurrentIndex((i) => i - 1)}
         >
-          ← Prev
+          {language.t("diff.previous")}
         </button>
         <span class="text-xs font-medium truncate mx-2">
-          {current()?.path ?? "No files"}
+          {current()?.path ?? language.t("diff.noFiles")}
           <span class="text-secondary ml-1">
             ({currentIndex() + 1}/{props.files.length})
           </span>
@@ -68,13 +70,13 @@ export function MobileDiff(props: MobileDiffProps) {
           disabled={!hasNext()}
           onClick={() => setCurrentIndex((i) => i + 1)}
         >
-          Next →
+          {language.t("diff.next")} →
         </button>
       </div>
 
       {/* Diff content */}
       <div class="flex-1 overflow-auto">
-        <Show when={current()} fallback={<div class="p-4 text-center text-secondary">No diffs to show</div>}>
+        <Show when={current()} fallback={<div class="p-4 text-center text-secondary">{language.t("diff.noDiffs")}</div>}>
           <For each={current()!.diff.split("\n")}>
             {(line, idx) => renderLine(line, idx())}
           </For>
@@ -84,7 +86,7 @@ export function MobileDiff(props: MobileDiffProps) {
       {/* Swipe hint */}
       <Show when={props.files.length > 1}>
         <div class="text-center text-xs text-secondary py-1 border-t">
-          Swipe left/right to navigate files
+          {language.t("diff.swipeHint")}
         </div>
       </Show>
     </div>

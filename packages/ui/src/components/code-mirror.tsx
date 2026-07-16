@@ -18,8 +18,19 @@ import { EditorState, Compartment, Annotation } from "@codemirror/state"
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search"
 import { indentOnInput, bracketMatching, syntaxHighlighting } from "@codemirror/language"
-import { classHighlighter } from "@lezer/highlight"
+import { classHighlighter, tagHighlighter, tags } from "@lezer/highlight"
 import { buildLspExtensions, type LspCallbacks, type LspLocation } from "./code-mirror-lsp"
+
+// classHighlighter has no rule for tags.function(...), so function/method
+// names (CallExpression, FunctionDeclaration, etc. across the JS/TS/Python/
+// Rust grammars) fall back to the plain tok-variableName/tok-propertyName
+// class — colored differently than the read-only viewer, which colors
+// `entity.name.function` distinctly (see pierre/opencode-theme.ts). This adds
+// the missing class so both surfaces agree.
+const functionHighlighter = tagHighlighter([
+  { tag: tags.function(tags.variableName), class: "tok-function" },
+  { tag: tags.function(tags.propertyName), class: "tok-function" },
+])
 
 // Used to tag programmatic (non-user) document changes so the updateListener
 // can skip them and avoid spurious onChange callbacks.
@@ -177,6 +188,7 @@ export function CodeMirrorEditor(props: {
         // Use literal token classes so syntax colours come from the static CSS.
         // HighlightStyle would inject a runtime <style>, which mobile CSP drops.
         syntaxHighlighting(classHighlighter),
+        syntaxHighlighting(functionHighlighter),
         search({ top: true }),
         // Placeholder slot: reconfigured after the async language import resolves.
         langCompartment.of([]),

@@ -45,7 +45,7 @@ runs:
       id: version
       shell: bash
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        VERSION=$(curl -sf https://api.github.com/repos/Rwanbt/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
     - name: Cache opencode
@@ -56,9 +56,19 @@ runs:
         key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
 
     - name: Install opencode
+      # opencode.ai/install always installs anomalyco/opencode's own latest
+      # release regardless of any VERSION env var — it has no way to point at
+      # a fork. Fetching the fork's own release tarball directly is the only
+      # way this action installs the CLI it's actually meant to run. The
+      # releases/latest/download/ URL form always resolves to the newest
+      # release without needing an already-known tag name.
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: curl -fsSL https://opencode.ai/install | bash
+      run: |
+        mkdir -p "$HOME/.opencode/bin"
+        curl -fsSL "https://github.com/Rwanbt/opencode/releases/latest/download/opencode-linux-x64.tar.gz" \
+          -o /tmp/opencode.tar.gz
+        tar -xzf /tmp/opencode.tar.gz -C "$HOME/.opencode/bin"
 
     - name: Add opencode to PATH
       shell: bash

@@ -22,6 +22,7 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
   // dot reflects the exact same value the viewer / save button / autosave
   // factory see — no skew between components.
   const fileStore = useFileStore()
+  const language = useLanguage()
   const dirty = createMemo(() => fileStore.get(props.path)?.status === "dirty")
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
@@ -37,7 +38,7 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
       <Show when={dirty()}>
         <span
           class="size-1.5 md:size-1.5 rounded-full bg-amber-500 shrink-0"
-          aria-label="Unsaved changes"
+          aria-label={language.t("common.unsavedChanges")}
           data-dirty-dot
         />
       </Show>
