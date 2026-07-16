@@ -15,7 +15,7 @@ This extension requires the [opencode CLI](https://opencode.ai) to be installed 
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/Rwanbt/opencode/issues.
 
 ## Development
 
@@ -32,3 +32,4 @@ To test your changes:
 1. In the debug VS Code window, press `Cmd+Shift+P`
 2. Search for `Developer: Reload Window`
 3. Reload to see your changes without restarting the debug session
+

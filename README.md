@@ -1,5 +1,6 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <img src="Bannière OpencodeX.png" alt="RBannière OpencodeX" >
+  <a href="https://github.com/Rwanbt/opencode">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,8 +10,7 @@
 </p>
 <p align="center">The open source AI coding agent.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/opencode/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/opencode?display_name=tag&style=flat-square" /></a>
   <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
 </p>
 
@@ -39,27 +39,30 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
+> [!WARNING]
+> **Unofficial fork notice:** this repository is an independent, unofficial fork of [OpenCode](https://github.com/anomalyco/opencode), maintained by [Rwanbt/opencode](https://github.com/Rwanbt/opencode). It is not built, operated, endorsed, or supported by the upstream OpenCode team.
+
+Releases, binaries, issues, roadmap, and support for this fork are maintained here.
 ---
 
 <!-- ACCORDION-APPLIED -->
 
 ## ⚡ At a glance
 
-OpenCode (fork) — an orchestrated AI coding agent that runs on **desktop, server, and phone**, with local models end-to-end, zero cloud dependency, and enterprise-grade governance primitives baked in. Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
+OpenCode Fusion (working name) — an orchestrated AI coding agent that runs on **desktop, server, and phone**, with local models end-to-end and governance primitives built into the fork. It is based on [upstream OpenCode](https://github.com/anomalyco/opencode) and distributed from the [Rwanbt fork](https://github.com/Rwanbt/opencode). The final product name is not fixed yet.
 
 ### Install
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# The upstream installer is intentionally not used for this fork. Use a fork release artifact or build from source.
 
 # Desktop app + Android APK
 # → https://github.com/Rwanbt/opencode/releases/latest
 ```
 
-### 8 things this fork bundles that no other CLI does
+### 10 things this fork bundles that no other CLI does
 
 |   |   |
 | - | - |
@@ -71,6 +74,8 @@ curl -fsSL https://opencode.ai/install | bash
 | 🔌 **REST task API** | 8 endpoints — drive the agent from cron, Temporal, Airflow |
 | 🛡️ **Vulnerability scanner** | Auto-scans every edit / write for secrets & injection sinks |
 | 🔍 **Hybrid RAG** | BM25 + vector + time-decay confidence scoring |
+| 🗣️ **Debate agent** | Multi-model divergence, blind-spot extraction, red-team checks, and synthesis |
+| ⚡ **Auto agent** | Explicit full-auto primary agent with confirmation and permission semantics |
 
 ### Run your first task
 
@@ -234,8 +239,8 @@ Kick off 5 tasks in isolated worktrees from a laptop. Check their progress from 
 
 ## Fork Features
 
-> This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) maintained by [Rwanbt](https://github.com/Rwanbt).
-> Kept in sync with upstream. See [dev branch](https://github.com/Rwanbt/opencode/tree/dev) for latest changes.
+> This is a working-name fork of [upstream OpenCode](https://github.com/anomalyco/opencode), maintained in [Rwanbt/opencode](https://github.com/Rwanbt/opencode).
+> See [`docs/FORK-DISTRIBUTION.md`](docs/FORK-DISTRIBUTION.md) for the temporary naming and distribution boundary.
 
 #### Local-First AI
 
@@ -249,7 +254,8 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 
 **Inference Engine (llama.cpp b8731)**
 - Vulkan GPU backend, auto-downloaded on first model load
-- **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`): `n_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
+- **Runtime adaptive config** (`packages/opencode/src/local-llm-server/auto-config.ts`):
+_gpu_layers`, threads, batch/ubatch size, KV cache quant and context size derived from detected VRAM, free RAM, big.LITTLE CPU split, GPU backend (CUDA/ROCm/Vulkan/Metal/OpenCL) and thermal state. Replaces the old hardcoded `--n-gpu-layers 99` — a 4 GB Android now runs in CPU fallback instead of OOM-killing, flagship desktops get tuned batch instead of the 512 default.
 - `--flash-attn on` — Flash Attention for memory efficiency (desktop; mobile auto-disables when GPU is off or KV is unquantized)
 - `--cache-type-k/v` — standard llama.cpp KV-cache quantization; adaptive tier (f16 / q8_0 / q4_0) selected from detected VRAM headroom
 - `--fit on` — fork-only secondary VRAM adjustment (opt-in via `OPENCODE_LLAMA_ENABLE_FIT=1`)
@@ -292,6 +298,14 @@ OpenCode runs AI models locally on consumer hardware (8 GB VRAM / 16 GB RAM), wi
 - Tool telemetry: per-session success/error counts with per-tool breakdown, emitted to structured logs (not persisted to SQLite — recover via log shipping if needed)
 
 **Cross-platform**: Windows (Vulkan), Linux, macOS, Android
+
+#### Debate mode
+
+`debate` is a native primary agent wired into `packages/opencode/src/agent/agent.ts`. It uses the collective-intelligence orchestrator in `packages/opencode/src/collective/` and is exposed through the `debate` tool and `/debate` server routes. It runs multiple models in parallel, extracts atomic claims, detects blind spots, can red-team the result, and produces a persisted synthesis report. Tiers include `free`, `quick`, `standard`, and `deep`.
+
+#### Auto mode
+
+The fork also contains an explicit `auto` primary agent. It grants configured tools without ordinary permission prompts, with a TUI confirmation boundary and protection against silently overriding a user-defined `agent.auto`. This is distinct from the prompt toolbar presets (`Ask`, `Auto Edit`, and `Full Auto`). The implementation is currently on the fork `dev` line and must be merged into `main` before being presented as a `main` release feature.
 
 #### Background Tasks
 
@@ -381,6 +395,8 @@ Read-only coordinator agent (50 max steps). Has access to `task` and `team` tool
 |-------|------|--------|-------------|
 | **build** | primary | full | Default development agent |
 | **plan** | primary | read-only | Analysis and code exploration |
+| **debate** | primary | read/web | Multi-model debate, blind-spot detection, red-team checks, and synthesis |
+| **auto** | primary | full (confirmation) | Explicit full-auto execution mode; implemented on `dev`, pending merge into `main` |
 | **general** | subagent | full (no todowrite) | Complex multi-step tasks |
 | **explore** | subagent | read-only | Fast codebase search |
 | **orchestrator** | subagent | read-only + task/team | Multi-agent coordinator (50 steps) |
@@ -645,7 +661,7 @@ graph TB
 </details>
 
 <details>
-<summary><b>🌿 Feature branches — Collaborative mode, Mobile, AnythingLLM</b></summary>
+<summary><b>🌿 Implemented fork extensions — Collaboration, Android, knowledge bridge</b></summary>
 <br>
 
 ## Feature Branches (Implemented on `dev`)
@@ -664,9 +680,9 @@ Multi-user real-time collaboration. Implemented:
 
 Config: `experimental.collaborative.enabled: true`
 
-### Mobile Version (`dev_mobile`)
+### Android application (`dev_mobile`) — implemented and functional
 
-Native Android app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. iOS target is planned. Implemented:
+Native Android app via Tauri 2.0 with **embedded runtime** — a single APK, zero external dependencies. Android is implemented and functional; only the native iOS client remains planned. Implemented:
 
 **Layer 1 — Embedded Runtime (Android, 100% native performance):**
 - **Static binaries in APK** — Bun, Bash, Ripgrep, Toybox (aarch64, packaged as `.so` libraries) extracted at first launch (~15s). `git` is intentionally not bundled — source projects are expected to be mounted from `/sdcard/` (see external storage below)
@@ -708,105 +724,74 @@ Native Android app via Tauri 2.0 with **embedded runtime** — a single APK, zer
 - **Mode selector** — Choose Local (Android) or Remote (iOS + Android) on first launch
 - **Mobile action menu** — Quick access to terminal, fork, search, and settings from session header
 
-### AnythingLLM Fusion (`dev_anything`)
-
-Bridge between OpenCode and AnythingLLM's document RAG platform. Implemented:
-- **REST client** — Full API wrapper for AnythingLLM workspaces, documents, search, chat
-- **MCP server adapter** — 4 tools: `anythingllm_search`, `anythingllm_list_workspaces`, `anythingllm_get_document`, `anythingllm_chat`
-- **Plugin context injection** — `experimental.chat.system.transform` hook injects relevant docs into system prompt
-- **Agent Skills HTTP API** — `GET /agent-skills` + `POST /agent-skills/:toolId/execute` to expose OpenCode tools to AnythingLLM
-- **Vector store bridge** — Composite search merging local SQLite RAG with AnythingLLM vector DB results
-- **Docker Compose** — Ready-to-use `docker-compose.anythingllm.yml` with shared network
-
-Config: `experimental.anythingllm.enabled: true`
 
 ---
 
 </details>
 
 ---
+<details>
+<summary><b>Future Roadmap</b></summary>
+<br>
+
+## Future Roadmap
+
+The next product direction is defined by the Obsidian plan `Plan directeur V2 — OpenCode Fusion production-ready`. The Android application and optional knowledge bridge are already implemented and are intentionally not listed as future work.
+
+### 🎨 OpenDesign + OpenWork fusion
+
+Unify the design and productivity layers around the same workspace model:
+
+- **OpenDesign layer** — workspace-scoped design tokens, `DESIGN.md` contracts, design-pack manifests, controlled prompt injection, and automated design-compliance reports.
+- **OpenWork layer** — project/workspace management, structured artefacts, memory, extensions, and resumable productivity workflows with explicit approvals.
+- **Shared foundation** — capability manifests, scoped storage, migrations, auditability, observability, release gates, and kill switches so design and work automation remain safe and reversible.
+
+This follows the vault sequence: workspace OS and storage scopes, then OpenDesign, Artifact Studio, memory/session intelligence, and workflow automation. The vault plan is the authoritative implementation roadmap.
+
+###  Native iOS client
+
+Android is already implemented and functional. The remaining mobile client work is a native iOS target, initially prioritizing remote mode and Apple's sandbox constraints.
+
+</details>
+[![OpenCode Fusion Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/opencode)
 
 ### Installation
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
-
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
-
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/Rwanbt/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+Use a fork release artifact from [Rwanbt/opencode/releases](https://github.com/Rwanbt/opencode/releases/latest), or build from source:
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+git clone https://github.com/Rwanbt/opencode.git
+cd opencode
+bun install
+bun run --cwd packages/opencode build --single
 ```
 
-#### Installation Directory
+The upstream installer, npm package, Homebrew formula, Scoop package and `opencode.ai/download` are intentionally not used for this fork. Fork-specific package channels will be added after the rebrand.
 
-The install script respects the following priority order for the installation path:
+### Desktop App and Android APK
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+Download the platform artifact from the [fork releases page](https://github.com/Rwanbt/opencode/releases). Check each release note for signing and production-readiness status before deployment.
 
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+| Platform | Artifact |
+| --- | --- |
+| macOS | `.dmg` |
+| Windows | `.exe` or `.msi` |
+| Linux | `.deb`, `.rpm`, or AppImage |
+| Android | `.apk` |
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+See the complete [Agent System](#agent-system) table above for all built-in primary, subagent, and hidden agents. The fork-specific `debate` and `auto` modes are documented there with their current branch status.
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+For more info on how to configure OpenCode, [**use the versioned fork docs**](packages/web/src/content/docs).
 
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
+\n
 <details>
 <summary><b>❓ FAQ</b></summary>
 <br>
@@ -818,7 +803,7 @@ If you are working on a project that's related to OpenCode and is using "opencod
 It's very similar to Claude Code in terms of capability. Here are the key differences:
 
 - 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
+- Not coupled to any provider. Although we recommend the models we provide through upstream OpenCode Zen, OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
 - Out-of-the-box LSP support
 - A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
 - A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
@@ -827,4 +812,4 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 </details>
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Community**: use the [fork issues](https://github.com/Rwanbt/opencode/issues) for fork support. The [upstream Discord](https://discord.gg/opencode) is for upstream OpenCode and may not reflect fork releases.

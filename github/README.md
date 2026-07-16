@@ -88,7 +88,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
               persist-credentials: false
 
           - name: Run opencode
-           uses: anomalyco/opencode/github@latest
+           uses: Rwanbt/opencode/github@main
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,7 +101,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/Rwanbt/opencode/issues.
 
 ## Development
 
@@ -164,3 +164,4 @@ MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-wor
 ```
 MOCK_EVENT='{"eventName":"pull_request_review_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"pull_request":{"number":7},"comment":{"id":1,"body":"hey opencode, add error handling","path":"src/components/Button.tsx","diff_hunk":"@@ -45,8 +45,11 @@\n- const handleClick = () => {\n-   console.log('clicked')\n+ const handleClick = useCallback(() => {\n+   console.log('clicked')\n+   doSomething()\n+ }, [doSomething])","line":47,"original_line":45,"position":10,"commit_id":"abc123","original_commit_id":"def456"}}}'
 ```
+
