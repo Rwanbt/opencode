@@ -11,12 +11,10 @@ set -euo pipefail
 
 # chroot requires root. Re-exec as root if needed (passwordless sudo expected in WSL).
 if [ "$(id -u)" != "0" ]; then
-  exec sudo --preserve-env=HOME,USER,SUDO_USER "$0" "$@"
+  exec sudo --preserve-env=HOME,USER,SUDO_USER bash "$0" "$@"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_WIN="$(realpath "$SCRIPT_DIR/..")"
-
 # Translate Windows path ??? WSL mount path
 # SCRIPT_DIR will be something like /mnt/d/App/OpenCode/opencode/packages/mobile/scripts
 MOBILE_DIR="$SCRIPT_DIR/.."
@@ -37,7 +35,7 @@ if [ -f "$OUTPUT" ]; then
   echo "=== rootfs.tgz is ${AGE_DAYS}d old, rebuilding ==="
 fi
 
-trap "echo '--- cleanup ---'; rm -rf '$WORKDIR'" EXIT
+trap 'echo "--- cleanup ---"; rm -rf "$WORKDIR"' EXIT
 
 echo "=== Building Alpine aarch64 rootfs ==="
 echo "    Workdir : $WORKDIR"
