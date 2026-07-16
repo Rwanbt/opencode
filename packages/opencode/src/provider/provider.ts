@@ -616,9 +616,17 @@ export namespace Provider {
       // is guaranteed InstanceState has already been invalidated — otherwise
       // a manual refresh could report success before Provider.list() sees
       // the new catalog.
-      ModelsDev.onRefresh(async () => {
+      //
+      // Unsubscribe on scope close: ModelsDev.refreshCallbacks is a
+      // process-lifetime singleton array, but `state`'s ScopedCache is
+      // scoped to this Layer. Without this, every Layer construction (e.g.
+      // once per test) leaks a callback that later calls invalidateAll on an
+      // already-closed cache — refresh() awaits all of them via Promise.all,
+      // so one leaked callback throwing turns a real refresh into ok:false.
+      const unsubscribeRefresh = ModelsDev.onRefresh(async () => {
         await Effect.runPromise(InstanceState.invalidateAll(state))
       })
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribeRefresh))
 
       const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
