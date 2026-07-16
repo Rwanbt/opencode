@@ -30,6 +30,11 @@ if [ -n "${ORT_LIB_LOCATION:-}" ] && [ ! -f "$ORT_LIB_LOCATION/libonnxruntime.so
   echo "ERROR: ORT_LIB_LOCATION does not contain libonnxruntime.so: $ORT_LIB_LOCATION" >&2
   exit 1
 fi
+if [ -n "${ORT_LIB_LOCATION:-}" ] && [ -f "$ORT_LIB_LOCATION/libonnxruntime.so" ] && [ ! -f "$ORT_SO" ]; then
+  mkdir -p "$JNILIBS"
+  cp "$ORT_LIB_LOCATION/libonnxruntime.so" "$ORT_SO"
+  echo "ONNX Runtime copied from ORT_LIB_LOCATION: $(du -h -- "$ORT_SO" | cut -f1)"
+fi
 if [ ! -f "$ORT_SO" ]; then
   echo "Downloading ONNX Runtime $ORT_VERSION for Android arm64..."
   # Try Maven Central (official Qualcomm/Microsoft distribution)
