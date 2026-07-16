@@ -40,8 +40,13 @@ if ! wsl.exe bash "$SCRIPT_WSL"; then
   fi
 elif command -v wsl &>/dev/null; then
   # Running inside WSL directly
-if ! bash "$SCRIPT_DIR/build-alpine-rootfs.sh"; then
+  if ! bash "$SCRIPT_DIR/build-alpine-rootfs.sh"; then
     echo "  WARNING: WSL rootfs build failed; continuing without the offline Alpine rootfs."
+  fi
+elif [ "$(uname -s)" = "Linux" ]; then
+  # GitHub-hosted Linux runners have no WSL, but can build the rootfs natively.
+  if ! bash "$SCRIPT_DIR/build-alpine-rootfs.sh"; then
+    echo "  WARNING: Native Linux rootfs build failed; continuing without the offline Alpine rootfs."
   fi
 else
   echo "  WARNING: WSL not available. Build rootfs manually and place at:"
