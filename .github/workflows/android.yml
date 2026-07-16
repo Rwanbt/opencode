@@ -45,7 +45,9 @@ jobs:
           toolchain: stable
           targets: aarch64-linux-android
 
+      # Cache is best-effort: Android builds can exhaust runner disk during post-job metadata collection.
       - name: Rust cache
+        continue-on-error: true
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
         with:
           workspaces: packages/mobile/src-tauri
