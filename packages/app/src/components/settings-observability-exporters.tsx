@@ -15,10 +15,12 @@ import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
+import { useLanguage } from "@/context/language"
 
 type EventItem = { eventId: string; type: string; status: string; tsMs: number }
 
 export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> = (props) => {
+  const language = useLanguage()
   const sdk = useSDK()
   const [host, setHost] = createSignal("https://cloud.langfuse.com")
   const [publicKey, setPublicKey] = createSignal("")
@@ -120,7 +122,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       const result = await unwrap(sdk.client.observability.exporters.preview({ eventId }))
       setPreview(result)
     } catch (error) {
-      showToast({ variant: "error", title: "Preview failed", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.previewButton") + " failed", description: error instanceof Error ? error.message : "Request failed" })
     } finally {
       setBusy(false)
     }
@@ -129,13 +131,13 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
   return (
     <div class="flex flex-col gap-6">
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Exporters</h3>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.exporters")}</h3>
         <p class="text-12-regular text-text-weak">
-          Off by default. A configured exporter only ever receives a redacted ExportProjection (ADR-1026) — never raw prompts, responses, tool payloads, or Phase 3 opt-in content, even if opted in for local storage.
+          {language.t("settings.fork.observability.exporterDescription")}
         </p>
       </div>
 
-      <Show when={config()?.exporters.length} fallback={<div class="rounded-lg bg-surface-base px-3 py-3 text-12-regular text-text-weak">No exporter configured.</div>}>
+      <Show when={config()?.exporters.length} fallback={<div class="rounded-lg bg-surface-base px-3 py-3 text-12-regular text-text-weak">{language.t("settings.fork.observability.noExporter")}</div>}>
         <div class="flex flex-col gap-2">
           <For each={config()?.exporters ?? []}>
             {(exporter) => (
@@ -153,36 +155,36 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       </Show>
 
       <SettingsList>
-        <SettingsRow title="Backfill on start" description="When enabled, the next time an exporter is configured, it exports the ENTIRE existing local event history instead of only new events. Off by default.">
+        <SettingsRow title={language.t("settings.fork.observability.backfill")} description={language.t("settings.fork.observability.backfillDescription")}>
           <SwitchComponent checked={config()?.backfillOnStart ?? false} disabled={busy()} onChange={(v) => void setBackfill(v)} />
         </SettingsRow>
       </SettingsList>
 
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Add Langfuse exporter</h3>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.addExporter")}</h3>
         <SettingsList>
-          <SettingsRow title="Host" description="Langfuse instance base URL.">
+          <SettingsRow title={language.t("settings.fork.observability.host")} description={language.t("settings.fork.observability.hostDescription")}>
             <TextField size="small" variant="normal" value={host()} onChange={setHost} />
           </SettingsRow>
-          <SettingsRow title="Public key" description="Langfuse project public key.">
+          <SettingsRow title={language.t("settings.fork.observability.publicKey")} description={language.t("settings.fork.observability.publicKeyDescription")}>
             <TextField size="small" variant="normal" value={publicKey()} onChange={setPublicKey} />
           </SettingsRow>
-          <SettingsRow title="Secret key" description="Langfuse project secret key. Never displayed back once saved.">
+          <SettingsRow title={language.t("settings.fork.observability.secretKey")} description={language.t("settings.fork.observability.secretKeyDescription")}>
             <TextField size="small" variant="normal" type="password" value={secretKey()} onChange={setSecretKey} />
           </SettingsRow>
         </SettingsList>
         <div class="mt-2">
           <Button variant="primary" size="small" disabled={busy()} onClick={() => void saveLangfuse()}>
-            Save exporter
+            {language.t("settings.fork.observability.saveExporter")}
           </Button>
         </div>
       </div>
 
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Test connection</h3>
-        <p class="pb-2 text-12-regular text-text-weak">Sends one synthetic, non-real event through every configured exporter right now.</p>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.testConnection")}</h3>
+        <p class="pb-2 text-12-regular text-text-weak">{language.t("settings.fork.observability.testDescription")}</p>
         <Button variant="secondary" size="small" disabled={busy()} onClick={() => void runTest()}>
-          Send test event
+          {language.t("settings.fork.observability.sendTest")}
         </Button>
         <Show when={testResults()}>
           {(results) => (
@@ -202,8 +204,8 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       </div>
 
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Preview projection</h3>
-        <p class="pb-2 text-12-regular text-text-weak">See exactly what would be sent for a real event — without sending it anywhere.</p>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.preview")}</h3>
+        <p class="pb-2 text-12-regular text-text-weak">{language.t("settings.fork.observability.previewDescription")}</p>
         <div class="flex items-center gap-2">
           <Select
             size="small"
@@ -215,7 +217,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
             onSelect={(e) => e && setPreviewEventId(e.eventId)}
           />
           <Button variant="secondary" size="small" disabled={busy() || !previewEventId()} onClick={() => void runPreview()}>
-            Preview
+            {language.t("settings.fork.observability.previewButton")}
           </Button>
         </div>
         <Show when={preview()}>

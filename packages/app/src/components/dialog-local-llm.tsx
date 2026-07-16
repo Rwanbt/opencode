@@ -8,6 +8,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 
 // Use Tauri's global API if available (injected by withGlobalTauri: true in tauri.conf.json)
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
@@ -150,6 +151,7 @@ function formatDownloads(n: number): string {
 }
 
 export function DialogLocalLLM() {
+  const language = useLanguage()
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const [models, { refetch }] = createResource((): Promise<ModelInfo[]> => invokeTauri("list_models").catch(() => []))
@@ -426,7 +428,7 @@ export function DialogLocalLLM() {
           icon="arrow-left"
           variant="ghost"
           onClick={() => dialog.close()}
-          aria-label="Back"
+          aria-label={language.t("settings.localLlm.back")}
         />
       }
     >
@@ -435,11 +437,11 @@ export function DialogLocalLLM() {
         <div class="flex items-center gap-3">
           <ProviderIcon id="local-llm" class="size-6 shrink-0" />
           <div>
-            <div class="text-16-medium text-text-strong">Local AI Models</div>
+            <div class="text-16-medium text-text-strong">{language.t("settings.localLlm.title")}</div>
             <div class="text-12-regular text-text-weak">
-              Run models on-device with llama.cpp
+              {language.t("settings.localLlm.description")}
               <Show when={healthy()}>
-                <span class="text-icon-success-base"> • Running</span>
+                <span class="text-icon-success-base"> • {language.t("settings.localLlm.running")}</span>
               </Show>
             </div>
           </div>
@@ -467,7 +469,7 @@ export function DialogLocalLLM() {
         {/* Installed models */}
         <Show when={(models() ?? []).length > 0}>
           <div class="flex flex-col gap-1">
-            <div class="text-13-medium text-text-weak">Installed</div>
+            <div class="text-13-medium text-text-weak">{language.t("settings.localLlm.installed")}</div>
             <For each={mainModels()}>
               {(model) => (
                 <div class="flex items-center justify-between gap-2 py-2 border-b border-border-weak-base last:border-none">
@@ -477,7 +479,7 @@ export function DialogLocalLLM() {
                   </div>
                   <div class="flex items-center gap-1.5">
                     <Show when={activeModel() === model.filename}>
-                      <Tag>Active</Tag>
+                      <Tag>{language.t("settings.localLlm.active")}</Tag>
                     </Show>
                     <Button size="small" variant="ghost" class="text-text-critical-base" disabled={loading() !== null} onClick={() => handleDelete(model.filename)}>
                       Delete
@@ -492,7 +494,7 @@ export function DialogLocalLLM() {
                   <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-2">
                       <span class="text-14-regular text-text-strong truncate">{proj.filename.replace(/\.gguf$/i, "")}</span>
-                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">Vision Projector</span>
+                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">{language.t("settings.localLlm.visionProjector")}</span>
                     </div>
                     <span class="text-12-regular text-text-weak">{formatBytes(proj.size)}</span>
                   </div>
@@ -507,19 +509,19 @@ export function DialogLocalLLM() {
 
         {/* Catalog */}
         <div class="flex flex-col gap-1">
-          <div class="text-13-medium text-text-weak">Available Models</div>
+          <div class="text-13-medium text-text-weak">{language.t("settings.localLlm.available")}</div>
           <For each={MODEL_CATALOG}>
             {(item) => (
               <div class="flex items-center justify-between gap-2 py-2 border-b border-border-weak-base last:border-none">
                 <div class="flex flex-col min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <span class="text-14-regular text-text-strong">{item.name}</span>
-                    <Show when={item.recommended}><Tag>Recommended</Tag></Show>
+                    <Show when={item.recommended}><Tag>{language.t("settings.localLlm.recommended")}</Tag></Show>
                     <Show when={item.vision && mmprojInstalled()}>
-                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">Vision ✓</span>
+                      <span class="text-11-regular text-icon-success-base bg-icon-success-base/10 rounded px-1.5 py-0.5">{language.t("settings.localLlm.visionReady")}</span>
                     </Show>
                     <Show when={item.vision && !mmprojInstalled()}>
-                      <span class="text-11-regular text-text-weak bg-surface-inset rounded px-1.5 py-0.5">Vision</span>
+                      <span class="text-11-regular text-text-weak bg-surface-inset rounded px-1.5 py-0.5">{language.t("settings.localLlm.vision")}</span>
                     </Show>
                   </div>
                   <span class="text-12-regular text-text-weak">
@@ -528,7 +530,7 @@ export function DialogLocalLLM() {
                       {" · "}<span class={vramBadgeClass(item.sizeBytes / 1e9)}>{recommendQuant(item.sizeBytes / 1e9)}</span>
                     </Show>
                     <Show when={item.vision && !mmprojInstalled()}>
-                      {" · "}<span class="text-text-weak">Add vision projector via HF search to enable images</span>
+                      {" · "}<span class="text-text-weak">{language.t("settings.localLlm.visionHint")}</span>
                     </Show>
                   </span>
                 </div>
@@ -541,7 +543,7 @@ export function DialogLocalLLM() {
                     <span class="text-12-regular text-text-weak">{Math.round((downloading()[item.filename] ?? 0) * 100)}%</span>
                   </Show>
                 }>
-                  <span class="text-12-regular text-icon-success-base">Downloaded ✓</span>
+                  <span class="text-12-regular text-icon-success-base">{language.t("settings.localLlm.downloadedReady")}</span>
                 </Show>
               </div>
             )}
@@ -552,13 +554,13 @@ export function DialogLocalLLM() {
         <div class="flex flex-col gap-2 pt-2 border-t border-border-weak-base">
           <div class="flex items-center gap-2">
             <Icon name="globe" size="small" class="text-text-weak" />
-            <span class="text-13-medium text-text-weak">Search HuggingFace</span>
+            <span class="text-13-medium text-text-weak">{language.t("settings.localLlm.searchTitle")}</span>
           </div>
           <div class="flex items-center gap-2 bg-surface-inset rounded-md border border-border-weak-base focus-within:border-border-base transition-colors px-2.5">
             <Icon name="magnifying-glass" size="small" class="text-text-weak" />
             <input
               type="text"
-              placeholder="Search GGUF models..."
+              placeholder={language.t("settings.localLlm.searchPlaceholder")}
               value={hfQuery()}
               onInput={(e) => handleHfSearch(e.currentTarget.value)}
               class="w-full py-2 text-13-regular bg-transparent text-text-strong placeholder:text-text-weak outline-none"
@@ -570,7 +572,7 @@ export function DialogLocalLLM() {
           </Show>
 
           <Show when={hfSearching()}>
-            <div class="text-12-regular text-text-weak py-2">Searching...</div>
+            <div class="text-12-regular text-text-weak py-2">{language.t("settings.localLlm.searching")}</div>
           </Show>
 
           <Show when={hfResults().length > 0}>
@@ -613,7 +615,7 @@ export function DialogLocalLLM() {
                                       <span class="text-12-regular text-text-weak">{Math.round((downloading()[fname] ?? 0) * 100)}%</span>
                                     </Show>
                                   }>
-                                    <span class="text-12-regular text-icon-success-base">Downloaded</span>
+                                    <span class="text-12-regular text-icon-success-base">{language.t("settings.localLlm.downloaded")}</span>
                                   </Show>
                                 </div>
                               )
@@ -629,7 +631,7 @@ export function DialogLocalLLM() {
                                     <div class="flex flex-col min-w-0 flex-1">
                                       <div class="flex items-center gap-1.5">
                                         <span class="text-12-regular text-text-strong truncate">{fname}</span>
-                                        <span class="text-10-regular text-icon-success-base bg-icon-success-base/10 rounded px-1 py-0.5 shrink-0">Vision Projector</span>
+                                        <span class="text-10-regular text-icon-success-base bg-icon-success-base/10 rounded px-1 py-0.5 shrink-0">{language.t("settings.localLlm.visionProjector")}</span>
                                       </div>
                                       <Show when={file.size > 0}>
                                         <span class="text-11-regular text-text-weak">{formatBytes(file.size)}</span>
@@ -644,7 +646,7 @@ export function DialogLocalLLM() {
                                         <span class="text-12-regular text-text-weak">{Math.round((downloading()[fname] ?? 0) * 100)}%</span>
                                       </Show>
                                     }>
-                                      <span class="text-12-regular text-icon-success-base">Downloaded</span>
+                                      <span class="text-12-regular text-icon-success-base">{language.t("settings.localLlm.downloaded")}</span>
                                     </Show>
                                   </div>
                                 )
@@ -661,7 +663,7 @@ export function DialogLocalLLM() {
           </Show>
 
           <Show when={!hfSearching() && hfQuery().trim() && hfResults().length === 0 && !hfError()}>
-            <div class="text-12-regular text-text-weak py-2">No GGUF models found</div>
+            <div class="text-12-regular text-text-weak py-2">{language.t("settings.localLlm.noResults")}</div>
           </Show>
         </div>
       </div>

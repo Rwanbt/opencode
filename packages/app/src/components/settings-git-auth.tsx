@@ -5,6 +5,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { createResource, createSignal, Match, Show, Switch } from "solid-js"
 import { useSDK } from "@/context/sdk"
+import { useLanguage } from "@/context/language"
 
 type AuthType = "none" | "https-token" | "ssh-key"
 
@@ -14,6 +15,7 @@ type MaskedCredentials =
   | { type: "ssh-key"; keySet: boolean; hasPassphrase: boolean }
 
 export function SettingsGitAuth() {
+  const language = useLanguage()
   const sdk = useSDK()
 
   const [masked, { refetch }] = createResource<MaskedCredentials>(async () => {
@@ -88,7 +90,7 @@ export function SettingsGitAuth() {
     <div class="flex flex-col gap-3 py-4 border-t border-border-weak-base">
       <div class="flex items-center justify-between px-4">
         <div class="flex flex-col gap-0.5">
-          <span class="text-13-medium text-text-base">Authentification Git</span>
+          <span class="text-13-medium text-text-base">{language.t("settings.fork.gitAuth.title")}</span>
           <span class="text-11-regular text-text-weaker">
             Credentials pour git push / pull (HTTPS token ou clé SSH)
           </span>
@@ -143,7 +145,7 @@ export function SettingsGitAuth() {
           </Show>
         </div>
         <Show when={saveOk()}>
-          <span class="text-11-regular text-[#22c55e] px-4">✓ Enregistré</span>
+          <span class="text-11-regular text-[#22c55e] px-4">{language.t("settings.fork.gitAuth.saved")}</span>
         </Show>
       </Show>
 
@@ -154,7 +156,7 @@ export function SettingsGitAuth() {
             {/* HTTPS token form */}
             <Match when={authType() === "https-token"}>
               <div class="flex flex-col gap-1">
-                <span class={labelClass}>Nom d'utilisateur (optionnel)</span>
+                <span class={labelClass}>{language.t("settings.fork.gitAuth.username")}</span>
                 <input
                   class={inputClass}
                   type="text"
@@ -164,7 +166,7 @@ export function SettingsGitAuth() {
                 />
               </div>
               <div class="flex flex-col gap-1">
-                <span class={labelClass}>Personal Access Token (GitHub, GitLab, etc.)</span>
+                <span class={labelClass}>{language.t("settings.fork.gitAuth.token")}</span>
                 <input
                   class={inputClass}
                   type="password"
@@ -183,7 +185,7 @@ export function SettingsGitAuth() {
             {/* SSH key form */}
             <Match when={authType() === "ssh-key"}>
               <div class="flex flex-col gap-1">
-                <span class={labelClass}>Clé privée SSH (PEM — contenu de ~/.ssh/id_ed25519)</span>
+                <span class={labelClass}>{language.t("settings.fork.gitAuth.privateKey")}</span>
                 <textarea
                   class={`${inputClass} h-32 resize-y`}
                   placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
@@ -194,7 +196,7 @@ export function SettingsGitAuth() {
                 />
               </div>
               <div class="flex flex-col gap-1">
-                <span class={labelClass}>Passphrase (laisser vide si aucune)</span>
+                <span class={labelClass}>{language.t("settings.fork.gitAuth.passphrase")}</span>
                 <input
                   class={inputClass}
                   type="password"

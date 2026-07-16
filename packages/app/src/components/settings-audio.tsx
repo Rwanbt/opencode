@@ -8,6 +8,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SettingsList } from "./settings-list"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 
 export type AudioSettings = {
   sttEnabled: boolean
@@ -64,6 +65,7 @@ function saveSettings(s: AudioSettings) {
 }
 
 export const SettingsAudio: Component = () => {
+  const language = useLanguage()
   const platform = usePlatform()
   // Mobile has no Pocket TTS (no Python sidecar), so the only TTS engine is
   // Kokoro. Voice cloning (Pocket-only feature) is also hidden. We still
@@ -138,22 +140,22 @@ export const SettingsAudio: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">Audio</h2>
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.fork.audio.title")}</h2>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 w-full">
         {/* Speech-to-Text Section */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Speech to Text (STT)</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.audio.stt")}</h3>
           <SettingsList>
-            <SettingsRow title="Enable STT" description="Show microphone button in prompt input">
+            <SettingsRow title={language.t("settings.fork.audio.enableStt")} description={language.t("settings.fork.audio.enableSttDescription")}>
               <Switch checked={settings.sttEnabled} onChange={(v) => update("sttEnabled", v)} />
             </SettingsRow>
-            <SettingsRow title="Engine" description="Parakeet TDT 0.6B — fast, 25 languages, ~670 MB">
-              <span class="text-12-regular text-text-weak">Parakeet (built-in)</span>
+            <SettingsRow title={language.t("settings.fork.audio.engine")} description={language.t("settings.fork.audio.engineDescription")}>
+              <span class="text-12-regular text-text-weak">{language.t("settings.fork.audio.parakeet")}</span>
             </SettingsRow>
-            <SettingsRow title="Language" description="Language for speech recognition">
+            <SettingsRow title={language.t("settings.fork.audio.language")} description={language.t("settings.fork.audio.languageDescription")}>
               <Select
                 size="normal"
                 options={["auto", "en", "fr", "de", "es", "it"]}
@@ -170,13 +172,13 @@ export const SettingsAudio: Component = () => {
 
         {/* Text-to-Speech Section */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Text to Speech (TTS)</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.audio.tts")}</h3>
           <SettingsList>
-            <SettingsRow title="Enable TTS" description="Show speaker button under AI responses">
+            <SettingsRow title={language.t("settings.fork.audio.enableTts")} description={language.t("settings.fork.audio.enableTtsDescription")}>
               <Switch checked={settings.ttsEnabled} onChange={(v) => update("ttsEnabled", v)} />
             </SettingsRow>
             <SettingsRow
-              title="Provider"
+              title={language.t("settings.fork.audio.provider")}
               description={isMobile()
                 ? "Kokoro (built-in ONNX). Pocket TTS is desktop-only."
                 : "TTS engine to use for speech synthesis"}
@@ -184,7 +186,7 @@ export const SettingsAudio: Component = () => {
               <div class="flex items-center gap-2">
                 <Show
                   when={!isMobile()}
-                  fallback={<span class="text-12-regular text-text-weak">Kokoro (ONNX)</span>}
+                  fallback={<span class="text-12-regular text-text-weak">{language.t("settings.fork.audio.kokoro")}</span>}
                 >
                   <Select
                     size="normal"
@@ -207,10 +209,10 @@ export const SettingsAudio: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
-              title="Voice"
+              title={language.t("settings.fork.audio.voice")}
               description={settings.ttsProvider === "kokoro"
-                ? `Kokoro — ${kokoroVoices().length} voices (ONNX, DirectML GPU)`
-                : "Pocket TTS — Kyutai (EN + FR, voice cloning)"
+                ? language.t("settings.fork.audio.kokoroVoiceDescription", { count: kokoroVoices().length })
+                : language.t("settings.fork.audio.pocketVoiceDescription")
               }
             >
               <Show when={settings.ttsProvider === "kokoro"} fallback={
@@ -231,7 +233,7 @@ export const SettingsAudio: Component = () => {
                 />
               </Show>
             </SettingsRow>
-            <SettingsRow title="Speed" description="Playback speed">
+            <SettingsRow title={language.t("settings.fork.audio.speed")} description={language.t("settings.fork.audio.speedDescription")}>
               <Select
                 size="normal"
                 options={["0.75", "1.0", "1.25", "1.5", "2.0"]}
@@ -240,15 +242,15 @@ export const SettingsAudio: Component = () => {
                 onSelect={(v) => { if (v) update("ttsSpeed", parseFloat(v)) }}
               />
             </SettingsRow>
-            <SettingsRow title="Auto-play" description="Automatically read AI responses aloud">
+            <SettingsRow title={language.t("settings.fork.audio.autoPlay")} description={language.t("settings.fork.audio.autoPlayDescription")}>
               <Switch checked={settings.ttsAutoPlay} onChange={(v) => update("ttsAutoPlay", v)} />
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-2 px-1">
             <Show when={settings.ttsProvider === "kokoro"} fallback={
-              <>Powered by Kyutai Pocket TTS (CC-BY-4.0). French-native, voice cloning supported. Click to play/pause, double-click to reset.</>
+              <>{language.t("settings.fork.audio.poweredPocket")}</>
             }>
-              Powered by Kokoro v1.0 (Apache-2.0). 54+ voices, DirectML GPU acceleration. Click to play/pause, double-click to reset.
+              {language.t("settings.fork.audio.poweredKokoro")}
             </Show>
           </div>
         </div>
@@ -268,6 +270,7 @@ export const SettingsAudio: Component = () => {
 }
 
 function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: string) => void }) {
+  const language = useLanguage()
   const [clones, setClones] = createSignal<string[]>([])
   const [uploading, setUploading] = createSignal(false)
   const [recording, setRecording] = createSignal(false)
@@ -424,14 +427,14 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
 
   return (
     <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">Voice Cloning</h3>
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.audio.voiceCloning")}</h3>
       <SettingsList>
         <div class="py-3">
           <div class="flex items-center justify-between gap-2 pb-3">
             <div class="flex flex-col gap-0.5">
-              <span class="text-14-medium text-text-strong">Clone a voice</span>
+              <span class="text-14-medium text-text-strong">{language.t("settings.fork.audio.cloneVoice")}</span>
               <span class="text-12-regular text-text-weak">
-                {recording() ? "Recording... click mic to stop" : "Upload a WAV or record 5-10s of speech"}
+                {recording() ? language.t("settings.fork.audio.stopRecording") : language.t("settings.fork.audio.cloneDescription")}
               </span>
             </div>
             <div class="flex items-center gap-1.5">
@@ -441,14 +444,14 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
                 onClick={handleUpload}
                 disabled={uploading() || recording()}
               >
-                {uploading() ? "Processing..." : "Upload WAV"}
+                {uploading() ? language.t("settings.fork.audio.processing") : language.t("settings.fork.audio.uploadWav")}
               </Button>
               <Tooltip placement="top" value={recording() ? "Stop recording" : "Record voice sample"}>
                 <IconButton
                   icon="microphone"
                   variant={recording() ? "primary" : "ghost"}
                   class="size-8"
-                  aria-label={recording() ? "Stop recording" : "Record voice"}
+                  aria-label={recording() ? language.t("settings.fork.audio.stopRecording") : language.t("settings.fork.audio.recordVoice")}
                   onClick={handleRecord}
                   disabled={uploading()}
                 />
@@ -467,12 +470,12 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
                 <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar1" />
                 <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar4" />
               </div>
-              <span class="text-12-regular text-text-critical-base ml-1">Recording...</span>
+              <span class="text-12-regular text-text-critical-base ml-1">{language.t("settings.fork.audio.recording")}</span>
             </div>
           </Show>
           <Show when={clones().length > 0}>
             <div class="flex flex-col gap-1 border-t border-border-weak-base pt-2">
-              <span class="text-12-medium text-text-weak pb-1">Custom voices</span>
+              <span class="text-12-medium text-text-weak pb-1">{language.t("settings.fork.audio.customVoices")}</span>
               <For each={clones()}>
                 {(name) => (
                   <div class="flex items-center justify-between gap-2 py-1.5">
@@ -484,7 +487,7 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
                     >
                       {name}
                       <Show when={props.currentVoice === name}>
-                        <span class="text-11-regular text-text-weak ml-2">(active)</span>
+                        <span class="text-11-regular text-text-weak ml-2">{language.t("settings.fork.audio.active")}</span>
                       </Show>
                     </button>
                     <div class="flex items-center gap-2 shrink-0">
@@ -494,14 +497,14 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
                         disabled={testing() !== null}
                         onClick={() => handleTest(name)}
                       >
-                        {testing() === name ? "Testing..." : "Test"}
+                        {testing() === name ? language.t("settings.fork.audio.voiceTesting") : language.t("settings.fork.audio.voiceTest")}
                       </button>
                       <button
                         type="button"
                         class="text-12-regular text-text-critical-base hover:underline"
                         onClick={() => handleDelete(name)}
                       >
-                        Delete
+                        {language.t("settings.fork.audio.voiceDelete")}
                       </button>
                     </div>
                   </div>
@@ -512,7 +515,7 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
         </div>
       </SettingsList>
       <div class="text-11-regular text-text-weak mt-1 px-1">
-        Zero-shot voice cloning: Pocket TTS will mimic the voice from your audio sample. For best results, use a clean recording without background noise.
+        {language.t("settings.fork.audio.cloningDescription")}
       </div>
     </div>
   )

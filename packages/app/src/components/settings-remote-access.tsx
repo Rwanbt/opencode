@@ -327,7 +327,7 @@ export const SettingsRemoteAccess: Component = () => {
               <Show when={editingCredentials()}>
                 <div class="flex flex-col gap-1.5 rounded-md border border-border-weak-base bg-surface-panel p-2">
                   <div class="flex items-center gap-2">
-                    <span class="text-11-regular text-text-weak w-20 shrink-0">Username</span>
+                    <span class="text-11-regular text-text-weak w-20 shrink-0">{language.t("settings.fork.remote.username")}</span>
                     <input
                       class="flex-1 text-12-regular bg-transparent border border-border-weak-base rounded px-2 py-1 text-text-strong font-mono outline-none focus:border-border-base"
                       value={editUsername()}
@@ -338,12 +338,12 @@ export const SettingsRemoteAccess: Component = () => {
                     />
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-11-regular text-text-weak w-20 shrink-0">Password</span>
+                    <span class="text-11-regular text-text-weak w-20 shrink-0">{language.t("settings.fork.remote.password")}</span>
                     <input
                       class="flex-1 text-12-regular bg-transparent border border-border-weak-base rounded px-2 py-1 text-text-strong font-mono outline-none focus:border-border-base"
                       value={editPassword()}
                       onInput={(e) => setEditPassword(e.currentTarget.value)}
-                      placeholder="Nouveau mot de passe…"
+                      placeholder={language.t("settings.fork.remote.newPassword")}
                       type="password"
                       autocomplete="new-password"
                     />

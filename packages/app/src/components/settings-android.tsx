@@ -3,6 +3,7 @@
 import { createResource, createSignal, onCleanup, Show, type Component } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
@@ -30,6 +31,7 @@ const THERMAL_COLOR: Record<string, string> = {
 }
 
 function ThermalRow() {
+  const language = useLanguage()
   const [thermal, setThermal] = createSignal<"nominal" | "fair" | "serious" | "critical">("nominal")
 
   const poll = async () => {
@@ -46,7 +48,7 @@ function ThermalRow() {
   onCleanup(() => clearInterval(id))
 
   return (
-    <SettingsRow title="Température" description="État thermique du processeur / GPU">
+    <SettingsRow title={language.t("settings.fork.android.temperature")} description={language.t("settings.fork.android.temperatureDescription")}>
       <div class="flex items-center gap-2">
         <div class={`w-2 h-2 rounded-full shrink-0 ${THERMAL_COLOR[thermal()] ?? "bg-text-weaker"}`} />
         <span class="text-13-regular text-text-base">{THERMAL_LABEL[thermal()] ?? thermal()}</span>
@@ -58,6 +60,7 @@ function ThermalRow() {
 // ─── Memory widget ───────────────────────────────────────────────────────────
 
 function MemoryRow() {
+  const language = useLanguage()
   const [mem, setMem] = createSignal<{ total_mb: number; available_mb: number; used_mb: number } | null>(null)
 
   ;(async () => {
@@ -74,7 +77,7 @@ function MemoryRow() {
       {(info) => {
         const pct = () => Math.round((info().used_mb / info().total_mb) * 100)
         return (
-          <SettingsRow title="RAM" description="Mémoire vive utilisée par le système">
+          <SettingsRow title={language.t("settings.fork.android.ram")} description={language.t("settings.fork.android.ramDescription")}>
             <div class="flex flex-col gap-1.5 w-full max-w-[200px]">
               <div class="flex justify-between text-12-regular">
                 <span class="text-text-weaker">
@@ -104,6 +107,7 @@ function MemoryRow() {
 // ─── Storage permission widget ───────────────────────────────────────────────
 
 function StoragePermissionRow() {
+  const language = useLanguage()
   const platform = usePlatform()
   const [roots] = createResource(async () => {
     try {
@@ -125,11 +129,11 @@ function StoragePermissionRow() {
 
   return (
     <SettingsRow
-      title="Stockage (All Files Access)"
+      title={language.t("settings.fork.android.storage")}
       description={
         granted()
-          ? `Accordé — ${(roots() ?? []).length} volume(s) accessible(s)`
-          : "Requis pour accéder aux fichiers de l'espace de stockage partagé"
+          ? language.t("settings.fork.android.grantedVolumes", { count: (roots() ?? []).length })
+          : language.t("settings.fork.android.storageRequired")
       }
     >
       <Show
@@ -142,7 +146,7 @@ function StoragePermissionRow() {
       >
         <div class="flex items-center gap-2">
           <div class="w-2 h-2 rounded-full bg-icon-success-base" />
-          <span class="text-13-regular text-text-base">Accordé</span>
+          <span class="text-13-regular text-text-base">{language.t("settings.fork.android.granted")}</span>
         </div>
       </Show>
     </SettingsRow>
@@ -152,6 +156,7 @@ function StoragePermissionRow() {
 // ─── Battery widget ──────────────────────────────────────────────────────────
 
 function BatteryRow() {
+  const language = useLanguage()
   const [battery, setBattery] = createSignal<{ level: number; charging: boolean } | null>(null)
 
   ;(async () => {
@@ -172,7 +177,7 @@ function BatteryRow() {
       {(info) => {
         const pct = () => Math.round(info().level * 100)
         return (
-          <SettingsRow title="Batterie" description={info().charging ? "En charge" : "Sur batterie"}>
+          <SettingsRow title={language.t("settings.fork.android.battery")} description={info().charging ? language.t("settings.fork.android.charging") : language.t("settings.fork.android.onBattery")}>
             <div class="flex items-center gap-2">
               <div class="w-2 h-2 rounded-full shrink-0 bg-icon-success-base" classList={{ "bg-yellow-400": pct() < 30, "bg-red-500": pct() < 15 }} />
               <span class="text-13-regular text-text-base">{pct()}%</span>
@@ -200,6 +205,7 @@ function fmtBytes(n: number) {
 }
 
 function DiskRow() {
+  const language = useLanguage()
   const sdk = useSDK()
   const [disk] = createResource<{ available: number; total: number } | null>(async () => {
     try {
@@ -215,7 +221,7 @@ function DiskRow() {
     <Show when={disk()}>
       {(d) => (
         <SettingsRow
-          title="Espace disque"
+          title={language.t("settings.fork.android.disk")}
           description={`${fmtBytes(d().available)} disponibles / ${fmtBytes(d().total)}`}
         >
           <Show
@@ -235,32 +241,33 @@ function DiskRow() {
 }
 
 export const SettingsAndroid: Component = () => {
+  const language = useLanguage()
   const platform = usePlatform()
 
   return (
     <div class="flex flex-col gap-6 px-5 py-4">
       {/* Permissions */}
       <div class="flex flex-col gap-2">
-        <span class="text-12-medium text-text-weaker uppercase tracking-wider px-1">Permissions</span>
+        <span class="text-12-medium text-text-weaker uppercase tracking-wider px-1">{language.t("settings.fork.android.permissions")}</span>
         <SettingsList>
           <StoragePermissionRow />
         </SettingsList>
         <p class="text-11-regular text-text-weaker leading-relaxed px-1">
           L'accès All Files Access est nécessaire pour que le terminal puisse lire et écrire dans le
           stockage partagé. Si le bouton ne s'ouvre pas directement, allez dans{" "}
-          <span class="font-mono">Paramètres → Applications → OpenCode → Autorisations → Accès à tous les fichiers</span>.
+          <span class="font-mono">{language.t("settings.fork.android.allFilesPath")}</span>.
         </p>
       </div>
 
       {/* Diagnostics */}
       <div class="flex flex-col gap-2">
-        <span class="text-12-medium text-text-weaker uppercase tracking-wider px-1">Diagnostics</span>
+        <span class="text-12-medium text-text-weaker uppercase tracking-wider px-1">{language.t("settings.fork.android.diagnostics")}</span>
         <SettingsList>
           <ThermalRow />
           <MemoryRow />
           <DiskRow />
           <BatteryRow />
-          <SettingsRow title="Plateforme" description="Version du système">
+          <SettingsRow title={language.t("settings.fork.android.platformLabel")} description={language.t("settings.fork.android.platformDescription")}>
             <span class="text-13-regular text-text-base font-mono">
               {platform.os ?? "android"} v{platform.version ?? "—"}
             </span>

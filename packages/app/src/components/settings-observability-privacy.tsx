@@ -15,6 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
+import { useLanguage } from "@/context/language"
 
 type SessionItem = { id: string; title?: string; projectID: string }
 type ContentCaptureLevel = "local_content_redacted" | "local_full"
@@ -32,6 +33,7 @@ export const SettingsObservabilityPrivacy: Component<{
   projectId?: string
   onSelectSession: (id: string) => void
 }> = (props) => {
+  const language = useLanguage()
   const sdk = useSDK()
   const [scope, setScope] = createSignal<OptInScope>("session")
   const [level, setLevel] = createSignal<ContentCaptureLevel>("local_content_redacted")
@@ -54,7 +56,7 @@ export const SettingsObservabilityPrivacy: Component<{
     try {
       await unwrap(sdk.client.observability.privacy.set({ scope: scope(), id, level: level(), ttlDays: ttl }))
       await optInActions.refetch()
-      showToast({ variant: "success", title: "Content capture opt-in granted", description: `Expires in ${ttl} day${ttl === 1 ? "" : "s"}.` })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.contentCapture") + " granted", description: `Expires in ${ttl} day${ttl === 1 ? "" : "s"}.` })
     } catch (error) {
       showToast({ variant: "error", title: "Unable to grant opt-in", description: error instanceof Error ? error.message : "Request failed" })
     } finally {
@@ -80,40 +82,40 @@ export const SettingsObservabilityPrivacy: Component<{
   return (
     <div class="flex flex-col gap-6">
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Content capture opt-in</h3>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.contentCapture")}</h3>
         <p class="text-12-regular text-text-weak">
-          Off by default, everywhere. Opting in stores actual prompt/response/tool text for a scope, bounded to 32 KiB per event and cleared automatically when the TTL expires.
+          {language.t("settings.fork.observability.contentCaptureDescription")}
         </p>
       </div>
 
       <SettingsList>
-        <SettingsRow title="Scope" description="Session covers one session; Current project covers this project; All projects covers only local SQLite data across known projects. Each opt-in is explicit and TTL-bound.">
+        <SettingsRow title={language.t("settings.fork.observability.scope")} description={language.t("settings.fork.observability.scopeDescription")}>
           <Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All projects"} onSelect={(item) => item && setScope(item)} />
         </SettingsRow>
         <Show when={scope() === "session"}>
-          <SettingsRow title="Session" description="Which session's content capture opt-in to view or change.">
+          <SettingsRow title={language.t("settings.fork.observability.session")} description={language.t("settings.fork.observability.sessionDescription")}>
             <Select size="small" variant="secondary" options={props.sessions} current={selectedSession()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && props.onSelectSession(item.id)} />
           </SettingsRow>
         </Show>
-        <SettingsRow title="Level" description="Redacted masks known-sensitive patterns; full stores the bounded text as-is.">
+        <SettingsRow title={language.t("settings.fork.observability.level")} description={language.t("settings.fork.observability.levelDescription")}>
           <Select size="small" variant="secondary" options={["local_content_redacted", "local_full"] as const} current={level()} label={(item) => (item === "local_content_redacted" ? "Redacted" : "Full")} onSelect={(item) => item && setLevel(item)} />
         </SettingsRow>
-        <SettingsRow title="TTL (days)" description="Content auto-clears once this many days pass. Maximum 30.">
+        <SettingsRow title={language.t("settings.fork.observability.ttl")} description={language.t("settings.fork.observability.ttlDescription")}>
           <TextField size="small" variant="normal" type="number" value={ttlDays()} onChange={setTtlDays} />
         </SettingsRow>
       </SettingsList>
 
       <div>
         <Button variant="primary" size="small" disabled={busy() || !scopeId()} onClick={() => void grant()}>
-          Grant opt-in
+          {language.t("settings.fork.observability.grant")}
         </Button>
       </div>
 
       <div>
-        <h3 class="pb-2 text-14-medium text-text-strong">Current status</h3>
+        <h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.currentStatus")}</h3>
         <Show
           when={optIn()?.optIn}
-          fallback={<div class="rounded-lg bg-surface-base px-3 py-3 text-12-regular text-text-weak">No content capture opt-in active for this scope.</div>}
+          fallback={<div class="rounded-lg bg-surface-base px-3 py-3 text-12-regular text-text-weak">{language.t("settings.fork.observability.noOptIn")}</div>}
         >
           {(active) => (
             <div class="flex flex-col gap-3">
@@ -128,7 +130,7 @@ export const SettingsObservabilityPrivacy: Component<{
               </div>
               <div>
                 <Button variant="secondary" size="small" disabled={busy()} onClick={() => void revoke()}>
-                  Revoke now
+                  {language.t("settings.fork.observability.revoke")}
                 </Button>
               </div>
             </div>

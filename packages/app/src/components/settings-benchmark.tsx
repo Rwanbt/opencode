@@ -15,6 +15,7 @@
 import { type Component, createSignal, createResource, createMemo, For, Show, } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
+import { useLanguage } from "@/context/language"
 
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
   const tauri = (globalThis as any).__TAURI__
@@ -62,6 +63,7 @@ function saveHistory(history: BenchResult[]) {
 }
 
 export const SettingsBenchmark: Component = () => {
+  const language = useLanguage()
   const [history, setHistory] = createSignal<BenchResult[]>(loadHistory())
   const [running, setRunning] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
@@ -176,19 +178,19 @@ export const SettingsBenchmark: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">Benchmark</h2>
-          <span class="text-12-regular text-text-weak">Measure inference speed on this device</span>
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.fork.benchmark.title")}</h2>
+          <span class="text-12-regular text-text-weak">{language.t("settings.fork.benchmark.description")}</span>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 w-full">
         {/* Run controls */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Run</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.benchmark.run")}</h3>
           <div class="bg-surface-base px-4 py-4 rounded-lg flex flex-col gap-3">
             <div class="flex items-center justify-between gap-4 flex-wrap">
               <div class="flex flex-col gap-1 min-w-0 flex-1">
-                <span class="text-13-medium text-text-strong">Target model</span>
+                <span class="text-13-medium text-text-strong">{language.t("settings.fork.benchmark.targetModel")}</span>
                 <span class="text-11-regular text-text-weak">
                   Pick a downloaded model to benchmark (will be loaded if not already running)
                 </span>
@@ -203,7 +205,7 @@ export const SettingsBenchmark: Component = () => {
             </div>
             <div class="flex items-center justify-between gap-4 flex-wrap">
               <div class="flex flex-col gap-1 min-w-0 flex-1">
-                <span class="text-13-medium text-text-strong">Active backend</span>
+                <span class="text-13-medium text-text-strong">{language.t("settings.fork.benchmark.activeBackend")}</span>
                 <span class="text-11-regular text-text-weak">
                   Detected automatically (use the Configuration tab's Accelerator switch to change)
                 </span>
@@ -218,11 +220,11 @@ export const SettingsBenchmark: Component = () => {
                 disabled={running() || !selectedModel()}
                 variant="primary"
               >
-                {running() ? "Running…" : history().length > 0 ? "Re-run benchmark" : "Run benchmark"}
+                {running() ? language.t("settings.fork.benchmark.running") : history().length > 0 ? language.t("settings.fork.benchmark.rerun") : language.t("settings.fork.benchmark.run")}
               </Button>
               <Show when={history().length > 0}>
                 <Button onClick={clearHistory} variant="ghost" disabled={running()}>
-                  Clear history
+                  {language.t("settings.fork.benchmark.clearHistory")}
                 </Button>
               </Show>
               <Show when={progressMessage()}>
@@ -236,21 +238,21 @@ export const SettingsBenchmark: Component = () => {
             </Show>
           </div>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Workload: ~128 prompt tokens + 64 generated tokens. Prefill measures time-to-first-token, decode measures sustained throughput.
+            {language.t("settings.fork.benchmark.workload")}
           </div>
         </div>
 
         {/* Best per (model, backend) */}
         <Show when={bestEntry().length > 0}>
           <div class="flex flex-col gap-1">
-            <h3 class="text-14-medium text-text-strong pb-2">Best result per model</h3>
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.benchmark.bestResult")}</h3>
             <div class="bg-surface-base rounded-lg overflow-hidden">
               <div class="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 bg-surface-inset text-11-medium text-text-weak">
-                <span>Model</span>
-                <span class="text-right">Backend</span>
-                <span class="text-right">Prefill (t/s)</span>
-                <span class="text-right">Decode (t/s)</span>
-                <span class="text-right">RAM</span>
+                <span>{language.t("settings.fork.benchmark.model")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.backend")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.prefill")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.decode")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.ram")}</span>
               </div>
               <For each={bestEntry()}>
                 {(r) => (
@@ -272,14 +274,14 @@ export const SettingsBenchmark: Component = () => {
         {/* Full history */}
         <Show when={history().length > 0}>
           <div class="flex flex-col gap-1">
-            <h3 class="text-14-medium text-text-strong pb-2">Run history</h3>
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.benchmark.history")}</h3>
             <div class="bg-surface-base rounded-lg overflow-hidden">
               <div class="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 bg-surface-inset text-11-medium text-text-weak">
-                <span>Model · time</span>
-                <span class="text-right">Backend</span>
-                <span class="text-right">Prefill (t/s)</span>
-                <span class="text-right">Decode (t/s)</span>
-                <span class="text-right">Generated</span>
+                <span>{language.t("settings.fork.benchmark.modelTime")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.backend")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.prefill")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.decode")}</span>
+                <span class="text-right">{language.t("settings.fork.benchmark.generated")}</span>
               </div>
               <For each={history()}>
                 {(r) => (
@@ -293,7 +295,7 @@ export const SettingsBenchmark: Component = () => {
                     <span class="text-right text-text-weak self-center">{r.backend}</span>
                     <span class="text-right tabular-nums text-text-strong self-center">{r.prefillTps.toFixed(1)}</span>
                     <span class="text-right tabular-nums text-text-strong self-center">{r.decodeTps.toFixed(2)}</span>
-                    <span class="text-right tabular-nums text-text-weak self-center">{r.generatedTokens} tok</span>
+                    <span class="text-right tabular-nums text-text-weak self-center">{r.generatedTokens} {language.t("settings.fork.benchmark.tokens")}</span>
                   </div>
                 )}
               </For>
@@ -303,7 +305,7 @@ export const SettingsBenchmark: Component = () => {
 
         <Show when={history().length === 0 && !running()}>
           <div class="text-12-regular text-text-weak px-1">
-            No benchmarks yet. Click "Run benchmark" above — the first run loads the model so it can take a few seconds. Subsequent runs are faster.
+            {language.t("settings.fork.benchmark.empty")}
           </div>
         </Show>
       </div>

@@ -8,6 +8,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
+import { useLanguage } from "@/context/language"
 
 type SessionItem = { id: string; title?: string }
 type EventDto = {
@@ -49,7 +50,8 @@ export const SettingsObservabilityTimeline: Component<{
   refreshKey?: number
   onSelectSession: (id: string) => void
   scope: "project" | "all"
-}> = (props) => {
+ }> = (props) => {
+  const language = useLanguage()
   const sdk = useSDK()
   const selected = () => props.sessions.find((s) => s.id === props.sessionId)
   const [expandedTraceId, setExpandedTraceId] = createSignal<string>()
@@ -83,12 +85,12 @@ export const SettingsObservabilityTimeline: Component<{
   return (
     <div class="flex flex-col gap-4">
       <div class="flex items-center justify-between gap-4">
-        <h3 class="text-14-medium text-text-strong">Timeline</h3>
+        <h3 class="text-14-medium text-text-strong">{language.t("settings.fork.observability.timeline")}</h3>
         <Select size="small" variant="secondary" options={props.sessions} current={selected()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && props.onSelectSession(item.id)} />
       </div>
 
       <div class="flex flex-col gap-1">
-        <For each={traces()} fallback={<div class="px-2 py-4 text-12-regular text-text-weak">No traces for this session.</div>}>
+        <For each={traces()} fallback={<div class="px-2 py-4 text-12-regular text-text-weak">{language.t("settings.fork.observability.noTraces")}</div>}>
           {(entry) => {
             const offsetPct = () => ((entry.startMs - windowStart()) / windowMs()) * 100
             const widthPct = () => Math.max(0.5, ((entry.endMs - entry.startMs) / windowMs()) * 100)
@@ -106,7 +108,7 @@ export const SettingsObservabilityTimeline: Component<{
                       <Icon name="warning" />
                     </Show>
                     <Show when={entry.hasOrphan}>
-                      <span class="rounded bg-surface-warning-base px-1.5 py-0.5 text-11-regular text-text-strong">orphelin probable</span>
+                      <span class="rounded bg-surface-warning-base px-1.5 py-0.5 text-11-regular text-text-strong">{language.t("settings.fork.observability.orphaned")}</span>
                     </Show>
                     {entry.items.length} event{entry.items.length === 1 ? "" : "s"}
                   </span>
@@ -125,8 +127,8 @@ export const SettingsObservabilityTimeline: Component<{
 
       <Show when={expandedTraceId()}>
         <div class="rounded-lg border border-border-weak-base p-4">
-          <h4 class="pb-2 text-13-medium text-text-strong">Trace detail</h4>
-          <Show when={trace()} fallback={<div class="text-12-regular text-text-weak">Loading…</div>}>
+          <h4 class="pb-2 text-13-medium text-text-strong">{language.t("settings.fork.observability.traceDetail")}</h4>
+          <Show when={trace()} fallback={<div class="text-12-regular text-text-weak">{language.t("settings.fork.observability.loading")}</div>}>
             {(value) => (
               <div class="flex flex-col gap-2">
                 <For each={value().events}>

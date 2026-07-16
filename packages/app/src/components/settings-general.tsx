@@ -30,6 +30,7 @@ import { SettingsDiskQuota } from "./settings-disk-quota"
 
 // FORK: ADR-0005 Phase 6 — Export / Import global configuration.
 const ConfigExportImport: Component = () => {
+  const language = useLanguage()
   const globalSDK = useGlobalSDK()
   const [exporting, setExporting] = createSignal(false)
   const [importing, setImporting] = createSignal(false)
@@ -50,7 +51,7 @@ const ConfigExportImport: Component = () => {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      showToast({ variant: "error", title: "Export échoué", description: err instanceof Error ? err.message : String(err) })
+      showToast({ variant: "error", title: language.t("settings.fork.config.exportFailed"), description: err instanceof Error ? err.message : String(err) })
     } finally {
       setExporting(false)
     }
@@ -63,10 +64,10 @@ const ConfigExportImport: Component = () => {
       const data = JSON.parse(text)
       const result = await globalSDK.client.config.update(data)
       if (result.error) throw new Error(JSON.stringify(result.error))
-      showToast({ variant: "error", title: "Configuration importée — rechargement en cours…" })
+      showToast({ variant: "error", title: language.t("settings.fork.config.imported") })
       setTimeout(() => window.location.reload(), 1500)
     } catch (err) {
-      showToast({ variant: "error", title: "Import échoué", description: err instanceof Error ? err.message : String(err) })
+      showToast({ variant: "error", title: language.t("settings.fork.config.importFailed"), description: err instanceof Error ? err.message : String(err) })
     } finally {
       setImporting(false)
     }
@@ -74,14 +75,14 @@ const ConfigExportImport: Component = () => {
 
   return (
     <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">Configuration</h3>
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.fork.config.title")}</h3>
       <SettingsList>
-        <SettingsRow title="Exporter la configuration" description="Télécharger opencode-config.json avec tous vos réglages">
+        <SettingsRow title={language.t("settings.fork.config.exportTitle")} description={language.t("settings.fork.config.exportDescription")}>
           <Button size="small" variant="secondary" disabled={exporting()} onClick={exportConfig}>
-            {exporting() ? "Export…" : "Exporter"}
+            {exporting() ? language.t("settings.fork.config.exporting") : language.t("settings.fork.config.export")}
           </Button>
         </SettingsRow>
-        <SettingsRow title="Importer une configuration" description="Restaurer depuis un fichier opencode-config.json exporté">
+        <SettingsRow title={language.t("settings.fork.config.importTitle")} description={language.t("settings.fork.config.importDescription")}>
           <input
             ref={fileInputRef!}
             type="file"
@@ -94,7 +95,7 @@ const ConfigExportImport: Component = () => {
             }}
           />
           <Button size="small" variant="secondary" disabled={importing()} onClick={() => fileInputRef?.click()}>
-            {importing() ? "Import…" : "Importer"}
+            {importing() ? language.t("settings.fork.config.importing") : language.t("settings.fork.config.import")}
           </Button>
         </SettingsRow>
       </SettingsList>
