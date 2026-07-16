@@ -273,19 +273,22 @@ jobs:
           set -euo pipefail
           APK="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           SIGNED="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER" || { echo "Android apksigner was not found"; exit 1; }
+          echo "Using apksigner: $APKSIGNER"
           cp "$APK" "$SIGNED"
           if [ -n "${OPENCODE_ANDROID_KEYSTORE_B64}" ] && [ -n "${OPENCODE_ANDROID_KEY_ALIAS}" ] && [ -n "${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" ] && [ -n "${OPENCODE_ANDROID_KEY_PASSWORD}" ]; then
             echo "Signing APK with configured release key"
             echo "${OPENCODE_ANDROID_KEYSTORE_B64}" | base64 --decode > /tmp/opencode-release.keystore
-            apksigner sign --ks /tmp/opencode-release.keystore --ks-key-alias "${OPENCODE_ANDROID_KEY_ALIAS}" --ks-pass pass:"${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" --key-pass pass:"${OPENCODE_ANDROID_KEY_PASSWORD}" "$SIGNED"
+            "$APKSIGNER" sign --ks /tmp/opencode-release.keystore --ks-key-alias "${OPENCODE_ANDROID_KEY_ALIAS}" --ks-pass pass:"${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" --key-pass pass:"${OPENCODE_ANDROID_KEY_PASSWORD}" "$SIGNED"
             rm -f /tmp/opencode-release.keystore
           else
             echo "Release signing secrets are not configured; using an ephemeral CI key for dev validation"
             keytool -genkeypair -v -keystore /tmp/opencode-ci.keystore -alias opencode-ci -keyalg RSA -keysize 2048 -validity 1 -storepass android -keypass android -dname "CN=OpenCode CI"
-            apksigner sign --ks /tmp/opencode-ci.keystore --ks-key-alias opencode-ci --ks-pass pass:android --key-pass pass:android "$SIGNED"
+            "$APKSIGNER" sign --ks /tmp/opencode-ci.keystore --ks-key-alias opencode-ci --ks-pass pass:android --key-pass pass:android "$SIGNED"
             rm -f /tmp/opencode-ci.keystore
           fi
-          apksigner verify --verbose "$SIGNED"
+          "$APKSIGNER" verify --verbose "$SIGNED"
           sha256sum "$SIGNED" | tee "$SIGNED.sha256"
 
       - name: Upload signed APK
