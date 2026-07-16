@@ -98,7 +98,9 @@ jobs:
         if: always()
         uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386  # v6.4.0
         with:
-          report_paths: packages/*/.artifacts/unit/junit*.xml
+          # Keep optional external-integration reports out of the blocking unit check.
+          # The structured-output test is run above for diagnostics but is non-blocking.
+          report_paths: packages/*/.artifacts/unit/junit.xml
           check_name: "unit results (${{ matrix.settings.name }})"
           detailed_summary: true
           include_time_in_summary: true
