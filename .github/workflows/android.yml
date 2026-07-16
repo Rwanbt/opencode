@@ -244,8 +244,8 @@ jobs:
 
           # Extract the native .so for arm64
           cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
-          mkdir -p /tmp/ort-android/lib
-          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/lib/
+          mkdir -p /tmp/ort-android
+          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/libonnxruntime.so
           ls -la /tmp/ort-android/lib/
 
           # Also need the headers — download the full release for headers
