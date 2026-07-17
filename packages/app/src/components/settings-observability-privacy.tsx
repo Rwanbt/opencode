@@ -23,8 +23,8 @@ type OptInScope = "session" | "project" | "all"
 const ALL_PROJECTS_SCOPE_ID = "local"
 
 const LEVEL_LABEL: Record<ContentCaptureLevel, string> = {
-  local_content_redacted: "Redacted content (secrets/paths/emails masked)",
-  local_full: "Full content (unredacted, bounded to 32 KiB per event)",
+  local_content_redacted: "settings.fork.observability.redactedContent",
+  local_full: "settings.fork.observability.fullContentLabel",
 }
 
 export const SettingsObservabilityPrivacy: Component<{
@@ -56,9 +56,9 @@ export const SettingsObservabilityPrivacy: Component<{
     try {
       await unwrap(sdk.client.observability.privacy.set({ scope: scope(), id, level: level(), ttlDays: ttl }))
       await optInActions.refetch()
-      showToast({ variant: "success", title: language.t("settings.fork.observability.contentCapture") + " granted", description: `Expires in ${ttl} day${ttl === 1 ? "" : "s"}.` })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.privacyGrantSuccess"), description: language.t("settings.fork.observability.privacyExpires", { count: ttl }) })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to grant opt-in", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.privacyGrantError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -71,9 +71,9 @@ export const SettingsObservabilityPrivacy: Component<{
     try {
       const result = await unwrap(sdk.client.observability.privacy.revoke({ scope: scope(), id }))
       await optInActions.refetch()
-      showToast({ variant: "success", title: "Opt-in revoked", description: `${result.contentCleared} event(s) had their captured content cleared.` })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.privacyRevokeSuccess"), description: language.t("settings.fork.observability.privacyCleared", { count: result.contentCleared }) })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to revoke opt-in", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.privacyRevokeError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -90,7 +90,7 @@ export const SettingsObservabilityPrivacy: Component<{
 
       <SettingsList>
         <SettingsRow title={language.t("settings.fork.observability.scope")} description={language.t("settings.fork.observability.scopeDescription")}>
-          <Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? "Current session" : item === "project" ? "Current project" : "All projects"} onSelect={(item) => item && setScope(item)} />
+          <Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={scope()} label={(item) => item === "session" ? language.t("settings.fork.observability.currentSession") : item === "project" ? language.t("settings.fork.observability.currentProject") : language.t("settings.fork.observability.allProjects")} onSelect={(item) => item && setScope(item)} />
         </SettingsRow>
         <Show when={scope() === "session"}>
           <SettingsRow title={language.t("settings.fork.observability.session")} description={language.t("settings.fork.observability.sessionDescription")}>
@@ -98,7 +98,7 @@ export const SettingsObservabilityPrivacy: Component<{
           </SettingsRow>
         </Show>
         <SettingsRow title={language.t("settings.fork.observability.level")} description={language.t("settings.fork.observability.levelDescription")}>
-          <Select size="small" variant="secondary" options={["local_content_redacted", "local_full"] as const} current={level()} label={(item) => (item === "local_content_redacted" ? "Redacted" : "Full")} onSelect={(item) => item && setLevel(item)} />
+          <Select size="small" variant="secondary" options={["local_content_redacted", "local_full"] as const} current={level()} label={(item) => (item === "local_content_redacted" ? language.t("settings.fork.observability.redacted") : language.t("settings.fork.observability.full"))} onSelect={(item) => item && setLevel(item)} />
         </SettingsRow>
         <SettingsRow title={language.t("settings.fork.observability.ttl")} description={language.t("settings.fork.observability.ttlDescription")}>
           <TextField size="small" variant="normal" type="number" value={ttlDays()} onChange={setTtlDays} />
@@ -123,9 +123,9 @@ export const SettingsObservabilityPrivacy: Component<{
                 <Icon name="warning" />
                 <div>
                   <div class="text-12-medium">
-                    {LEVEL_LABEL[active().level]} is active for this {active().scope}.
+                    {language.t("settings.fork.observability.privacyActive", { level: language.t(LEVEL_LABEL[active().level] as Parameters<typeof language.t>[0]), scope: active().scope })}
                   </div>
-                  <div>Expires {new Date(active().expiresAtMs).toLocaleString()} ({active().ttlDays} day TTL).</div>
+                  <div>{language.t("settings.fork.observability.privacyExpiresAt", { date: new Date(active().expiresAtMs).toLocaleString(), count: active().ttlDays })}</div>
                 </div>
               </div>
               <div>

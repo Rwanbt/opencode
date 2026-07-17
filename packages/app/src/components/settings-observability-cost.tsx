@@ -56,8 +56,8 @@ export const SettingsObservabilityCost: Component<{ refreshKey?: number; scope: 
             {(cohort) => (
               <div class="flex flex-col gap-1">
                 <div class="flex items-center justify-between text-12-regular">
-                  <span class="text-text-strong">{cohort.modelProvider ?? "unknown"} / {cohort.modelId ?? "unknown"}</span>
-                  <span class="text-text-weak">{formatCost(cohort.costPerTurnNanoUsd)} / turn · {cohort.traceCount} turns</span>
+                  <span class="text-text-strong">{cohort.modelProvider ?? language.t("settings.fork.observability.unknown")} / {cohort.modelId ?? language.t("settings.fork.observability.unknown")}</span>
+                  <span class="text-text-weak">{language.t("settings.fork.observability.costPerTurnSummary", { cost: formatCost(cohort.costPerTurnNanoUsd), count: cohort.traceCount })}</span>
                 </div>
                 <div class="h-2 w-full rounded bg-surface-inset">
                   <div class="h-2 rounded bg-icon-info-base" style={{ width: `${Math.max(1, (cohort.costPerTurnNanoUsd / maxCostPerTurn()) * 100)}%` }} />

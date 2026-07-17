@@ -162,7 +162,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
         groupBy={(item) => (props.local.model.favorite(item) ? "Favorites" : item.providerID)}
         groupHeader={(group) => (
           <span class="px-2 pt-2 pb-1 text-12-medium text-text-muted">
-            {group.category === "Favorites" ? "Favorites" : group.items[0]?.providerName}
+            {group.category === "Favorites" ? language.t("dialog.debate.favorites") : group.items[0]?.providerName}
           </span>
         )}
         sortGroupsBy={(a, b) => {
@@ -191,7 +191,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
         "data-action": "prompt-debate-models",
         disabled: saving(),
       }}
-      trigger={<span class="truncate">Models{selectedModels().length > 0 ? " (" + selectedModels().length + ")" : ""}</span>}
+      trigger={<span class="truncate">{language.t("dialog.debate.models")}{selectedModels().length > 0 ? " (" + selectedModels().length + ")" : ""}</span>}
       class="w-[min(520px,calc(100vw-32px))]"
       modal
     >

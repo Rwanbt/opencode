@@ -198,7 +198,7 @@ export const SettingsProviders: Component = () => {
                   })
                 }}
               >
-                Manage
+                {language.t("dialog.model.manage")}
               </Button>
             </div>
 
@@ -234,7 +234,7 @@ export const SettingsProviders: Component = () => {
                       }
                     }}
                   >
-                    {item.id === "local-llm" ? "Manage" : language.t("common.connect")}
+                    {item.id === "local-llm" ? language.t("dialog.model.manage") : language.t("common.connect")}
                   </Button>
                 </div>
               )}

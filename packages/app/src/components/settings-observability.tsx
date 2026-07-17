@@ -74,9 +74,9 @@ export const SettingsObservability: Component = () => {
       const config = await unwrap(sdk.client.global.config.get())
       await unwrap(sdk.client.global.config.update({ config: { ...config, experimental: { ...config.experimental, observability: { ...config.experimental?.observability, ...patch } } } }))
       await Promise.all([settingsActions.refetch(), healthActions.refetch()])
-      showToast({ variant: "success", title: "Observability settings saved" })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.saveSuccess") })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to save observability settings", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.saveError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally { setBusy(false) }
   }
 
@@ -90,9 +90,9 @@ export const SettingsObservability: Component = () => {
       const result = await unwrap(sdk.client.observability.data.delete({ body }, { headers: { "X-Confirm-Delete": "yes" } }))
       setConfirmation("")
       refresh()
-      showToast({ variant: "success", title: `${result.deletedCount} observability events deleted` })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.deleteSuccess", { count: result.deletedCount }) })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to delete observability data", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.deleteError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally { setBusy(false) }
   }
 
@@ -123,14 +123,14 @@ export const SettingsObservability: Component = () => {
       */}
       <div class="grid grid-cols-2 gap-1 mb-4 sm:flex sm:flex-wrap" role="tablist">
         {([
-          ["overview", "sliders", "Overview"],
-          ["traces", "branch", "Traces"],
-          ["timeline", "task", "Timeline"],
-          ["comparisons", "bullet-list", "Comparisons"],
-          ["cost", "checklist", "Cost"],
-          ["events", "bullet-list", "Events"],
-          ["privacy", "shield", "Privacy"],
-          ["exporters", "cloud-upload", "Exporters"],
+          ["overview", "sliders", "tabOverview"],
+          ["traces", "branch", "tabTraces"],
+          ["timeline", "task", "tabTimeline"],
+          ["comparisons", "bullet-list", "tabComparisons"],
+          ["cost", "checklist", "tabCost"],
+          ["events", "bullet-list", "tabEvents"],
+          ["privacy", "shield", "tabPrivacy"],
+          ["exporters", "cloud-upload", "tabExporters"],
         ] as const).map(([value, icon, label]) => (
           <button
             type="button"
@@ -144,30 +144,30 @@ export const SettingsObservability: Component = () => {
             onClick={() => setActiveSubtab(value)}
           >
             <Icon name={icon} />
-            {label}
+            {language.t(`settings.fork.observability.${label}` as Parameters<typeof language.t>[0])}
           </button>
         ))}
       </div>
 
         <Show when={activeSubtab() === "overview"}><div class="no-scrollbar">
-          <section><h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.capture")}</h3><SettingsList><SettingsRow title={language.t("settings.fork.observability.enable")} description={language.t("settings.fork.observability.captureDescription")}><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title={language.t("settings.fork.observability.captureMode")} description={language.t("settings.fork.observability.captureModeDescription")}><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? language.t("settings.fork.observability.metadataOnly") : language.t("settings.fork.observability.metadataRedaction")} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">{language.t("settings.fork.observability.sqliteNotice")} {exportersConfig()?.exporters.length ? `${exportersConfig()!.exporters.length} exporter(s) configured — see the Exporters tab.` : language.t("settings.fork.observability.noExporter")}</div></section>
+          <section><h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.capture")}</h3><SettingsList><SettingsRow title={language.t("settings.fork.observability.enable")} description={language.t("settings.fork.observability.captureDescription")}><SwitchComponent checked={settings()?.enabled ?? false} disabled={busy()} onChange={(enabled) => void update({ enabled })} /></SettingsRow><SettingsRow title={language.t("settings.fork.observability.captureMode")} description={language.t("settings.fork.observability.captureModeDescription")}><Select size="small" variant="secondary" options={["local_metadata", "local_redacted"] as const} current={settings()?.captureMode ?? "local_metadata"} label={(item) => item === "local_metadata" ? language.t("settings.fork.observability.metadataOnly") : language.t("settings.fork.observability.metadataRedaction")} onSelect={(item) => item && void update({ captureMode: item })} /></SettingsRow></SettingsList><div class="mt-2 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">{language.t("settings.fork.observability.sqliteNotice")} {exportersConfig()?.exporters.length ? language.t("settings.fork.observability.exportersConfigured", { count: exportersConfig()!.exporters.length }) : language.t("settings.fork.observability.noExporter")}</div></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.retention")}</h3><SettingsList><SettingsRow title={language.t("settings.fork.observability.retentionDays")} description={language.t("settings.fork.observability.retentionDescription")}><TextField size="small" variant="normal" type="number" placeholder={language.t("settings.fork.observability.retentionPlaceholder")} value={String(settings()?.retentionDays ?? "")} onBlur={(v: string) => { update({ retentionDays: v ? parseInt(v, 10) : undefined }) }} /></SettingsRow><SettingsRow title={language.t("settings.fork.observability.maxEvents")} description={language.t("settings.fork.observability.maxEventsDescription")}><TextField size="small" variant="normal" type="number" placeholder={language.t("settings.fork.observability.maxEventsPlaceholder")} value={String(settings()?.maxEvents ?? "")} onBlur={(v: string) => { update({ maxEvents: v ? parseInt(v, 10) : 100000 }) }} /></SettingsRow></SettingsList></section>
           <section><h3 class="pb-2 text-14-medium text-text-strong">{language.t("settings.fork.observability.health")}</h3><p class="pb-2 text-12-regular text-text-weak">{language.t("settings.fork.observability.healthDescription")}</p><div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Metric label="Queue" value={String(health()?.queueSize ?? 0)} />
-            <Metric label="Queue bytes" value={`${((health()?.queueBytes ?? 0) / 1024).toFixed(1)} KiB`} />
-            <Metric label="Accepted (runtime)" value={String(health()?.eventsAccepted ?? 0)} />
-            <Metric label="Inserted (runtime)" value={String(health()?.eventsInserted ?? 0)} />
-            <Metric label="Persisted (all local projects)" value={String(health()?.eventsPersisted ?? 0)} />
-            <Metric label="Rejected context" value={String(health()?.eventsRejectedInvalidContext ?? 0)} />
-            <Metric label="Rejected event" value={String(health()?.eventsRejectedInvalidEvent ?? 0)} />
-            <Metric label="Dropped queue" value={String(health()?.eventsDroppedQueueFull ?? 0)} />
-            <Metric label="Dropped circuit" value={String(health()?.eventsDroppedCircuitOpen ?? 0)} />
-            <Metric label="DB failures" value={String(health()?.eventsFailedDb ?? 0)} />
-            <Metric label="DB busy" value={String(health()?.eventsFailedBusy ?? 0)} />
-            <Metric label="DB full" value={String(health()?.eventsFailedFull ?? 0)} />
-            <Metric label="DB corrupt" value={String(health()?.eventsFailedCorrupt ?? 0)} />
-            <Metric label="Sanitizer failed" value={String(health()?.sanitizerFailed ?? 0)} />
-            <Metric label="Last error" value={health()?.lastErrorKind ?? "—"} />
+            <Metric label={language.t("settings.fork.observability.metricQueue")} value={String(health()?.queueSize ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricQueueBytes")} value={`${((health()?.queueBytes ?? 0) / 1024).toFixed(1)} KiB`} />
+            <Metric label={language.t("settings.fork.observability.metricAccepted")} value={String(health()?.eventsAccepted ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricInserted")} value={String(health()?.eventsInserted ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricPersisted")} value={String(health()?.eventsPersisted ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricRejectedContext")} value={String(health()?.eventsRejectedInvalidContext ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricRejectedEvent")} value={String(health()?.eventsRejectedInvalidEvent ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDroppedQueue")} value={String(health()?.eventsDroppedQueueFull ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDroppedCircuit")} value={String(health()?.eventsDroppedCircuitOpen ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDbFailures")} value={String(health()?.eventsFailedDb ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDbBusy")} value={String(health()?.eventsFailedBusy ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDbFull")} value={String(health()?.eventsFailedFull ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricDbCorrupt")} value={String(health()?.eventsFailedCorrupt ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricSanitizerFailed")} value={String(health()?.sanitizerFailed ?? 0)} />
+            <Metric label={language.t("settings.fork.observability.metricLastError")} value={health()?.lastErrorKind ?? "—"} />
           </div><Show when={health()?.circuitOpen}><div class="mt-2 rounded-md bg-surface-critical-base px-3 py-2 text-12-regular text-text-on-critical-base">{language.t("settings.fork.observability.circuitOpen")}</div></Show></section>
           <section><h3 class="pb-2 text-14-medium text-icon-critical-base">{language.t("settings.fork.observability.deleteData")}</h3><div class="rounded-lg border border-border-critical-base bg-surface-critical-weak p-4"><div class="flex flex-col gap-3"><Select size="small" variant="secondary" options={["session", "project", "all"] as const} current={deleteScope()} label={(item) => item === "session" ? language.t("settings.fork.observability.deleteScope") : item === "project" ? language.t("settings.fork.observability.currentProject") : language.t("settings.fork.observability.allProjects")} onSelect={(item) => item && setDeleteScope(item)} /><TextField label={language.t("settings.fork.observability.confirmation")} value={confirmation()} placeholder={language.t("settings.fork.observability.confirmPlaceholder")} onChange={setConfirmation} /><div><Button variant="primary" disabled={busy() || confirmation() !== confirmText || (deleteScope() !== "all" && !selected())} onClick={() => void remove()}>{language.t("settings.fork.observability.deleteButton")}</Button></div></div></div></section>
         </div></Show>
@@ -175,7 +175,7 @@ export const SettingsObservability: Component = () => {
         <Show when={activeSubtab() === "traces"}><div class="no-scrollbar">
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
             <Select size="small" variant="secondary" options={sessions() ?? []} current={selected()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && setSessionId(item.id)} />
-            <span class="text-11-regular" style={{ color: "var(--text-weaker)" }}>{sessions()?.length ?? 0} sessions</span>
+            <span class="text-11-regular" style={{ color: "var(--text-weaker)" }}>{language.t("settings.fork.observability.sessionsCount", { count: sessions()?.length ?? 0 })}</span>
           </div>
           <Show when={events()}>
             {(value) => <div class="overflow-hidden rounded-lg bg-surface-base">
@@ -228,7 +228,7 @@ export const SettingsObservability: Component = () => {
             <Select size="small" variant="secondary" options={sessions() ?? []} current={selected()} value={(item) => item.id} label={(item) => item.title || item.id} onSelect={(item) => item && setSessionId(item.id)} />
           </div>
           <Show when={summary()}>
-            {(value) => <p class="mb-2 text-12-regular text-text-weak">{value().totalEvents} events · ${(value().totalCostNanoUsd / 1_000_000_000).toFixed(4)}</p>}
+            {(value) => <p class="mb-2 text-12-regular text-text-weak">{language.t("settings.fork.observability.eventsSummary", { count: value().totalEvents, cost: (value().totalCostNanoUsd / 1_000_000_000).toFixed(4) })}</p>}
           </Show>
           <div class="overflow-hidden rounded-lg bg-surface-base">
             <div class="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 bg-surface-inset px-4 py-2 text-11-medium text-text-weak"><span>{language.t("settings.fork.observability.type")}</span><span>{language.t("settings.fork.observability.status")}</span><span class="text-right">{language.t("settings.fork.observability.time")}</span><span class="text-right">{language.t("settings.fork.observability.durationCost")}</span></div>
