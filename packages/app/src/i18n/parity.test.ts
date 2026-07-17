@@ -21,6 +21,7 @@ import { dict as tr } from "./tr"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 
 const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, tr, zh, zht]
+const namedLocales: Record<string, typeof en> = { ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, tr, zh, zht }
 const keys = ["command.session.previous.unseen", "command.session.next.unseen"] as const
 
 const forkKeys = [
@@ -183,14 +184,20 @@ describe("i18n parity", () => {
     expect(missing).toEqual([])
   })
 
-  test("audited settings scope (Audio/Configuration/Benchmark/Android/Plugins/RemoteAccess/GitAuth/LocalAI/Debate) has fr and zh dedicated translations", () => {
+  test("audited settings scope (Audio/Configuration/Benchmark/Android/Plugins/RemoteAccess/GitAuth/LocalAI/Debate) has dedicated translations in every locale", () => {
     const scopeKeys = Object.keys(en).filter((key) => AUDITED_SCOPE_PREFIXES.some((prefix) => key.startsWith(prefix)))
     expect(scopeKeys.length).toBeGreaterThan(100)
 
-    const frUntranslated = scopeKeys.filter((key) => !TECHNICAL_ALLOWLIST.has(key) && fr[key as keyof typeof fr] === en[key as keyof typeof en])
-    const zhUntranslated = scopeKeys.filter((key) => !TECHNICAL_ALLOWLIST.has(key) && zh[key as keyof typeof zh] === en[key as keyof typeof en])
-
-    expect(frUntranslated).toEqual([])
-    expect(zhUntranslated).toEqual([])
+    // Regression guard for 2026-07-17: the prior version of this test only checked
+    // fr/zh, so ~26 real UI words (Audio, Configuration, Benchmark, Mode, Model,
+    // Diagnostics, Plugins, Skills, ...) were silently left as literal English
+    // copies in the other 14 locales. Loop over every locale so a future addition
+    // can't reintroduce the same silent gap.
+    for (const [name, dict] of Object.entries(namedLocales)) {
+      const untranslated = scopeKeys.filter(
+        (key) => !TECHNICAL_ALLOWLIST.has(key) && dict[key as keyof typeof dict] === en[key as keyof typeof en],
+      )
+      expect(untranslated, `${name}: untranslated keys outside the technical allowlist`).toEqual([])
+    }
   })
 })
