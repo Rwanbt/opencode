@@ -64,17 +64,10 @@ jobs:
           fi
 
       - name: LOC gate (packages/app)
-        run: |
-          # Gate : aucun fichier TypeScript dans packages/app/src ne doit dépasser 1500 LOC
-          # Exceptions documentées : aucune (les fichiers > 1500 sont dans upstream packages)
-          GATE=1500
-          VIOLATIONS=$(find packages/app/src -name "*.ts" -o -name "*.tsx" | \
-            xargs wc -l 2>/dev/null | \
-            awk -v t=$GATE '$1 > t && $2 != "total" { print $1, $2 }' | \
-            grep -v "node_modules" || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "❌ LOC gate FAILED — fichiers > ${GATE} LOC dans packages/app/src :"
-            echo "$VIOLATIONS"
-            exit 1
-          fi
-          echo "✅ LOC gate passed — aucun fichier packages/app/src > ${GATE} LOC"
+        # Delegates to the canonical scripts/loc-gate.mjs (also run by
+        # .github/workflows/loc-gate.yml on PRs) instead of duplicating the
+        # 1500-LOC check inline. The inline version predated the i18n/
+        # exclusion (flat translation dictionaries aren't "god files" — see
+        # ADR-0002) and blocked every push once locale files grew past 1500
+        # lines, even though the PR-triggered gate already exempted them.
+        run: node scripts/loc-gate.mjs
