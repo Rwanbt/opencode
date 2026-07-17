@@ -17,6 +17,11 @@ import { Instance } from "../project/instance"
 import { Workspace } from "../control-plane/workspace"
 import { Database, eq } from "../storage/db"
 import { SessionTable } from "../session/session.sql"
+import { ObservabilityId } from "@/observability/id"
+import { startAgent, finishAgent } from "@/observability/lifecycle"
+import { resolveCapturePolicy } from "@/observability/capture-policy"
+import { ObservabilityRuntime } from "@/observability/runtime"
+import type { TraceContext } from "@/observability/trace-context"
 
 const log = Log.create({ service: "task" })
 
@@ -268,19 +273,45 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           slotHeld = true
           // Transition queued -> busy now that we're actively running.
           await SessionStatus.set(session.id, { type: "busy" }).catch(() => {})
-          if (workspace?.directory) {
-            return Instance.provide({
-              directory: workspace.directory,
-              fn: () => SessionPrompt.prompt(promptInput),
+
+          // Agent lifecycle observability for background tasks
+          const capturePolicy = resolveCapturePolicy((await Config.get()).experimental?.observability)
+          const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
+          const agentTraceId = ObservabilityId.create()
+          const agentStartedAtMs = Date.now()
+          let agentSpan: { trace: TraceContext; startedAtMs: number } | undefined
+          if (observability) {
+            const started = startAgent({ traceId: agentTraceId, sessionId: session.id, projectId: session.projectID })
+            agentSpan = { trace: started.trace, startedAtMs: started.event.tsMs }
+            observability.record(started.trace, {
+              ...started.event,
+              metadata: { agentName: agent.name, modelProvider: model.providerID, modelId: model.modelID },
             })
           }
-          return SessionPrompt.prompt(promptInput)
+
+          try {
+            let result: Awaited<ReturnType<typeof SessionPrompt.prompt>>
+            if (workspace?.directory) {
+              result = await Instance.provide({
+                directory: workspace.directory,
+                fn: () => SessionPrompt.prompt(promptInput),
+              })
+            } else {
+              result = await SessionPrompt.prompt(promptInput)
+            }
+            return { result, observability, agentSpan, agentStartedAtMs, error: null }
+          } catch (err) {
+            return { result: null, observability, agentSpan, agentStartedAtMs, error: err }
+          }
         }
 
         // Fire and forget with proper error boundary
         runPrompt()
-          .then(async (result) => {
+          .then(async ({ result, observability, agentSpan, agentStartedAtMs, error }) => {
             try {
+              if (error) throw error
+              if (!result) throw new Error("No result from agent execution")
+
               const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
               await SessionStatus.set(session.id, { type: "completed", result: text.slice(0, 500) })
               await Bus.publish(SessionStatus.Event.TaskCompleted, {
@@ -288,6 +319,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 parentID: ctx.sessionID,
                 result: text.slice(0, 500),
               })
+              // Finish agent observability span on success
+              if (observability && agentSpan) {
+                const terminal = finishAgent(agentSpan.trace, "finished", agentStartedAtMs)
+                observability.record(terminal.context, terminal.event)
+              }
               // Auto-cleanup worktree if no changes were made
               if (workspace) {
                 try {
@@ -317,6 +353,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 error: errorMsg,
               }).catch(() => {})
               log.error("background task completion handler failed", { sessionID: session.id, error: errorMsg })
+              // Finish agent observability span on failure
+              if (observability && agentSpan) {
+                const terminal = finishAgent(agentSpan.trace, "failed", agentStartedAtMs)
+                observability.record(terminal.context, terminal.event)
+              }
             }
           })
           .catch(async (err) => {
@@ -367,6 +408,21 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
 
+      // Agent lifecycle observability
+      const capturePolicy = resolveCapturePolicy((await Config.get()).experimental?.observability)
+      const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
+      const agentTraceId = ObservabilityId.create()
+      const agentStartedAtMs = Date.now()
+      let agentSpan: { trace: TraceContext; startedAtMs: number } | undefined
+      if (observability) {
+        const started = startAgent({ traceId: agentTraceId, sessionId: session.id, projectId: session.projectID })
+        agentSpan = { trace: started.trace, startedAtMs: started.event.tsMs }
+        observability.record(started.trace, {
+          ...started.event,
+          metadata: { agentName: agent.name, modelProvider: model.providerID, modelId: model.modelID },
+        })
+      }
+
       try {
         const result = await SessionPrompt.prompt(promptInput)
 
@@ -379,6 +435,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           result: text.slice(0, 500),
         }).catch(() => {})
+
+        if (observability && agentSpan) {
+          const terminal = finishAgent(agentSpan.trace, "finished", agentSpan.startedAtMs)
+          observability.record(terminal.context, terminal.event)
+        }
 
         const output = [
           `task_id: ${session.id} (for resuming to continue this task if needed)`,
@@ -408,6 +469,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           error: errorMsg,
         }).catch(() => {})
+
+        if (observability && agentSpan) {
+          const terminal = finishAgent(agentSpan.trace, "failed", agentSpan.startedAtMs)
+          observability.record(terminal.context, terminal.event)
+        }
+
         throw err
       }
     },

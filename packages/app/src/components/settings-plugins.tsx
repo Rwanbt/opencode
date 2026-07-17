@@ -6,10 +6,10 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
+import { useLanguage } from "@/context/language"
 import { SettingsList } from "./settings-list"
 
 // ─── status helpers ────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ function statusLabel(kind: McpStatusKind | undefined) {
 // ─── MCP section ───────────────────────────────────────────────────────────
 
 const McpSection: Component = () => {
+  const language = useLanguage()
   let sync: ReturnType<typeof useSync> | undefined
   try {
     sync = useSync()
@@ -81,7 +82,7 @@ const McpSection: Component = () => {
     onError: (err: unknown) => {
       showToast({
         variant: "error",
-        title: "Erreur MCP",
+        title: language.t("settings.fork.plugins.mcpError"),
         description: err instanceof Error ? err.message : String(err),
       })
     },
@@ -95,7 +96,7 @@ const McpSection: Component = () => {
     onError: (err: unknown) => {
       showToast({
         variant: "error",
-        title: "Erreur MCP",
+        title: language.t("settings.fork.plugins.mcpError"),
         description: err instanceof Error ? err.message : String(err),
       })
     },
@@ -109,7 +110,7 @@ const McpSection: Component = () => {
     onError: (err: unknown) => {
       showToast({
         variant: "error",
-        title: "Authentification MCP",
+        title: language.t("settings.fork.plugins.mcpAuth"),
         description: err instanceof Error ? err.message : String(err),
       })
     },
@@ -118,7 +119,7 @@ const McpSection: Component = () => {
   const addServer = useMutation(() => ({
     mutationFn: async () => {
       const name = addName().trim()
-      if (!name) throw new Error("Nom requis")
+      if (!name) throw new Error(language.t("settings.fork.plugins.nameRequired"))
       // McpLocalConfig.command is string[] (command + args as array)
       const config =
         addType() === "remote"
@@ -138,7 +139,7 @@ const McpSection: Component = () => {
     onError: (err: unknown) => {
       showToast({
         variant: "error",
-        title: "Ajout MCP échoué",
+        title: language.t("settings.fork.plugins.addFailed"),
         description: err instanceof Error ? err.message : String(err),
       })
     },
@@ -148,9 +149,9 @@ const McpSection: Component = () => {
     <div class="flex flex-col gap-3">
       <Show when={servers().length === 0}>
         <div class="text-12-regular text-text-weak text-center py-6 bg-surface-base rounded-lg">
-          Aucun serveur MCP configuré.
+          {language.t("settings.fork.plugins.noServer")}
           <br />
-          <span class="text-11-regular opacity-70">Cliquez sur Ajouter pour en connecter un.</span>
+          <span class="text-11-regular opacity-70">{language.t("settings.fork.plugins.addHint")}</span>
         </div>
       </Show>
 
@@ -232,12 +233,12 @@ const McpSection: Component = () => {
             onClick={() => setShowAdd(true)}
           >
             <Icon name="plus" class="w-3.5 h-3.5" />
-            Ajouter un serveur MCP
+            {language.t("settings.fork.plugins.addServer")}
           </button>
         }
       >
         <div class="bg-surface-base rounded-lg p-4 flex flex-col gap-3">
-          <span class="text-13-medium text-text-strong">Nouveau serveur MCP</span>
+          <span class="text-13-medium text-text-strong">{language.t("settings.fork.plugins.newMcp")}</span>
 
           {/* type selector */}
           <div class="flex gap-2">
@@ -258,17 +259,17 @@ const McpSection: Component = () => {
           </div>
 
           <TextField
-            label="Nom"
+            label={language.t("settings.fork.plugins.name")}
             value={addName()}
             onChange={setAddName}
-            placeholder="mon-serveur"
+            placeholder={language.t("settings.fork.plugins.serverNamePlaceholder")}
           />
 
           <Show
             when={addType() === "remote"}
             fallback={
               <TextField
-                label="Commande"
+                label={language.t("settings.fork.plugins.command")}
                 value={addCommand()}
                 onChange={setAddCommand}
                 placeholder="/usr/local/bin/mon-mcp-server"
@@ -276,7 +277,7 @@ const McpSection: Component = () => {
             }
           >
             <TextField
-              label="URL"
+              label={language.t("settings.fork.plugins.url")}
               value={addUrl()}
               onChange={setAddUrl}
               placeholder="https://mon-serveur.example.com/mcp"
@@ -301,7 +302,7 @@ const McpSection: Component = () => {
               disabled={addServer.isPending || !addName().trim() || (addType() === "remote" ? !addUrl().trim() : !addCommand().trim())}
               onClick={() => addServer.mutate()}
             >
-              {addServer.isPending ? "Ajout…" : "Ajouter"}
+              {addServer.isPending ? language.t("settings.fork.plugins.adding") : language.t("settings.fork.plugins.add")}
             </Button>
           </div>
         </div>
@@ -319,6 +320,7 @@ function skillFileName(location: string): string {
 }
 
 const SkillsSection: Component = () => {
+  const language = useLanguage()
   const sdk = useSDK()
   const [installUrl, setInstallUrl] = createSignal("")
   const [installing, setInstalling] = createSignal(false)
@@ -353,7 +355,7 @@ const SkillsSection: Component = () => {
       })
       if (!res.ok) {
         const { error } = (await res.json().catch(() => ({ error: `HTTP ${res.status}` }))) as { error: string }
-        showToast({ variant: "error", title: "Échec installation", description: error })
+        showToast({ variant: "error", title: language.t("settings.fork.plugins.installFailed"), description: error })
       } else {
         const info = (await res.json()) as SkillInfo
         showToast({ variant: "success", title: `Skill "${info.name}" installé` })
@@ -361,7 +363,7 @@ const SkillsSection: Component = () => {
         void refetchSkills()
       }
     } catch (e) {
-      showToast({ variant: "error", title: "Erreur réseau", description: String(e) })
+      showToast({ variant: "error", title: language.t("settings.fork.plugins.networkError"), description: String(e) })
     } finally {
       setInstalling(false)
     }
@@ -372,13 +374,13 @@ const SkillsSection: Component = () => {
     try {
       const res = await fetch(`${sdk.url}/skill/${encodeURIComponent(name)}`, { method: "DELETE" })
       if (!res.ok) {
-        showToast({ variant: "error", title: "Désinstallation échouée" })
+        showToast({ variant: "error", title: language.t("settings.fork.plugins.uninstallFailed") })
       } else {
         showToast({ variant: "success", title: `Skill "${name}" supprimé` })
         void refetchSkills()
       }
     } catch (e) {
-      showToast({ variant: "error", title: "Erreur réseau", description: String(e) })
+      showToast({ variant: "error", title: language.t("settings.fork.plugins.networkError"), description: String(e) })
     } finally {
       setRemovingName(null)
     }
@@ -388,11 +390,11 @@ const SkillsSection: Component = () => {
     <div class="flex flex-col gap-3">
       {/* Install via URL */}
       <div class="flex flex-col gap-2 px-1">
-        <p class="text-11-regular text-text-weaker uppercase tracking-wide">Installer un skill</p>
+        <p class="text-11-regular text-text-weaker uppercase tracking-wide">{language.t("settings.fork.plugins.installSkill")}</p>
         <div class="flex gap-2">
           <input
             class="flex-1 bg-surface-base border border-border-weak-base rounded px-2 py-1.5 text-12-regular text-text-base outline-none focus:border-accent-primary placeholder:text-text-weakest"
-            placeholder="URL directe SKILL.md ou index discovery…"
+            placeholder={language.t("settings.fork.plugins.skillUrlPlaceholder")}
             value={installUrl()}
             onInput={(e) => setInstallUrl(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void handleInstall() }}
@@ -404,20 +406,20 @@ const SkillsSection: Component = () => {
             disabled={!installUrl().trim() || installing()}
             onClick={() => void handleInstall()}
           >
-            {installing() ? "…" : "Installer"}
+            {installing() ? language.t("settings.fork.plugins.installing") : language.t("settings.fork.plugins.installSkill")}
           </Button>
         </div>
       </div>
 
       {/* Installed skills list */}
       <Show when={skills.loading}>
-        <div class="text-text-weak text-12-regular px-3 py-2">Chargement…</div>
+        <div class="text-text-weak text-12-regular px-3 py-2">{language.t("settings.fork.plugins.loading")}</div>
       </Show>
 
       <Show when={!skills.loading && (skills()?.length ?? 0) > 0}>
         <div class="flex flex-col">
           <p class="text-11-regular text-text-weaker px-1 mb-1 uppercase tracking-wide">
-            Skills installés ({skills()!.length})
+            {language.t("settings.fork.plugins.skillsInstalled", { count: skills()!.length })}
           </p>
           <For each={skills()}>
             {(skill) => (
@@ -437,7 +439,7 @@ const SkillsSection: Component = () => {
                     disabled={removingName() === skill.name}
                     onClick={() => void handleUninstall(skill.name)}
                     class="text-10-regular text-text-weaker hover:text-error-base shrink-0 px-1 py-0.5 rounded"
-                    title="Désinstaller"
+                    title={language.t("settings.fork.plugins.uninstall")}
                   >
                     {removingName() === skill.name ? "…" : "✕"}
                   </button>
@@ -450,18 +452,18 @@ const SkillsSection: Component = () => {
 
       <Show when={!skills.loading && (skills()?.length ?? 0) === 0}>
         <div class="text-12-regular text-text-weaker text-center py-4 border border-dashed border-border-weak-base rounded-lg">
-          Aucun skill installé
+          {language.t("settings.fork.plugins.noSkills")}
         </div>
       </Show>
 
       {/* Format documentation */}
       <details class="bg-surface-base rounded-lg text-12-regular text-text-weak">
         <summary class="px-4 py-3 cursor-pointer select-none text-13-medium text-text-strong">
-          Format SKILL.md
+          {language.t("settings.fork.plugins.skillFormat")}
         </summary>
         <div class="px-4 pb-4 leading-relaxed">
           <p class="mb-3 mt-1">
-            Fichier Markdown avec frontmatter YAML, déposé dans{" "}
+            {language.t("settings.fork.plugins.skillDocumentation")}{" "}
             <span class="font-mono text-text-base">~/.config/opencode/skills/</span> ou{" "}
             <span class="font-mono text-text-base">.opencode/skills/</span> (projet).
           </p>
@@ -476,9 +478,9 @@ metadata:
 
 Texte ajouté au prompt système...`}</pre>
           <p class="text-11-regular opacity-70">
-            Catégories : <span class="font-mono">text-only</span> (prompt système),{" "}
-            <span class="font-mono">js</span> (sandbox WebView),{" "}
-            <span class="font-mono">native</span> (intents Android).
+            {language.t("settings.fork.plugins.categories")} <span class="font-mono">text-only</span> ({language.t("settings.fork.plugins.systemPrompt")}),{" "}
+            <span class="font-mono">js</span> ({language.t("settings.fork.plugins.webviewSandbox")}),{" "}
+            <span class="font-mono">native</span> ({language.t("settings.fork.plugins.androidIntents")}).
           </p>
         </div>
       </details>
@@ -488,21 +490,46 @@ Texte ajouté au prompt système...`}</pre>
 
 // ─── Main export ────────────────────────────────────────────────────────────
 
+// A nested Kobalte <Tabs> here would sit inside dialog-settings.tsx's own
+// vertical/settings-variant <Tabs>. tabs.css scopes that variant's overrides
+// with plain descendant combinators (no boundary at nested
+// [data-component="tabs"]), so the outer vertical sidebar layout leaks onto
+// this inner sub-nav (same root cause as the observability panel's blank
+// content — see settings-observability.tsx). Plain buttons + Show sidesteps
+// the leak without touching the shared tabs.css.
 export const SettingsPlugins: Component = () => {
+  const language = useLanguage()
+  const [activeSubtab, setActiveSubtab] = createSignal<"mcp" | "skills">("mcp")
   return (
     <div class="flex flex-col gap-6 px-5 py-4">
-      <Tabs defaultValue="mcp" variant="pill">
-        <Tabs.List class="mb-4">
-          <Tabs.Trigger value="mcp">Serveurs MCP</Tabs.Trigger>
-          <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content value="mcp">
-          <McpSection />
-        </Tabs.Content>
-        <Tabs.Content value="skills">
-          <SkillsSection />
-        </Tabs.Content>
-      </Tabs>
+      <div class="flex items-center gap-1 mb-4" role="tablist">
+        {(
+          [
+            ["mcp", "Serveurs MCP"],
+            ["skills", "Skills"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubtab() === value}
+            class="rounded-md px-3 py-1.5 text-12-medium"
+            classList={{
+              "bg-surface-base-active text-text-strong": activeSubtab() === value,
+              "text-text-weak hover:text-text-strong": activeSubtab() !== value,
+            }}
+            onClick={() => setActiveSubtab(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <Show when={activeSubtab() === "mcp"}>
+        <McpSection />
+      </Show>
+      <Show when={activeSubtab() === "skills"}>
+        <SkillsSection />
+      </Show>
     </div>
   )
 }

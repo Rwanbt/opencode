@@ -483,14 +483,14 @@ export function SessionHeader() {
                       no visible effect — hide it there. */}
                   <Show when={platform.platform !== "mobile" && (layout.fileTree.opened() || view().reviewPanel.opened())}>
                     <TooltipKeybind
-                      title={layout.editorFocus.enabled() ? "Restaurer le chat" : "Mode focus éditeur"}
+                      title={layout.editorFocus.enabled() ? language.t("session.header.restoreChat") : language.t("session.header.editorFocus")}
                       keybind=""
                     >
                       <Button
                         variant="ghost"
                         class="titlebar-icon w-8 h-6 p-0 box-border"
                         onClick={() => layout.editorFocus.toggle()}
-                        aria-label={layout.editorFocus.enabled() ? "Restaurer le chat" : "Mode focus éditeur"}
+                        aria-label={layout.editorFocus.enabled() ? language.t("session.header.restoreChat") : language.t("session.header.editorFocus")}
                         aria-pressed={layout.editorFocus.enabled()}
                       >
                         <Icon
@@ -513,7 +513,7 @@ export function SessionHeader() {
                       as={Button}
                       variant="ghost"
                       class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                      aria-label="More actions"
+                      aria-label={language.t("session.header.moreActions")}
                     >
                       <Icon size="small" name="dot-grid" />
                     </DropdownMenu.Trigger>

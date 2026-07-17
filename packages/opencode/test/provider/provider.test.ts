@@ -317,7 +317,7 @@ test("getModel returns model for valid provider/model", async () => {
       expect(model).toBeDefined()
       expect(String(model.providerID)).toBe("anthropic")
       expect(String(model.id)).toBe("claude-sonnet-4-20250514")
-      const language = await Provider.getLanguage(model)
+      const language = await Provider.getLanguageByID(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
       expect(language).toBeDefined()
     },
   })

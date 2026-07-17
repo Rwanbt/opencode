@@ -23,8 +23,18 @@ fi
 # across a DT_NEEDED gap (the .so exports OrtGetApiBase@@VERS_1.22.0 but
 # libopencode_mobile_lib.so's undefined reference is VERS_1.19.2).
 JNILIBS="$SCRIPT_DIR/../src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
-ORT_VERSION="1.19.2"
+ORT_VERSION="${ORT_VERSION:-1.19.2}"
+ORT_SHA256="${ORT_SHA256:-}"
 ORT_SO="$JNILIBS/libonnxruntime.so"
+if [ -n "${ORT_LIB_LOCATION:-}" ] && [ ! -f "$ORT_LIB_LOCATION/libonnxruntime.so" ]; then
+  echo "ERROR: ORT_LIB_LOCATION does not contain libonnxruntime.so: $ORT_LIB_LOCATION" >&2
+  exit 1
+fi
+if [ -n "${ORT_LIB_LOCATION:-}" ] && [ -f "$ORT_LIB_LOCATION/libonnxruntime.so" ] && [ ! -f "$ORT_SO" ]; then
+  mkdir -p "$JNILIBS"
+  cp "$ORT_LIB_LOCATION/libonnxruntime.so" "$ORT_SO"
+  echo "ONNX Runtime copied from ORT_LIB_LOCATION: $(du -h -- "$ORT_SO" | cut -f1)"
+fi
 if [ ! -f "$ORT_SO" ]; then
   echo "Downloading ONNX Runtime $ORT_VERSION for Android arm64..."
   # Try Maven Central (official Qualcomm/Microsoft distribution)
@@ -32,25 +42,35 @@ if [ ! -f "$ORT_SO" ]; then
   mkdir -p "$JNILIBS"
   TMPDIR=$(mktemp -d)
   echo "Fetching from Maven Central..."
-  if curl -sL "$ORT_AAR_URL" -o "$TMPDIR/ort.aar"; then
+  if [ -z "$ORT_SHA256" ]; then
+    echo "ERROR: ORT_SHA256 is required when downloading ONNX Runtime $ORT_VERSION." >&2
+    exit 1
+  fi
+  if curl -fsSL "$ORT_AAR_URL" -o "$TMPDIR/ort.aar" && echo "$ORT_SHA256  $TMPDIR/ort.aar" | sha256sum -c -; then
     cd "$TMPDIR"
     unzip -q ort.aar "jni/arm64-v8a/libonnxruntime.so" 2>/dev/null || true
     if [ -f "jni/arm64-v8a/libonnxruntime.so" ]; then
       cp "jni/arm64-v8a/libonnxruntime.so" "$ORT_SO"
-      echo "ONNX Runtime installed: $(ls -lh "$ORT_SO" | awk '{print $5}')"
+      echo "ONNX Runtime installed: $(du -h -- "$ORT_SO" | cut -f1)"
     else
       echo "WARNING: Could not extract libonnxruntime.so from AAR"
       echo "Please manually place libonnxruntime.so (arm64-v8a) in $JNILIBS/"
     fi
     rm -rf "$TMPDIR"
   else
-    echo "WARNING: Failed to download ONNX Runtime"
-    echo "Please set ORT_LIB_LOCATION or place libonnxruntime.so in $JNILIBS/"
+    echo "ERROR: Failed to obtain ONNX Runtime $ORT_VERSION for Android." >&2
+    echo "Set ORT_LIB_LOCATION to a directory containing libonnxruntime.so or provide a verified ORT_SHA256." >&2
     rm -rf "$TMPDIR"
+    exit 1
   fi
   cd "$SCRIPT_DIR"
 else
   echo "ONNX Runtime already present."
+fi
+
+if [ ! -f "$ORT_SO" ] && [ -z "${ORT_LIB_LOCATION:-}" ]; then
+  echo "ERROR: Android ONNX Runtime is unavailable; refusing to start Cargo with an opaque ort-sys failure." >&2
+  exit 1
 fi
 
 # Set ORT_LIB_LOCATION for cargo build if not already set

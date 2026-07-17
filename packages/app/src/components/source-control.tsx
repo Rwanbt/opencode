@@ -22,6 +22,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@/context/sdk"
+import { useLanguage } from "@/context/language"
 import type { GitBranchEntry, GitCommitEntry, GitOpResult, GitWorkingStatusEntry } from "../types/sdk-shim"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export const SourceControl: Component<{
   directory?: string
   onOpenFile?: (path: string) => void
 }> = (props) => {
+  const language = useLanguage()
   const sdk = useSDK()
 
   const [state, setState] = createStore<SourceControlState>({
@@ -128,7 +130,7 @@ export const SourceControl: Component<{
       setState("files", files)
       setState("branches", (branchRes.data ?? []) as GitBranchEntry[])
     } catch (err) {
-      setState("lastError", err instanceof Error ? err.message : "Impossible de lire le statut git")
+      setState("lastError", err instanceof Error ? err.message : language.t("sourceControl.statusReadError"))
     } finally {
       setState("loading", false)
     }
@@ -191,34 +193,34 @@ export const SourceControl: Component<{
   }
 
   const stageFile = (path: string) =>
-    withBusy("staging…", async () => {
+    withBusy(language.t("sourceControl.stagingProgress"), async () => {
       await sdk.client.git.add({ directory: props.directory, files: [path] })
       await loadStatus()
     })
 
   const unstageFile = (path: string) =>
-    withBusy("unstaging…", async () => {
+    withBusy(language.t("sourceControl.unstagingProgress"), async () => {
       await sdk.client.git.reset({ directory: props.directory, files: [path] })
       await loadStatus()
     })
 
   const stageAll = () =>
-    withBusy("staging all…", async () => {
+    withBusy(language.t("sourceControl.stagingAllProgress"), async () => {
       await sdk.client.git.add({ directory: props.directory })
       await loadStatus()
     })
 
   const unstageAll = () =>
-    withBusy("unstaging all…", async () => {
+    withBusy(language.t("sourceControl.unstagingAllProgress"), async () => {
       await sdk.client.git.reset({ directory: props.directory })
       await loadStatus()
     })
 
   const commitChanges = () =>
-    withBusy("committing…", async () => {
+    withBusy(language.t("sourceControl.committingProgress"), async () => {
       const msg = state.commitMessage.trim()
       if (!msg) {
-        setState("lastError", "Le message de commit est vide")
+        setState("lastError", language.t("sourceControl.emptyCommit"))
         return
       }
       const res = (await sdk.client.git.commit({ directory: props.directory, message: msg })) as {
@@ -230,7 +232,7 @@ export const SourceControl: Component<{
         return
       }
       setState("commitMessage", "")
-      setState("lastSuccess", `Commit ${res.data?.hash ?? ""}`)
+      setState("lastSuccess", language.t("sourceControl.commitSuccess", { hash: res.data?.hash ?? "" }))
       await loadStatus()
       // Reload log if open
       if (tab() === "log") await loadLog()
@@ -238,7 +240,7 @@ export const SourceControl: Component<{
     })
 
   const pushChanges = () =>
-    withBusy("push…", async () => {
+    withBusy(language.t("sourceControl.pushingProgress"), async () => {
       const res = (await sdk.client.git.push({ directory: props.directory })) as {
         data?: GitOpResult
       }
@@ -247,11 +249,11 @@ export const SourceControl: Component<{
         setState("lastError", result.error ?? "git push failed")
         return
       }
-      setState("lastSuccess", "Poussé vers origin")
+      setState("lastSuccess", language.t("sourceControl.pushed"))
     })
 
   const pullChanges = () =>
-    withBusy("pull…", async () => {
+    withBusy(language.t("sourceControl.pullingProgress"), async () => {
       const res = (await sdk.client.git.pull({ directory: props.directory })) as {
         data?: GitOpResult
       }
@@ -260,12 +262,12 @@ export const SourceControl: Component<{
         setState("lastError", result.error ?? "git pull failed")
         return
       }
-      setState("lastSuccess", "Récupéré depuis origin")
+      setState("lastSuccess", language.t("sourceControl.pulled"))
       await loadStatus()
     })
 
   const switchBranch = (name: string) =>
-    withBusy("checkout…", async () => {
+    withBusy(language.t("sourceControl.checkoutProgress"), async () => {
       await sdk.client.git.branch({
         directory: props.directory,
         name,
@@ -281,7 +283,7 @@ export const SourceControl: Component<{
     <div class="flex flex-col h-full text-12-regular select-none">
       {/* ── Header ── */}
       <div class="px-3 py-2 border-b border-border-main flex items-center gap-2">
-        <span class="text-12-medium text-text-base flex-1">Source Control</span>
+        <span class="text-12-medium text-text-base flex-1">{language.t("sourceControl.title")}</span>
 
         {/* Branch switcher */}
         <div class="relative" data-branch-dropdown>
@@ -339,7 +341,7 @@ export const SourceControl: Component<{
         <button
           class="p-1 rounded hover:bg-bg-hover text-text-weak hover:text-text-base transition-colors"
           onClick={() => void loadStatus()}
-          title="Rafraîchir"
+          title={language.t("sourceControl.refresh")}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -387,7 +389,7 @@ export const SourceControl: Component<{
             }}
             onClick={() => setTab(t)}
           >
-            {t === "changes" ? "Changements" : "Historique"}
+            {t === "changes" ? language.t("sourceControl.changes") : language.t("sourceControl.history")}
             <Show when={t === "changes" && state.files.length > 0}>
               <span class="ml-1 text-10-regular text-text-weaker">({state.files.length})</span>
             </Show>
@@ -402,14 +404,14 @@ export const SourceControl: Component<{
           <Show when={staged().length > 0}>
             <div class="px-3 pt-2 pb-1 flex items-center justify-between">
               <span class="text-11-medium text-text-weak uppercase tracking-wide">
-                Staging ({staged().length})
+                {language.t("sourceControl.staging")} ({staged().length})
               </span>
               <button
                 class="text-10-regular text-text-weaker hover:text-text-weak transition-colors"
                 onClick={() => void unstageAll()}
                 disabled={!!state.busy}
               >
-                Tout désindexer
+                {language.t("sourceControl.unstageAll")}
               </button>
             </div>
             <For each={staged()}>
@@ -429,14 +431,14 @@ export const SourceControl: Component<{
           <Show when={unstaged().length > 0}>
             <div class="px-3 pt-2 pb-1 flex items-center justify-between">
               <span class="text-11-medium text-text-weak uppercase tracking-wide">
-                Modifications ({unstaged().length})
+                {language.t("sourceControl.modifications")} ({unstaged().length})
               </span>
               <button
                 class="text-10-regular text-text-weaker hover:text-text-weak transition-colors"
                 onClick={() => void stageAll()}
                 disabled={!!state.busy}
               >
-                Tout indexer
+                {language.t("sourceControl.stageAll")}
               </button>
             </div>
             <For each={unstaged()}>
@@ -453,7 +455,7 @@ export const SourceControl: Component<{
           </Show>
 
           <Show when={state.files.length === 0 && !state.loading}>
-            <div class="p-4 text-center text-text-weaker">Aucun changement</div>
+            <div class="p-4 text-center text-text-weaker">{language.t("sourceControl.noChanges")}</div>
           </Show>
         </div>
 
@@ -462,7 +464,7 @@ export const SourceControl: Component<{
           <textarea
             class="w-full text-12-regular bg-bg-input border border-border-input rounded px-2 py-1.5 resize-none text-text-base placeholder:text-text-weaker focus:outline-none focus:ring-1 focus:ring-accent-primary/40"
             rows={2}
-            placeholder="Message de commit…"
+            placeholder={language.t("sourceControl.commitPlaceholder")}
             value={state.commitMessage}
             onInput={(e) => setState("commitMessage", e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -479,23 +481,23 @@ export const SourceControl: Component<{
               onClick={() => void commitChanges()}
               disabled={!!state.busy || staged().length === 0 || !state.commitMessage.trim()}
             >
-              Commit
+              {language.t("sourceControl.commit")}
             </button>
             <button
               class="px-2 py-1 text-11-regular rounded border border-border-main text-text-weak hover:text-text-base hover:bg-bg-hover disabled:opacity-40 transition-colors"
               onClick={() => void pullChanges()}
               disabled={!!state.busy}
-              title="git pull --rebase"
+              title={language.t("sourceControl.pull")}
             >
-              Pull
+              {language.t("sourceControl.pull")}
             </button>
             <button
               class="px-2 py-1 text-11-regular rounded border border-border-main text-text-weak hover:text-text-base hover:bg-bg-hover disabled:opacity-40 transition-colors"
               onClick={() => void pushChanges()}
               disabled={!!state.busy}
-              title="git push"
+              title={language.t("sourceControl.push")}
             >
-              Push
+              {language.t("sourceControl.push")}
             </button>
           </div>
         </div>
@@ -505,10 +507,10 @@ export const SourceControl: Component<{
       <Show when={tab() === "log"}>
         <div class="flex-1 overflow-y-auto min-h-0">
           <Show when={state.logLoading}>
-            <div class="p-4 text-center text-text-weaker">Chargement…</div>
+            <div class="p-4 text-center text-text-weaker">{language.t("sourceControl.loading")}</div>
           </Show>
           <Show when={!state.logLoading && state.log.length === 0}>
-            <div class="p-4 text-center text-text-weaker">Aucun commit</div>
+            <div class="p-4 text-center text-text-weaker">{language.t("sourceControl.noCommits")}</div>
           </Show>
           <For each={state.log}>
             {(entry) => (
@@ -524,7 +526,7 @@ export const SourceControl: Component<{
                 <div class="mt-0.5 pl-[52px] flex items-center gap-2 text-10-regular text-text-weaker">
                   <span class="truncate max-w-[80px]">{entry.author}</span>
                   <span>·</span>
-                  <span>{formatAge(entry.timestamp)}</span>
+                  <span>{formatAge(entry.timestamp, language)}</span>
                 </div>
               </div>
             )}
@@ -544,7 +546,8 @@ function FileRow(props: {
   onOpen: () => void
   busy: boolean
 }) {
-  const label = () => (props.action === "stage" ? "Indexer" : "Désindexer")
+  const language = useLanguage()
+  const label = () => (props.action === "stage" ? language.t("sourceControl.stage") : language.t("sourceControl.unstage"))
   const filename = () => {
     const parts = props.file.path.split(/[/\\]/)
     return parts[parts.length - 1] ?? props.file.path
@@ -579,11 +582,11 @@ function FileRow(props: {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function formatAge(unixSeconds: number): string {
+function formatAge(unixSeconds: number, language: ReturnType<typeof useLanguage>): string {
   const diff = Math.floor(Date.now() / 1000) - unixSeconds
-  if (diff < 60) return "à l'instant"
-  if (diff < 3600) return `il y a ${Math.floor(diff / 60)}m`
-  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)}h`
-  if (diff < 86400 * 30) return `il y a ${Math.floor(diff / 86400)}j`
+  if (diff < 60) return language.t("sourceControl.justNow")
+  if (diff < 3600) return language.t("sourceControl.minutesAgo", { count: Math.floor(diff / 60) })
+  if (diff < 86400) return language.t("sourceControl.hoursAgo", { count: Math.floor(diff / 3600) })
+  if (diff < 86400 * 30) return language.t("sourceControl.daysAgo", { count: Math.floor(diff / 86400) })
   return new Date(unixSeconds * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
 }

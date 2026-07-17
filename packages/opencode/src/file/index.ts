@@ -742,11 +742,12 @@ export namespace File {
         const { cache } = yield* InstanceState.get(state)
 
         const query = input.query.trim()
+        const normalizedQuery = query.replaceAll("\\", "/")
         const limit = input.limit ?? 100
         const kind = input.type ?? (input.dirs === false ? "file" : "all")
         log.info("search", { query, kind })
 
-        const preferHidden = query.startsWith(".") || query.includes("/.")
+        const preferHidden = normalizedQuery.startsWith(".") || normalizedQuery.includes("/.")
 
         if (!query) {
           if (kind === "file") return cache.files.slice(0, limit)
@@ -757,7 +758,11 @@ export namespace File {
           kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
 
         const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-        const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
+        const normalizedItems = items.map((item) => item.replaceAll("\\", "/"))
+        const originalByNormalized = new Map(items.map((item, index) => [normalizedItems[index]!, item]))
+        const sorted = fuzzysort
+          .go(normalizedQuery, normalizedItems, { limit: searchLimit })
+          .map((item) => originalByNormalized.get(item.target) ?? item.target)
         const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
         log.info("search", { query, kind, results: output.length })

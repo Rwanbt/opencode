@@ -15,8 +15,8 @@ Images
 Build
 
 ```
-REGISTRY=ghcr.io/anomalyco TAG=24.04 bun ./packages/containers/script/build.ts
-REGISTRY=ghcr.io/anomalyco TAG=24.04 bun ./packages/containers/script/build.ts --push
+REGISTRY=ghcr.io/rwanbt TAG=24.04 bun ./packages/containers/script/build.ts
+REGISTRY=ghcr.io/rwanbt TAG=24.04 bun ./packages/containers/script/build.ts --push
 ```
 
 Workflow usage
@@ -26,7 +26,7 @@ jobs:
   build-cli:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/anomalyco/build/bun-node:24.04
+      image: ghcr.io/rwanbt/build/bun-node:24.04
 ```
 
 Notes
@@ -36,3 +36,4 @@ Notes
 - `--push` publishes multi-arch (amd64 + arm64) images using Buildx.
 - If a job uses Docker Buildx, the container needs access to the host
   Docker daemon (or `docker-in-docker` with privileged mode).
+

@@ -181,8 +181,8 @@ export const SettingsProviders: Component = () => {
               <div class="flex flex-col min-w-0">
                 <div class="flex items-center gap-x-3">
                   <ProviderIcon id="local-llm" class="size-5 shrink-0 icon-strong-base" />
-                  <span class="text-14-medium text-text-strong">Local AI</span>
-                  <Tag>On-device</Tag>
+                  <span class="text-14-medium text-text-strong">{language.t("settings.fork.providers.localAi")}</span>
+                  <Tag>{language.t("settings.fork.providers.onDevice")}</Tag>
                 </div>
                 <span class="text-12-regular text-text-weak pl-8">
                   {language.t("dialog.provider.localLlm.note")}

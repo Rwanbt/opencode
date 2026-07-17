@@ -92,6 +92,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       return map
     })
 
+    const favorites = createMemo(() => new Set(store.user.filter((item) => item.favorite).map(modelKey)))
+
     const list = createMemo(() =>
       available().map((m) => ({
         ...m,
@@ -126,6 +128,15 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       update(model, state ? "show" : "hide")
     }
 
+    const setFavorite = (model: ModelKey, state: boolean) => {
+      const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
+      if (index >= 0) {
+        setStore("user", index, "favorite", state)
+        return
+      }
+      setStore("user", store.user.length, { ...model, visibility: "show", favorite: state })
+    }
+
     const push = (model: ModelKey) => {
       const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
       if (uniq.length > RECENT_LIMIT) uniq.pop()
@@ -150,6 +161,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       find,
       visible,
       setVisibility,
+      favorite: (model: ModelKey) => favorites().has(modelKey(model)),
+      setFavorite,
       recent: {
         list: createMemo(() => store.recent),
         push,

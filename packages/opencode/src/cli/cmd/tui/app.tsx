@@ -34,6 +34,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogDebateSetup } from "@tui/component/dialog-debate-setup"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
@@ -453,6 +454,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   )
 
   const connected = useConnected()
+  const confirmAutoActivation = async () => {
+    if (!local.agent.requiresConfirmation("auto")) return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Dangerous auto mode",
+      "Auto mode can run commands and modify files without permission prompts. Continue?",
+    )
+    if (!confirmed) return
+    local.agent.confirmAuto()
+    local.agent.set("auto")
+  }
+
   command.register(() => [
     {
       title: "Switch session",
@@ -591,7 +604,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(1)
+        const next = local.agent.move(1)
+        if (next === "auto") void confirmAutoActivation()
+        if (next === "debate")
+          void local.debate.ensureConfigured().then((valid) => {
+            if (!valid) dialog.replace(() => <DialogDebateSetup />)
+          })
+      },
+    },
+    {
+      title: "Configure debate models",
+      value: "debate.models",
+      keybind: "debate_models",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        if (local.agent.current().name !== "debate") return
+        dialog.replace(() => <DialogDebateSetup />)
       },
     },
     {
@@ -622,7 +651,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(-1)
+        const next = local.agent.move(-1)
+        if (next === "auto") void confirmAutoActivation()
+        if (next === "debate")
+          void local.debate.ensureConfigured().then((valid) => {
+            if (!valid) dialog.replace(() => <DialogDebateSetup />)
+          })
       },
     },
     {

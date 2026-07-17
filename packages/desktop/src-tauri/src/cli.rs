@@ -433,6 +433,7 @@ pub fn spawn_command(
             "true".to_string(),
         ),
         ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
+        ("OPENCODE_AUTH_STORAGE".to_string(), "keychain".to_string()),
         (
             "XDG_STATE_HOME".to_string(),
             state_dir.to_string_lossy().to_string(),
@@ -813,6 +814,7 @@ mod tests {
             vec![
                 ("PATH".to_string(), "/desktop/path".to_string()),
                 ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
+                ("OPENCODE_AUTH_STORAGE".to_string(), "keychain".to_string()),
             ],
         )
         .into_iter()

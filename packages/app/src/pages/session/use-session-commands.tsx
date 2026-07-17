@@ -48,6 +48,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
+
+  const selectAgent = (direction: 1 | -1) => {
+    local.agent.move(direction)
+  }
   const { params, tabs, view } = useSessionLayout()
   const guard = useEditorCloseGuard()
   const editor = useEditor()
@@ -636,14 +640,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
-      onSelect: () => local.agent.move(1),
+      onSelect: () => selectAgent(1),
     }),
     agentCommand({
       id: "agent.cycle.reverse",
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
-      onSelect: () => local.agent.move(-1),
+      onSelect: () => selectAgent(-1),
     }),
   ]
 

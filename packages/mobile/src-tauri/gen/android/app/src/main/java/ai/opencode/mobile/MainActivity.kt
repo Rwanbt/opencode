@@ -1,6 +1,14 @@
 package ai.opencode.mobile
 
 import android.Manifest
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.GCMParameterSpec
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -18,6 +26,37 @@ import androidx.core.content.ContextCompat
 import java.io.File
 
 class MainActivity : TauriActivity() {
+  fun getAuthStorageKey(): String {
+    val alias = "opencode.auth.master"
+    val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    if (!store.containsAlias(alias)) {
+      val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+      generator.init(
+        KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+          .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+          .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+          .setUserAuthenticationRequired(false)
+          .build(),
+      )
+      generator.generateKey()
+    }
+    val prefs = getSharedPreferences("opencode_secure_auth", MODE_PRIVATE)
+    val wrapped = prefs.getString("wrapped_key", null)
+    val raw = if (wrapped == null) {
+      ByteArray(32).also { SecureRandom().nextBytes(it) }.also { keyBytes ->
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, store.getKey(alias, null))
+        prefs.edit().putString("wrapped_key", Base64.encodeToString(cipher.iv + cipher.doFinal(keyBytes), Base64.NO_WRAP)).apply()
+      }
+    } else {
+      val packed = Base64.decode(wrapped, Base64.NO_WRAP)
+      val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+      cipher.init(Cipher.DECRYPT_MODE, store.getKey(alias, null), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+      cipher.doFinal(packed.copyOfRange(12, packed.size))
+    }
+    return Base64.encodeToString(raw, Base64.NO_WRAP)
+  }
+
   private var hadAllFilesAccessAtCreate: Boolean = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -182,7 +221,11 @@ class MainActivity : TauriActivity() {
       packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
     } catch (_: Exception) { "unknown" }
     val installedVersion = if (versionFile.exists()) versionFile.readText().trim() else ""
-    val needsExtract = !File(runtimeDir, "opencode-cli.js").exists() || installedVersion != currentVersion
+    // The APK version marker alone is insufficient: a previous install may have
+    // skipped rootfs extraction while leaving the CLI bundle present.
+    val rootfsVersionFile = File(runtimeDir, ".rootfs_version")
+    val needsExtract = !File(runtimeDir, "opencode-cli.js").exists() ||
+      installedVersion != currentVersion || !rootfsVersionFile.exists()
     if (needsExtract) {
       Thread {
         android.util.Log.i("OpenCode", "Extracting runtime assets to ${runtimeDir.absolutePath}")

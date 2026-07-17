@@ -20,7 +20,29 @@ import { dict as tr } from "./tr"
 const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, tr, zh, zht]
 const keys = ["command.session.previous.unseen", "command.session.next.unseen"] as const
 
+const forkKeys = [
+  "settings.localLlm.title",
+  "settings.localLlm.searchPlaceholder",
+  "settings.localConfig.title",
+  "settings.localConfig.backendDescription",
+] as const
+
 describe("i18n parity", () => {
+  test("all locales expose every English key", () => {
+    for (const locale of locales) {
+      for (const key of Object.keys(en)) {
+        expect(locale[key as keyof typeof locale]).toBeDefined()
+      }
+    }
+  })
+
+  test("fork settings keys exist and French translates them", () => {
+    for (const key of forkKeys) {
+      expect(en[key]).toBeDefined()
+      expect(fr[key]).toBeDefined()
+    }
+  })
+
   test("non-English locales translate targeted unseen session keys", () => {
     for (const locale of locales) {
       for (const key of keys) {

@@ -15,6 +15,7 @@ import {
 import { Portal } from "solid-js/web"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useCommand, formatKeybind } from "@/context/command"
+import { useLanguage } from "@/context/language"
 
 // ─── Mount point (always rendered, conditionally visible) ───────────────────
 
@@ -30,6 +31,7 @@ export const CommandPaletteMount: Component = () => {
 // ─── Overlay ────────────────────────────────────────────────────────────────
 
 const CommandPaletteOverlay: Component = () => {
+  const language = useLanguage()
   const command = useCommand()
   const [query, setQuery] = createSignal("")
   const [activeIndex, setActiveIndex] = createSignal(0)
@@ -118,7 +120,7 @@ const CommandPaletteOverlay: Component = () => {
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
-          aria-label="Command palette"
+          aria-label={language.t("ui.commandPalette.label")}
         >
           {/* Search row */}
           <div class="flex items-center gap-3 px-4 py-3 border-b border-border-weak-base">
@@ -127,12 +129,12 @@ const CommandPaletteOverlay: Component = () => {
               ref={inputRef!}
               type="text"
               class="flex-1 bg-transparent text-14-regular text-text-base outline-none placeholder:text-text-weaker"
-              placeholder="Rechercher une commande…"
+              placeholder={language.t("ui.commandPalette.searchPlaceholder")}
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={handleKeyDown}
               aria-autocomplete="list"
-              aria-label="Rechercher une commande"
+              aria-label={language.t("ui.commandPalette.searchLabel")}
               autocomplete="off"
               spellcheck={false}
             />
@@ -147,7 +149,7 @@ const CommandPaletteOverlay: Component = () => {
               when={filtered().length > 0}
               fallback={
                 <div class="text-13-regular text-text-weaker text-center py-10">
-                  Aucune commande trouvée
+                  {language.t("ui.commandPalette.empty")}
                 </div>
               }
             >
@@ -189,9 +191,9 @@ const CommandPaletteOverlay: Component = () => {
 
           {/* Footer hints */}
           <div class="flex items-center gap-4 px-4 py-2 border-t border-border-weak-base text-11-regular text-text-weaker select-none">
-            <span>↑↓ naviguer</span>
-            <span>⏎ sélectionner</span>
-            <span>Esc fermer</span>
+            <span>{language.t("ui.commandPalette.navigate")}</span>
+            <span>{language.t("ui.commandPalette.select")}</span>
+            <span>{language.t("ui.commandPalette.close")}</span>
           </div>
         </div>
       </div>

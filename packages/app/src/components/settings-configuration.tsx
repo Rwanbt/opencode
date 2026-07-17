@@ -4,6 +4,7 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Select } from "@opencode-ai/ui/select"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { createStore } from "solid-js/store"
+import { useLanguage } from "@/context/language"
 
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
   const tauri = (globalThis as any).__TAURI__
@@ -106,6 +107,7 @@ function saveConfig(c: ModelConfiguration) {
 }
 
 export const SettingsConfiguration: Component = () => {
+  const language = useLanguage()
   const [config, setConfig] = createStore<ModelConfiguration>(loadModelConfig())
   const [advancedOpen, setAdvancedOpen] = createSignal(false)
 
@@ -120,8 +122,8 @@ export const SettingsConfiguration: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">Configuration</h2>
-          <span class="text-12-regular text-text-weak">Advanced model parameters</span>
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.localConfig.title")}</h2>
+          <span class="text-12-regular text-text-weak">{language.t("settings.localConfig.description")}</span>
         </div>
       </div>
 
@@ -132,11 +134,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Accelerator (NEW) */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Accelerator</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.accelerator")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Backend"
-              description="Hardware accelerator for the local LLM. Auto picks the fastest available for your device."
+              title={language.t("settings.localConfig.backend")}
+              description={language.t("settings.localConfig.backendDescription")}
             >
               <SegmentedButton<AcceleratorMode>
                 options={[
@@ -157,20 +159,20 @@ export const SettingsConfiguration: Component = () => {
 
         {/* System Prompt (NEW) */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">System Prompt</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.systemPrompt")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Custom system prompt"
-              description="Persistent instructions prepended to every conversation (leave empty for model default)"
+              title={language.t("settings.localConfig.customPrompt")}
+              description={language.t("settings.localConfig.customPromptDescription")}
             >
               <div class="w-full sm:w-96">
                 <TextField
                   multiline
                   value={config.systemPrompt}
                   onChange={(v) => update("systemPrompt", v ?? "")}
-                  placeholder="e.g. You are a senior C++ engineer. Always cite file paths and line numbers."
+                  placeholder={language.t("settings.localConfig.promptPlaceholder")}
                   hideLabel
-                  label="System prompt"
+                  label={language.t("settings.localConfig.systemPrompt")}
                 />
               </div>
             </SettingsRow>
@@ -179,9 +181,9 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Presets */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Preset</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.preset")}</h3>
           <SettingsList>
-            <SettingsRow title="Configuration profile" description="Pre-configured settings for common use cases">
+            <SettingsRow title={language.t("settings.localConfig.profile")} description={language.t("settings.localConfig.profileDescription")}>
               <Select
                 size="normal"
                 options={["custom", "fast", "quality", "eco", "long-context"]}
@@ -213,11 +215,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Output Tokens */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Output Tokens</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.outputTokens")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Mode"
-              description="Auto adjusts based on model and available context. Manual lets you set a fixed limit."
+              title={language.t("settings.localConfig.mode")}
+              description={language.t("settings.localConfig.outputModeDescription")}
             >
               <Select
                 size="normal"
@@ -229,8 +231,8 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
             <Show when={config.outputTokensMode === "manual"}>
               <SettingsRow
-                title="Max output tokens"
-                description="Maximum number of tokens the model can generate per response"
+                title={language.t("settings.localConfig.maxOutputTokens")}
+                description={language.t("settings.localConfig.maxOutputDescription")}
               >
                 <SettingsSlider
                   value={config.outputTokensManual}
@@ -248,11 +250,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Context Window */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Context Window</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.contextWindow")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Mode"
-              description="Auto uses the model's native context length. Manual lets you constrain it."
+              title={language.t("settings.localConfig.mode")}
+              description={language.t("settings.localConfig.contextModeDescription")}
             >
               <Select
                 size="normal"
@@ -264,8 +266,8 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
             <Show when={config.contextMode === "manual"}>
               <SettingsRow
-                title="Context size"
-                description="Maximum context window for the conversation"
+                title={language.t("settings.localConfig.contextSize")}
+                description={language.t("settings.localConfig.contextSizeDescription")}
               >
                 <SettingsSlider
                   value={config.contextManual}
@@ -280,11 +282,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Sampling */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Sampling</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.sampling")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Temperature"
-              description="Higher = more creative, lower = more focused (0.0 - 2.0)"
+              title={language.t("settings.localConfig.temperature")}
+              description={language.t("settings.localConfig.temperatureDescription")}
             >
               <SettingsSlider
                 value={config.temperature}
@@ -294,8 +296,8 @@ export const SettingsConfiguration: Component = () => {
               />
             </SettingsRow>
             <SettingsRow
-              title="Top P"
-              description="Nucleus sampling threshold (0.0 - 1.0)"
+              title={language.t("settings.localConfig.topP")}
+              description={language.t("settings.localConfig.topPDescription")}
             >
               <SettingsSlider
                 value={config.topP}
@@ -305,8 +307,8 @@ export const SettingsConfiguration: Component = () => {
               />
             </SettingsRow>
             <SettingsRow
-              title="Top K"
-              description="Limit to top K most likely tokens (1 - 100). Aligns with Gemma/Gallery default of 64."
+              title={language.t("settings.localConfig.topK")}
+              description={language.t("settings.localConfig.topKDescription")}
             >
               <SettingsSlider
                 value={config.topK}
@@ -320,11 +322,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* KV Cache (Local models only) */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">KV Cache (Local AI)</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.kvCache")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Quantization"
-              description="KV cache type for local LLM server (affects VRAM usage)"
+              title={language.t("settings.localConfig.quantization")}
+              description={language.t("settings.localConfig.quantizationDescription")}
             >
               <Select
                 size="normal"
@@ -350,11 +352,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* GPU/CPU Offloading */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">GPU/CPU Offloading</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.offloading")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Mode"
-              description="How to split model layers between GPU and CPU"
+              title={language.t("settings.localConfig.mode")}
+              description={language.t("settings.localConfig.offloadDescription")}
             >
               <Select
                 size="normal"
@@ -381,11 +383,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Memory Management */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Memory</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.memory")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Memory mapping (mmap)"
-              description="Use OS memory mapping for model weights"
+              title={language.t("settings.localConfig.mmap")}
+              description={language.t("settings.localConfig.mmapDescription")}
             >
               <Select
                 size="normal"
@@ -412,11 +414,11 @@ export const SettingsConfiguration: Component = () => {
 
         {/* Speculative Decoding */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Speculative Decoding (Local AI)</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.localConfig.speculative")}</h3>
           <SettingsList>
             <SettingsRow
-              title="Draft model"
-              description="Small model for speculative decoding (2-3x speedup)"
+              title={language.t("settings.localConfig.draftModel")}
+              description={language.t("settings.localConfig.draftModelDescription")}
             >
               <DraftModelSelect
                 current={config.draftModel}
@@ -436,14 +438,14 @@ export const SettingsConfiguration: Component = () => {
             onClick={() => setAdvancedOpen(!advancedOpen())}
             class="flex items-center justify-between text-14-medium text-text-strong pb-2 cursor-pointer hover:text-text-strong"
           >
-            <span>Advanced</span>
+            <span>{language.t("settings.localConfig.advanced")}</span>
             <span class="text-12-regular text-text-weak">{advancedOpen() ? "▾" : "▸"}</span>
           </button>
           <Show when={advancedOpen()}>
             <SettingsList>
               <SettingsRow
-                title="CPU threads"
-                description="Number of CPU threads for inference (0 = auto-detect big-cores)"
+                title={language.t("settings.localConfig.cpuThreads")}
+                description={language.t("settings.localConfig.cpuThreadsDescription")}
               >
                 <SettingsSlider
                   value={config.threads}
@@ -453,8 +455,8 @@ export const SettingsConfiguration: Component = () => {
                 />
               </SettingsRow>
               <SettingsRow
-                title="Flash attention"
-                description="Enable optimized attention kernel (recommended on)"
+                title={language.t("settings.localConfig.flashAttention")}
+                description={language.t("settings.localConfig.flashAttentionDescription")}
               >
                 <Switch
                   checked={config.flashAttn}
@@ -462,8 +464,8 @@ export const SettingsConfiguration: Component = () => {
                 />
               </SettingsRow>
               <SettingsRow
-                title="KV cache reuse"
-                description="Reuse KV cache between turns for faster multi-turn (auto-disabled on Gemma 4 SWA)"
+                title={language.t("settings.localConfig.cacheReuse")}
+                description={language.t("settings.localConfig.cacheReuseDescription")}
               >
                 <Switch
                   checked={config.cacheReuse}
@@ -471,8 +473,8 @@ export const SettingsConfiguration: Component = () => {
                 />
               </SettingsRow>
               <SettingsRow
-                title="Batch size (n_batch)"
-                description="Token batch size for prefill (higher = faster prefill, more VRAM)"
+                title={language.t("settings.localConfig.batchSize")}
+                description={language.t("settings.localConfig.batchSizeDescription")}
               >
                 <SettingsSlider
                   value={config.nBatch}

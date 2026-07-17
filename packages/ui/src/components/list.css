@@ -135,10 +135,16 @@
     animation: scroll;
     animation-timeline: --scroll;
     scroll-timeline: --scroll y;
-    scrollbar-width: none;
+    scrollbar-width: auto;
     -ms-overflow-style: none;
     &::-webkit-scrollbar {
-      display: none;
+      display: block;
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: var(--border-base);
+      border-radius: 4px;
     }
 
     [data-slot="list-empty-state"] {

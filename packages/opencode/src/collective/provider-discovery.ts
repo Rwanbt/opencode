@@ -71,12 +71,20 @@ export namespace ProviderDiscovery {
 
   export const discover = Effect.fn("ProviderDiscovery.discover")(function* (
     explicit?: Array<{ providerID: string; modelID: string; role?: string }>,
-    maxProviders?: number,
+    _maxProviders?: number,
   ) {
-    if (explicit && explicit.length >= 2) {
-      log.info("using explicit participants", { count: explicit.length })
+    if (explicit && explicit.length >= 1) {
+      const unique = new Map<string, (typeof explicit)[number]>()
+      for (const participant of explicit) {
+        unique.set(`${participant.providerID}:${participant.modelID}`, participant)
+      }
+      if (unique.size < 2) {
+        return yield* Effect.fail(new InsufficientProvidersError({ available: unique.size, required: 2 }))
+      }
+
+      log.info("using explicit participants", { count: unique.size })
       return {
-        providers: explicit.map((p) => ({
+        providers: [...unique.values()].map((p) => ({
           providerID: ProviderID.make(p.providerID),
           modelID: ModelID.make(p.modelID),
           role: p.role,
@@ -90,10 +98,7 @@ export namespace ProviderDiscovery {
     const authEntries = yield* Effect.promise(() => Auth.all())
     const available: DiscoveredProvider[] = []
     const ghostWarnings: GhostWarning[] = []
-    const cap = maxProviders ?? 5
-
     for (const pref of PREFERRED_MODELS) {
-      if (available.length >= cap) break
 
       const pid = ProviderID.make(pref.providerID)
       const provider = providers[pid]
@@ -194,6 +199,29 @@ export namespace ProviderDiscovery {
 
     return { providers: available, ghostWarnings }
   })
+
+  export function includeJudge(
+    providers: DiscoveredProvider[],
+    judgeProviderID?: ProviderID,
+    judgeModelID?: ModelID,
+  ): DiscoveredProvider[] {
+    if (!judgeProviderID || !judgeModelID) return providers
+
+    const alreadyIncluded = providers.some(
+      (provider) => provider.providerID === judgeProviderID && provider.modelID === judgeModelID,
+    )
+    if (alreadyIncluded) return providers
+
+    return [
+      {
+        providerID: judgeProviderID,
+        modelID: judgeModelID,
+        role: "judge",
+        authMethod: "api_key",
+      },
+      ...providers,
+    ]
+  }
 
   export function selectJudge(
     participants: DiscoveredProvider[],

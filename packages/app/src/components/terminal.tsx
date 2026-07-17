@@ -742,29 +742,6 @@ export const Terminal = (props: TerminalProps) => {
           // SIGWINCH is ever emitted and mksh's readline pad-erase
           // redisplay never fires — fixes the portrait first-prompt bug at
           // its root.
-          // FORK (P5 investigation, 2026-07-09): dump the EXACT measurement
-          // feeding pty.create(). PTY-Server native logs show all sessions
-          // are spawned with cols=36 rows=1 (bash LINES=1), but the visible
-          // container is ~43 cols x ~7 rows. Suspect: waitForStableContainerSize
-          // returned early on a transient 1-row stable state. Capture before/after
-          // waitForStableContainerSize + the actual t.cols/t.rows + container +
-          // t.element rect to identify the race.
-          {
-            const contRect = container.getBoundingClientRect()
-            const elemRect = (t.element ?? container).getBoundingClientRect()
-            console.log(
-              "[term-investigation] lazy-create measurement",
-              JSON.stringify({
-                id,
-                tCols: t.cols,
-                tRows: t.rows,
-                containerRect: { w: Math.round(contRect.width), h: Math.round(contRect.height) },
-                tElementRect: { w: Math.round(elemRect.width), h: Math.round(elemRect.height) },
-                tColsExpected: Math.floor(elemRect.width / 8.4),
-                tRowsExpected: Math.floor(elemRect.height / 17),
-              }),
-            )
-          }
           // FORK (P1, 2026-07-09): SDK default `throwOnError:false` returns
           // errors via `res.error` instead of throwing. The previous try/catch
           // was unreachable on HTTP errors, so a failed lazy-create left
@@ -779,23 +756,6 @@ export const Terminal = (props: TerminalProps) => {
             ...(local.pty.command ? { command: local.pty.command } : {}),
           })
           if (createRes.error) {
-            // FORK (P5 investigation, 2026-07-09): trace lazy-create failure
-            // (Site 4 from P1). If this fires alongside failPending in the
-            // context, lazy-create is rejecting a tab — but it should NOT be
-            // the active tab if the device is past the welcome screen.
-            console.log(
-              "[term-investigation] lazy-create pty.create failed",
-              JSON.stringify({
-                id,
-                title: local.pty.title,
-                cols: t.cols,
-                rows: t.rows,
-                isPending: local.pty._pending,
-                errorName: (createRes.error as { name?: string })?.name,
-                errorMessage:
-                  createRes.error instanceof Error ? createRes.error.message : String(createRes.error),
-              }),
-            )
             addDebug(`pty.create failed: ${createRes.error instanceof Error ? createRes.error.message : String(createRes.error)}`)
             terminalCtx.failPending(id)
             throw createRes.error
@@ -821,16 +781,6 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         if (once.value) return
         once.value = true
-        // FORK (P5 investigation, 2026-07-09): WS path. If this fires for the
-        // T2 id when the user presses Enter, the bug is on the frontend side
-        // (WS dropped, retry exhausted), not the backend killing bash.
-        console.log(
-          "[term-investigation] terminal fail() (WS retry exhausted or auth failed)",
-          JSON.stringify({
-            id,
-            errMessage: err instanceof Error ? err.message : String(err),
-          }),
-        )
         local.onConnectError?.(err)
       }
 

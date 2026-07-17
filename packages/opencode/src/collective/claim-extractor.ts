@@ -5,6 +5,8 @@ import { Provider } from "../provider/provider"
 import type { ProviderID, ModelID } from "../provider/schema"
 import { Collective } from "./types"
 import { Log } from "../util/log"
+import { Bus } from "../bus"
+import * as Events from "./events"
 
 import PROMPT_EXTRACTOR from "./prompts/extractor.txt"
 import PROMPT_EXHAUSTIVITY from "./prompts/exhaustivity.txt"
@@ -13,6 +15,7 @@ export namespace ClaimExtractor {
   const log = Log.create({ service: "claim-extractor" })
 
   const EXHAUSTIVITY_THRESHOLD = 0.95
+  const STRUCTURED_OUTPUT_TIMEOUT_MS = 30_000
 
   const ExtractedClaimsSchema = z.object({
     claims: z.array(
@@ -47,8 +50,18 @@ export namespace ClaimExtractor {
     question: string,
     extractorProviderID: ProviderID,
     extractorModelID: ModelID,
+    bus: Bus.Interface,
+    debateID: Collective.DebateID,
   ) {
     log.info("extracting claims", { responseCount: responses.length })
+
+    const provider = `${extractorProviderID}/${extractorModelID}`
+    yield* bus.publish(Events.ProviderStarted, {
+      debateID,
+      provider,
+      phase: "phase2_extract",
+    })
+    const start = Date.now()
 
     const anonymizedResponses = responses.map((r, i) => ({
       index: i,
@@ -57,21 +70,18 @@ export namespace ClaimExtractor {
       outOfRoleInsights: r.outOfRoleInsights,
     }))
 
-    const model = yield* Effect.promise(() =>
-      Provider.getLanguage({
-        providerID: extractorProviderID,
-        id: extractorModelID,
-      } as Provider.Model),
-    )
+    const catalogModel = yield* Effect.promise(() => Provider.getModel(extractorProviderID, extractorModelID))
+    const model = yield* Effect.promise(() => Provider.getLanguage(catalogModel))
+    const temperature = catalogModel.capabilities.temperature ? 0.1 : undefined
 
     // Phase 2a — Extraction
-    let rawClaims = yield* extractClaims(model, question, anonymizedResponses)
+    let rawClaims = yield* extractClaims(model, temperature, question, anonymizedResponses, bus, debateID, provider)
 
     // Phase 2b — Exhaustivity check with re-extraction loop
     let attempts = 0
     const maxAttempts = 2
     while (attempts < maxAttempts) {
-      const check = yield* checkExhaustivity(model, question, anonymizedResponses, rawClaims)
+      const check = yield* checkExhaustivity(model, temperature, question, anonymizedResponses, rawClaims, bus, debateID, provider)
 
       if (check.coveragePercent >= EXHAUSTIVITY_THRESHOLD * 100 || check.missedClaims.length === 0) {
         break
@@ -83,7 +93,7 @@ export namespace ClaimExtractor {
         attempt: attempts + 1,
       })
 
-      const recoveredClaims = check.missedClaims.map((m) => ({
+      const recoveredClaims = check.missedClaims.map((m: any) => ({
         text: m.text,
         category: m.category,
         confidence: m.confidence,
@@ -110,6 +120,14 @@ export namespace ClaimExtractor {
       output: 0,
     }
 
+    yield* bus.publish(Events.ProviderCompleted, {
+      debateID,
+      provider,
+      tokens: totalTokens.input + totalTokens.output,
+      durationMs: Date.now() - start,
+      phase: "phase2_extract",
+    })
+
     log.info("extraction complete", {
       totalClaims: claims.length,
       unique: claims.filter((c) => c.noveltyMarker === "unique").length,
@@ -122,43 +140,95 @@ export namespace ClaimExtractor {
 
   function extractClaims(
     model: any,
+    temperature: number | undefined,
     question: string,
     responses: Array<{ index: number; hash: string; content: string; outOfRoleInsights: string[] }>,
+    bus: Bus.Interface,
+    debateID: Collective.DebateID,
+    provider: string,
   ) {
     return Effect.gen(function* () {
-      const result = yield* Effect.tryPromise({
+      const result: any = yield* Effect.tryPromise({
         try: () =>
           generateObject({
             model,
             schema: ExtractedClaimsSchema,
             system: PROMPT_EXTRACTOR,
             prompt: buildExtractionPrompt(question, responses),
-            temperature: 0.1,
+            temperature,
+            abortSignal: AbortSignal.timeout(STRUCTURED_OUTPUT_TIMEOUT_MS),
           }),
-        catch: (e) => new Error(`Claim extraction failed: ${e}`),
-      })
-      return result.object.claims.map((c) => ({ ...c, isRecovered: false }))
+        catch: (e) => {
+          const err = new Error(`Claim extraction failed: ${e}`)
+          Effect.runFork(
+            bus.publish(Events.ProviderFailed, {
+              debateID,
+              provider,
+              error: String(e),
+              phase: "phase2_extract",
+            }),
+          )
+          return err
+        },
+      }).pipe(Effect.orElseSucceed(() => null))
+      if (!result) return fallbackClaims(responses)
+      return result.object.claims.map((c: any) => ({ ...c, isRecovered: false }))
     })
+  }
+
+  function fallbackClaims(responses: Array<{ hash: string; content: string }>) {
+    return responses.flatMap((response) =>
+      response.content
+        .split("\\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 20)
+        .slice(0, 20)
+        .map((text) => ({
+          text,
+          category: "other" as const,
+          confidence: 0.5,
+          isOutOfRole: false,
+          isActionable: false,
+          isExistenceClaim: false,
+          verificationHint: "Source: " + response.hash.slice(0, 8),
+        })),
+    )
   }
 
   function checkExhaustivity(
     model: any,
+    temperature: number | undefined,
     question: string,
     responses: Array<{ index: number; hash: string; content: string }>,
     extractedClaims: Array<{ text: string }>,
+    bus: Bus.Interface,
+    debateID: Collective.DebateID,
+    provider: string,
   ) {
     return Effect.gen(function* () {
-      const result = yield* Effect.tryPromise({
+      const result: any = yield* Effect.tryPromise({
         try: () =>
           generateObject({
             model,
             schema: ExhaustivityCheckSchema,
             system: PROMPT_EXHAUSTIVITY,
             prompt: buildExhaustivityPrompt(question, responses, extractedClaims),
-            temperature: 0.1,
+            temperature,
+            abortSignal: AbortSignal.timeout(STRUCTURED_OUTPUT_TIMEOUT_MS),
           }),
-        catch: (e) => new Error(`Exhaustivity check failed: ${e}`),
-      })
+        catch: (e) => {
+          const err = new Error(`Exhaustivity check failed: ${e}`)
+          Effect.runFork(
+            bus.publish(Events.ProviderFailed, {
+              debateID,
+              provider,
+              error: String(e),
+              phase: "phase2_extract",
+            }),
+          )
+          return err
+        },
+      }).pipe(Effect.orElseSucceed(() => ({ object: { missedClaims: [], coveragePercent: 100, isExhaustive: true } })))
       return result.object
     })
   }

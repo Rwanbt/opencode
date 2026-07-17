@@ -30,6 +30,23 @@ jobs:
       - name: Fix Pulumi version conflict
         run: sudo rm -f /usr/local/bin/pulumi-language-nodejs
 
+      - name: Install Pulumi Stripe provider without GitHub API rate limits
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STRIPE_VERSION="0.0.28"
+          STRIPE_PLUGIN_DIR="$HOME/.pulumi/plugins/resource-stripe-v${STRIPE_VERSION}"
+          STRIPE_ARCHIVE="/tmp/pulumi-resource-stripe-v${STRIPE_VERSION}-linux-amd64.tar.gz"
+          mkdir -p "$STRIPE_PLUGIN_DIR"
+          curl --fail --location --retry 5 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            "https://github.com/georgegebbett/pulumi-stripe/releases/download/v${STRIPE_VERSION}/pulumi-resource-stripe-v${STRIPE_VERSION}-linux-amd64.tar.gz" \
+            --output "$STRIPE_ARCHIVE"
+          tar -xzf "$STRIPE_ARCHIVE" -C "$STRIPE_PLUGIN_DIR"
+          test -x "$STRIPE_PLUGIN_DIR/pulumi-resource-stripe"
+
       - name: Deploy
         run: bun sst deploy --stage=${{ github.ref_name }}
         env:

@@ -10,6 +10,10 @@ on:
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -41,7 +45,9 @@ jobs:
           toolchain: stable
           targets: aarch64-linux-android
 
+      # Cache is best-effort: Android builds can exhaust runner disk during post-job metadata collection.
       - name: Rust cache
+        continue-on-error: true
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
         with:
           workspaces: packages/mobile/src-tauri
@@ -232,7 +238,7 @@ jobs:
       - name: Download ONNX Runtime for Android
         run: |
           echo "Downloading ONNX Runtime for Android (aarch64)..."
-          ORT_VERSION="1.22.0"
+          ORT_VERSION="1.19.2"
 
           # Download Microsoft's official ONNX Runtime Android AAR
           curl -fsSL "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
@@ -240,9 +246,9 @@ jobs:
 
           # Extract the native .so for arm64
           cd /tmp && unzip -o ort.aar "jni/arm64-v8a/*"
-          mkdir -p /tmp/ort-android/lib
-          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/lib/
-          ls -la /tmp/ort-android/lib/
+          mkdir -p /tmp/ort-android
+          cp /tmp/jni/arm64-v8a/libonnxruntime.so /tmp/ort-android/libonnxruntime.so
+          ls -la /tmp/ort-android/
 
           # Also need the headers — download the full release for headers
           curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-android-${ORT_VERSION}.aar" \
@@ -255,31 +261,39 @@ jobs:
 
       - name: Build Android APK
         working-directory: packages/mobile
-        run: bunx tauri android build --target aarch64
+        run: bash scripts/build-android.sh
 
       # ─── Sign APK ─────────────────────────────────────────────────
-      - name: Sign APK
+      # ─── Sign APK ─────────────────────────────────────────────────
+      - name: Sign APK with release key
+        env:
+          OPENCODE_ANDROID_KEYSTORE_B64: ${{ secrets.OPENCODE_ANDROID_KEYSTORE_B64 }}
+          OPENCODE_ANDROID_KEY_ALIAS: ${{ secrets.OPENCODE_ANDROID_KEY_ALIAS }}
+          OPENCODE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OPENCODE_ANDROID_KEYSTORE_PASSWORD }}
+          OPENCODE_ANDROID_KEY_PASSWORD: ${{ secrets.OPENCODE_ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           APK="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           SIGNED="packages/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release/opencode-mobile.apk"
-
-          # Create a debug keystore for CI
-          keytool -genkey -v \
-            -keystore /tmp/ci.keystore \
-            -alias opencode -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=OpenCode CI, OU=Dev, O=OpenCode, L=Paris, ST=IDF, C=FR"
-
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER" || { echo "Android apksigner was not found"; exit 1; }
+          echo "Using apksigner: $APKSIGNER"
           cp "$APK" "$SIGNED"
-          java -jar "$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | tail -1)/lib/apksigner.jar" sign \
-            --ks /tmp/ci.keystore \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            "$SIGNED"
+          if [ -n "${OPENCODE_ANDROID_KEYSTORE_B64}" ] && [ -n "${OPENCODE_ANDROID_KEY_ALIAS}" ] && [ -n "${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" ] && [ -n "${OPENCODE_ANDROID_KEY_PASSWORD}" ]; then
+            echo "Signing APK with configured release key"
+            echo "${OPENCODE_ANDROID_KEYSTORE_B64}" | base64 --decode > /tmp/opencode-release.keystore
+            "$APKSIGNER" sign --ks /tmp/opencode-release.keystore --ks-key-alias "${OPENCODE_ANDROID_KEY_ALIAS}" --ks-pass pass:"${OPENCODE_ANDROID_KEYSTORE_PASSWORD}" --key-pass pass:"${OPENCODE_ANDROID_KEY_PASSWORD}" "$SIGNED"
+            rm -f /tmp/opencode-release.keystore
+          else
+            echo "Release signing secrets are not configured; using an ephemeral CI key for dev validation"
+            keytool -genkeypair -v -keystore /tmp/opencode-ci.keystore -alias opencode-ci -keyalg RSA -keysize 2048 -validity 1 -storepass android -keypass android -dname "CN=OpenCode CI"
+            "$APKSIGNER" sign --ks /tmp/opencode-ci.keystore --ks-key-alias opencode-ci --ks-pass pass:android --key-pass pass:android "$SIGNED"
+            rm -f /tmp/opencode-ci.keystore
+          fi
+          "$APKSIGNER" verify --verbose "$SIGNED"
+          sha256sum "$SIGNED" | tee "$SIGNED.sha256"
 
-          echo "Signed APK: $(du -sh "$SIGNED" | cut -f1)"
-
-      - name: Upload APK
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: opencode-mobile-apk

@@ -19,3 +19,9 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# JNI calls this method from the Rust embedded-server runtime. R8 cannot see
+# that call through the native boundary and would otherwise remove the method.
+-keepclassmembers class ai.opencode.mobile.MainActivity {
+    public java.lang.String getAuthStorageKey();
+}

@@ -19,6 +19,57 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { ProviderTransform } from "@/provider/transform"
+import { ObservabilityId } from "@/observability/id"
+import { finishTool, startTool } from "@/observability/lifecycle"
+import { resolveCapturePolicy } from "@/observability/capture-policy"
+import { ObservabilityRuntime } from "@/observability/runtime"
+import type { ObservabilityService } from "@/observability/service"
+import type { TraceContext } from "@/observability/trace-context"
+import { sanitizeText } from "@/observability/sanitizer"
+import { hmacSha256 } from "@/observability/hmac"
+import { secret as observabilitySecret } from "@/observability/hmac-secret"
+import { resolveContentCaptureLevel, withContentCapture, type ContentOptIn } from "@/observability/capture-content"
+
+// The skill tool is the only tool whose identity (name, absolute path) is
+// itself sensitive — everything else is generic tool args/output already
+// covered by sanitizeText(). HMAC only, regardless of capture level: the
+// Phase 1 privacy matrix allows skill.name as "HMAC or absent" even at
+// local_metadata, and absolute paths as "always HMAC only".
+async function skillIdentityMetadata(name: unknown, dir: unknown) {
+  const result: { skillHmac?: string; pathHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (typeof name === "string" && name.length > 0) result.skillHmac = hmacSha256(secret, name)
+    if (typeof dir === "string" && dir.length > 0) result.pathHmac = hmacSha256(secret, dir)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
+
+// File path HMAC for file tools (read, write, edit, glob, grep, bash, apply_patch, ls)
+async function filePathIdentityMetadata(filePath: unknown) {
+  const result: { pathHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (typeof filePath === "string" && filePath.length > 0) result.pathHmac = hmacSha256(secret, filePath)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
+
+// MCP tool HMAC for MCP tools (prefixed with "mcp_")
+async function mcpToolIdentityMetadata(toolName: string) {
+  const result: { mcpHmac?: string } = {}
+  try {
+    const secret = await observabilitySecret()
+    if (toolName.startsWith("mcp_") && toolName.length > 4) result.mcpHmac = hmacSha256(secret, toolName)
+  } catch {
+    // Never let a missing/unreadable secret affect the tool-call path.
+  }
+  return result
+}
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 2
@@ -63,6 +114,28 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    // Open tool.call spans awaiting a terminal event, keyed by toolCallID.
+    // Anything still here in cleanup() never reached tool-result/tool-error,
+    // i.e. it was aborted mid-flight. toolName/identityMetadata are captured
+    // once at "tool-call" time (the same values used on the started event)
+    // so the aborted event carries the same toolKind/skillHmac/pathHmac/
+    // mcpHmac identity as started/finished/failed instead of an empty
+    // metadata object — a tool never reaching tool-result/tool-error means
+    // there's no later output/error to derive identity from anyway.
+    toolSpans: Record<
+      string,
+      {
+        trace: TraceContext
+        startedAtMs: number
+        toolName: string
+        identityMetadata: Record<string, string | undefined>
+        // Raw args JSON, kept only so the aborted-cleanup path (no
+        // tool-result/tool-error to derive content from) can still capture
+        // args content under Phase 3 opt-in — same rationale as
+        // identityMetadata above.
+        argsText: string
+      }
+    >
   }
 
   type StreamEvent = Event
@@ -112,8 +185,26 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          toolSpans: {},
         }
         let aborted = false
+
+        // Resolved once per turn, mirroring session/llm.ts. A single
+        // per-turn traceId correlates this turn's tool calls with each
+        // other; it is independent from the LLM call's own traceId since
+        // that one isn't threaded across the LLM/tool boundary yet.
+        const capturePolicy = resolveCapturePolicy((yield* config.get()).experimental?.observability)
+        const observability: ObservabilityService | undefined = capturePolicy.enabled
+          ? ObservabilityRuntime.service()
+          : undefined
+        const sessionInfo = observability ? yield* session.get(ctx.sessionID).pipe(Effect.orElseSucceed(() => undefined)) : undefined
+        const turnTraceId = observability ? ObservabilityId.create() : undefined
+        // Phase 3 opt-in (ADR-1032), resolved once per turn like capturePolicy.
+        // undefined (the common case) makes every withContentCapture() call
+        // below a no-op.
+        const contentOptIn: ContentOptIn | undefined = observability
+          ? resolveContentCaptureLevel({ sessionId: ctx.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
+          : undefined
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
@@ -196,6 +287,51 @@ export namespace SessionProcessor {
                 state: { status: "running", input: value.input, time: { start: Date.now() } },
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
+
+              if (observability && turnTraceId) {
+                const started = startTool({ traceId: turnTraceId, sessionId: ctx.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
+                const argsClassification = sanitizeText({ text: JSON.stringify(value.input ?? {}) })
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
+                if (value.toolName === "skill") {
+                  skillIdentity = yield* Effect.promise(() =>
+                    skillIdentityMetadata((value.input as any)?.name, undefined),
+                  )
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(value.toolName)) {
+                  // File tools: extract filePath from input
+                  const input = value.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (value.toolName.startsWith("mcp_")) {
+                  // MCP tools: HMAC the tool name
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(value.toolName))
+                }
+                const identityMetadata = { ...skillIdentity, ...fileIdentity, ...mcpIdentity }
+                const argsText = JSON.stringify(value.input ?? {})
+                ctx.toolSpans[value.toolCallId] = {
+                  trace: started.trace,
+                  startedAtMs: started.event.tsMs,
+                  toolName: value.toolName,
+                  identityMetadata,
+                  argsText,
+                }
+                observability.record(
+                  started.trace,
+                  withContentCapture(
+                    {
+                      ...started.event,
+                      metadata: { toolKind: value.toolName, ...identityMetadata },
+                      originalSizeBytes: argsClassification.originalSizeBytes,
+                      payloadTruncated: argsClassification.payloadTruncated,
+                      redactionStatus: argsClassification.redactionStatus,
+                      localRedacted: { classes: argsClassification.classes },
+                    },
+                    contentOptIn,
+                    argsText,
+                  ),
+                )
+              }
 
               // Cross-message tool history. Local 4B models retry failed tool
               // calls in NEW assistant messages (each turn = new message), so a
@@ -309,6 +445,50 @@ export namespace SessionProcessor {
                 },
               })
               delete ctx.toolcalls[value.toolCallId]
+
+              const finishedSpan = ctx.toolSpans[value.toolCallId]
+              if (observability && finishedSpan) {
+                const terminal = finishTool(finishedSpan.trace, "finished", finishedSpan.startedAtMs)
+                const outputClassification = sanitizeText({ text: value.output.output })
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
+                if (toolName === "skill") {
+                  const outputMetadata = value.output.metadata as { name?: unknown; dir?: unknown } | undefined
+                  skillIdentity = yield* Effect.promise(() =>
+                    skillIdentityMetadata(outputMetadata?.name, outputMetadata?.dir),
+                  )
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(toolName)) {
+                  const input = match.state.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (toolName.startsWith("mcp_")) {
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
+                }
+                observability.record(
+                  terminal.context,
+                  withContentCapture(
+                    {
+                      ...terminal.event,
+                      metadata: {
+                        toolKind: toolName,
+                        outputFileKind: outputClassification.fileKind,
+                        outputMime: outputClassification.mime,
+                        ...skillIdentity,
+                        ...fileIdentity,
+                        ...mcpIdentity,
+                      },
+                      originalSizeBytes: outputClassification.originalSizeBytes,
+                      payloadTruncated: outputClassification.payloadTruncated,
+                      redactionStatus: outputClassification.redactionStatus,
+                      localRedacted: { classes: outputClassification.classes },
+                    },
+                    contentOptIn,
+                    value.output.output,
+                  ),
+                )
+                delete ctx.toolSpans[value.toolCallId]
+              }
               return
             }
 
@@ -360,6 +540,34 @@ export namespace SessionProcessor {
                 ctx.blocked = ctx.shouldBreak
               }
               delete ctx.toolcalls[value.toolCallId]
+
+              const failedSpan = ctx.toolSpans[value.toolCallId]
+              if (observability && failedSpan) {
+                const terminal = finishTool(failedSpan.trace, "failed", failedSpan.startedAtMs)
+                const errorKind = (value.error instanceof Error ? value.error.name : typeof value.error).slice(0, 128)
+                let skillIdentity: { skillHmac?: string; pathHmac?: string } = {}
+                let fileIdentity: { pathHmac?: string } = {}
+                let mcpIdentity: { mcpHmac?: string } = {}
+                if (toolName === "skill") {
+                  const requestedName = (value.input as any)?.name ?? (match.state.input as any)?.name
+                  skillIdentity = yield* Effect.promise(() => skillIdentityMetadata(requestedName, undefined))
+                } else if (["read", "write", "edit", "glob", "grep", "bash", "apply_patch", "ls"].includes(toolName)) {
+                  const input = match?.state.input as Record<string, unknown> | undefined
+                  const filePath = input?.filePath ?? input?.path ?? input?.directory
+                  fileIdentity = yield* Effect.promise(() => filePathIdentityMetadata(filePath))
+                } else if (toolName.startsWith("mcp_")) {
+                  mcpIdentity = yield* Effect.promise(() => mcpToolIdentityMetadata(toolName))
+                }
+                observability.record(
+                  terminal.context,
+                  withContentCapture(
+                    { ...terminal.event, metadata: { toolKind: toolName, errorKind, ...skillIdentity, ...fileIdentity, ...mcpIdentity } },
+                    contentOptIn,
+                    errorMsg,
+                  ),
+                )
+                delete ctx.toolSpans[value.toolCallId]
+              }
               return
             }
 
@@ -522,6 +730,24 @@ export namespace SessionProcessor {
               },
             })
           }
+
+          // Any span still open here never reached tool-result/tool-error —
+          // the turn ended (success, halt, or abort) while it was in flight.
+          if (observability) {
+            for (const span of Object.values(ctx.toolSpans)) {
+              const terminal = finishTool(span.trace, "aborted", span.startedAtMs)
+              observability.record(
+                terminal.context,
+                withContentCapture(
+                  { ...terminal.event, metadata: { toolKind: span.toolName, ...span.identityMetadata } },
+                  contentOptIn,
+                  span.argsText,
+                ),
+              )
+            }
+            ctx.toolSpans = {}
+          }
+
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
 

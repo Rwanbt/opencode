@@ -7,6 +7,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { PromptCache } from "@/provider/cache"
 import { resolveFallbackDirection, withStreamingFallback } from "@/provider/fallback"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -20,6 +21,31 @@ import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { Token } from "@/util/token"
+import { Session } from "."
+import { SessionID } from "./schema"
+import { ObservabilityId } from "@/observability/id"
+import { finishLlm, startLlm } from "@/observability/lifecycle"
+import { resolveCapturePolicy, type CapturePolicy } from "@/observability/capture-policy"
+import { ObservabilityRuntime } from "@/observability/runtime"
+import type { ObservabilityService } from "@/observability/service"
+import type { TraceContext } from "@/observability/trace-context"
+import { hmacSha256 } from "@/observability/hmac"
+import { secret as observabilitySecret } from "@/observability/hmac-secret"
+import { resolveContentCaptureLevel, withContentCapture, type ContentOptIn } from "@/observability/capture-content"
+
+// Best-effort text extraction from an AI SDK message's `content` — handles
+// both the plain-string shape and the multi-part array shape (text/file/
+// image parts) without depending on the exact ModelMessage union member.
+function extractMessageText(content: unknown): string {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    return content
+      .filter((part): part is { type: string; text: string } => typeof part === "object" && part !== null && (part as { type?: unknown }).type === "text")
+      .map((part) => part.text)
+      .join("\n")
+  }
+  return ""
+}
 
 function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise
@@ -32,6 +58,43 @@ function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
       (e) => { signal.removeEventListener("abort", onAbort); reject(e) },
     )
   })
+}
+
+// Records llm.call.failed without ever throwing into the LLM error path.
+// error_message_hmac is gated to captureMode=local_redacted per the Phase 1
+// privacy matrix (ADR-1022); error_kind is safe at local_metadata since it is
+// a bounded class name, never message content.
+async function recordLlmFailure(
+  observability: ObservabilityService,
+  trace: TraceContext,
+  startedAtMs: number,
+  error: unknown,
+  captureLevel: CapturePolicy["level"],
+  contentOptIn?: ContentOptIn,
+) {
+  const terminal = finishLlm(trace, "failed", startedAtMs)
+  const errorKind = (error instanceof Error ? error.name : typeof error).slice(0, 128)
+  const message = error instanceof Error ? error.message : String(error)
+  let errorMessageHmac: string | undefined
+  if (captureLevel === "local_redacted") {
+    try {
+      errorMessageHmac = hmacSha256(await observabilitySecret(), message)
+    } catch {
+      // Never let a missing/unreadable secret affect the LLM error path.
+    }
+  }
+  observability.record(
+    terminal.context,
+    withContentCapture(
+      {
+        ...terminal.event,
+        metadata: { errorKind },
+        localRedacted: errorMessageHmac ? { classes: [], errorMessageHmac } : { classes: [] },
+      },
+      contentOptIn,
+      message,
+    ),
+  )
 }
 
 export namespace LLM {
@@ -174,6 +237,8 @@ export namespace LLM {
       ]),
       input.abort,
     )
+
+    const capturePolicy = resolveCapturePolicy(cfg.experimental?.observability)
 
     // ── Provider fallback (Sprint 5 item 2) ─────────────────────────────────
     // Opt-in: experimental.provider.fallback = "local" | "cloud" | null.
@@ -354,7 +419,22 @@ export namespace LLM {
         ? undefined
         : localLLMLimits?.maxTokens ?? ProviderTransform.maxOutputTokens(input.model)
 
-    const tools = await resolveTools(input)
+    let tools = await resolveTools(input)
+
+    // Deferred prompt-cache-after-compaction chantier (plan v3.1, Phase 3).
+    // Gated behind the flag (not unconditional): reordering tools, even just
+    // alphabetically, can shift which tool a model is more inclined to call
+    // (plan §11 risk table) — flag off must stay bit-for-bit identical to the
+    // pre-Phase-3 caller-provided order. Canonicalizing lets the same
+    // effective toolset serialize identically across an agent switch, and
+    // annotating the last tool reserves a cache breakpoint that can carry
+    // over too — see ProviderTransform.message()'s matching slot reservation.
+    if (Flag.OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING) {
+      tools = PromptCache.canonicalizeToolOrder(tools)
+      const cacheCapabilities = PromptCache.getCapabilities(input.model)
+      tools = PromptCache.annotateLastToolForCache(tools, cacheCapabilities)
+    }
+    l.info("resolved tools", { toolCount: Object.keys(tools).length, toolNames: Object.keys(tools) })
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -413,11 +493,74 @@ export namespace LLM {
       }
     }
 
+    const observability = capturePolicy.enabled ? ObservabilityRuntime.service() : undefined
+    const sessionInfo = observability ? await Session.get(input.sessionID as SessionID).catch(() => undefined) : undefined
+    // Phase 3 opt-in (ADR-1032): checked once per call, session scope first.
+    // undefined (the common case) means every withContentCapture() call below
+    // is a no-op — content capture stays fully off the hot path when no
+    // opt-in is active.
+    const contentOptIn = observability
+      ? resolveContentCaptureLevel({ sessionId: input.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID })
+      : undefined
+    const promptText = contentOptIn ? extractMessageText([...messages].reverse().find((m) => m.role === "user")?.content) : ""
+    const llmStartedAtMs = Date.now()
+    const llmSpan = observability
+      ? startLlm({ traceId: ObservabilityId.create(), sessionId: input.sessionID, projectId: sessionInfo?.projectID, workspaceId: sessionInfo?.workspaceID }, llmStartedAtMs)
+      : undefined
+    if (observability && llmSpan) {
+      observability.record(
+        llmSpan.trace,
+        withContentCapture(
+          { ...llmSpan.event, metadata: { modelProvider: input.model.providerID, modelId: input.model.id } },
+          contentOptIn,
+          promptText,
+        ),
+      )
+    }
+
     return streamText({
-      onError(error) {
+      async onError(error) {
         l.error("stream error", {
           error,
         })
+        // The AI SDK awaits onError before continuing stream processing
+        // (see DefaultStreamTextResult's eventProcessor), so awaiting here
+        // guarantees the failed event is queued before the caller observes
+        // stream completion.
+        if (observability && llmSpan) {
+          await recordLlmFailure(observability, llmSpan.trace, llmStartedAtMs, error.error, capturePolicy.level, contentOptIn)
+        }
+      },
+      onFinish(event) {
+        if (!observability || !llmSpan) return
+        const usage = Session.getUsage({ model: input.model, usage: event.usage, metadata: event.providerMetadata })
+        const terminal = finishLlm(llmSpan.trace, "finished", llmStartedAtMs)
+        observability.record(
+          terminal.context,
+          withContentCapture(
+            {
+              ...terminal.event,
+              metadata: {
+                modelProvider: input.model.providerID,
+                modelId: input.model.id,
+                inputTokens: usage.tokens.input,
+                outputTokens: usage.tokens.output,
+                cacheReadTokens: usage.tokens.cache.read,
+                cacheWriteTokens: usage.tokens.cache.write,
+              },
+              costNanoUsd: Math.max(0, Math.round(usage.cost * 1_000_000_000)),
+              pricingSource: "Session.getUsage",
+              costComputedAtMs: Date.now(),
+            },
+            contentOptIn,
+            event.text,
+          ),
+        )
+      },
+      onAbort() {
+        if (!observability || !llmSpan) return
+        const terminal = finishLlm(llmSpan.trace, "aborted", llmStartedAtMs)
+        observability.record(terminal.context, terminal.event)
       },
       async experimental_repairToolCall(failed) {
         // Step 1: lowercase tool name normalization
@@ -548,6 +691,9 @@ export namespace LLM {
       }),
       experimental_telemetry: {
         isEnabled: cfg.experimental?.openTelemetry,
+        // Native observability is metadata-only in Phase 1; never let the AI SDK retain prompts or responses. See ADR-1031.
+        recordInputs: false,
+        recordOutputs: false,
         metadata: {
           userId: cfg.username ?? "unknown",
           sessionId: input.sessionID,

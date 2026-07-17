@@ -2,6 +2,7 @@ import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { LSPServer } from "../lsp/server"
 import { Log } from "../util/log"
+import { ExporterConfigSchema } from "../observability/exporter"
 
 // Zod schemas for opencode configuration. Extracted from config.ts to keep
 // that file under the size budget. config.ts re-binds every export into the
@@ -182,6 +183,15 @@ export const Agent = z
       .boolean()
       .optional()
       .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+    cli_hidden: z
+      .boolean()
+      .optional()
+      .describe(
+        "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
+      ),
+    app_hidden: z.boolean().optional().describe(
+      "Hide this agent from the desktop/mobile app agent selector only. Does not affect the CLI or programmatic/explicit invocation (default: false).",
+    ),
     options: z.record(z.string(), z.any()).optional(),
     color: z
       .union([
@@ -218,6 +228,8 @@ export const Agent = z
       "top_p",
       "mode",
       "hidden",
+      "cli_hidden",
+      "app_hidden",
       "color",
       "steps",
       "maxSteps",
@@ -281,6 +293,7 @@ export const Keybinds = z
     stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
     model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
     model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
+    model_refresh: z.string().optional().default("alt+r").describe("Force-refresh the models.dev catalog"),
     session_share: z.string().optional().default("none").describe("Share current session"),
     session_unshare: z.string().optional().default("none").describe("Unshare current session"),
     session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
@@ -322,6 +335,7 @@ export const Keybinds = z
     agent_list: z.string().optional().default("<leader>a").describe("List agents"),
     agent_cycle: z.string().optional().default("tab").describe("Next agent"),
     agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+    debate_models: z.string().optional().default("alt+w").describe("Configure debate models"),
     variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
     input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
     input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
@@ -570,6 +584,7 @@ export const Info = z
         // primary
         plan: Agent.optional(),
         build: Agent.optional(),
+        auto: Agent.optional(),
         // subagent
         general: Agent.optional(),
         explore: Agent.optional(),
@@ -698,6 +713,35 @@ export const Info = z
           .boolean()
           .optional()
           .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+        observability: z
+          .object({
+            enabled: z
+              .boolean()
+              .optional()
+              .describe("Enable native local observability event capture (default: false). See ADR-1020 through 1031."),
+            captureMode: z
+              .enum(["local_metadata", "local_redacted"])
+              .optional()
+              .describe(
+                "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
+              ),
+            retentionDays: z.number().int().positive().optional().describe("Delete events older than this many days. Undefined keeps events until another retention limit applies."),
+            maxEvents: z.number().int().positive().optional().describe("Maximum local observability event count. Default: 100000."),
+            exporters: z
+              .array(ExporterConfigSchema)
+              .optional()
+              .describe(
+                "Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.",
+              ),
+            backfillOnStart: z
+              .boolean()
+              .optional()
+              .describe(
+                "When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.",
+              ),
+          })
+          .optional()
+          .describe("Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured."),
         primary_tools: z
           .array(z.string())
           .optional()

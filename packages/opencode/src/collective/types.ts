@@ -2,6 +2,37 @@ import z from "zod"
 import { ProviderID, ModelID } from "../provider/schema"
 
 export namespace Collective {
+  export const DebateSelection = z.object({
+    primary: z.object({
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
+    }),
+    participants: z
+      .array(
+        z.object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
+          role: z.string().optional(),
+        }),
+      )
+      .min(1)
+      .superRefine((participants, context) => {
+        const seen = new Set<string>()
+        for (const [index, participant] of participants.entries()) {
+          const key = `${participant.providerID}:${participant.modelID}`
+          if (seen.has(key)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index],
+              message: "Participants must reference distinct models",
+            })
+          }
+          seen.add(key)
+        }
+      }),
+  })
+
+  export type DebateSelection = z.infer<typeof DebateSelection>
   // ── Identifiers ───────────────────────────────────────────────────────────
 
   export type DebateID = string & { readonly __brand: "DebateID" }
@@ -226,6 +257,7 @@ export namespace Collective {
     timestamp: z.string(),
     tier: DebateTier,
     providers: z.array(z.string()),
+    failedProviders: z.array(z.object({ provider: z.string(), error: z.string() })).default([]),
     roles: z.record(z.string(), z.string()),
     cost: z.number(),
     durationMs: z.number(),

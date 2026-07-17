@@ -1,4 +1,5 @@
 import { createSignal, Show } from "solid-js"
+import { useLanguage } from "@/context/language"
 
 export interface LoginFormProps {
   onLogin: (tokens: { accessToken: string; refreshToken: string; user: { id: string; username: string; role: string } }) => void
@@ -10,6 +11,7 @@ export interface LoginFormProps {
  * Talks to the /collab/login and /collab/register endpoints.
  */
 export function LoginForm(props: LoginFormProps) {
+  const language = useLanguage()
   const [mode, setMode] = createSignal<"login" | "register">("login")
   const [username, setUsername] = createSignal("")
   const [password, setPassword] = createSignal("")
@@ -46,7 +48,7 @@ export function LoginForm(props: LoginFormProps) {
 
       props.onLogin(data)
     } catch (e: any) {
-      setError(e.message || "Connection failed")
+      setError(e.message || language.t("auth.connectionFailed"))
     } finally {
       setLoading(false)
     }
@@ -55,11 +57,11 @@ export function LoginForm(props: LoginFormProps) {
   return (
     <form onSubmit={submit} class="flex flex-col gap-3 p-6 max-w-sm mx-auto">
       <h2 class="text-lg font-semibold text-center">
-        {mode() === "login" ? "Sign In" : "Create Account"}
+        {mode() === "login" ? language.t("auth.signIn") : language.t("auth.createAccount")}
       </h2>
 
       <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-secondary">Username</span>
+        <span class="text-xs font-medium text-secondary">{language.t("auth.username")}</span>
         <input
           type="text"
           value={username()}
@@ -72,7 +74,7 @@ export function LoginForm(props: LoginFormProps) {
 
       <Show when={mode() === "register"}>
         <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-secondary">Email (optional)</span>
+          <span class="text-xs font-medium text-secondary">{language.t("auth.emailOptional")}</span>
           <input
             type="email"
             value={email()}
@@ -83,7 +85,7 @@ export function LoginForm(props: LoginFormProps) {
       </Show>
 
       <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-secondary">Password</span>
+        <span class="text-xs font-medium text-secondary">{language.t("auth.password")}</span>
         <input
           type="password"
           value={password()}
@@ -104,7 +106,7 @@ export function LoginForm(props: LoginFormProps) {
         disabled={loading()}
         class="px-4 py-2 bg-primary text-white rounded-lg font-medium text-sm disabled:opacity-50"
       >
-        {loading() ? "..." : mode() === "login" ? "Sign In" : "Register"}
+        {loading() ? "..." : mode() === "login" ? language.t("auth.signIn") : "Register"}
       </button>
 
       <button
@@ -112,7 +114,7 @@ export function LoginForm(props: LoginFormProps) {
         class="text-xs text-secondary hover:text-primary"
         onClick={() => setMode((m) => (m === "login" ? "register" : "login"))}
       >
-        {mode() === "login" ? "Need an account? Register" : "Already have an account? Sign in"}
+        {mode() === "login" ? language.t("auth.needAccount") : language.t("auth.alreadyAccount")}
       </button>
     </form>
   )

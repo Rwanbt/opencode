@@ -4,34 +4,35 @@
 import { createMediaQuery } from "@solid-primitives/media"
 import { createMemo, For, Show } from "solid-js"
 import { useLayout } from "@/context/layout"
+import { useLanguage } from "@/context/language"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
-type Hint = { key: string; label: string }
+type Hint = { key: string; labelKey: string }
 
 // Shortcuts that are always relevant in the editor/file panel.
 const EDITOR_HINTS: Hint[] = [
-  { key: "Ctrl+S", label: "Sauver" },
-  { key: "Ctrl+Z", label: "Annuler" },
-  { key: "Ctrl+F", label: "Chercher" },
-  { key: "Ctrl+\\", label: "Split" },
-  { key: "Ctrl+.", label: "Actions" },
-  { key: "F12", label: "Définition" },
+  { key: "Ctrl+S", labelKey: "keyboard.save" },
+  { key: "Ctrl+Z", labelKey: "keyboard.undo" },
+  { key: "Ctrl+F", labelKey: "keyboard.find" },
+  { key: "Ctrl+\\", labelKey: "keyboard.split" },
+  { key: "Ctrl+.", labelKey: "keyboard.actions" },
+  { key: "F12", labelKey: "keyboard.definition" },
 ]
 
 // Shortcuts relevant when focus is in the chat input.
 const CHAT_HINTS: Hint[] = [
-  { key: "Ctrl+↵", label: "Envoyer" },
-  { key: "Esc", label: "Annuler" },
-  { key: "↑/↓", label: "Historique" },
-  { key: "Ctrl+K", label: "Nouvelle session" },
+  { key: "Ctrl+↵", labelKey: "keyboard.send" },
+  { key: "Esc", labelKey: "keyboard.cancel" },
+  { key: "↑/↓", labelKey: "keyboard.history" },
+  { key: "Ctrl+K", labelKey: "keyboard.newSession" },
 ]
 
 // Shortcuts relevant in the terminal.
 const TERMINAL_HINTS: Hint[] = [
-  { key: "Ctrl+C", label: "Interrompre" },
-  { key: "Ctrl+L", label: "Effacer" },
-  { key: "Ctrl+D", label: "EOF" },
-  { key: "Ctrl+T", label: "Nouv. terminal" },
+  { key: "Ctrl+C", labelKey: "keyboard.interrupt" },
+  { key: "Ctrl+L", labelKey: "keyboard.clear" },
+  { key: "Ctrl+D", labelKey: "keyboard.eof" },
+  { key: "Ctrl+T", labelKey: "keyboard.newTerminal" },
 ]
 
 export function KeyboardHintsBar() {
@@ -41,6 +42,7 @@ export function KeyboardHintsBar() {
   const showBar = createMemo(() => isTouchDevice() && hasFinePointer())
 
   const layout = useLayout()
+  const language = useLanguage()
   const { view } = useSessionLayout()
 
   // Terminal open → terminal hints; side panel (file tree/review) open → editor hints; else chat.
@@ -55,7 +57,7 @@ export function KeyboardHintsBar() {
     <Show when={showBar()}>
       <div
         role="toolbar"
-        aria-label="Raccourcis clavier"
+        aria-label={language.t("common.keyboardShortcuts")}
         class="flex items-center gap-0 px-3 border-t border-border-weak-base bg-background-stronger overflow-x-auto scrollbar-none shrink-0"
         style={{ height: "28px" }}
       >
@@ -69,7 +71,7 @@ export function KeyboardHintsBar() {
                 <kbd class="text-9-regular font-mono bg-surface-base border border-border-weak-base rounded px-1 py-0.5 text-text-weak leading-none select-none">
                   {hint.key}
                 </kbd>
-                <span class="text-10-regular text-text-weaker select-none">{hint.label}</span>
+                <span class="text-10-regular text-text-weaker select-none">{language.t(hint.labelKey as Parameters<typeof language.t>[0])}</span>
               </div>
             </>
           )}

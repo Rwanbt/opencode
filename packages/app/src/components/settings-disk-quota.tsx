@@ -5,6 +5,7 @@
 import { createResource, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SettingsRow } from "./settings-row"
+import { useLanguage } from "@/context/language"
 
 const WARN_BYTES = 500 * 1024 * 1024 // 500 MB
 
@@ -14,6 +15,7 @@ function fmtBytes(n: number) {
 }
 
 export function SettingsDiskQuota() {
+  const language = useLanguage()
   const sdk = useSDK()
   const [disk] = createResource<{ available: number; total: number } | null>(async () => {
     try {
@@ -32,8 +34,8 @@ export function SettingsDiskQuota() {
     <Show when={disk()}>
       {(d) => (
         <SettingsRow
-          title="Espace disque"
-          description={`Espace disponible pour les modèles et projets`}
+          title={language.t("settings.fork.observability.diskTitle")}
+          description={language.t("settings.fork.observability.diskDescription")}
         >
           <Show
             when={d().available < WARN_BYTES}

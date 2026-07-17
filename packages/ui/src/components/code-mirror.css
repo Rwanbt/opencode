@@ -160,6 +160,17 @@
   color: var(--syntax-primitive, currentColor);
 }
 
+/*
+ * Function/method names (CallExpression, FunctionDeclaration, method calls).
+ * Placed after .tok-variableName/.tok-propertyName above: a token can carry
+ * both classes (e.g. "tok-variableName tok-function"), and this rule must win
+ * the cascade tie so functions match the read-only viewer's entity.name.function
+ * color instead of the plain variable/property color.
+ */
+.cm-opencode .tok-function {
+  color: var(--syntax-primitive, currentColor);
+}
+
 .cm-opencode .tok-operator {
   color: var(--syntax-operator, currentColor);
 }

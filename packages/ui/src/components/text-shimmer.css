@@ -63,6 +63,15 @@
   animation-fill-mode: both;
   animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
   will-change: background-position;
+  /* Promotes this element to its own compositing layer. Without it, some
+     Chromium engines (observed: Tauri's WebView2 on Windows) can fall back to
+     software-rendering the `background-clip: text` gradient sweep below and
+     silently freeze it on the first frame instead of animating — the
+     animation is technically running (DevTools shows it), it just never
+     repaints. transform is a no-op here (translateZ(0)) but forces the GPU
+     layer promotion that will-change alone doesn't guarantee on WebView2. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 @keyframes text-shimmer-sweep {
@@ -115,5 +124,51 @@
 
   [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
     opacity: 1 !important;
+  }
+}
+
+
+[data-component="activity-dots"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 14px;
+  height: 1em;
+  vertical-align: baseline;
+}
+
+[data-component="activity-dots"] [data-slot="activity-dot"] {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.3;
+  animation: activity-dot-pulse 1.2s ease-in-out infinite;
+}
+
+[data-component="activity-dots"] [data-slot="activity-dot"]:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+[data-component="activity-dots"] [data-slot="activity-dot"]:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+@keyframes activity-dot-pulse {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="activity-dots"] [data-slot="activity-dot"] {
+    animation: none;
+    opacity: 0.8;
   }
 }

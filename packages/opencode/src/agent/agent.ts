@@ -37,6 +37,8 @@ export namespace Agent {
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
+      cli_hidden: z.boolean().optional(),
+      app_hidden: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
@@ -133,6 +135,19 @@ export namespace Agent {
               mode: "primary",
               native: true,
             },
+            ...(cfg.agent?.auto
+              ? {}
+              : {
+                  auto: {
+                    name: "auto",
+                    description: "DANGEROUS — runs all tools without permission prompts.",
+                    options: {},
+                    permission: Permission.fromConfig({ "*": "allow" }),
+                    mode: "primary",
+                    native: true,
+                    color: "error",
+                  },
+                }),
             chat: {
               name: "chat",
               description: "Chat mode. General-purpose conversational AI with no tool access.",
@@ -380,6 +395,8 @@ export namespace Agent {
             item.mode = value.mode ?? item.mode
             item.color = value.color ?? item.color
             item.hidden = value.hidden ?? item.hidden
+            item.cli_hidden = value.cli_hidden ?? item.cli_hidden
+            item.app_hidden = value.app_hidden ?? item.app_hidden
             item.name = value.name ?? item.name
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
@@ -424,14 +441,14 @@ export namespace Agent {
             const c = yield* config.get()
             if (c.default_agent) {
               const agent = agents[c.default_agent]
-              if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
-              if (agent.mode === "subagent") throw new Error(`default agent "${c.default_agent}" is a subagent`)
-              if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
-              return agent.name
+              if (agent && agent.mode !== "subagent" && agent.hidden !== true) return agent.name
             }
-            const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
-            if (!visible) throw new Error("no primary visible agent found")
-            return visible.name
+            const visible = Object.values(agents)
+              .filter((a) => a.name !== "auto" && a.mode !== "subagent" && a.hidden !== true)
+              .sort((a, b) => a.name.localeCompare(b.name))
+            const fallback = visible.find((a) => a.name === "build") ?? visible[0]
+            if (!fallback) throw new Error("no primary visible agent found")
+            return fallback.name
           })
 
           return {

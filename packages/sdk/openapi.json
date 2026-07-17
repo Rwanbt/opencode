@@ -6423,6 +6423,56 @@
         ]
       }
     },
+    "/provider/refresh": {
+      "post": {
+        "operationId": "provider.refresh",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Force-refresh the models.dev catalog",
+        "description": "Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.",
+        "responses": {
+          "200": {
+            "description": "Refresh result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider/auth": {
       "get": {
         "operationId": "provider.auth",
@@ -6686,6 +6736,22 @@
                       "type": "array",
                       "items": {
                         "type": "string"
+                      }
+                    },
+                    "failedProviders": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["provider", "error"]
                       }
                     },
                     "roles": {
@@ -7174,6 +7240,418 @@
         ]
       }
     },
+    "/debate/config": {
+      "put": {
+        "operationId": "debate.config",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Configure global debate models",
+        "description": "Select the primary synthesis model and parallel participants reused by Debate mode.",
+        "responses": {
+          "200": {
+            "description": "Saved global debate selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "primary": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    },
+                    "participants": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "modelID"]
+                      }
+                    }
+                  },
+                  "required": ["primary", "participants"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "participants": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  }
+                },
+                "required": ["primary", "participants"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.config({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "debate.getConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get global debate models",
+        "description": "Return the Debate mode model selection reused across sessions.",
+        "responses": {
+          "200": {
+            "description": "Global debate selection or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "primary": {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["providerID", "modelID"]
+                        },
+                        "participants": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string"
+                              },
+                              "modelID": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["providerID", "modelID"]
+                          }
+                        }
+                      },
+                      "required": ["primary", "participants"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.getConfig({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/debate/session/{sessionID}/config": {
+      "put": {
+        "operationId": "debate.sessionConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionID",
+            "required": true
+          }
+        ],
+        "summary": "Configure session debate models",
+        "description": "Select the primary synthesis model and the parallel debate participants for a session.",
+        "responses": {
+          "200": {
+            "description": "Saved debate selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "primary": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    },
+                    "participants": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "modelID"]
+                      }
+                    }
+                  },
+                  "required": ["primary", "participants"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "participants": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "modelID": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "modelID"]
+                    }
+                  }
+                },
+                "required": ["primary", "participants"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.sessionConfig({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "debate.getSessionConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionID",
+            "required": true
+          }
+        ],
+        "summary": "Get session debate models",
+        "description": "Return the configured debate models for a session, if any.",
+        "responses": {
+          "200": {
+            "description": "Debate selection or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "primary": {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["providerID", "modelID"]
+                        },
+                        "participants": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string"
+                              },
+                              "modelID": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["providerID", "modelID"]
+                          }
+                        }
+                      },
+                      "required": ["primary", "participants"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.getSessionConfig({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/debate/estimate": {
       "post": {
         "operationId": "debate.estimate",
@@ -7476,6 +7954,2177 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debate.feedback({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/health": {
+      "get": {
+        "operationId": "observability.health",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Observability health",
+        "description": "Current instance's observability queue/circuit-breaker state. Reflects only the process serving this request, not a global/cross-project view.",
+        "responses": {
+          "200": {
+            "description": "Health snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "captureMode": {
+                      "type": "string",
+                      "enum": ["local_metadata", "local_redacted"]
+                    },
+                    "circuitOpen": {
+                      "type": "boolean"
+                    },
+                    "eventsAccepted": {
+                      "type": "number"
+                    },
+                    "eventsInserted": {
+                      "type": "number"
+                    },
+                    "eventsPersisted": {
+                      "type": "number"
+                    },
+                    "eventsRejectedInvalidContext": {
+                      "type": "number"
+                    },
+                    "eventsRejectedInvalidEvent": {
+                      "type": "number"
+                    },
+                    "eventsDroppedQueueFull": {
+                      "type": "number"
+                    },
+                    "eventsDroppedCircuitOpen": {
+                      "type": "number"
+                    },
+                    "eventsFailedDb": {
+                      "type": "number"
+                    },
+                    "eventsFailedBusy": {
+                      "type": "number"
+                    },
+                    "eventsFailedFull": {
+                      "type": "number"
+                    },
+                    "eventsFailedCorrupt": {
+                      "type": "number"
+                    },
+                    "sanitizerFailed": {
+                      "type": "number"
+                    },
+                    "lastErrorAt": {
+                      "type": "number"
+                    },
+                    "lastErrorKind": {
+                      "type": "string"
+                    },
+                    "queueSize": {
+                      "type": "number"
+                    },
+                    "queueBytes": {
+                      "type": "number"
+                    },
+                    "runtimeCounterScope": {
+                      "type": "string",
+                      "const": "current_process"
+                    },
+                    "persistedCounterScope": {
+                      "type": "string",
+                      "const": "all_projects_local_sqlite"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "captureMode",
+                    "circuitOpen",
+                    "eventsAccepted",
+                    "eventsInserted",
+                    "eventsPersisted",
+                    "eventsRejectedInvalidContext",
+                    "eventsRejectedInvalidEvent",
+                    "eventsDroppedQueueFull",
+                    "eventsDroppedCircuitOpen",
+                    "eventsFailedDb",
+                    "eventsFailedBusy",
+                    "eventsFailedFull",
+                    "eventsFailedCorrupt",
+                    "sanitizerFailed",
+                    "queueSize",
+                    "queueBytes",
+                    "runtimeCounterScope",
+                    "persistedCounterScope"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/settings": {
+      "get": {
+        "operationId": "observability.settings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Observability settings",
+        "description": "Resolved capture policy plus Phase 1 storage disclosure flags for the settings UI (unencrypted local SQLite, no full-content capture available).",
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "captureMode": {
+                      "type": "string",
+                      "enum": ["local_metadata", "local_redacted"]
+                    },
+                    "policyVersion": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "localFullAvailable": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "maxOptInTtlDays": {
+                      "type": "number"
+                    },
+                    "storage": {
+                      "type": "string",
+                      "const": "sqlite_unencrypted_local"
+                    },
+                    "retentionDays": {
+                      "type": "number"
+                    },
+                    "maxEvents": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "captureMode",
+                    "policyVersion",
+                    "localFullAvailable",
+                    "maxOptInTtlDays",
+                    "storage",
+                    "maxEvents"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.settings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/sessions": {
+      "get": {
+        "operationId": "observability.sessions.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "summary": "List sessions with observability data",
+        "description": "Lists local sessions with persisted observability events, independent of the current project directory.",
+        "responses": {
+          "200": {
+            "description": "Sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "projectID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.sessions.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/events": {
+      "get": {
+        "operationId": "observability.events.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk.*"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List observability events for a session",
+        "description": "Keyset-paginated (ts_ms, id) events for one session, newest first. The session must belong to the current project — a session from another project 404s.",
+        "responses": {
+          "200": {
+            "description": "Events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "eventId": {
+                        "type": "string"
+                      },
+                      "traceId": {
+                        "type": "string"
+                      },
+                      "spanId": {
+                        "type": "string"
+                      },
+                      "parentSpanId": {
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "type": "string"
+                      },
+                      "workspaceId": {
+                        "type": "string"
+                      },
+                      "messageId": {
+                        "type": "string"
+                      },
+                      "turnId": {
+                        "type": "string"
+                      },
+                      "stepIndex": {
+                        "type": "number"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "derivedStatus": {
+                        "type": "string",
+                        "const": "orphaned"
+                      },
+                      "tsMs": {
+                        "type": "number"
+                      },
+                      "durationMs": {
+                        "type": "number"
+                      },
+                      "costNanoUsd": {
+                        "type": "number"
+                      },
+                      "pricingVersion": {
+                        "type": "string"
+                      },
+                      "pricingSource": {
+                        "type": "string"
+                      },
+                      "costComputedAtMs": {
+                        "type": "number"
+                      },
+                      "redactionStatus": {
+                        "type": "string"
+                      },
+                      "originalSizeBytes": {
+                        "type": "number"
+                      },
+                      "payloadTruncated": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "localRedacted": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "localContentRedacted": {
+                        "type": "string"
+                      },
+                      "localFull": {
+                        "type": "string"
+                      },
+                      "hasSensitiveContent": {
+                        "type": "boolean"
+                      },
+                      "schemaVersion": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "eventId",
+                      "traceId",
+                      "spanId",
+                      "type",
+                      "status",
+                      "tsMs",
+                      "redactionStatus",
+                      "payloadTruncated",
+                      "metadata",
+                      "localRedacted",
+                      "hasSensitiveContent",
+                      "schemaVersion"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.events.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/events/{eventId}": {
+      "get": {
+        "operationId": "observability.events.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "eventId",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get a single observability event",
+        "description": "Fetch one event by its ULID. 404s if it doesn't exist or belongs to another project.",
+        "responses": {
+          "200": {
+            "description": "Event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eventId": {
+                      "type": "string"
+                    },
+                    "traceId": {
+                      "type": "string"
+                    },
+                    "spanId": {
+                      "type": "string"
+                    },
+                    "parentSpanId": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "messageId": {
+                      "type": "string"
+                    },
+                    "turnId": {
+                      "type": "string"
+                    },
+                    "stepIndex": {
+                      "type": "number"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "derivedStatus": {
+                      "type": "string",
+                      "const": "orphaned"
+                    },
+                    "tsMs": {
+                      "type": "number"
+                    },
+                    "durationMs": {
+                      "type": "number"
+                    },
+                    "costNanoUsd": {
+                      "type": "number"
+                    },
+                    "pricingVersion": {
+                      "type": "string"
+                    },
+                    "pricingSource": {
+                      "type": "string"
+                    },
+                    "costComputedAtMs": {
+                      "type": "number"
+                    },
+                    "redactionStatus": {
+                      "type": "string"
+                    },
+                    "originalSizeBytes": {
+                      "type": "number"
+                    },
+                    "payloadTruncated": {
+                      "type": "boolean"
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "localRedacted": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "localContentRedacted": {
+                      "type": "string"
+                    },
+                    "localFull": {
+                      "type": "string"
+                    },
+                    "hasSensitiveContent": {
+                      "type": "boolean"
+                    },
+                    "schemaVersion": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "eventId",
+                    "traceId",
+                    "spanId",
+                    "type",
+                    "status",
+                    "tsMs",
+                    "redactionStatus",
+                    "payloadTruncated",
+                    "metadata",
+                    "localRedacted",
+                    "hasSensitiveContent",
+                    "schemaVersion"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.events.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/trace/{traceId}": {
+      "get": {
+        "operationId": "observability.trace.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "traceId",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          }
+        ],
+        "summary": "Get all events in a trace",
+        "description": "The full span sequence for one trace (Timeline/TraceDetail UI), oldest first. Ownership is checked against the first event's session — 404s if the trace doesn't exist or belongs to another project.",
+        "responses": {
+          "200": {
+            "description": "Trace detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "traceId": {
+                      "type": "string"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "eventId": {
+                            "type": "string"
+                          },
+                          "traceId": {
+                            "type": "string"
+                          },
+                          "spanId": {
+                            "type": "string"
+                          },
+                          "parentSpanId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "workspaceId": {
+                            "type": "string"
+                          },
+                          "messageId": {
+                            "type": "string"
+                          },
+                          "turnId": {
+                            "type": "string"
+                          },
+                          "stepIndex": {
+                            "type": "number"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "derivedStatus": {
+                            "type": "string",
+                            "const": "orphaned"
+                          },
+                          "tsMs": {
+                            "type": "number"
+                          },
+                          "durationMs": {
+                            "type": "number"
+                          },
+                          "costNanoUsd": {
+                            "type": "number"
+                          },
+                          "pricingVersion": {
+                            "type": "string"
+                          },
+                          "pricingSource": {
+                            "type": "string"
+                          },
+                          "costComputedAtMs": {
+                            "type": "number"
+                          },
+                          "redactionStatus": {
+                            "type": "string"
+                          },
+                          "originalSizeBytes": {
+                            "type": "number"
+                          },
+                          "payloadTruncated": {
+                            "type": "boolean"
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "localRedacted": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "localContentRedacted": {
+                            "type": "string"
+                          },
+                          "localFull": {
+                            "type": "string"
+                          },
+                          "hasSensitiveContent": {
+                            "type": "boolean"
+                          },
+                          "schemaVersion": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "eventId",
+                          "traceId",
+                          "spanId",
+                          "type",
+                          "status",
+                          "tsMs",
+                          "redactionStatus",
+                          "payloadTruncated",
+                          "metadata",
+                          "localRedacted",
+                          "hasSensitiveContent",
+                          "schemaVersion"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["traceId", "events"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.trace.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/summary": {
+      "get": {
+        "operationId": "observability.summary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          }
+        ],
+        "summary": "Observability summary for a session",
+        "description": "Aggregate event counts (by type/status) and total cost for one session. Same ownership check as /events.",
+        "responses": {
+          "200": {
+            "description": "Summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "totalEvents": {
+                      "type": "number"
+                    },
+                    "totalCostNanoUsd": {
+                      "type": "number"
+                    },
+                    "byType": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "byStatus": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "firstEventTsMs": {
+                      "type": "number"
+                    },
+                    "lastEventTsMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["sessionId", "totalEvents", "totalCostNanoUsd", "byType", "byStatus"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.summary({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/privacy": {
+      "get": {
+        "operationId": "observability.privacy.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["workspace", "project", "session", "all"]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Returns the active, non-expired opt-in for one session/project/workspace, or null if none is active. Ownership-checked like every other route in this file.",
+        "responses": {
+          "200": {
+            "description": "Opt-in status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "optIn": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "enum": ["workspace", "project", "session", "all"]
+                            },
+                            "scopeId": {
+                              "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": ["local_content_redacted", "local_full"]
+                            },
+                            "ttlDays": {
+                              "type": "number"
+                            },
+                            "createdAtMs": {
+                              "type": "number"
+                            },
+                            "expiresAtMs": {
+                              "type": "number"
+                            }
+                          },
+                          "required": ["scope", "scopeId", "level", "ttlDays", "createdAtMs", "expiresAtMs"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["optIn"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "observability.privacy.set",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Set the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Grants local_content_redacted or local_full capture for a scope, with a mandatory TTL (max 30 days). Re-opting-in overwrites the previous level/TTL — it never stacks.",
+        "responses": {
+          "200": {
+            "description": "Opt-in created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scope": {
+                      "type": "string",
+                      "enum": ["workspace", "project", "session", "all"]
+                    },
+                    "scopeId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": ["local_content_redacted", "local_full"]
+                    },
+                    "ttlDays": {
+                      "type": "number"
+                    },
+                    "createdAtMs": {
+                      "type": "number"
+                    },
+                    "expiresAtMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["scope", "scopeId", "level", "ttlDays", "createdAtMs", "expiresAtMs"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["workspace", "project", "session", "all"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": ["local_content_redacted", "local_full"]
+                  },
+                  "ttlDays": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 30
+                  }
+                },
+                "required": ["scope", "id", "level", "ttlDays"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.set({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/privacy/revoke": {
+      "post": {
+        "operationId": "observability.privacy.revoke",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Revoke the content-capture opt-in for a scope",
+        "description": "Phase 3 (ADR-1032). Immediately stops future content capture for the scope AND clears content already captured on existing events (metadata rows are kept, only local_content_redacted/local_full are cleared).",
+        "responses": {
+          "200": {
+            "description": "Revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    },
+                    "contentCleared": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["revoked", "contentCleared"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["workspace", "project", "session", "all"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["scope", "id"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.privacy.revoke({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/compare": {
+      "get": {
+        "operationId": "observability.compare",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeWindowMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          }
+        ],
+        "summary": "Compare configuration cohorts",
+        "description": "Aggregates latency p50/p95, cost per turn, and failure rate by (model_provider, model_id, skill_hmac). Phase 2 feature — returns empty array if insufficient data.",
+        "responses": {
+          "200": {
+            "description": "Cohort comparison",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cohorts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "modelProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "modelId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "skillHmac": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "latencyP50Ms": {
+                            "type": "number"
+                          },
+                          "latencyP95Ms": {
+                            "type": "number"
+                          },
+                          "costPerTurnNanoUsd": {
+                            "type": "number"
+                          },
+                          "failureRatePct": {
+                            "type": "number"
+                          },
+                          "totalEvents": {
+                            "type": "number"
+                          },
+                          "traceCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "modelProvider",
+                          "modelId",
+                          "skillHmac",
+                          "latencyP50Ms",
+                          "latencyP95Ms",
+                          "costPerTurnNanoUsd",
+                          "failureRatePct",
+                          "totalEvents",
+                          "traceCount"
+                        ]
+                      }
+                    },
+                    "referenceIndex": {
+                      "type": "number"
+                    },
+                    "timeWindowMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["cohorts"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.compare({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/data": {
+      "delete": {
+        "operationId": "observability.data.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Delete observability data",
+        "description": "Destroys observability events for a scope (session/project/workspace/all). Requires header `X-Confirm-Delete: yes`.",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deletedCount": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["deletedCount"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "const": "workspace"
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^wrk.*"
+                      }
+                    },
+                    "required": ["scope", "id"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "const": "all"
+                      }
+                    },
+                    "required": ["scope"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "const": "project"
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["scope", "id"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "const": "session"
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^ses.*"
+                      }
+                    },
+                    "required": ["scope", "id"]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.data.delete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/export": {
+      "get": {
+        "operationId": "observability.export",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sinceMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "untilMs",
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          }
+        ],
+        "summary": "Export observability events as NDJSON",
+        "description": "Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.",
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of events",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.export({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/summary/aggregate": {
+      "get": {
+        "operationId": "observability.summaryAggregate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sinceMs",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "untilMs",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "default": "project",
+              "type": "string",
+              "enum": ["project", "all"]
+            }
+          }
+        ],
+        "summary": "Aggregate summary across sessions/projects/workspaces",
+        "description": "Aggregate event counts (by type/status) and total cost across a scope. Defaults to the current project when no sessionId/projectId/workspaceId is given — never returns other projects' data implicitly.",
+        "responses": {
+          "200": {
+            "description": "Summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalEvents": {
+                      "type": "number"
+                    },
+                    "totalCostNanoUsd": {
+                      "type": "number"
+                    },
+                    "byType": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "byStatus": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "firstEventTsMs": {
+                      "type": "number"
+                    },
+                    "lastEventTsMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["totalEvents", "totalCostNanoUsd", "byType", "byStatus"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.summaryAggregate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/exporters/config": {
+      "get": {
+        "operationId": "observability.exporters.config",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Phase 4 exporter configuration and last run",
+        "description": "Configured exporters (ADR-1026) — secrets are never returned, only type/host/publicKey — plus the most recent periodic export tick's per-exporter outcome, if any exporter has ever run.",
+        "responses": {
+          "200": {
+            "description": "Exporter config summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exporters": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "langfuse"
+                          },
+                          "host": {
+                            "type": "string"
+                          },
+                          "publicKey": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "host", "publicKey"]
+                      }
+                    },
+                    "backfillOnStart": {
+                      "type": "boolean"
+                    },
+                    "lastRun": {
+                      "type": "object",
+                      "properties": {
+                        "atMs": {
+                          "type": "number"
+                        },
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "exporter": {
+                                "type": "string"
+                              },
+                              "ok": {
+                                "type": "boolean"
+                              },
+                              "attempts": {
+                                "type": "number"
+                              },
+                              "error": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["exporter", "ok", "attempts"]
+                          }
+                        }
+                      },
+                      "required": ["atMs", "results"]
+                    }
+                  },
+                  "required": ["exporters", "backfillOnStart"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.exporters.config({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/exporters/preview/{eventId}": {
+      "get": {
+        "operationId": "observability.exporters.preview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "eventId",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Preview the ExportProjection for one event",
+        "description": "Returns exactly what would be sent to a configured exporter for this event — without sending it anywhere. `exportable: false` if the event is not yet a terminal event (shouldExportSpan, ADR-1026) even if it is otherwise valid.",
+        "responses": {
+          "200": {
+            "description": "Preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exportable": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "projection": {
+                      "type": "object",
+                      "properties": {
+                        "eventId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "parentSpanId": {
+                          "type": "string"
+                        },
+                        "sessionIdHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "projectIdHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "workspaceIdHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["started", "finished", "failed", "aborted", "dropped"]
+                        },
+                        "tsMs": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "durationMs": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "modelProvider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "inputTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "outputTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "cacheReadTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "cacheWriteTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "costNanoUsd": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "pricingVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "pricingSource": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "redactionStatus": {
+                          "type": "string",
+                          "enum": ["metadata_only", "redacted", "failed_closed"]
+                        },
+                        "errorKind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "errorMessageHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "toolKind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "toolNameHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "skillHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "pathHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "mcpHmac": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "agentName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "redactedClasses": {
+                          "default": [],
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": ["eventId", "traceId", "spanId", "type", "status", "tsMs", "redactionStatus"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["exportable"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.exporters.preview({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/observability/exporters/test": {
+      "post": {
+        "operationId": "observability.exporters.test",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Send a synthetic test event through every configured exporter",
+        "description": "Exercises each configured exporter right now with a synthetic, non-real ExportProjection (fake trace/span ids, no data derived from any real event) so credentials/connectivity can be validated without waiting for real traffic or risking real content. Returns per-exporter success/failure, with the same bounded retry policy as the periodic export tick.",
+        "responses": {
+          "200": {
+            "description": "Test results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "exporter": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "attempts": {
+                            "type": "number"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["exporter", "ok", "attempts"]
+                      }
+                    }
+                  },
+                  "required": ["results"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.observability.exporters.test({\n  ...\n})"
           }
         ]
       }
@@ -13025,9 +15674,22 @@
               },
               "role": {
                 "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider"]
+            "required": ["debateID", "provider", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13054,9 +15716,22 @@
               },
               "durationMs": {
                 "type": "number"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider", "tokens", "durationMs"]
+            "required": ["debateID", "provider", "tokens", "durationMs", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13080,9 +15755,22 @@
               },
               "error": {
                 "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
               }
             },
-            "required": ["debateID", "provider", "error"]
+            "required": ["debateID", "provider", "error", "phase"]
           }
         },
         "required": ["type", "properties"]
@@ -13323,6 +16011,38 @@
               }
             },
             "required": ["debateID", "percentUsed", "tokensUsed", "tokenLimit"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.shadow.divergence": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.shadow.divergence"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "critical"]
+              },
+              "shadowResponse": {
+                "type": "string"
+              },
+              "divergenceReason": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
           }
         },
         "required": ["type", "properties"]
@@ -13972,38 +16692,6 @@
               }
             },
             "required": ["message"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.shadow.divergence": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.shadow.divergence"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "question": {
-                "type": "string"
-              },
-              "severity": {
-                "type": "string",
-                "enum": ["info", "warning", "critical"]
-              },
-              "shadowResponse": {
-                "type": "string"
-              },
-              "divergenceReason": {
-                "type": "string"
-              }
-            },
-            "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
           }
         },
         "required": ["type", "properties"]
@@ -15508,6 +18196,9 @@
             "$ref": "#/components/schemas/Event.collective.debate.budget_warning"
           },
           {
+            "$ref": "#/components/schemas/Event.collective.shadow.divergence"
+          },
+          {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
           },
           {
@@ -15557,9 +18248,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.shadow.divergence"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -16223,6 +18911,14 @@
             "description": "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
             "type": "boolean"
           },
+          "cli_hidden": {
+            "description": "Hide this agent from the terminal CLI agent selector only (Tab cycling and the agent dialog). Does not affect the mobile/web app or programmatic/explicit invocation (default: false).",
+            "type": "boolean"
+          },
+          "app_hidden": {
+            "description": "Hide this agent from the desktop/mobile app agent selector only. Does not affect the CLI or programmatic/explicit invocation (default: false).",
+            "type": "boolean"
+          },
           "options": {
             "type": "object",
             "propertyNames": {
@@ -16822,6 +19518,9 @@
               "build": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
+              "auto": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
               "general": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
@@ -17071,6 +19770,69 @@
               "openTelemetry": {
                 "description": "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
                 "type": "boolean"
+              },
+              "observability": {
+                "description": "Native local observability: metadata-only event capture, no prompts/responses, no network unless exporters is explicitly configured.",
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "description": "Enable native local observability event capture (default: false). See ADR-1020 through 1031.",
+                    "type": "boolean"
+                  },
+                  "captureMode": {
+                    "description": "Capture level for observability events. Phase 1 never persists readable prompts, responses, tool args/output, or raw error messages regardless of mode.",
+                    "type": "string",
+                    "enum": ["local_metadata", "local_redacted"]
+                  },
+                  "retentionDays": {
+                    "description": "Delete events older than this many days. Undefined keeps events until another retention limit applies.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "maxEvents": {
+                    "description": "Maximum local observability event count. Default: 100000.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "exporters": {
+                    "description": "Phase 4 optional exporters (e.g. Langfuse). Each exporter only ever receives a redacted ExportProjection (ADR-1026), never raw event content or Phase 3 opt-in text. Empty/undefined by default: no network calls happen until an exporter is explicitly configured here.",
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "langfuse"
+                            },
+                            "host": {
+                              "description": "Langfuse instance base URL, e.g. https://cloud.langfuse.com",
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "publicKey": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "secretKey": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["type", "host", "publicKey", "secretKey"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "backfillOnStart": {
+                    "description": "When true, the first export tick that finds a configured exporter exports the ENTIRE existing event history instead of only events inserted from that point forward. Default: false (no backfill). Only takes effect once at least one exporter is configured — has no effect while exporters is empty.",
+                    "type": "boolean"
+                  }
+                }
               },
               "primary_tools": {
                 "description": "Tools that should only be available to primary agents.",
@@ -18750,6 +21512,12 @@
             "type": "boolean"
           },
           "hidden": {
+            "type": "boolean"
+          },
+          "cli_hidden": {
+            "type": "boolean"
+          },
+          "app_hidden": {
             "type": "boolean"
           },
           "topP": {

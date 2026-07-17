@@ -3,6 +3,7 @@ import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { ObservabilityEventTable } from "@/observability/event.sql"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "session.projector" })
@@ -78,6 +79,11 @@ export default [
 
   SyncEvent.project(Session.Event.Deleted, (db, data) => {
     db.delete(SessionTable).where(eq(SessionTable.id, data.sessionID)).run()
+    // No DB foreign key ties observability_event to session (events without
+    // a sessionId must stay purgeable by project/workspace/retention), so
+    // the cascade is applicative, not referential — kept in the same
+    // transaction as the session delete for atomicity (ADR-1030).
+    db.delete(ObservabilityEventTable).where(eq(ObservabilityEventTable.session_id, data.sessionID)).run()
   }),
 
   SyncEvent.project(MessageV2.Event.Updated, (db, data) => {

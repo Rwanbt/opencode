@@ -45,6 +45,11 @@ runs:
         # Workaround for patched peer variants
         # e.g. ./patches/ for standard-openapi
         # https://github.com/oven-sh/bun/issues/28147
+        # Reuse the runner's installed Node headers for native addons. Without
+        # this, node-gyp attempts a network download and flakes on restricted
+        # runners even though setup-node already provisioned the headers.
+        NODE_ROOT=$(dirname "$(dirname "$(readlink -f "$(command -v node)")")")
+        export npm_config_nodedir="$NODE_ROOT"
         if [ "$RUNNER_OS" = "Windows" ]; then
           bun install --linker hoisted
         else

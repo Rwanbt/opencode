@@ -35,10 +35,14 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DebateConfigResponses,
   DebateEstimateResponses,
   DebateFeedbackResponses,
+  DebateGetConfigResponses,
   DebateGetResponses,
+  DebateGetSessionConfigResponses,
   DebateListResponses,
+  DebateSessionConfigResponses,
   DebateStartResponses,
   DiskGetResponses,
   EventSubscribeResponses,
@@ -138,6 +142,34 @@ import type {
   McpRemoveErrors,
   McpRemoveResponses,
   McpStatusResponses,
+  ObservabilityCompareErrors,
+  ObservabilityCompareResponses,
+  ObservabilityDataDeleteErrors,
+  ObservabilityDataDeleteResponses,
+  ObservabilityEventsGetErrors,
+  ObservabilityEventsGetResponses,
+  ObservabilityEventsListErrors,
+  ObservabilityEventsListResponses,
+  ObservabilityExportErrors,
+  ObservabilityExportersConfigResponses,
+  ObservabilityExportersPreviewErrors,
+  ObservabilityExportersPreviewResponses,
+  ObservabilityExportersTestResponses,
+  ObservabilityExportResponses,
+  ObservabilityHealthResponses,
+  ObservabilityPrivacyGetErrors,
+  ObservabilityPrivacyGetResponses,
+  ObservabilityPrivacyRevokeErrors,
+  ObservabilityPrivacyRevokeResponses,
+  ObservabilityPrivacySetErrors,
+  ObservabilityPrivacySetResponses,
+  ObservabilitySessionsListResponses,
+  ObservabilitySettingsResponses,
+  ObservabilitySummaryAggregateResponses,
+  ObservabilitySummaryErrors,
+  ObservabilitySummaryResponses,
+  ObservabilityTraceGetErrors,
+  ObservabilityTraceGetResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -162,6 +194,7 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  ProviderRefreshResponses,
   PtyConnectErrors,
   PtyConnectResponses,
   PtyCreateErrors,
@@ -3624,6 +3657,36 @@ export class Provider extends HeyApiClient {
   }
 
   /**
+   * Force-refresh the models.dev catalog
+   *
+   * Force a refresh of the cached models.dev provider/model catalog, bypassing the freshness TTL. Returns ok:false with an explanatory message if the catalog is managed externally (OPENCODE_MODELS_PATH), fetching is disabled (OPENCODE_DISABLE_MODELS_FETCH), or the fetch itself failed.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProviderRefreshResponses, unknown, ThrowOnError>({
+      url: "/provider/refresh",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get provider auth methods
    *
    * Retrieve available authentication methods for all AI providers.
@@ -3753,6 +3816,162 @@ export class Debate extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<DebateStartResponses, unknown, ThrowOnError>({
       url: "/debate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get global debate models
+   *
+   * Return the Debate mode model selection reused across sessions.
+   */
+  public getConfig<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure global debate models
+   *
+   * Select the primary synthesis model and parallel participants reused by Debate mode.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get session debate models
+   *
+   * Return the configured debate models for a session, if any.
+   */
+  public getSessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DebateGetSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Configure session debate models
+   *
+   * Select the primary synthesis model and the parallel debate participants for a session.
+   */
+  public sessionConfig<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      primary?: {
+        providerID: string
+        modelID: string
+      }
+      participants?: Array<{
+        providerID: string
+        modelID: string
+        role?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "primary" },
+            { in: "body", key: "participants" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<DebateSessionConfigResponses, unknown, ThrowOnError>({
+      url: "/debate/session/{sessionID}/config",
       ...options,
       ...params,
       headers: {
@@ -3908,6 +4127,700 @@ export class Debate extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+}
+
+export class Sessions extends HeyApiClient {
+  /**
+   * List sessions with observability data
+   *
+   * Lists local sessions with persisted observability events, independent of the current project directory.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "project" | "all"
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySessionsListResponses, unknown, ThrowOnError>({
+      url: "/observability/sessions",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Events extends HeyApiClient {
+  /**
+   * List observability events for a session
+   *
+   * Keyset-paginated (ts_ms, id) events for one session, newest first. The session must belong to the current project — a session from another project 404s.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionId: string
+      scope?: "project" | "all"
+      limit?: number
+      before?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "before" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityEventsListResponses,
+      ObservabilityEventsListErrors,
+      ThrowOnError
+    >({
+      url: "/observability/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a single observability event
+   *
+   * Fetch one event by its ULID. 404s if it doesn't exist or belongs to another project.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      eventId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "eventId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityEventsGetResponses,
+      ObservabilityEventsGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/events/{eventId}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Trace extends HeyApiClient {
+  /**
+   * Get all events in a trace
+   *
+   * The full span sequence for one trace (Timeline/TraceDetail UI), oldest first. Ownership is checked against the first event's session — 404s if the trace doesn't exist or belongs to another project.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      traceId: string
+      directory?: string
+      workspace?: string
+      scope?: "project" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "traceId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityTraceGetResponses,
+      ObservabilityTraceGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/trace/{traceId}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Privacy extends HeyApiClient {
+  /**
+   * Get the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Returns the active, non-expired opt-in for one session/project/workspace, or null if none is active. Ownership-checked like every other route in this file.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: "workspace" | "project" | "session" | "all"
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityPrivacyGetResponses,
+      ObservabilityPrivacyGetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Grants local_content_redacted or local_full capture for a scope, with a mandatory TTL (max 30 days). Re-opting-in overwrites the previous level/TTL — it never stacks.
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "workspace" | "project" | "session" | "all"
+      id?: string
+      level?: "local_content_redacted" | "local_full"
+      ttlDays?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "id" },
+            { in: "body", key: "level" },
+            { in: "body", key: "ttlDays" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      ObservabilityPrivacySetResponses,
+      ObservabilityPrivacySetErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Revoke the content-capture opt-in for a scope
+   *
+   * Phase 3 (ADR-1032). Immediately stops future content capture for the scope AND clears content already captured on existing events (metadata rows are kept, only local_content_redacted/local_full are cleared).
+   */
+  public revoke<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "workspace" | "project" | "session" | "all"
+      id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ObservabilityPrivacyRevokeResponses,
+      ObservabilityPrivacyRevokeErrors,
+      ThrowOnError
+    >({
+      url: "/observability/privacy/revoke",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Data extends HeyApiClient {
+  /**
+   * Delete observability data
+   *
+   * Destroys observability events for a scope (session/project/workspace/all). Requires header `X-Confirm-Delete: yes`.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      body?:
+        | {
+            scope: "workspace"
+            id: string
+          }
+        | {
+            scope: "all"
+          }
+        | {
+            scope: "project"
+            id: string
+          }
+        | {
+            scope: "session"
+            id: string
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ObservabilityDataDeleteResponses,
+      ObservabilityDataDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/observability/data",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Exporters extends HeyApiClient {
+  /**
+   * Phase 4 exporter configuration and last run
+   *
+   * Configured exporters (ADR-1026) — secrets are never returned, only type/host/publicKey — plus the most recent periodic export tick's per-exporter outcome, if any exporter has ever run.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityExportersConfigResponses, unknown, ThrowOnError>({
+      url: "/observability/exporters/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Preview the ExportProjection for one event
+   *
+   * Returns exactly what would be sent to a configured exporter for this event — without sending it anywhere. `exportable: false` if the event is not yet a terminal event (shouldExportSpan, ADR-1026) even if it is otherwise valid.
+   */
+  public preview<ThrowOnError extends boolean = false>(
+    parameters: {
+      eventId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "eventId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityExportersPreviewResponses,
+      ObservabilityExportersPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/observability/exporters/preview/{eventId}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send a synthetic test event through every configured exporter
+   *
+   * Exercises each configured exporter right now with a synthetic, non-real ExportProjection (fake trace/span ids, no data derived from any real event) so credentials/connectivity can be validated without waiting for real traffic or risking real content. Returns per-exporter success/failure, with the same bounded retry policy as the periodic export tick.
+   */
+  public test<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ObservabilityExportersTestResponses, unknown, ThrowOnError>({
+      url: "/observability/exporters/test",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Observability extends HeyApiClient {
+  /**
+   * Observability health
+   *
+   * Current instance's observability queue/circuit-breaker state. Reflects only the process serving this request, not a global/cross-project view.
+   */
+  public health<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityHealthResponses, unknown, ThrowOnError>({
+      url: "/observability/health",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Observability settings
+   *
+   * Resolved capture policy plus Phase 1 storage disclosure flags for the settings UI (unencrypted local SQLite, no full-content capture available).
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySettingsResponses, unknown, ThrowOnError>({
+      url: "/observability/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Observability summary for a session
+   *
+   * Aggregate event counts (by type/status) and total cost for one session. Same ownership check as /events.
+   */
+  public summary<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionId: string
+      scope?: "project" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilitySummaryResponses,
+      ObservabilitySummaryErrors,
+      ThrowOnError
+    >({
+      url: "/observability/summary",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Compare configuration cohorts
+   *
+   * Aggregates latency p50/p95, cost per turn, and failure rate by (model_provider, model_id, skill_hmac). Phase 2 feature — returns empty array if insufficient data.
+   */
+  public compare<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      timeWindowMs?: number
+      scope?: "project" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "timeWindowMs" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ObservabilityCompareResponses,
+      ObservabilityCompareErrors,
+      ThrowOnError
+    >({
+      url: "/observability/compare",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export observability events as NDJSON
+   *
+   * Streams all matching events as newline-delimited JSON. Supports filtering by session/project/workspace and time window. Returns NDJSON lines.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionId: string
+      projectId?: string
+      workspaceId?: string
+      sinceMs?: number
+      untilMs?: number
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "projectId" },
+            { in: "query", key: "workspaceId" },
+            { in: "query", key: "sinceMs" },
+            { in: "query", key: "untilMs" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilityExportResponses, ObservabilityExportErrors, ThrowOnError>({
+      url: "/observability/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Aggregate summary across sessions/projects/workspaces
+   *
+   * Aggregate event counts (by type/status) and total cost across a scope. Defaults to the current project when no sessionId/projectId/workspaceId is given — never returns other projects' data implicitly.
+   */
+  public summaryAggregate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionId?: string
+      projectId?: string
+      workspaceId?: string
+      sinceMs?: number
+      untilMs?: number
+      scope?: "project" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionId" },
+            { in: "query", key: "projectId" },
+            { in: "query", key: "workspaceId" },
+            { in: "query", key: "sinceMs" },
+            { in: "query", key: "untilMs" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ObservabilitySummaryAggregateResponses, unknown, ThrowOnError>({
+      url: "/observability/summary/aggregate",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _sessions?: Sessions
+  get sessions(): Sessions {
+    return (this._sessions ??= new Sessions({ client: this.client }))
+  }
+
+  private _events?: Events
+  get events(): Events {
+    return (this._events ??= new Events({ client: this.client }))
+  }
+
+  private _trace?: Trace
+  get trace(): Trace {
+    return (this._trace ??= new Trace({ client: this.client }))
+  }
+
+  private _privacy?: Privacy
+  get privacy(): Privacy {
+    return (this._privacy ??= new Privacy({ client: this.client }))
+  }
+
+  private _data?: Data
+  get data(): Data {
+    return (this._data ??= new Data({ client: this.client }))
+  }
+
+  private _exporters?: Exporters
+  get exporters(): Exporters {
+    return (this._exporters ??= new Exporters({ client: this.client }))
   }
 }
 
@@ -6390,6 +7303,11 @@ export class OpencodeClient extends HeyApiClient {
   private _debate?: Debate
   get debate(): Debate {
     return (this._debate ??= new Debate({ client: this.client }))
+  }
+
+  private _observability?: Observability
+  get observability(): Observability {
+    return (this._observability ??= new Observability({ client: this.client }))
   }
 
   private _gdpr?: Gdpr

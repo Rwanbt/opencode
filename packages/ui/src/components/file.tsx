@@ -670,7 +670,7 @@ function ViewerShell(props: {
 }
 
 // ---------------------------------------------------------------------------
-// Subgrid row-collapse workaround (Android WebView)
+// Dynamic line-row alignment shared by desktop and Android WebView
 // ---------------------------------------------------------------------------
 
 // WHY: @pierre/diffs lays out [data-gutter]/[data-content] with
@@ -682,9 +682,8 @@ function ViewerShell(props: {
 // instead of one per line: every [data-line] renders at the same position
 // and only the last one paints. Verified live via DevTools — giving each
 // container its own explicit `repeat(N, auto)` track list (bypassing the
-// subgrid inheritance) fixes it immediately. Desktop Chrome is unaffected by
-// The pixel tracks below preserve the cross-column row-height matching for
-// wrapped multi-line rows while keeping the workaround scoped to the viewer.
+// subgrid inheritance) fixes it immediately. The pixel tracks below preserve
+// cross-column row-height matching for wrapped rows on every viewer platform.
 function getSynchronizedGridRows(gutter: HTMLElement, content: HTMLElement) {
   const gutterRows = Array.from(gutter.children) as HTMLElement[]
   const contentRows = Array.from(content.children) as HTMLElement[]
@@ -742,12 +741,30 @@ function fixSubgridLineRowCollapse(root: ShadowRoot) {
 // `subgrid` with the one-shot version, while a reopen (second mount) picked
 // up the fix fine. Watching the shadow root and re-applying on every
 // mutation removes that timing dependency entirely.
-function watchSubgridLineRowCollapse(root: ShadowRoot | undefined): () => void {
+function watchViewerLineRows(root: ShadowRoot | undefined): () => void {
   if (!root || typeof MutationObserver === "undefined") return () => {}
-  fixSubgridLineRowCollapse(root)
-  const observer = new MutationObserver(() => fixSubgridLineRowCollapse(root))
-  observer.observe(root, { childList: true, subtree: true })
-  return () => observer.disconnect()
+
+  let frame = 0
+  const schedule = () => {
+    if (frame !== 0) return
+    frame = requestAnimationFrame(() => {
+      frame = 0
+      fixSubgridLineRowCollapse(root)
+    })
+  }
+
+  const mutationObserver = new MutationObserver(schedule)
+  mutationObserver.observe(root, { childList: true, subtree: true })
+
+  const resizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(schedule)
+  if (resizeObserver && root.host instanceof HTMLElement) resizeObserver.observe(root.host)
+
+  schedule()
+  return () => {
+    mutationObserver.disconnect()
+    resizeObserver?.disconnect()
+    if (frame !== 0) cancelAnimationFrame(frame)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -908,7 +925,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
       },
       onReady: () => {
         stopSubgridWatch?.()
-        stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
+        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
         stopTokenStyleWatch?.()
         stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
         applySelection(viewer.lastSelection)
@@ -1106,7 +1123,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       settleFrames: 1,
       onReady: () => {
         stopSubgridWatch?.()
-        stopSubgridWatch = watchSubgridLineRowCollapse(viewer.getRoot())
+        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
         stopTokenStyleWatch?.()
         stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
         done?.()

@@ -3,6 +3,7 @@ import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { NotFoundError } from "../../src/storage/db"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Log } from "../../src/util/log"
@@ -177,7 +178,7 @@ describe("MessageV2.page", () => {
       directory: root,
       fn: async () => {
         const fake = "non-existent-session" as SessionID
-        expect(() => MessageV2.page({ sessionID: fake, limit: 10 })).toThrow("NotFoundError")
+        expect(() => MessageV2.page({ sessionID: fake, limit: 10 })).toThrow(NotFoundError)
       },
     })
   })
@@ -541,7 +542,7 @@ describe("MessageV2.get", () => {
         const session = await Session.create({})
 
         expect(() => MessageV2.get({ sessionID: session.id, messageID: MessageID.ascending() })).toThrow(
-          "NotFoundError",
+          NotFoundError,
         )
 
         await Session.remove(session.id)
@@ -557,7 +558,7 @@ describe("MessageV2.get", () => {
         const b = await Session.create({})
         const [id] = await fill(a.id, 1)
 
-        expect(() => MessageV2.get({ sessionID: b.id, messageID: id })).toThrow("NotFoundError")
+        expect(() => MessageV2.get({ sessionID: b.id, messageID: id })).toThrow(NotFoundError)
         const result = MessageV2.get({ sessionID: a.id, messageID: id })
         expect(result.info.id).toBe(id)
 

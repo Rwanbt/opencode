@@ -16,6 +16,19 @@ export function normalizeAgentList(input: unknown): Agent[] {
   return Object.values(input).filter(isAgent)
 }
 
+export function visibleAgents(input: Agent[]) {
+  const preferredOrder = ["chat", "plan", "debate", "build", "auto"]
+  const rank = (name: string) => {
+    const index = preferredOrder.indexOf(name)
+    return index === -1 ? preferredOrder.length : index
+  }
+  return input
+    .filter((item) => item.mode !== "subagent" && !item.hidden && !item.app_hidden)
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => rank(a.item.name) - rank(b.item.name) || a.index - b.index)
+    .map(({ item }) => item)
+}
+
 export function normalizeProviderList(input: ProviderListResponse): ProviderListResponse {
   return {
     ...input,

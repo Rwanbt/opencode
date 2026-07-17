@@ -198,6 +198,14 @@ export function DialogModel(props: { providerID?: string }) {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
         },
+        {
+          keybind: keybind.all.model_refresh?.[0],
+          title: local.modelCatalog.refreshing ? "Refreshing…" : "Refresh models",
+          disabled: local.modelCatalog.refreshing,
+          onTrigger: () => {
+            void local.modelCatalog.refresh()
+          },
+        },
       ]}
       onFilter={setQuery}
       flat={true}

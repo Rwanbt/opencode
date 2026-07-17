@@ -70,7 +70,7 @@ describe("Worktree", () => {
     test("throws NotGitError for non-git directories", async () => {
       await using tmp = await tmpdir()
 
-      await expect(withInstance(tmp.path, () => Worktree.makeWorktreeInfo())).rejects.toThrow("WorktreeNotGitError")
+      await expect(withInstance(tmp.path, () => Worktree.makeWorktreeInfo())).rejects.toThrow(Worktree.NotGitError)
     })
   })
 
@@ -170,7 +170,7 @@ describe("Worktree", () => {
       await using tmp = await tmpdir()
 
       await expect(withInstance(tmp.path, () => Worktree.remove({ directory: "/tmp/fake" }))).rejects.toThrow(
-        "WorktreeNotGitError",
+        Worktree.NotGitError,
       )
     })
   })

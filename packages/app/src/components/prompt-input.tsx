@@ -34,6 +34,7 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { DebateModelSelector } from "@/components/debate-model-selector"
 import {
   createTextFragment,
   getCursorPosition,
@@ -577,12 +578,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const agents = agentList()
       const open = recent()
       const seen = new Set(open)
-      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
+      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path.replaceAll("\\", "/"), recent: true }))
       if (!query.trim()) return [...agents, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
+        .map((path) => ({ type: "file", path, display: path.replaceAll("\\", "/") }))
       return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
@@ -759,7 +760,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        atOnInput(atMatch[1])
+        atOnInput(atMatch[1].replaceAll("\\", "/"))
         setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
@@ -1142,7 +1143,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar5" />
                   <div class="w-0.5 bg-icon-critical-base rounded-full animate-stt-bar2" />
                 </div>
-                <span class="text-13-regular text-text-critical-base ml-2">Listening...</span>
+                <span class="text-13-regular text-text-critical-base ml-2">{language.t("prompt.listening")}</span>
               </div>
             </Show>
           </div>
@@ -1178,7 +1179,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   value={
                     local.model.variant.current()
                       ? `Thinking: ${local.model.variant.current()}`
-                      : "Enable thinking"
+                       : language.t("prompt.enableThinking")
                   }
                 >
                   <IconButton
@@ -1187,7 +1188,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant={local.model.variant.current() ? "primary" : "ghost"}
                     class="size-8"
                     style={buttons()}
-                    aria-label="Toggle thinking"
+                    aria-label={language.t("prompt.toggleThinking")}
                     onClick={(e: MouseEvent) => {
                       e.preventDefault()
                       e.stopPropagation()
@@ -1205,7 +1206,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Show>
               <Tooltip
                 placement="top"
-                value={webSearch() ? "Disable web search" : "Enable web search"}
+                value={webSearch() ? language.t("prompt.disableWebSearch") : language.t("prompt.enableWebSearch")}
               >
                 <IconButton
                   data-action="prompt-web-search-toggle"
@@ -1213,7 +1214,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant={webSearch() ? "primary" : "ghost"}
                   class="size-8"
                   style={buttons()}
-                  aria-label="Toggle web search"
+                  aria-label={language.t("prompt.toggleWebSearch")}
                   onClick={(e: MouseEvent) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -1223,7 +1224,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Tooltip>
               <Tooltip
                 placement="top"
-                value={recording() ? "Stop recording" : "Voice input"}
+                value={recording() ? language.t("prompt.stopRecording") : language.t("prompt.voiceInput")}
               >
                 <IconButton
                   data-action="prompt-stt-toggle"
@@ -1231,7 +1232,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant={recording() ? "primary" : "ghost"}
                   class="size-8"
                   style={buttons()}
-                  aria-label={recording() ? "Stop recording" : "Voice input"}
+                  aria-label={recording() ? language.t("prompt.stopRecording") : language.t("prompt.voiceInput")}
                   onClick={(e: MouseEvent) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -1251,7 +1252,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!working() && blank())}
+                  disabled={store.mode !== "normal" || (!working() && blank()) || !local.agent.current()}
                   tabIndex={store.mode === "normal" ? undefined : -1}
                   icon={stopping() ? "stop" : "arrow-up"}
                   variant="primary"
@@ -1333,6 +1334,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </TooltipKeybind>
                 </div>
                 <Show when={store.mode !== "shell"}>
+                <Show when={local.agent.current()?.name !== "debate"}>
                   <div data-component="prompt-model-control">
                     <Show
                       when={providers.paid().length > 0}
@@ -1348,7 +1350,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             as="div"
                             variant="ghost"
                             size="normal"
-                            class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
+                            class={local.agent.current()?.name === "debate" ? "min-w-0 w-full max-w-none text-13-regular text-text-base group" : "min-w-0 max-w-[320px] text-13-regular text-text-base group"}
                             style={control()}
                             onClick={() => {
                               void import("@/components/dialog-select-model-unpaid").then((x) => {
@@ -1404,6 +1406,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipKeybind>
                     </Show>
                   </div>
+                </Show>
+                <Show when={local.agent.current()?.name === "debate"}>
+                  <div data-component="prompt-debate-model-control">
+                    <DebateModelSelector local={local} />
+                  </div>
+                </Show>
                   <div data-component="prompt-mode-control">
                     <Select
                       size="normal"

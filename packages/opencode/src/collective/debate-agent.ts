@@ -11,6 +11,7 @@ export function createDebateAgent(
     description:
       "Collective Intelligence agent that orchestrates multi-model debates. Surfaces blind spots by running N models in parallel, extracting atomic claims, and producing a synthesis report.",
     mode: "primary",
+    color: "info",
     native: true,
     permission: Permission.merge(
       defaults,
@@ -21,6 +22,7 @@ export function createDebateAgent(
         glob: "allow",
         websearch: "allow",
         webfetch: "allow",
+        debate: "allow",
       }),
       user,
     ),

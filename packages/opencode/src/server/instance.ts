@@ -35,6 +35,7 @@ import { WsEventRoutes } from "./routes/ws-event"
 import { Presence } from "./presence"
 import { AgentSkillRoutes } from "./routes/agent-skills"
 import { GdprRoutes } from "./routes/gdpr"
+import { ObservabilityRoutes } from "./routes/observability"
 import { DebateRoutes } from "./routes/debate"
 import { errorHandler } from "./middleware"
 
@@ -66,6 +67,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
     .route("/debate", DebateRoutes())
+    .route("/observability", ObservabilityRoutes())
     .get(
       "/presence",
       describeRoute({

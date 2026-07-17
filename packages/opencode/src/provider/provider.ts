@@ -605,16 +605,28 @@ export namespace Provider {
         }),
       )
 
-      // When models.dev refreshes in the background (fire-and-forget timer,
-      // no instance context), the provider state cached per-directory is stale.
-      // Invalidate all entries so the next access rebuilds with fresh models —
-      // this is what makes a provider that was missing at boot (empty fetch)
-      // appear once the network fetch completes.
-      ModelsDev.onRefresh(() => {
-        Effect.runPromise(InstanceState.invalidateAll(state)).catch((e) => {
-          log.error("Failed to invalidate provider state after models refresh", { error: e })
-        })
+      // When models.dev refreshes (background timer or a manual force-refresh
+      // from the TUI/HTTP route), the provider state cached per-directory is
+      // stale. Invalidate all entries so the next access rebuilds with fresh
+      // models — this is what makes a provider that was missing at boot
+      // (empty fetch) appear once the network fetch completes.
+      //
+      // This callback is awaited by ModelsDev.refresh() before it resolves
+      // (see refreshCallbacks in models.ts), so a caller awaiting refresh()
+      // is guaranteed InstanceState has already been invalidated — otherwise
+      // a manual refresh could report success before Provider.list() sees
+      // the new catalog.
+      //
+      // Unsubscribe on scope close: ModelsDev.refreshCallbacks is a
+      // process-lifetime singleton array, but `state`'s ScopedCache is
+      // scoped to this Layer. Without this, every Layer construction (e.g.
+      // once per test) leaks a callback that later calls invalidateAll on an
+      // already-closed cache — refresh() awaits all of them via Promise.all,
+      // so one leaked callback throwing turns a real refresh into ok:false.
+      const unsubscribeRefresh = ModelsDev.onRefresh(async () => {
+        await Effect.runPromise(InstanceState.invalidateAll(state))
       })
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribeRefresh))
 
       const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
@@ -946,6 +958,11 @@ export namespace Provider {
 
   export async function getLanguage(model: Model) {
     return runPromise((svc) => svc.getLanguage(model))
+  }
+
+  export async function getLanguageByID(providerID: ProviderID, modelID: ModelID) {
+    const model = await getModel(providerID, modelID)
+    return getLanguage(model)
   }
 
   export async function closest(providerID: ProviderID, query: string[]) {

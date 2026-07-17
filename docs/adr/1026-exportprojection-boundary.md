@@ -1,0 +1,25 @@
+# ADR-1026 : Frontière `ExportProjection` pour les exporters Phase 4
+
+**Date** : 2026-07-12 | **Statut** : Accepté
+
+## Contexte
+
+Le cœur de l'observabilité native (Phase 0-3) ne connaît aucun client réseau (invariant 4, vérifié par `resilience.test.ts`: "no observability pipeline module imports a network client"). La Phase 4 introduit des exporters optionnels (Langfuse en premier) qui, par construction, doivent parler au réseau — mais sans jamais recevoir une ligne `observability_event` brute, qui peut porter `local_content_redacted_json`/`local_full_json` (Phase 3, ADR-1032, contenu opt-in potentiellement sensible).
+
+Le plan (§17, invariant 5) exige : "Un exporter ne reçoit qu'une `ExportProjection` validée Zod, jamais la ligne brute" et "Aucun `local_full_json` ou raw event type ne compile comme input exporter."
+
+## Décision
+
+- **`ExportProjectionSchema`** (`observability/export-projection.ts`) est un schéma Zod `.strict()` séparé du `ObservabilityEventSchema` (event-schema.ts) — pas un sous-type, un type distinct construit explicitement champ par champ depuis une `EventRow`. `.strict()` fait qu'ajouter `localContentRedacted`/`localFull` à l'objet source lève une erreur de validation au lieu de passer silencieusement.
+- **Aucun champ de contenu texte n'existe dans `ExportProjection`**, jamais — ni `local_content_redacted`, ni `local_full`, ni un extrait tronqué de l'un ou l'autre. C'est plus strict que la lecture locale (qui peut afficher ce contenu dans TraceDetail/PrivacyPanel à l'utilisateur lui-même) : envoyer du contenu opt-in vers un service tiers (Langfuse) n'a jamais été couvert par le consentement Phase 3, qui autorise uniquement le **stockage local**. Étendre cette autorisation à l'export réseau demanderait un opt-in Phase 3 distinct, non spécifié par le plan — donc non implémenté.
+- **`sessionId`/`projectId`/`workspaceId` sont HMACés avant export**, même si la DB locale les stocke en clair (accès authentifié local uniquement, ADR-1028). Un exporter réseau tiers ne doit jamais recevoir d'identifiant interne réutilisable pour corréler avec d'autres systèmes — seul le hash HMAC-local (ADR-1027) traverse la frontière, cohérent avec l'invariant 9 déjà appliqué à `toolNameHmac`/`skillHmac`/`pathHmac`.
+- **`shouldExportSpan(row)`** filtre les lignes avant traduction : un event `status="started"` sans terminal correspondant n'est pas encore un span complet (durée/coût inconnus) et n'est pas exporté — évite d'envoyer des spans partiels qui polluent un dashboard externe. `observability.write.dropped` est un compteur interne, pas une opération métier, et n'est jamais exporté non plus.
+- **`toExportProjection(row, secret)`** est la seule fonction qui construit une `ExportProjection` ; elle appelle `ExportProjectionSchema.parse()` avant de retourner (fail loud — une projection invalide ne doit jamais atteindre un exporter silencieusement tronquée).
+- **Séparation de répertoire comme frontière réseau explicite** : `exporter.ts` (interface + registre) reste au niveau racine de `observability/` et ne contient aucun `fetch()` — seul `observability/exporters/langfuse.ts` en contient un. Le test existant `resilience.test.ts` ("no observability pipeline module imports a network client") scanne `observability/*.ts` avec un glob non récursif (`Bun.Glob("*.ts")`) : il continue de couvrir tout le cœur Phase 1-3 sans modification, et `observability/exporters/` est la seule zone où un import réseau est légitime et attendu.
+- **Liste d'exporters vide par défaut** (`config.experimental.observability.exporters` non défini ou `[]`) : `ExporterRegistry.from()` retourne alors un tableau vide, et le job d'export périodique (`runtime.ts`) sort immédiatement sans jamais interroger la DB ni construire une seule `ExportProjection` — zéro coût, zéro réseau, invariants 2/3 préservés par construction, pas seulement par convention.
+
+## Conséquences
+
+- Un utilisateur qui veut voir son contenu opt-in Phase 3 (`local_full`) dans Langfuse ne le peut pas avec cette implémentation — c'est une limitation connue et volontaire, documentée dans `docs/observability-phase4-admin.md`. Lever cette limitation demanderait un ADR et un opt-in UI dédiés, hors scope Phase 4.
+- Le cursor d'export (`runtime.ts`) est en mémoire par instance de processus, pas persisté en DB — par défaut un redémarrage (ou une première configuration d'exporter) repart de l'event le plus récent, sans rattraper l'historique antérieur. `experimental.observability.backfillOnStart: true` (ou le switch équivalent du panneau Exporters) inverse ce choix et exporte tout l'historique existant — opt-in explicite, jamais le comportement par défaut, documenté dans `docs/observability-phase4-admin.md` avec l'avertissement sur le volume que ça peut représenter.
+- Toute évolution future de `ExportProjectionSchema` doit rester `.strict()` : ajouter un champ optionnel est sûr, mais retirer `.strict()` romprait la garantie qu'aucun futur champ de `ObservabilityEventSchema` ne fuite par erreur de spread/copie.

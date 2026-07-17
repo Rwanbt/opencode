@@ -16,6 +16,7 @@
 
 import { Match, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { checksum } from "@opencode-ai/util/encode"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useLanguage } from "@/context/language"
@@ -85,11 +86,14 @@ export function ViewerPanel(props: ViewerPanelProps) {
         // horizontal scroll under "scroll" mode, so it pushes the outer
         // .scroll-view__viewport wider instead of staying contained.
         overflow="wrap"
-        file={{
-          name: props.path() ?? "",
-          contents: source(),
-          cacheKey: source().length,
-        }}
+        file={(() => {
+          const contents = source()
+          return {
+            name: props.path() ?? "",
+            contents,
+            cacheKey: checksum(contents),
+          }
+        })()}
         enableLineSelection
         enableHoverUtility
         selectedLines={props.activeSelection()}

@@ -1,0 +1,193 @@
+// Phase 4 soak test harness (plan §14/§18: "soak test 24h"). This script
+// exists so the 24h run can actually be executed — it cannot be executed BY
+// an agent inside one session, since it requires 24 real wall-clock hours of
+// a live process. Nothing in this repository can complete that gate; it must
+// be run manually (or in a dedicated long-running CI job) before Phase 4 is
+// declared production-ready per plan §22.
+//
+// Usage:
+//   bun run script/observability-soak-test.ts --duration-ms=86400000 --rate-per-sec=20
+//   bun run script/observability-soak-test.ts --duration-ms=10000 --rate-per-sec=50   # smoke test
+//
+// What it does: boots one ObservabilityRuntime instance against an isolated
+// XDG_*_HOME (never the real user profile — see the top-of-file env
+// overrides below, set before ANY relative import so global/index.ts picks
+// them up at its own module-load time), then continuously calls
+// service.record() at the requested rate with a realistic mix of event
+// types (llm started/finished/failed/aborted, tool started/finished/failed),
+// logging service.stats() and process.memoryUsage() on an interval so a
+// human reviewing the log afterwards can judge whether the queue, circuit
+// breaker, or process memory trended toward a problem over the full run.
+// Ends with a final flush and `PRAGMA integrity_check`.
+import { mkdtempSync, statSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
+
+const soakHome = mkdtempSync(path.join(os.tmpdir(), "opencode-observability-soak-"))
+process.env.XDG_DATA_HOME = path.join(soakHome, "data")
+process.env.XDG_CONFIG_HOME = path.join(soakHome, "config")
+process.env.XDG_CACHE_HOME = path.join(soakHome, "cache")
+process.env.XDG_STATE_HOME = path.join(soakHome, "state")
+process.env.OPENCODE_TEST_HOME = soakHome
+
+const { Instance } = await import("../src/project/instance")
+const { ObservabilityRuntime } = await import("../src/observability/runtime")
+const { createTraceContext } = await import("../src/observability/trace-context")
+const { Database, sql } = await import("../src/storage/db")
+
+function parseArg(name: string, fallback: number): number {
+  const flag = process.argv.find((arg) => arg.startsWith(`--${name}=`))
+  if (!flag) return fallback
+  const value = Number(flag.split("=")[1])
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+const DURATION_MS = parseArg("duration-ms", 24 * 60 * 60 * 1000)
+const RATE_PER_SEC = parseArg("rate-per-sec", 20)
+const LOG_INTERVAL_MS = parseArg("log-interval-ms", 60_000)
+const TICK_MS = Math.max(1, Math.round(1000 / RATE_PER_SEC))
+const CIRCUIT_COOLDOWN_MS = 30_000
+const MAX_RSS_GROWTH_MB = 256
+
+const EVENT_KINDS: Array<{ type: string; status: string }> = [
+  { type: "llm.call.started", status: "started" },
+  { type: "llm.call.finished", status: "finished" },
+  { type: "llm.call.failed", status: "failed" },
+  { type: "llm.call.aborted", status: "aborted" },
+  { type: "tool.call.started", status: "started" },
+  { type: "tool.call.finished", status: "finished" },
+  { type: "tool.call.failed", status: "failed" },
+]
+
+function syntheticEvent(i: number) {
+  const kind = EVENT_KINDS[i % EVENT_KINDS.length]!
+  const isLlm = kind.type.startsWith("llm.")
+  return {
+    type: kind.type as any,
+    status: kind.status as any,
+    tsMs: Date.now(),
+    durationMs: kind.status === "started" ? undefined : 50 + (i % 500),
+    redactionStatus: "metadata_only" as const,
+    payloadTruncated: false,
+    schemaVersion: 1 as const,
+    metadata: isLlm
+      ? { modelProvider: "anthropic", modelId: "claude-sonnet-5", inputTokens: 100 + (i % 50), outputTokens: 50 + (i % 30) }
+      : { toolKind: "read", toolNameHmac: "0".repeat(64) },
+    localRedacted: { classes: [] },
+    costNanoUsd: isLlm && kind.status === "finished" ? 1000 + (i % 200) : undefined,
+  }
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${hours}h${minutes}m${seconds}s`
+}
+
+async function main() {
+  console.log(`[soak] isolated home: ${soakHome}`)
+  console.log(`[soak] duration=${formatDuration(DURATION_MS)} rate=${RATE_PER_SEC}/s tick=${TICK_MS}ms`)
+
+  const startedAt = Date.now()
+  const startRssMb = process.memoryUsage().rss / (1024 * 1024)
+  let recorded = 0
+  let recordErrors = 0
+  let lastLogAt = startedAt
+  let peakRssMb = startRssMb
+  let circuitOpenStartedAt: number | undefined
+  let circuitOpenCount = 0
+  let maxCircuitOpenDurationMs = 0
+  let stop = false
+
+  process.on("SIGINT", () => {
+    console.log("\n[soak] SIGINT received, finishing current tick and shutting down cleanly...")
+    stop = true
+  })
+
+  await Instance.provide({
+    directory: soakHome,
+    fn: async () => {
+      const service = ObservabilityRuntime.service()
+
+      while (!stop && Date.now() - startedAt < DURATION_MS) {
+        const result = service.record(createTraceContext(), syntheticEvent(recorded))
+        recorded++
+        if (!result.ok) recordErrors++
+
+        const now = Date.now()
+        const stats = service.stats()
+        const rssMb = process.memoryUsage().rss / (1024 * 1024)
+        peakRssMb = Math.max(peakRssMb, rssMb)
+        if (stats.circuitOpen && circuitOpenStartedAt === undefined) {
+          circuitOpenStartedAt = now
+          circuitOpenCount++
+        } else if (!stats.circuitOpen && circuitOpenStartedAt !== undefined) {
+          maxCircuitOpenDurationMs = Math.max(maxCircuitOpenDurationMs, now - circuitOpenStartedAt)
+          circuitOpenStartedAt = undefined
+        }
+        if (now - lastLogAt >= LOG_INTERVAL_MS) {
+          lastLogAt = now
+          console.log(
+            `[soak] t=${formatDuration(now - startedAt)} recorded=${recorded} recordErrors=${recordErrors} ` +
+              `rssMb=${rssMb.toFixed(1)} (Δ${(rssMb - startRssMb).toFixed(1)}) ` +
+              `queueSize=${stats.queueSize} queueBytes=${stats.queueBytes} circuitOpen=${stats.circuitOpen} ` +
+              `accepted=${stats.eventsAccepted} inserted=${stats.eventsInserted} droppedQueueFull=${stats.eventsDroppedQueueFull} droppedCircuit=${stats.eventsDroppedCircuitOpen} ` +
+              `failedDb=${stats.eventsFailedDb} failedBusy=${stats.eventsFailedBusy} failedFull=${stats.eventsFailedFull} failedCorrupt=${stats.eventsFailedCorrupt} sanitizerFailed=${stats.sanitizerFailed}`,
+          )
+          if (stats.circuitOpen) {
+            console.warn(`[soak] WARNING: circuit breaker is open at t=${formatDuration(now - startedAt)}`)
+          }
+        }
+
+        await Bun.sleep(TICK_MS)
+      }
+
+      console.log("[soak] loop ended, flushing remaining queue...")
+      await service.flush(10_000)
+      const finalStats = service.stats()
+      const finalNow = Date.now()
+      if (circuitOpenStartedAt !== undefined) maxCircuitOpenDurationMs = Math.max(maxCircuitOpenDurationMs, finalNow - circuitOpenStartedAt)
+
+      const integrity = Database.use((db) => db.all(sql.raw("PRAGMA integrity_check")))
+      const integrityOk = integrity.length === 1 && Object.values(integrity[0] as Record<string, unknown>)[0] === "ok"
+      const databasePath = Database.Path
+      const databaseSize = statSync(databasePath, { throwIfNoEntry: false })?.size ?? 0
+      const walSize = statSync(`${databasePath}-wal`, { throwIfNoEntry: false })?.size ?? 0
+      const shmSize = statSync(`${databasePath}-shm`, { throwIfNoEntry: false })?.size ?? 0
+      const accountedAccepted = finalStats.eventsInserted + finalStats.queueSize + finalStats.eventsDroppedQueueFull
+      const unexplainedDivergence = finalStats.eventsAccepted !== accountedAccepted
+      const finalRssMb = process.memoryUsage().rss / (1024 * 1024)
+      const rssDeltaMb = finalRssMb - startRssMb
+      const failed = [
+        finalStats.eventsDroppedCircuitOpen > 0,
+        finalStats.eventsFailedFull > 0,
+        finalStats.eventsFailedCorrupt > 0,
+        maxCircuitOpenDurationMs > CIRCUIT_COOLDOWN_MS,
+        finalStats.queueSize > 0,
+        unexplainedDivergence,
+        !integrityOk,
+        rssDeltaMb > MAX_RSS_GROWTH_MB,
+      ]
+
+      console.log(
+        `[soak] summary verdict=${failed.some(Boolean) ? "FAIL" : "PASS"} duration=${formatDuration(finalNow - startedAt)} ` +
+          `rate=${(recorded / Math.max(1, (finalNow - startedAt) / 1000)).toFixed(2)}/s ` +
+          `recorded=${recorded} accepted=${finalStats.eventsAccepted} inserted=${finalStats.eventsInserted} ` +
+          `recordErrors=${recordErrors} invalidContext=${finalStats.eventsRejectedInvalidContext} invalidEvent=${finalStats.eventsRejectedInvalidEvent} ` +
+          `queueDrops=${finalStats.eventsDroppedQueueFull} circuitDrops=${finalStats.eventsDroppedCircuitOpen} queueSize=${finalStats.queueSize} ` +
+          `sqliteErrors={db:${finalStats.eventsFailedDb},busy:${finalStats.eventsFailedBusy},full:${finalStats.eventsFailedFull},corrupt:${finalStats.eventsFailedCorrupt}} ` +
+          `circuitOpenCount=${circuitOpenCount} maxCircuitOpen=${formatDuration(maxCircuitOpenDurationMs)} ` +
+          `rssMb={start:${startRssMb.toFixed(1)},peak:${peakRssMb.toFixed(1)},final:${finalRssMb.toFixed(1)},delta:${rssDeltaMb.toFixed(1)}} ` +
+          `dbBytes={main:${databaseSize},wal:${walSize},shm:${shmSize}} integrity=${integrityOk ? "ok" : "FAIL"}`,
+      )
+      if (failed.some(Boolean)) process.exitCode = 1
+
+    },
+  })
+
+  await Instance.disposeAll().catch(() => {})
+}
+
+await main()
