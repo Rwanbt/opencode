@@ -50,6 +50,12 @@ import { FileSearchBar } from "./file-search"
 
 const VIRTUALIZE_BYTES = 500_000
 
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): a stable reference for
+// "no annotations", so useAnnotationRerender's reference-equality skip
+// actually works for the common case — `?? []` would allocate a fresh empty
+// array on every read, defeating the check every time.
+const EMPTY_ANNOTATIONS: never[] = []
+
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
   lineHeight: 24,
@@ -447,12 +453,28 @@ function useAnnotationRerender<A>(opts: {
   current: () => AnnotationTarget<A> | undefined
   annotations: () => A[]
 }) {
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): `rerender()` always does
+  // `render({..., forceRender: true})` — a full Pierre re-render regardless
+  // of whether anything actually changed. This effect re-runs on EVERY
+  // `rendered()` bump (i.e. every single content render, via renderViewer),
+  // so without this guard it forced a second full re-render pass right
+  // after the first one, every time, even when there are no annotations at
+  // all (the common case). Skipping when the annotations reference is
+  // unchanged since the last apply turns that into a no-op — annotations()
+  // is expected to be a stable reference (a Solid memo, or the same EMPTY_
+  // ANNOTATIONS constant below) when nothing relevant changed, so this is a
+  // plain reference check, not a deep comparison.
+  let lastApplied: A[] | undefined
   createEffect(() => {
     opts.viewer.rendered()
     const active = opts.current()
     if (!active) return
-    active.setLineAnnotations(opts.annotations())
-    active.rerender()
+    const annotations = opts.annotations()
+    if (annotations !== lastApplied) {
+      active.setLineAnnotations(annotations)
+      active.rerender()
+      lastApplied = annotations
+    }
     requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
   })
 }
@@ -898,7 +920,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   useAnnotationRerender<LineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
   })
 
   // -- cleanup --
@@ -1105,7 +1127,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   useAnnotationRerender<DiffLineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
   })
 
   // -- cleanup --

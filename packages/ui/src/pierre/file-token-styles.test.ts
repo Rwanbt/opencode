@@ -72,7 +72,6 @@ function fakeLine(styledSpanStyle = "color: red;"): { line: FakeElement; span: F
 }
 
 let originalElement: unknown
-let originalInstanceofTarget: unknown
 
 beforeEach(() => {
   // repairTokenStylesIn does `node instanceof Element` — stub a minimal
