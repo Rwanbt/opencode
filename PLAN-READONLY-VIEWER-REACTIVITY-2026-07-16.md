@@ -210,7 +210,30 @@ Options à évaluer (ne pas trancher sans mesure Phase 0) :
   - `viewer-ready` — `viewer-panel.tsx`'s `onRendered` (le signal de fin réel, déjà utilisé par `queueRestore()`)
 - [ ] **Angle mort documenté, pas de fix** : pas de mark `worker-result` séparé — le worker de tokenisation Pierre vit entièrement dans `node_modules/@pierre/diffs` (vendée), l'instrumenter nécessiterait de la patcher, ce que la Phase 6/C4 exclut explicitement (patch non versionné, écrasé au prochain `bun install`). `notify-shadow-ready-start/end` est le proxy le plus honnête disponible sans toucher la lib.
 - [ ] **Hors scope délibéré** : `DiffViewer`'s propre `notify()` n'est pas instrumenté (seul le viewer lecture seule `TextViewer`, utilisé par `viewer-panel.tsx`, est dans le périmètre de ce plan).
-- [ ] Mesure réelle desktop + Android — **reste à faire, nécessite une session de test manuelle** (activer le flag, ouvrir un fichier, sauvegarder, lire `logViewerTimingSummary()` dans la console). Décide du choix d'option pour la Phase 2 (section suivante).
+- [x] **Mesure réelle obtenue (2026-07-19, desktop dev — `opencode serve` port 4097 + `packages/app` Vite dev, piloté via `/browse`, projet réel `D:\App\OpenCode\opencode` branche `opti-ui`, édition d'un vrai fichier `viewer-panel.tsx`, flag `opencode:debug:viewer-timing` activé)** :
+
+```
+save-start                 80091.0
+write-complete              80212.9   (+121.9 ms — écriture disque backend, coût incompressible)
+store-mirror                 80214.1   (+1.2 ms)
+refresh-sdk-start             80214.8   (+0.7 ms)
+refresh-sdk-complete           80415.4   (+200.6 ms  ← round-trip C1)
+editing-false                   80421.1   (+5.7 ms)
+viewer-mount-start                80424.3   (+3.2 ms)
+notify-shadow-ready-start           80477.8   (+53.5 ms)
+notify-shadow-ready-end               80514.6   (+36.8 ms)
+viewer-ready                            80515.3   (+0.7 ms)
+
+Total save-start → viewer-ready : 424.3 ms
+Round-trip SDK (C1, refresh-sdk-start → refresh-sdk-complete) : 200.6 ms
+Remount Pierre complet (editing-false → viewer-ready) : 94.2 ms
+```
+
+**Verdict chiffré** : le round-trip SDK redondant (C1) coûte **200.6 ms, soit plus du double du remount Pierre complet (94.2 ms)** — tokenisation worker, peuplement DOM et détection "prêt" inclus. Sur les ~300 ms de latence évitable (424 ms total − 121.9 ms d'écriture disque incompressible), C1 représente à lui seul **~67%**. Confirme sans ambiguïté que C1 est la priorité n°1, largement devant les phases Pierre (4-6).
+
+*(Deuxième cycle de mesure tenté mais non exploitable — après le premier save, `setEditing(false)` a fermé l'éditeur avant le second clic, donc pas de second Ctrl+S réel ; le premier point de mesure est net et cohérent en interne, considéré suffisant pour la décision. Édition de test entièrement revert via `git checkout` après la mesure — aucune trace dans le diff.)*
+
+- [ ] Mesure desktop Tauri packagé + Android — reportée à la Phase 7 (validation finale), pas nécessaire pour la décision Phase 2 ci-dessous.
 
 Validé par `bun typecheck` + suite complète sur les 3 packages touchés (`util` 8/8, `ui` 74/74 dont le nouveau fichier, `app` 588/588) — aucune régression.
 
