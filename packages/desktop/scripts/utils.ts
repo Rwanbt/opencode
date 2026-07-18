@@ -44,6 +44,19 @@ export function getCurrentSidecar(target = RUST_TARGET) {
   return binaryConfig
 }
 
+// The official release matrix cross-compiles a "-baseline" CLI variant
+// (older CPU instruction sets) for x64 targets. Pipelines that only build
+// the host's native target (e.g. fork-release.yml) never produce that
+// directory, so fall back to the plain binary — same resilience already
+// used by copy-sidecar.ts's candidate list.
+export async function resolveSidecarBinaryPath(dir: string, ocBinary: string) {
+  const candidates = [windowsify(`${dir}/${ocBinary}/bin/opencode`), windowsify(`${dir}/${ocBinary.replace("-baseline", "")}/bin/opencode`)]
+  for (const candidate of candidates) {
+    if (await Bun.file(candidate).exists()) return candidate
+  }
+  throw new Error(`No CLI binary found, tried: ${candidates.join(", ")}`)
+}
+
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
   await $`mkdir -p src-tauri/sidecars`
   const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)

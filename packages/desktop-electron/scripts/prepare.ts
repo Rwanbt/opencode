@@ -2,7 +2,7 @@
 import { $ } from "bun"
 
 import { Script } from "@opencode-ai/script"
-import { copyBinaryToSidecarFolder, getCurrentSidecar, resolveChannel, windowsify } from "./utils"
+import { copyBinaryToSidecarFolder, getCurrentSidecar, resolveChannel, resolveSidecarBinaryPath } from "./utils"
 
 const channel = resolveChannel()
 await $`bun ./scripts/copy-icons.ts ${channel}`
@@ -20,6 +20,6 @@ const dir = "resources/opencode-binaries"
 await $`mkdir -p ${dir}`
 await $`gh run download ${process.env.GITHUB_RUN_ID} -n ${artifact}`.cwd(dir)
 
-await copyBinaryToSidecarFolder(windowsify(`${dir}/${sidecarConfig.ocBinary}/bin/opencode`))
+await copyBinaryToSidecarFolder(await resolveSidecarBinaryPath(dir, sidecarConfig.ocBinary))
 
 await $`rm -rf ${dir}`
