@@ -196,12 +196,15 @@ Aucune erreur console. Rendu visuel vérifié par capture d'écran (couleurs, co
 
 Validé par `bun typecheck` + suite complète (`ui` 90/90, `app` 597/597, aucune régression suite au déplacement de fichier).
 
-### Phase 5 — Observers de tokens ET readiness coalescés (scope étendu à C8)
+### Phase 5 — Observers de tokens ET readiness coalescés (scope étendu à C8) — fait
 
-- [ ] Remplacer le scan complet `querySelectorAll` de `watchViewerTokenStyles` par une file de nœuds ajoutés, coalescée en RAF.
-- [ ] Étendre à `notifyShadowReady` (C8) : éviter de re-scanner tout le Shadow DOM à chaque callback — s'arrêter dès "prêt" stable, ou vérifier localement via le dernier `MutationRecord`.
-- [ ] Garder un scan complet uniquement à l'initialisation ou si la mutation ne permet pas d'identifier les nœuds ajoutés.
-- [ ] Vérifier que les styles inline Shiki restent présents après plusieurs rerenders.
+- [x] **`watchViewerTokenStyles`** : le scan complet `querySelectorAll` ne tourne plus qu'une fois, à l'installation. Chaque mutation suivante accumule ses `record.addedNodes` dans un `Set`, coalescé en un seul `requestAnimationFrame` (dédoublonnage naturel si plusieurs mutations touchent le même nœud avant le flush). La réparation par nœud ajouté réutilise exactement le même sélecteur `"[data-line] span[style]"` via `matches()` (vérifie toute la chaîne d'ancêtres, pas seulement le parent direct) donc le filtre de sécurité "doit être sous un `[data-line]`" reste identique — seule la portée du scan change (sous-arbre du nœud ajouté, pas toute la racine).
+- [x] **`notifyShadowReady` (C8)** : la vérification `isReady(root)` déclenchée par le `MutationObserver` interne est désormais coalescée en `requestAnimationFrame` — un seul appel `isReady()` (donc un seul scan complet `querySelectorAll("[data-line]")` côté appelant) par lot de mutations proches, au lieu d'un appel par mutation individuelle. Réutilise `state.frame` (le même champ que la chaîne de settle-frames de `runReady`) puisque les deux phases sont temporellement disjointes — l'annulation de frame de `disposeReadyWatcher` (C3) couvre donc aussi ce nouveau chemin sans modification supplémentaire.
+- [x] **Garder un scan complet uniquement à l'initialisation** : confirmé pour `watchViewerTokenStyles`. Pour `notifyShadowReady`, "s'arrêter dès la première condition prêt stable" était déjà vrai avant ce fix (l'observer se déconnecte au premier `isReady()===true`) — l'amélioration ici porte sur la fréquence des vérifications *avant* d'atteindre cet état, pas sur l'arrêt lui-même.
+- [x] **Vérifier que les styles inline Shiki restent présents après plusieurs rerenders** : testé explicitement — un nœud ajouté est réparé après le flush de sa frame ; un span non touché par la mutation en cours (simulé par une dérive artificielle de son `cssText` après le scan initial) reste volontairement non réparé par une mutation non liée, prouvant l'absence de rescan complet caché.
+- [x] **Tests ajoutés** (`packages/ui/src/pierre/file-token-styles.test.ts`, 9 tests, mini-DOM fake dédié comprenant exactement le sélecteur utilisé) : scan complet initial correct, no-op si déjà correct, root undefined sûr, réparation différée à la frame (pas synchrone), mutations multiples coalescées en un seul flush, **régression C8 directe** ("une mutation ne rescanne pas toute la racine" — un span dérivé après le scan initial n'est pas corrigé par une mutation qui ne le touche pas), cleanup déconnecte + annule la frame en attente, root undefined → no-op. Les tests existants de `notifyShadowReady` dans `file-runtime.test.ts` ont été mis à jour pour refléter le nouveau comportement coalescé (2 tests adaptés, pas de perte de couverture).
+
+Validé par `bun typecheck` + suite complète (`ui` 99/99, `app` 597/597, aucune régression).
 
 ### Phase 6 — Rendu Pierre incrémental / teardown propre
 
