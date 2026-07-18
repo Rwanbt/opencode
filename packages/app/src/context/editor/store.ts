@@ -1,4 +1,5 @@
 import { createStore, produce } from "solid-js/store"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import type { FileStore } from "../file/store"
 
 /**
@@ -189,6 +190,10 @@ export function createEditorStore(deps: EditorDeps) {
     mirror(path, (fs) => fs.markSaving(path))
     try {
       const res = await deps.write({ path, content, expectedHash: entry.baseline.hash || undefined, format })
+      // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): marks unconditionally
+      // — a conflict/missing/error result is still "the write round-trip
+      // finished", a useful signal on its own for timing the SDK call.
+      markViewerTiming("write-complete", { path, detail: { result: res.type } })
       if (res.type === "conflict") {
         set(path, { saving: false, conflict: true })
         mirror(path, (fs) => fs.markConflict(path))
@@ -216,6 +221,7 @@ export function createEditorStore(deps: EditorDeps) {
         saving: false,
       })
       mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
+      markViewerTiming("store-mirror", { path })
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
       set(path, { saving: false })

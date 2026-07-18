@@ -31,6 +31,7 @@ import { installFileKeybindings } from "@/pages/session/file-keybindings"
 import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { createScrollSync } from "@/pages/session/scroll-content-sync"
 import { createLspActions } from "@/pages/session/lsp-actions"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 
 // Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
 // (session-side-panel.tsx) keep their import path stable.
@@ -72,10 +73,20 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   // Editor action side-effects: refresh the read-mode cache after a write so
   // the viewer reflects the new bytes. EditorPanel handles save/reload/etc.;
   // these wrappers only coordinate the post-action file.load().
+  //
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0 / cause C1): this
+  // file.load({force:true}) is the suspected dominant source of
+  // save→viewer-ready latency — it re-fetches from the backend (two SDK
+  // calls internally) a file whose content editorStore.save() already wrote
+  // into FileStore synchronously. refresh-sdk-start/-complete measure that
+  // round-trip in isolation so Phase 2's fix can be justified by a real
+  // number instead of a hunch.
   const refreshAfterEditor = async () => {
     const p = path()
     if (!p) return
+    markViewerTiming("refresh-sdk-start", { path: p })
     await file.load(p, { force: true })
+    markViewerTiming("refresh-sdk-complete", { path: p })
   }
 
   // LSP glue (rename + code actions) — owns its own signals + handlers. The

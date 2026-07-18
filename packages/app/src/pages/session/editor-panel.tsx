@@ -18,6 +18,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { createAutosave } from "@/context/editor/autosave"
 import { showToast } from "@opencode-ai/ui/toast"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type {
@@ -183,6 +184,11 @@ export function EditorPanel(props: EditorPanelProps) {
   const handleCtrlS = async (retriesLeft = 2) => {
     const p = props.path()
     if (!p) return
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): mark only the initial
+    // call, not each busy-retry recursion (retriesLeft defaults to 2 and is
+    // only ever passed explicitly on a retry) — "save-start" should mean
+    // "the user pressed Ctrl+S", not "this particular attempt started".
+    if (retriesLeft === 2) markViewerTiming("save-start", { path: p })
     const content = props.editorHandle?.getContent() ?? ""
     const format = settings.general.formatOnSave()
     try {
@@ -217,6 +223,7 @@ export function EditorPanel(props: EditorPanelProps) {
       // viewer re-mounts and the editor (CM) unmounts. NOT done on
       // conflict/missing/error/busy above — banner must remain visible /
       // the retry must get a chance to run first.
+      markViewerTiming("editing-false", { path: p })
       props.setEditing(false)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
@@ -252,6 +259,7 @@ export function EditorPanel(props: EditorPanelProps) {
       // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
       // viewer re-mounts after the user explicitly resolved the conflict by
       // overwriting disk. NOT done on error above.
+      markViewerTiming("editing-false", { path: p })
       props.setEditing(false)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })

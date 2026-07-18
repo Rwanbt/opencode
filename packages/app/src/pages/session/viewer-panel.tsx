@@ -17,6 +17,7 @@
 import { createMemo, Match, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { checksum } from "@opencode-ai/util/encode"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useLanguage } from "@/context/language"
@@ -112,6 +113,10 @@ export function ViewerPanel(props: ViewerPanelProps) {
           selectedLines={props.activeSelection()}
           commentedLines={props.commentedLines()}
           onRendered={() => {
+            // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): this is the
+            // real end-to-end "the read-only view is done and visible"
+            // signal — the same one queueRestore() already relies on.
+            markViewerTiming("viewer-ready", { path: props.path() })
             props.scrollSync.queueRestore()
           }}
           annotations={props.commentsUi.annotations()}

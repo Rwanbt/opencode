@@ -1,4 +1,5 @@
 import { sampledChecksum } from "@opencode-ai/util/encode"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
@@ -755,7 +756,12 @@ function watchViewerLineRows(root: ShadowRoot | undefined): () => void {
     if (frame !== 0) return
     frame = requestAnimationFrame(() => {
       frame = 0
+      // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): no path tag available
+      // at this scope (root is a bare ShadowRoot) — acceptable, this function
+      // only ever runs for the single currently-mounted viewer instance.
+      markViewerTiming("layout-fix-start")
       fixSubgridLineRowCollapse(root)
+      markViewerTiming("layout-fix-end")
     })
   }
 
@@ -782,6 +788,14 @@ function TextViewer<T>(props: TextFileProps<T>) {
   let viewer!: Viewer
   let stopSubgridWatch: (() => void) | undefined
   let stopTokenStyleWatch: (() => void) | undefined
+
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): component setup runs
+  // once per mount (Solid components are not re-invoked on re-render), so
+  // this line IS "mount start" — including the case that matters most for
+  // cause C1: the full remount triggered by `<Show when={!editing()}>` after
+  // save. props.file may not be set up yet at this exact point for every
+  // caller, so the path tag is best-effort.
+  markViewerTiming("viewer-mount-start", { path: (props.file as { name?: string } | undefined)?.name })
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -923,6 +937,11 @@ function TextViewer<T>(props: TextFileProps<T>) {
   }))
 
   const notify = () => {
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): brackets worker
+    // tokenization + DOM population + Pierre's own shadow-ready detection as
+    // one block — the closest honest proxy for "worker-result" available
+    // without patching the vendored @pierre/diffs worker internals.
+    markViewerTiming("notify-shadow-ready-start", { path: local.file.name })
     notifyRendered({
       viewer,
       isReady: (root) => {
@@ -930,6 +949,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
+        markViewerTiming("notify-shadow-ready-end", { path: local.file.name })
         stopSubgridWatch?.()
         stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
         stopTokenStyleWatch?.()
