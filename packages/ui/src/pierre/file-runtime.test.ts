@@ -170,14 +170,17 @@ describe("notifyShadowReady", () => {
     expect(FakeMutationObserver.instances.length).toBe(1)
     const observer = FakeMutationObserver.instances[0]!
 
-    observer.trigger() // still not ready — no-op
+    observer.trigger() // still not ready — schedules a coalesced check frame
+    flushFrames() // consumes checkReady(): isReady() still false, no-op
     expect(readyCalls).toBe(0)
     expect(observer.disconnected).toBe(false)
 
     readyState = true
-    observer.trigger() // now ready — disconnects and schedules the settle frame
+    observer.trigger() // now ready, but the check itself is coalesced onto a frame (C8)
+    expect(observer.disconnected).toBe(false)
+    flushFrames() // consumes checkReady(): isReady() true -> disconnects, schedules settle frame
     expect(observer.disconnected).toBe(true)
-    flushFrames()
+    flushFrames() // consumes the settle frame -> onReady
     expect(readyCalls).toBe(1)
   })
 
@@ -258,7 +261,10 @@ describe("disposeReadyWatcher (C3 — no task survives destruction)", () => {
     })
     const observer = FakeMutationObserver.instances[0]!
     readyState = true
-    observer.trigger()
+    observer.trigger() // schedules a coalesced ready-check frame (C8), not yet disconnected
+    expect(observer.disconnected).toBe(false)
+    expect(rafQueue.size).toBe(1)
+    flushFrames() // consumes checkReady(): isReady() true -> disconnects, schedules settle frame
     expect(observer.disconnected).toBe(true)
     expect(rafQueue.size).toBe(1)
 

@@ -81,23 +81,70 @@ export function observeViewerScheme(getHost: () => HTMLElement | undefined) {
   return () => monitor.disconnect()
 }
 
+function repairTokenStyleSpan(span: HTMLElement) {
+  const raw = span.getAttribute("style")
+  if (!raw || span.style.cssText === raw) return
+  span.style.cssText = raw
+}
+
 export function repairViewerTokenStyles(root: ShadowRoot | undefined) {
   if (!root) return
 
   for (const span of root.querySelectorAll<HTMLElement>("[data-line] span[style]")) {
-    const raw = span.getAttribute("style")
-    if (!raw || span.style.cssText === raw) continue
-    span.style.cssText = raw
+    repairTokenStyleSpan(span)
+  }
+}
+
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 5 / C8): repairs only the
+// subtree of nodes a mutation actually added, instead of re-scanning the
+// whole Shadow DOM. `[data-line] span[style]` requires a `[data-line]`
+// ancestor, so `matches()` (which walks the full ancestor chain, not just
+// the immediate parent) still correctly filters out styled spans elsewhere
+// (e.g. the search bar) — same selector, same semantics, scoped to one
+// added node's subtree instead of the whole root.
+function repairTokenStylesIn(node: Node) {
+  if (!(node instanceof Element)) return
+  if (node.matches("[data-line] span[style]")) repairTokenStyleSpan(node as HTMLElement)
+  for (const span of node.querySelectorAll<HTMLElement>("[data-line] span[style]")) {
+    repairTokenStyleSpan(span)
   }
 }
 
 export function watchViewerTokenStyles(root: ShadowRoot | undefined) {
   if (!root || typeof MutationObserver === "undefined") return () => {}
 
+  // Full scan only once, at installation — every mutation after this only
+  // repairs the nodes that mutation actually added (queued, coalesced into
+  // one requestAnimationFrame instead of one full re-scan per mutation
+  // batch).
   repairViewerTokenStyles(root)
-  const observer = new MutationObserver(() => repairViewerTokenStyles(root))
+
+  let frame = 0
+  const pending = new Set<Node>()
+
+  const flush = () => {
+    frame = 0
+    const nodes = Array.from(pending)
+    pending.clear()
+    for (const node of nodes) repairTokenStylesIn(node)
+  }
+
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) pending.add(node)
+    }
+    if (pending.size === 0) return
+    if (frame !== 0) return
+    frame = requestAnimationFrame(flush)
+  })
   observer.observe(root, { childList: true, subtree: true })
-  return () => observer.disconnect()
+
+  return () => {
+    observer.disconnect()
+    if (frame !== 0) cancelAnimationFrame(frame)
+    frame = 0
+    pending.clear()
+  }
 }
 export function notifyShadowReady(opts: {
   state: ReadyWatcher
@@ -142,12 +189,28 @@ export function notifyShadowReady(opts: {
     if (typeof MutationObserver === "undefined") return
 
     clearReadyWatcher(opts.state)
-    opts.state.observer = new MutationObserver(() => {
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 5 / C8): opts.isReady()
+    // typically does a full `querySelectorAll("[data-line]").length >=
+    // lineCount()` scan (see file.tsx's notify()) — cheap once, but Pierre
+    // can insert lines across several mutation batches while still not
+    // ready. Coalescing the check into one requestAnimationFrame per batch
+    // of mutations (instead of one full scan per mutation callback) cuts
+    // scan count without changing when "ready" fires. Reuses opts.state.frame
+    // — it's never concurrently in use with the settle-frame chain below,
+    // since that only starts once isReady() has already returned true — so
+    // disposeReadyWatcher's existing frame cancellation covers this too.
+    const checkReady = () => {
+      opts.state.frame = undefined
       if (token !== opts.state.token) return
       if (!opts.isReady(root)) return
 
       clearReadyWatcher(opts.state)
       runReady()
+    }
+    opts.state.observer = new MutationObserver(() => {
+      if (token !== opts.state.token) return
+      if (opts.state.frame !== undefined) return
+      opts.state.frame = requestAnimationFrame(checkReady)
     })
     opts.state.observer.observe(root, { childList: true, subtree: true })
   }
