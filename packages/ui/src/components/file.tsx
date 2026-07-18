@@ -32,6 +32,7 @@ import {
   getViewerRoot,
   notifyShadowReady,
   observeViewerScheme,
+  watchViewerLineRows,
   watchViewerTokenStyles,
 } from "../pierre/file-runtime"
 import {
@@ -674,109 +675,6 @@ function ViewerShell(props: {
       <div ref={(el) => (props.viewer.overlay = el)} class="pointer-events-none absolute inset-0 z-0" />
     </div>
   )
-}
-
-// ---------------------------------------------------------------------------
-// Dynamic line-row alignment shared by desktop and Android WebView
-// ---------------------------------------------------------------------------
-
-// WHY: @pierre/diffs lays out [data-gutter]/[data-content] with
-// `grid-template-rows: subgrid`, inheriting row tracks from their
-// [data-code] parent — which never declares explicit tracks and relies on
-// implicit row generation. On Android WebView (Chrome Mobile, confirmed on
-// Chrome 149 despite `CSS.supports('grid-template-rows', 'subgrid')`
-// reporting true), that combination collapses to a single implicit row
-// instead of one per line: every [data-line] renders at the same position
-// and only the last one paints. Verified live via DevTools — giving each
-// container its own explicit `repeat(N, auto)` track list (bypassing the
-// subgrid inheritance) fixes it immediately. The pixel tracks below preserve
-// cross-column row-height matching for wrapped rows on every viewer platform.
-function getSynchronizedGridRows(gutter: HTMLElement, content: HTMLElement) {
-  const gutterRows = Array.from(gutter.children) as HTMLElement[]
-  const contentRows = Array.from(content.children) as HTMLElement[]
-  if (gutterRows.length === 0 || gutterRows.length !== contentRows.length) return
-
-  return gutterRows
-    .map((row, index) => {
-      const contentRow = contentRows[index]
-      const lineHeight = Number.parseFloat(getComputedStyle(contentRow).lineHeight)
-      const contentHeight = contentRow.scrollHeight
-      const gutterHeight = row.scrollHeight
-      const minimumHeight = Number.isFinite(lineHeight) ? lineHeight : 1
-      return `${Math.max(1, Math.ceil(Math.max(contentHeight, gutterHeight, minimumHeight)))}px`
-    })
-    .join(" ")
-}
-
-// WHY: Android WebView reports support for CSS subgrid but does not preserve
-// the shared row tracks used by Pierre. Independent `auto` tracks align normal
-// lines but drift as soon as a wrapped content row becomes taller than its
-// number cell. Measuring both columns and applying the same pixel tracks keeps
-// every number aligned with its corresponding content row.
-function fixSubgridLineRowCollapse(root: ShadowRoot) {
-  for (const gutter of root.querySelectorAll<HTMLElement>("[data-gutter]")) {
-    const parent = gutter.parentElement
-    const content = Array.from(parent?.children ?? []).find(
-      (child) => child !== gutter && child.matches("[data-content]"),
-    ) as HTMLElement | undefined
-    if (!content) continue
-
-    const previousGutterRows = gutter.style.gridTemplateRows
-    const previousContentRows = content.style.gridTemplateRows
-    gutter.style.gridTemplateRows = "none"
-    content.style.gridTemplateRows = "none"
-
-    const rows = getSynchronizedGridRows(gutter, content)
-    if (!rows) {
-      gutter.style.gridTemplateRows = previousGutterRows
-      content.style.gridTemplateRows = previousContentRows
-      continue
-    }
-
-    gutter.style.gridTemplateRows = rows
-    content.style.gridTemplateRows = rows
-  }
-}
-// WHY a persistent observer instead of a one-shot fix in onReady:
-// @pierre/diffs can re-render its shadow DOM more than once per file open
-// (e.g. once the file's initial DOM is inserted, and again as reactive
-// props/derived state settle a tick or two later) — each re-render rebuilds
-// the [data-gutter]/[data-content] children and wipes any inline style
-// applied earlier. A fix applied only in onReady only "sticks" if that
-// happened to be the LAST render, which is unreliable on a genuinely fresh
-// (first) open — confirmed live: a fresh open left both containers on
-// `subgrid` with the one-shot version, while a reopen (second mount) picked
-// up the fix fine. Watching the shadow root and re-applying on every
-// mutation removes that timing dependency entirely.
-function watchViewerLineRows(root: ShadowRoot | undefined): () => void {
-  if (!root || typeof MutationObserver === "undefined") return () => {}
-
-  let frame = 0
-  const schedule = () => {
-    if (frame !== 0) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): no path tag available
-      // at this scope (root is a bare ShadowRoot) — acceptable, this function
-      // only ever runs for the single currently-mounted viewer instance.
-      markViewerTiming("layout-fix-start")
-      fixSubgridLineRowCollapse(root)
-      markViewerTiming("layout-fix-end")
-    })
-  }
-
-  const mutationObserver = new MutationObserver(schedule)
-  mutationObserver.observe(root, { childList: true, subtree: true })
-
-  const resizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(schedule)
-  if (resizeObserver && root.host instanceof HTMLElement) resizeObserver.observe(root.host)
-
-  schedule()
-  return () => {
-    mutationObserver.disconnect()
-    resizeObserver?.disconnect()
-    if (frame !== 0) cancelAnimationFrame(frame)
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { clearReadyWatcher, createReadyWatcher, disposeReadyWatcher, notifyShadowReady } from "./file-runtime"
+import { clearReadyWatcher, createReadyWatcher, disposeReadyWatcher, notifyShadowReady, watchViewerLineRows } from "./file-runtime"
 
 // FORK (PLAN-READONLY-VIEWER-REACTIVITY C3 / C12): file-runtime.ts had zero
 // test coverage before this file. These tests pin the notifyShadowReady /
@@ -21,6 +21,14 @@ let rafNextId: number
 let originalRaf: typeof requestAnimationFrame | undefined
 let originalCancelRaf: typeof cancelAnimationFrame | undefined
 let originalMutationObserver: typeof MutationObserver | undefined
+let originalResizeObserver: typeof ResizeObserver | undefined
+let originalHTMLElement: typeof HTMLElement | undefined
+
+// Bun's test runtime has no DOM at all — referencing the bare `HTMLElement`
+// identifier (as watchViewerLineRows does, via `root.host instanceof
+// HTMLElement`) throws a ReferenceError, not just `typeof === "undefined"`.
+// A minimal stub is enough since only `instanceof` is exercised.
+class FakeHTMLElement {}
 
 class FakeMutationObserver {
   static instances: FakeMutationObserver[] = []
@@ -35,6 +43,26 @@ class FakeMutationObserver {
   // Test-only helper — simulates the browser delivering a mutation batch.
   trigger() {
     this.callback([], this as unknown as MutationObserver)
+  }
+}
+
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = []
+  disconnected = false
+  observedTargets: unknown[] = []
+  constructor(public callback: ResizeObserverCallback) {
+    FakeResizeObserver.instances.push(this)
+  }
+  observe(target: unknown) {
+    this.observedTargets.push(target)
+  }
+  unobserve() {}
+  disconnect() {
+    this.disconnected = true
+  }
+  // Test-only helper — simulates the browser reporting a size change.
+  trigger() {
+    this.callback([], this as unknown as ResizeObserver)
   }
 }
 
@@ -62,6 +90,13 @@ beforeEach(() => {
 
   FakeMutationObserver.instances = []
   globalThis.MutationObserver = FakeMutationObserver as unknown as typeof MutationObserver
+
+  originalResizeObserver = globalThis.ResizeObserver
+  FakeResizeObserver.instances = []
+  globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver
+
+  originalHTMLElement = globalThis.HTMLElement
+  globalThis.HTMLElement = FakeHTMLElement as unknown as typeof HTMLElement
 })
 
 afterEach(() => {
@@ -71,6 +106,10 @@ afterEach(() => {
   else delete (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame
   if (originalMutationObserver) globalThis.MutationObserver = originalMutationObserver
   else delete (globalThis as { MutationObserver?: unknown }).MutationObserver
+  if (originalResizeObserver) globalThis.ResizeObserver = originalResizeObserver
+  else delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver
+  if (originalHTMLElement) globalThis.HTMLElement = originalHTMLElement
+  else delete (globalThis as { HTMLElement?: unknown }).HTMLElement
 })
 
 const fakeRoot = {} as ShadowRoot
@@ -278,5 +317,82 @@ describe("disposeReadyWatcher (C3 — no task survives destruction)", () => {
     expect(readyCalls).toBe(0)
     expect(rafQueue.size).toBe(0)
     expect(FakeMutationObserver.instances.length).toBe(0)
+  })
+})
+
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 4): watchViewerLineRows moved
+// here from components/file.tsx (see the move's WHY comment above
+// getSynchronizedGridRows in file-runtime.ts) — first test coverage for its
+// scheduling/cleanup contract. querySelectorAll returns [] in every fake
+// root below, so fixSubgridLineRowCollapse's own DOM math is a no-op here —
+// these tests pin the *scheduler* (coalescing, cleanup, no-loop), not the
+// row-height computation (covered separately in file-line-rows.test.ts).
+describe("watchViewerLineRows", () => {
+  function fakeLineRowsRoot(): ShadowRoot {
+    const host = new FakeHTMLElement()
+    return {
+      querySelectorAll: () => [],
+      host,
+    } as unknown as ShadowRoot
+  }
+
+  test("undefined root: returns a no-op cleanup, installs nothing", () => {
+    const stop = watchViewerLineRows(undefined)
+    expect(() => stop()).not.toThrow()
+    expect(FakeMutationObserver.instances.length).toBe(0)
+    expect(FakeResizeObserver.instances.length).toBe(0)
+  })
+
+  test("installs a MutationObserver and a ResizeObserver on root.host, and runs once immediately", () => {
+    const root = fakeLineRowsRoot()
+    watchViewerLineRows(root)
+    expect(FakeMutationObserver.instances.length).toBe(1)
+    expect(FakeResizeObserver.instances.length).toBe(1)
+    expect(FakeResizeObserver.instances[0]!.observedTargets).toEqual([root.host])
+    // The initial schedule() call already queued a frame.
+    expect(rafQueue.size).toBe(1)
+  })
+
+  test("multiple mutations before the frame fires coalesce into a single scheduled frame (no pile-up)", () => {
+    const root = fakeLineRowsRoot()
+    watchViewerLineRows(root)
+    const sizeAfterInit = rafQueue.size
+    const observer = FakeMutationObserver.instances[0]!
+    observer.trigger()
+    observer.trigger()
+    observer.trigger()
+    // Still just one pending frame — schedule() no-ops while frame !== 0.
+    expect(rafQueue.size).toBe(sizeAfterInit)
+  })
+
+  test("a resize triggers the same coalesced schedule as a mutation", () => {
+    const root = fakeLineRowsRoot()
+    watchViewerLineRows(root)
+    flushFrames() // consume the initial schedule() frame
+    expect(rafQueue.size).toBe(0)
+
+    FakeResizeObserver.instances[0]!.trigger()
+    expect(rafQueue.size).toBe(1)
+  })
+
+  test("cleanup disconnects both observers and cancels a pending frame", () => {
+    const root = fakeLineRowsRoot()
+    const stop = watchViewerLineRows(root)
+    const mutation = FakeMutationObserver.instances[0]!
+    const resize = FakeResizeObserver.instances[0]!
+    expect(rafQueue.size).toBe(1) // initial schedule() still pending
+
+    stop()
+
+    expect(mutation.disconnected).toBe(true)
+    expect(resize.disconnected).toBe(true)
+    expect(rafQueue.size).toBe(0) // the pending frame was cancelled, not just orphaned
+  })
+
+  test("cleanup after the frame already fired is still safe (idempotent-ish: no throw, no stale cancel)", () => {
+    const root = fakeLineRowsRoot()
+    const stop = watchViewerLineRows(root)
+    flushFrames()
+    expect(() => stop()).not.toThrow()
   })
 })
