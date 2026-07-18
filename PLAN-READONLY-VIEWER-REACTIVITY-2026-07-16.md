@@ -197,16 +197,22 @@ Options à évaluer (ne pas trancher sans mesure Phase 0) :
 - Réactiver et faire passer `session-review.spec.ts` (retirer `test.fixme`).
 - Validation réelle desktop + APK Android (voir section 10).
 
-### Phase 0 — Instrumentation minimale (à exécuter tôt, cf. ordre de livraison section 12)
+### Phase 0 — Instrumentation minimale (fait)
 
-Timestamps instrumentés (flag debug désactivable) :
-```
-save-start / write-complete / store-mirror
-refresh-sdk-start / refresh-sdk-complete   ← round-trip C1
-editing-false / viewer-mount-start / worker-result
-notify-shadow-ready-start/end / layout-fix-start/end / viewer-ready
-```
-Mesurer séparément `refresh-sdk-complete - refresh-sdk-start` (coût C1) vs `viewer-ready - editing-false` (coût remount Pierre), desktop ET Android.
+- [x] Nouveau module partagé `packages/util/src/viewer-timing.ts` (framework-agnostic, importable depuis `packages/app` ET `packages/ui`). Désactivé par défaut PARTOUT (dev et prod) — s'active explicitement via `enableViewerTiming()` ou `localStorage["opencode:debug:viewer-timing"] = "1"`, y compris sur un vrai build desktop/Android (pas seulement un serveur dev), puisque le but de la Phase 0 est de mesurer la latence réelle sur les deux plateformes. `markViewerTiming()` est un simple check booléen quand désactivé — coût négligeable sur le chemin chaud même si un appel est oublié non gardé. 8 tests unitaires (`viewer-timing.test.ts`).
+- [x] Marks câblés :
+  - `save-start` / `editing-false` — `editor-panel.tsx` (`handleCtrlS`, `handleOverwrite`)
+  - `write-complete` / `store-mirror` — `context/editor/store.ts` (`save()`, autosave compris puisqu'il appelle la même fonction)
+  - `refresh-sdk-start` / `refresh-sdk-complete` — `file-tabs.tsx` (`refreshAfterEditor`) — **mesure directe du coût C1**
+  - `viewer-mount-start` — `packages/ui/src/components/file.tsx` (`TextViewer`, en tête de composant — un composant Solid ne s'exécute qu'une fois par montage, donc c'est bien "mount start", y compris pour le remount dominant via `<Show when={!editing()}>`)
+  - `notify-shadow-ready-start/end` — `TextViewer`'s `notify()` — englobe tokenisation worker + peuplement DOM + détection "prêt" Pierre en un seul bloc
+  - `layout-fix-start/end` — `watchViewerLineRows`'s `schedule()` callback (autour de `fixSubgridLineRowCollapse`)
+  - `viewer-ready` — `viewer-panel.tsx`'s `onRendered` (le signal de fin réel, déjà utilisé par `queueRestore()`)
+- [ ] **Angle mort documenté, pas de fix** : pas de mark `worker-result` séparé — le worker de tokenisation Pierre vit entièrement dans `node_modules/@pierre/diffs` (vendée), l'instrumenter nécessiterait de la patcher, ce que la Phase 6/C4 exclut explicitement (patch non versionné, écrasé au prochain `bun install`). `notify-shadow-ready-start/end` est le proxy le plus honnête disponible sans toucher la lib.
+- [ ] **Hors scope délibéré** : `DiffViewer`'s propre `notify()` n'est pas instrumenté (seul le viewer lecture seule `TextViewer`, utilisé par `viewer-panel.tsx`, est dans le périmètre de ce plan).
+- [ ] Mesure réelle desktop + Android — **reste à faire, nécessite une session de test manuelle** (activer le flag, ouvrir un fichier, sauvegarder, lire `logViewerTimingSummary()` dans la console). Décide du choix d'option pour la Phase 2 (section suivante).
+
+Validé par `bun typecheck` + suite complète sur les 3 packages touchés (`util` 8/8, `ui` 74/74 dont le nouveau fichier, `app` 588/588) — aucune régression.
 
 ---
 
