@@ -1,9 +1,11 @@
 name: SBOM
 
+# Manual only (see release-sign.yml for the same rationale): auto-triggering
+# on every published release attached 2 SBOM files nobody outside a
+# compliance audit needs, cluttering releases meant for end users.
+
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 permissions:
   contents: write
@@ -26,7 +28,7 @@ jobs:
           artifact-name: opencode-sbom.spdx.json
           output-file: opencode-sbom.spdx.json
           upload-artifact: true
-          upload-release-assets: ${{ github.event_name == 'release' }}
+          upload-release-assets: false
 
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
@@ -36,4 +38,4 @@ jobs:
           artifact-name: opencode-sbom.cyclonedx.json
           output-file: opencode-sbom.cyclonedx.json
           upload-artifact: true
-          upload-release-assets: ${{ github.event_name == 'release' }}
+          upload-release-assets: false

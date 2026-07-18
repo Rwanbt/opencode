@@ -14,10 +14,13 @@
 #
 # Activation
 # ----------
-# This workflow activates automatically once a release is PUBLISHED.
+# Manual only (`workflow_dispatch` against an existing release tag). Used to
+# auto-trigger on every published release, but that buried each release's
+# handful of real binaries under .sig/.cert/.sha256 for every asset —
+# confusing for users who just want to download and run something. Re-enable
+# the `release: types: [published]` trigger below if/when that tradeoff is
+# wanted again; the signing logic itself is unchanged.
 # No repo secrets required (Fulcio OIDC is provisioned by GitHub Actions).
-# It can also be triggered manually with `workflow_dispatch` against an
-# existing release tag.
 #
 # Fork-safety
 # -----------
@@ -35,8 +38,6 @@
 name: release-sign
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
