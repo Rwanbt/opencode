@@ -55,7 +55,12 @@ jobs:
 
       - name: Build CLI (cross-compile all targets via Bun)
         working-directory: packages/opencode
-        run: bun run script/build.ts --skip-embed-web-ui
+        # --all: build-cli runs once on ubuntu-latest but build-tauri needs both
+        # linux and windows CLI binaries (see SIDECAR_BINARIES in
+        # packages/desktop/scripts/utils.ts). Without --all, script/build.ts
+        # defaults to the host target only (see the comment above singleFlag in
+        # that script) and the windows artifact ends up empty.
+        run: bun run script/build.ts --skip-embed-web-ui --all
         env:
           OPENCODE_VERSION: ${{ steps.ver.outputs.version }}
           OPENCODE_CHANNEL: fork
@@ -159,11 +164,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
-      - name: Build Tauri bundle (unsigned)
+      - name: Build Tauri bundle (updater-signed, no OS code signing)
         working-directory: packages/desktop
         run: cargo tauri build --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json
         env:
-          # Omit TAURI_SIGNING_PRIVATE_KEY / APPLE_* / AZURE_* — unsigned fork build.
+          # tauri.prod.conf.json ships an updater public key, so Tauri hard-fails
+          # without a matching private key even when OS-level code signing
+          # (APPLE_*/AZURE_*) is skipped for this unsigned fork build.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
 
       - name: Collect Linux artifacts
