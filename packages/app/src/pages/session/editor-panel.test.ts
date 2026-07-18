@@ -42,7 +42,7 @@ async function runHandleCtrlS(
     editor: ReturnType<typeof createEditorStore>
     content: string
     setEditingLog: (boolean | undefined)[]
-    onSave: () => Promise<void>
+    onSave: (content?: string) => Promise<void>
     toasts: Array<{ variant: string; title: string }>
   },
   retriesLeft = 2,
@@ -67,7 +67,10 @@ async function runHandleCtrlS(
     }
     return { eff, onSaveCalls: 0 }
   }
-  await onSave()
+  // ← THE C1 LINE (PLAN-READONLY-VIEWER-REACTIVITY): the exact bytes now on
+  // disk — the backend's reformatted content wins, otherwise the sent content.
+  const finalContent = (eff as { type: string; content?: string }).type === "set" ? (eff as { content?: string }).content : content
+  await onSave(finalContent)
   toasts.push({ variant: "success", title: "toast.file.saved" })
   // ← THE NEW LINE: AutoExit on save success.
   setEditingLog.push(false)
@@ -82,7 +85,7 @@ async function runHandleOverwrite(opts: {
   editor: ReturnType<typeof createEditorStore>
   content: string
   setEditingLog: (boolean | undefined)[]
-  onOverwrite: () => Promise<void>
+  onOverwrite: (content?: string) => Promise<void>
   toasts: Array<{ variant: string; title: string }>
 }) {
   const { filePath, editor, content, setEditingLog, onOverwrite, toasts } = opts
@@ -92,7 +95,9 @@ async function runHandleOverwrite(opts: {
     toasts.push({ variant: "error", title: "toast.file.saveFailed" })
     return { eff, onOverwriteCalls: 0 }
   }
-  await onOverwrite()
+  // ← THE C1 LINE (PLAN-READONLY-VIEWER-REACTIVITY): same "set" vs sent-content logic.
+  const finalContent = (eff as { type: string; content?: string }).type === "set" ? (eff as { content?: string }).content : content
+  await onOverwrite(finalContent)
   // ← THE NEW LINE: AutoExit on conflict overwrite success.
   setEditingLog.push(false)
   return { eff, onOverwriteCalls: 1 }
@@ -517,5 +522,96 @@ describe("EditorPanel.handleCtrlS — busy retry on concurrent save (C11)", () =
 
     resolveWrite({ type: "ok", content: "v2-in-flight", stamp: { hash: hash("v2-in-flight") }, formatted: false })
     await inFlight
+  })
+})
+
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY C1): handleCtrlS/handleOverwrite now
+// pass the exact final bytes to onSave/onOverwrite so file-tabs.tsx can seed
+// the viewer cache directly instead of re-fetching over the SDK. These tests
+// pin which content wins in each case.
+describe("EditorPanel — content passed to onSave/onOverwrite (C1 seed source)", () => {
+  test("C.10 unformatted save: onSave receives the exact sent content", async () => {
+    const { deps } = fakeDeps({ "a.ts": "v1-baseline" })
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    let received: string | undefined
+    const onSave = async (content?: string) => {
+      received = content
+    }
+
+    await runHandleCtrlS({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      setEditingLog: [],
+      onSave,
+      toasts: [],
+    })
+
+    expect(received).toBe("v2-live-edits")
+  })
+
+  test("C.11 formatted save: onSave receives the backend's reformatted content, not the sent one", async () => {
+    const disk = new Map<string, string>([["a.ts", "v1-baseline"]])
+    const deps: EditorDeps = {
+      async readRaw(p) {
+        return { type: "ok", content: disk.get(p)!, stamp: { hash: hash(disk.get(p)!) } }
+      },
+      async write({ path: p, content }): Promise<WriteResult> {
+        const formattedContent = `${content}\n// formatted`
+        disk.set(p, formattedContent)
+        return { type: "ok", content: formattedContent, stamp: { hash: hash(formattedContent) }, formatted: true }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    let received: string | undefined
+    const onSave = async (content?: string) => {
+      received = content
+    }
+
+    const result = await runHandleCtrlS({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      setEditingLog: [],
+      onSave,
+      toasts: [],
+    })
+
+    expect(result.eff.type).toBe("set")
+    expect(received).toBe("v2-live-edits\n// formatted")
+    expect(received).not.toBe("v2-live-edits")
+  })
+
+  test("C.12 overwrite: onOverwrite receives the exact sent content", async () => {
+    const { deps, disk } = fakeDeps({ "a.ts": "v1-baseline" })
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+    disk.set("a.ts", "v3-external-change")
+
+    let received: string | undefined
+    const onOverwrite = async (content?: string) => {
+      received = content
+    }
+
+    await runHandleOverwrite({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      setEditingLog: [],
+      onOverwrite,
+      toasts: [],
+    })
+
+    expect(received).toBe("v2-live-edits")
   })
 })

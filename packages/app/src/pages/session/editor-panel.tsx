@@ -52,11 +52,16 @@ export interface EditorPanelProps {
   lspCallbacks: LspCallbacks
   onNavigate: (file: string) => void
   onReferences: (refs: LspLocation[]) => void
-  onSave: () => Promise<void>
-  onReload: () => Promise<void>
-  onOverwrite: () => Promise<void>
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1): optional `content` is the
+  // exact final bytes now on disk (the sent content, or the server's
+  // reformatted result if `formatted` was true) — lets the caller seed the
+  // viewer cache directly instead of re-fetching over the SDK. Omitted by
+  // onDiscard, which has no fresh content to offer (nothing was written).
+  onSave: (content?: string) => Promise<void>
+  onReload: (content?: string) => Promise<void>
+  onOverwrite: (content?: string) => Promise<void>
   onDiscard: () => void
-  onRecreate: () => Promise<void>
+  onRecreate: (content?: string) => Promise<void>
 }
 
 export function EditorPanel(props: EditorPanelProps) {
@@ -217,7 +222,11 @@ export function EditorPanel(props: EditorPanelProps) {
         }
         return
       }
-      await props.onSave()
+      // FORK (C1): the exact bytes now on disk — eff.type "set" means the
+      // backend reformatted (its content wins), otherwise the sent content
+      // is what was written verbatim.
+      const finalContent = eff.type === "set" ? eff.content : content
+      await props.onSave(finalContent)
       showToast({ variant: "success", title: language.t("toast.file.saved") })
       // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
       // viewer re-mounts and the editor (CM) unmounts. NOT done on
@@ -234,8 +243,12 @@ export function EditorPanel(props: EditorPanelProps) {
     const p = props.path()
     if (!p) return
     try {
-      applyDocEffect(await editorStore.reload(p))
-      await props.onReload()
+      const eff = await editorStore.reload(p)
+      applyDocEffect(eff)
+      // FORK (C1): reload() always resolves to {type:"set", content} on
+      // success (or {type:"missing"} on failure) — never "none", so this is
+      // the exact fresh disk content whenever present.
+      await props.onReload(eff.type === "set" ? eff.content : undefined)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.reloadFailed") })
     }
@@ -255,7 +268,9 @@ export function EditorPanel(props: EditorPanelProps) {
         showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
         return
       }
-      await props.onOverwrite()
+      // FORK (C1): same "set" vs sent-content logic as handleCtrlS.
+      const finalContent = eff.type === "set" ? eff.content : content
+      await props.onOverwrite(finalContent)
       // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
       // viewer re-mounts after the user explicitly resolved the conflict by
       // overwriting disk. NOT done on error above.
@@ -283,9 +298,18 @@ export function EditorPanel(props: EditorPanelProps) {
       const eff = await editorStore.recreate(p, content, format)
       applyDocEffect(eff)
       // See handleCtrlS — "busy" is a no-op, not a failure (C11).
+      if (eff.type === "busy") return
       if (eff.type === "error") {
         showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+        return
       }
+      // BUGFIX (found while wiring C1): props.onRecreate was declared but
+      // never called — the viewer cache never refreshed after recreating a
+      // file that had been deleted on disk, until some unrelated trigger
+      // (e.g. a tab switch) forced a reload. FORK (C1): same "set" vs
+      // sent-content logic as handleCtrlS.
+      const finalContent = eff.type === "set" ? eff.content : content
+      await props.onRecreate(finalContent)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }

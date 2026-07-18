@@ -29,6 +29,7 @@ export type ViewerTimingEvent =
   | "store-mirror"
   | "refresh-sdk-start"
   | "refresh-sdk-complete"
+  | "refresh-seed"
   | "editing-false"
   | "viewer-mount-start"
   | "notify-shadow-ready-start"

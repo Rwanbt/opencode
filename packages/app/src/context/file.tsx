@@ -24,6 +24,7 @@ import {
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
+import { createGenerationTracker } from "./file/generation"
 import {
   selectionFromLines,
   type FileState,
@@ -66,6 +67,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1/Phase 2): seed() and every
+    // real load() fetch bump the generation for that path; a load()
+    // response only applies if its captured generation is still current
+    // when it resolves. Without this, seed(pathA, "fresh") followed by a
+    // slower, now-superseded load() response (e.g. the watcher, or a load()
+    // that was already in flight before the seed) could overwrite fresher
+    // content with stale bytes after the fact.
+    const gen = createGenerationTracker()
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -102,6 +111,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     createEffect(() => {
       scope()
       inflight.clear()
+      gen.clear()
       resetFileContentLru()
       batch(() => {
         setStore("file", reconcile({}))
@@ -178,6 +188,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (pending) return pending
 
       setLoading(file)
+      const myGen = gen.bump(file)
 
       const promise = Promise.all([
         sdk.client.file.read({ path: file }),
@@ -185,6 +196,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       ])
         .then(([read, raw]) => {
           if (scope() !== directory) return
+          // A newer seed() or load() call for this path started after this
+          // one — this response is stale, drop it instead of overwriting
+          // fresher content (PLAN-READONLY-VIEWER-REACTIVITY Phase 2).
+          if (!gen.isCurrent(file, myGen)) return
           const content = read.data
           setLoaded(file, content)
 
@@ -211,6 +226,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
         .catch((e) => {
           if (scope() !== directory) return
+          // A superseded fetch failing is not a user-facing error — a newer
+          // seed()/load() already owns this path's displayed content.
+          if (!gen.isCurrent(file, myGen)) return
           setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
         })
         .finally(() => {
@@ -219,6 +237,32 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       inflight.set(key, promise)
       return promise
+    }
+
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1/Phase 2): seed the viewer
+    // cache directly with content already known to the caller (e.g. the
+    // exact bytes editorStore.save() just wrote and mirrored into FileStore)
+    // instead of re-fetching it over the SDK. Eliminates the redundant
+    // network/IPC round-trip that was the dominant cost between "save
+    // complete" and "viewer shows the new content" (measured ~200ms of a
+    // ~425ms total, see PLAN-READONLY-VIEWER-REACTIVITY-2026-07-16.md cause
+    // C1). Synchronous and side-effect-free beyond the store write — callers
+    // that also need VCS diff/patch info (not part of a save result) should
+    // follow up with a non-blocking `load(path, {force:true})`.
+    const seed = (input: string, content: string) => {
+      const file = path.normalize(input)
+      if (!file) return
+      ensure(file)
+      gen.bump(file)
+      // WHY type: "text" hardcoded, not inferred: seed() is only ever called
+      // with content the editor just wrote via CodeMirror — binary files are
+      // never editable (editor-panel.tsx's canEdit() excludes NUL bytes), so
+      // a seeded payload is text by construction. diff/patch are
+      // intentionally omitted — see the seed() doc comment above.
+      const payload: NonNullable<FileState["content"]> = { type: "text", content }
+      setLoaded(file, payload)
+      touchFileContent(file, approxBytes(payload))
+      evictContent(new Set([file]))
     }
 
     const search = (query: string, dirs: "true" | "false") =>
@@ -293,6 +337,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
       get,
       load,
+      seed,
       scrollTop,
       scrollLeft,
       setScrollTop,

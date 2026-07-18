@@ -72,18 +72,31 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
   // Editor action side-effects: refresh the read-mode cache after a write so
   // the viewer reflects the new bytes. EditorPanel handles save/reload/etc.;
-  // these wrappers only coordinate the post-action file.load().
+  // these wrappers only coordinate the post-action refresh.
   //
-  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0 / cause C1): this
-  // file.load({force:true}) is the suspected dominant source of
-  // save→viewer-ready latency — it re-fetches from the backend (two SDK
-  // calls internally) a file whose content editorStore.save() already wrote
-  // into FileStore synchronously. refresh-sdk-start/-complete measure that
-  // round-trip in isolation so Phase 2's fix can be justified by a real
-  // number instead of a hunch.
-  const refreshAfterEditor = async () => {
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY cause C1, resolved): Phase 0
+  // measured this file.load({force:true}) as the dominant source of
+  // save→viewer-ready latency (~200ms of a ~425ms total) — a redundant
+  // backend round-trip (2 SDK calls internally) re-fetching content
+  // editorStore.save() already wrote and mirrored into FileStore
+  // synchronously. When the caller already knows the final bytes (save,
+  // reload, overwrite, recreate — never a reformat-free assumption, they
+  // pass whatever CodeMirror/the backend actually persisted), `seedContent`
+  // seeds the viewer cache directly and synchronously, then kicks off a
+  // NON-BLOCKING background load() to backfill VCS diff/patch info (not
+  // part of a save result) — the generation counter in context/file.tsx
+  // ensures a slow/superseded background response can never overwrite
+  // fresher content. `onDiscard` has no fresh content to seed with (nothing
+  // was written to disk) and keeps the original blocking real-load path.
+  const refreshAfterEditor = async (seedContent?: string) => {
     const p = path()
     if (!p) return
+    if (seedContent !== undefined) {
+      file.seed(p, seedContent)
+      markViewerTiming("refresh-seed", { path: p })
+      void file.load(p, { force: true }) // background VCS backfill, not awaited
+      return
+    }
     markViewerTiming("refresh-sdk-start", { path: p })
     await file.load(p, { force: true })
     markViewerTiming("refresh-sdk-complete", { path: p })
@@ -202,11 +215,11 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
           lspCallbacks={lspCallbacks}
           onNavigate={handleNavigate}
           onReferences={handleReferences}
-          onSave={() => refreshAfterEditor()}
-          onReload={() => refreshAfterEditor()}
-          onOverwrite={() => refreshAfterEditor()}
+          onSave={(content) => refreshAfterEditor(content)}
+          onReload={(content) => refreshAfterEditor(content)}
+          onOverwrite={(content) => refreshAfterEditor(content)}
           onDiscard={() => refreshAfterEditor()}
-          onRecreate={() => refreshAfterEditor()}
+          onRecreate={(content) => refreshAfterEditor(content)}
         />
       </Show>
 
