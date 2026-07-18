@@ -143,10 +143,10 @@ Tests à créer/réactiver :
 ### Phase 1 — Identité de contenu fiable (déjà partiellement faite — à compléter, pas à refaire)
 
 - [x] `cacheKey: checksum(contents)` au lieu de `.length` — déjà fait dans `viewer-panel.tsx`.
-- [ ] **Corriger C2** : mémoïser l'objet `file` avec `createMemo` dans `viewer-panel.tsx` au lieu de l'IIFE inline.
-- [ ] **Décider l'identité de cache avant de figer C9/C10** : utiliser en priorité le `stamp.hash` autoritatif du backend ; fallback client (FNV-1a) seulement si le stamp est absent.
+- [x] **Corriger C2** : l'objet `file` est désormais construit via `createMemo` dans `renderFile()` (`viewer-panel.tsx`) au lieu de l'IIFE inline — `checksum()` ne se recalcule plus qu'au vrai changement de `source()`/`path()`, pas à chaque lecture downstream de `props.file` (sélection de ligne incluse). Vérifié par `bun typecheck` + suite complète (packages/app 588/588, packages/ui 74/74).
+- [ ] **Décider l'identité de cache avant de figer C9/C10** : utiliser en priorité le `stamp.hash` autoritatif du backend ; fallback client (FNV-1a) seulement si le stamp est absent. **Vérifié en implémentant C2** : `FileState` (`context/file/types.ts`), le type que lit `ViewerPanel`, ne porte aujourd'hui aucun champ `stamp`/`hash` — seul `FileStore` (le miroir Phase 2 R1, store différent) en a un. Câbler `stamp.hash` dans le viewer nécessite donc de faire lire `ViewerPanel` depuis `FileStore` (ou d'y ajouter un champ équivalent) — **ce sous-point est donc repoussé dans la Phase 2** (il touche exactement la même unification de store que C1), pas traité comme un fix Phase 1 isolé.
 - [ ] Si un fallback FNV-1a 32 bits reste nécessaire, documenter la garantie probabiliste. Ne pas utiliser `sampledChecksum` comme identité complète des gros fichiers.
-- [ ] Test : deux contenus de même longueur → deux clés différentes, deux rendus corrects.
+- [x] Test : deux contenus de même longueur → deux clés différentes, deux rendus corrects — déjà couvert par le fix Phase 1 initial (checksum vs `.length`) ; pas de nouveau test requis pour C2 (mémoïsation), qui est un fix de performance/redondance pur, pas de correction fonctionnelle — pas de comportement observable différent, donc pas de nouvelle assertion possible sans instrumenter le nombre d'appels à `checksum()` (prévu en Phase 0).
 
 ### Phase 2 — Pipeline de sauvegarde : éliminer le round-trip SDK redondant
 
@@ -166,8 +166,8 @@ Options à évaluer (ne pas trancher sans mesure Phase 0) :
 
 ### Phase 3 — `notifyShadowReady` : fermer la fenêtre de tâche obsolète
 
-- [ ] Rendre `clearReadyWatcher` idempotent : incrémenter le token, marquer l'état disposed, déconnecter l'observer et annuler les RAF connus. Aucun callback, mutation DOM ou effet applicatif ne doit survivre au démontage.
-- [ ] Test : démonter le composant entre "prêt détecté" et fin de `settleFrames`, vérifier qu'aucun observer n'est recréé et qu'`onRendered` n'est pas appelé après démontage.
+- [x] **Corrigé, avec une nuance importante découverte en implémentant** : modifier `clearReadyWatcher` lui-même pour bumper le token cassait `notifyShadowReady` — cette fonction est réutilisée EN INTERNE par `notifyShadowReady` à deux endroits (juste avant d'installer un nouveau `MutationObserver`, et dans le callback de ce même observer une fois "prêt" détecté, juste avant `runReady()`) ; bumper le token à ces deux endroits invalide la génération en cours AVANT que son propre `onReady` ait pu s'exécuter — `notifyShadowReady` ne se déclenche alors plus jamais via le chemin `MutationObserver`. Solution retenue : `clearReadyWatcher` reste inchangé (reset interne, pas de bump de token) ; nouvelle fonction `disposeReadyWatcher` ajoutée pour la vraie destruction du composant — annule le RAF de settle-frame en cours (`cancelAnimationFrame`, pas seulement le check de token), bump le token, marque `disposed:true`. `useFileViewer`'s `onCleanup` (`packages/ui/src/components/file.tsx`) appelle désormais `disposeReadyWatcher` au lieu de `clearReadyWatcher` ; les deux usages internes de `clearReadyWatcher` dans `notifyShadowReady`/`renderViewer` restent inchangés. `notifyShadowReady` ajoute aussi un garde `if (opts.state.disposed) return` en tête, défensif.
+- [x] Test : nouveau fichier `packages/ui/src/pierre/file-runtime.test.ts` (9 tests, aucune couverture n'existait avant — comble aussi une partie de C12) — couvre : ready immédiat, chaîne `settleFrames`, chemin `MutationObserver`, génération supersédée, démontage pendant la fenêtre `settleFrames` (RAF annulé, `onReady` jamais appelé), démontage après détection `MutationObserver` mais avant fin des settle frames, `clearReadyWatcher` seul NE annule PAS un settle-frame en vol (documente la distinction avec `disposeReadyWatcher`), idempotence de `disposeReadyWatcher`, no-op de `notifyShadowReady` sur un watcher déjà disposé.
 
 ### Phase 4 — Lignes dynamiques desktop/Android (déjà largement faite)
 
