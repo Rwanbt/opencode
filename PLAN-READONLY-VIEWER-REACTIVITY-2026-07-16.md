@@ -148,21 +148,34 @@ Tests à créer/réactiver :
 - [ ] Si un fallback FNV-1a 32 bits reste nécessaire, documenter la garantie probabiliste. Ne pas utiliser `sampledChecksum` comme identité complète des gros fichiers.
 - [x] Test : deux contenus de même longueur → deux clés différentes, deux rendus corrects — déjà couvert par le fix Phase 1 initial (checksum vs `.length`) ; pas de nouveau test requis pour C2 (mémoïsation), qui est un fix de performance/redondance pur, pas de correction fonctionnelle — pas de comportement observable différent, donc pas de nouvelle assertion possible sans instrumenter le nombre d'appels à `checksum()` (prévu en Phase 0).
 
-### Phase 2 — Pipeline de sauvegarde : éliminer le round-trip SDK redondant
-
-**⚠️ Cette phase touche `packages/app/src/context/` (providers). Règle "Architectural change discipline" du AGENTS.md : `graphify path` sur les symboles touchés, lecture d'au moins 3 call-sites de `file.load`/`refreshAfterEditor` hors chemin de sauvegarde, "Affects: [...]. Does not affect: [...]." explicite dans le commit, confirmation de scope utilisateur avant application si le diff touche ≥2 fichiers du périmètre.**
-
-Options à évaluer (ne pas trancher sans mesure Phase 0) :
-1. Faire lire `ViewerPanel.contents` directement depuis `FileStore` au lieu du cache viewer de `context/file.tsx`.
-2. Exposer une méthode de seed direct sur le contexte `file` avec `content` et `stamp`, sans repasser par le SDK. Garder `file.load({force:true})` pour les chemins qui en ont besoin. **Cette option doit utiliser une génération monotone par chemin** : un load commencé avant un seed plus récent ne peut pas exécuter `setLoaded()` après ce seed (protection anti-retour-obsolète).
-3. A minima (fix conservateur) : ne pas `await` le round-trip avant `setEditing(false)`.
-
-**Recommandation par défaut (v4)** : seed direct + stamp + génération anti-retour-obsolète. Source de vérité explicite : EditorStore/CodeMirror pour le buffer dirty, FileStore miroir + stamp pour le contenu sauvegardé immédiat, contexte `file` pour raw/VCS/patch, SDK/watchers pour l'état disque. Choix final après mesure Phase 0, avec confirmation utilisateur.
+### Phase 2 — Pipeline de sauvegarde : éliminer le round-trip SDK redondant (fait, validé par mesure réelle)
 
 - [x] **Corriger C11** : `DocEffect` distingue désormais `"none"` (sauvegarde réussie, pas de mutation CM nécessaire — y compris le cas legacy "aucune entrée éditeur", ex. close-guard sur un chemin fantôme) de `"busy"` (autre sauvegarde déjà en vol, rien n'a été tenté). `handleCtrlS`/`handleOverwrite`/`handleRecreate` (`editor-panel.tsx`) et `close-guard.tsx`'s `onSave` traitent désormais `busy` comme un non-succès et attendent la libération du verrou (`waitForSaveSlot`, poll 50ms, plafond 5s) avant de retenter avec le contenu le plus frais (`saveWithRetry`, borné à 2 tentatives). **Angle mort découvert en implémentant** : `close-guard.tsx` (dialogue "sauvegarder et fermer") avait exactement le même bug que `handleCtrlS` — un `busy` y aurait fermé l'onglet comme si la sauvegarde avait réussi, alors que rien n'avait été écrit. Corrigé dans le même commit (grep systématique des appelants de `editorStore.save`/`recreate`, règle AGENTS.md "grep the whole codebase for the same pattern").
 - [x] **Intégrer l'autosave** : `autosave.ts` appelle déjà `mirror()`→`FileStore.markClean()` comme une sauvegarde manuelle ; vérifié qu'aucun chemin actuel ne permet de quitter le mode édition sans passer par `handleCtrlS`/`handleOverwrite`/`handleDiscard` (pas de bouton "fermer sans sauvegarder" dans l'UI actuelle) — donc pas de risque de viewer resté périmé après un autosave silencieux. Un Ctrl+S concurrent préserve désormais les frappes supplémentaires via `saveWithRetry` (testé : `editor-panel.test.ts` C.7/C.8/C.9, `close-guard-integration.test.ts` "busy (autosave in flight)").
-- [ ] Tester un retour SDK obsolète : seed A, seed B, résolution tardive de A → B reste affiché. *(reporté à la Phase 2 proprement dite — nécessite la génération monotone par chemin, pas encore implémentée)*
-- [ ] Tester un changement de fichier pendant une sauvegarde : la résolution tardive de A ne modifie pas B. *(idem)*
+- [x] **Option retenue : option 2 (seed direct), confirmée par l'utilisateur** après présentation des chiffres Phase 0. Procédure "Architectural change discipline" suivie avant modification : `refreshAfterEditor`/`file.load({force:true})` grepé sur tout `packages/app/src` — 2 seuls call-sites de `{force:true}` dans toute l'app (`file-tabs.tsx`'s `refreshAfterEditor`, et `session.tsx:254` pour l'activation d'onglet, lu et confirmé non affecté). **Affects** : `packages/app/src/context/file.tsx` (nouvelle méthode `seed()`, génération monotone extraite dans `context/file/generation.ts`), `packages/app/src/pages/session/{editor-panel,file-tabs}.tsx` (signatures `onSave`/`onReload`/`onOverwrite`/`onRecreate` acceptent désormais un `content?: string`). **Does not affect** : `session.tsx:254` (activation d'onglet, toujours `file.load({force:true})` réel, inchangé), `close-guard.tsx` (chemin "sauvegarder et fermer", pas de seed — hors scope), `onDiscard` (aucun contenu frais à seeder, garde le vrai `file.load({force:true})`).
+- [x] **Design final** : `context/file.tsx` expose `seed(path, content)` — écrit directement le cache viewer (`store.file[path]`) avec `{type:"text", content}`, synchrone, sans appel SDK. `refreshAfterEditor(seedContent?)` : si `seedContent` fourni (save/reload/overwrite/recreate réussis), seed synchrone + `void file.load(path, {force:true})` **non attendu** en arrière-plan pour rafraîchir VCS diff/patch (absents d'un résultat de sauvegarde) ; sinon (onDiscard), chemin réel `await file.load()` inchangé.
+- [x] **Génération monotone** extraite dans un module pur et testable `context/file/generation.ts` (`createGenerationTracker`) — même principe que le `token` de `notifyShadowReady` (C3). `load()` capture sa génération avant le fetch réel ; à la résolution (succès ou erreur), si une génération plus récente existe (nouveau `seed()` ou nouveau `load()` pour ce chemin), la réponse est droppée silencieusement. Réinitialisée au changement de `scope()` (répertoire).
+- [x] **Bug adjacent trouvé en câblant le contenu** : `handleRecreate` déclarait `props.onRecreate` dans ses types mais ne l'appelait **jamais** — le viewer ne se rafraîchissait donc jamais après avoir recréé un fichier supprimé sur disque, jusqu'à un déclencheur non lié (changement d'onglet). Corrigé dans le même commit (règle Boy Scout AGENTS.md, périmètre déjà touché).
+- [x] Tester un retour SDK obsolète : seed A, seed B, résolution tardive de A → B reste affiché. *(couvert au niveau unitaire par `generation.test.ts` — "simulates a slow superseded response". Pas de test end-to-end au niveau `context/file.tsx` lui-même : ce contexte Solid complet (SDK, sync, layout, params) n'a pas de précédent testé isolément dans ce repo — le pattern établi ailleurs, `store-integration.test.ts`, teste les stores purs sans le wrapper Solid. La logique nouvelle et non-triviale, `generation.ts`, est celle qui a été extraite et testée ; `seed()`/`load()` restent du câblage fin autour d'elle.)*
+- [x] Tester un changement de fichier pendant une sauvegarde : couvert par le même mécanisme de génération (clé par chemin), plus le reset de génération au changement de `scope()`.
+
+**Mesure réelle post-fix (2026-07-19, même protocole que Phase 0)** :
+
+```
+save-start                 32786.1
+write-complete              32846.9   (+60.8 ms — écriture disque, variance normale vs la mesure précédente)
+store-mirror                 32847.8   (+0.9 ms)
+refresh-seed                  32848.8   (+1.0 ms  ← était 200.6 ms de round-trip SDK avant le fix)
+editing-false                  32854.5   (+5.7 ms)
+viewer-mount-start               32855.9   (+1.4 ms)
+notify-shadow-ready-start          32891.8   (+35.9 ms)
+notify-shadow-ready-end              32917.4   (+25.6 ms)
+viewer-ready                          32917.8   (+0.4 ms)
+
+Total save-start → viewer-ready : 131.7 ms  (était 424.3 ms — réduction de 292.6 ms, ~69%)
+```
+
+Aucune erreur console. Rendu visuel vérifié par capture d'écran (couleurs, contenu, sortie propre du mode édition). Édition de test revert via `git checkout` après mesure.
 
 ### Phase 3 — `notifyShadowReady` : fermer la fenêtre de tâche obsolète
 
