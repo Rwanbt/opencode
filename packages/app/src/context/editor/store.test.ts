@@ -146,7 +146,13 @@ describe("editor store — dirty + save", () => {
     expect(store.get("a.ts")!.missing).toBe(true)
   })
 
-  test("save while a save is in flight is ignored (guard)", async () => {
+  test("save while a save is in flight returns busy (guard) — FORK C11: distinct from a real no-op success", async () => {
+    // Regression for PLAN-READONLY-VIEWER-REACTIVITY C11: this guard used to
+    // return the same {type:"none"} as a successful save with no CM
+    // mutation, so callers (editor-panel.tsx's handleCtrlS) couldn't tell a
+    // busy no-op apart from an actual success and exited edit mode as if the
+    // save had happened. "busy" is the type the guard returns now — nothing
+    // was attempted, the caller must not treat it as saved.
     let resolveWrite: (r: WriteResult) => void = () => {}
     const deps: EditorDeps = {
       async readRaw() {
@@ -159,7 +165,7 @@ describe("editor store — dirty + save", () => {
     const first = store.save("a.ts", "a")
     expect(store.get("a.ts")!.saving).toBe(true)
     const second = await store.save("a.ts", "b")
-    expect(second).toEqual({ type: "none" }) // ignored while saving
+    expect(second).toEqual({ type: "busy" }) // nothing attempted while saving
     resolveWrite({ type: "ok", content: "a", stamp: { hash: hash("a") }, formatted: false })
     await first
     expect(store.get("a.ts")!.saving).toBe(false)
@@ -333,7 +339,9 @@ describe("editor store — recreate", () => {
     expect(store.get("a.ts")!.baseline.content).toBe("hello\n")
   })
 
-  test("save already in-flight → returns none immediately", async () => {
+  test("recreate already in-flight → returns busy immediately (FORK C11)", async () => {
+    // See the equivalent save() guard test above — "busy" (not "none") so a
+    // caller can't mistake an in-flight no-op for a completed recreate.
     let resolveWrite: (r: WriteResult) => void = () => {}
     const deps: EditorDeps = {
       async readRaw() {
@@ -345,7 +353,7 @@ describe("editor store — recreate", () => {
     await store.open("a.ts") // missing
     const first = store.recreate("a.ts", "x")
     const second = await store.recreate("a.ts", "x") // in-flight guard
-    expect(second).toEqual({ type: "none" })
+    expect(second).toEqual({ type: "busy" })
     resolveWrite({ type: "ok", content: "x", stamp: { hash: hash("x") }, formatted: false })
     await first
   })

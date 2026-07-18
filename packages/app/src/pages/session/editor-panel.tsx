@@ -162,7 +162,25 @@ export function EditorPanel(props: EditorPanelProps) {
     }
   }
 
-  const handleCtrlS = async () => {
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): wait for an in-flight save
+  // (autosave or a concurrent manual save) to release the path, so a "busy"
+  // Ctrl+S can retry instead of being silently dropped or — the actual bug —
+  // treated as a success. Bounded by maxWaitMs so a stuck save (e.g. a hung
+  // request) can't wedge the retry forever; the caller just gives up for
+  // this keypress and the user can press Ctrl+S again.
+  const waitForSaveSlot = async (p: string, maxWaitMs = 5000) => {
+    const start = Date.now()
+    while (editorStore.get(p)?.saving) {
+      if (Date.now() - start > maxWaitMs) return false
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return true
+  }
+
+  // maxRetries bounds the recursion below — a "busy" result can only mean
+  // another save just released or is about to; retrying more than a couple
+  // times would indicate a pathological save loop, not a legitimate race.
+  const handleCtrlS = async (retriesLeft = 2) => {
     const p = props.path()
     if (!p) return
     const content = props.editorHandle?.getContent() ?? ""
@@ -170,6 +188,17 @@ export function EditorPanel(props: EditorPanelProps) {
     try {
       const eff = await editorStore.save(p, content, format)
       applyDocEffect(eff)
+      // FORK (C11): "busy" means nothing was attempted (another save, e.g.
+      // autosave, was already in flight) — this is NOT a success. Wait for
+      // the in-flight save to finish, then retry with the freshest CM
+      // content so no keystrokes are silently dropped and the mode never
+      // exits on a no-op save.
+      if (eff.type === "busy") {
+        if (retriesLeft <= 0) return
+        const free = await waitForSaveSlot(p)
+        if (free) await handleCtrlS(retriesLeft - 1)
+        return
+      }
       // WHY: save() never throws (catches internally). A conflict/missing
       // result is already surfaced by the EditorBanner via the reactive
       // editorEntry — don't claim success here. REGRESSION FIX 2026-06-27:
@@ -186,7 +215,8 @@ export function EditorPanel(props: EditorPanelProps) {
       showToast({ variant: "success", title: language.t("toast.file.saved") })
       // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
       // viewer re-mounts and the editor (CM) unmounts. NOT done on
-      // conflict/missing/error above — banner must remain visible.
+      // conflict/missing/error/busy above — banner must remain visible /
+      // the retry must get a chance to run first.
       props.setEditing(false)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
@@ -211,7 +241,9 @@ export function EditorPanel(props: EditorPanelProps) {
     try {
       const eff = await editorStore.resolveConflict(p, content, "overwrite")
       applyDocEffect(eff)
-      // See handleCtrlS — also surface backend errors here.
+      // See handleCtrlS — also surface backend errors here, and don't treat
+      // a "busy" no-op (another save raced in) as a resolved conflict (C11).
+      if (eff.type === "busy") return
       if (eff.type === "error") {
         showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
         return
@@ -242,7 +274,7 @@ export function EditorPanel(props: EditorPanelProps) {
     try {
       const eff = await editorStore.recreate(p, content, format)
       applyDocEffect(eff)
-      // See handleCtrlS.
+      // See handleCtrlS — "busy" is a no-op, not a failure (C11).
       if (eff.type === "error") {
         showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
       }

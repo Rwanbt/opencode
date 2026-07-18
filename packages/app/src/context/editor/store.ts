@@ -69,12 +69,19 @@ export interface EditorDeps {
 /** What the caller (CM component) should do with the document after an action. */
 export type DocEffect =
   | { type: "set"; content: string } // replace the CM doc with this content
-  | { type: "none" } // leave the CM doc untouched
+  | { type: "none" } // saved successfully, leave the CM doc untouched (no reformat)
   | { type: "conflict" } // save blocked by 409 — show the conflict banner
   | { type: "missing" } // file gone on disk — show the delete-on-disk actions
   | { type: "error" } // FORK (REGRESSION FIX 2026-06-27): backend write failed
                        // (e.g. atomicWrite post-rename mismatch) — surface a
                        // SaveFailed toast instead of the phantom "Saved".
+  | { type: "busy" } // FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): another save
+                      // (autosave or a concurrent manual save) is already in
+                      // flight for this path — nothing was attempted. Distinct
+                      // from "none" (which means the save DID succeed, just
+                      // with no CM mutation needed) so the caller can tell a
+                      // no-op busy-guard apart from a real success and must
+                      // not treat it as "saved".
 
 function freshEntry(content: string, hash: string): EditorEntry {
   return { baseline: { content, hash }, dirty: false, stale: false, saving: false, conflict: false, missing: false }
@@ -172,7 +179,12 @@ export function createEditorStore(deps: EditorDeps) {
   /** Save the current CM content with the hash precondition. */
   async function save(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    if (!entry || entry.saving) return { type: "none" }
+    // No entry ⇒ nothing was ever open for this path — a legitimate no-op,
+    // not a race (see close-guard's "ghost path" case). Distinct from
+    // `entry.saving`, a real in-flight save (autosave or a concurrent
+    // manual save) — that's the "busy" case a caller must retry (C11).
+    if (!entry) return { type: "none" }
+    if (entry.saving) return { type: "busy" }
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {
@@ -308,7 +320,9 @@ export function createEditorStore(deps: EditorDeps) {
    */
   async function recreate(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    if (!entry || entry.saving) return { type: "none" }
+    // See save() above for the "none" (no entry) vs "busy" (in-flight) split.
+    if (!entry) return { type: "none" }
+    if (entry.saving) return { type: "busy" }
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {
