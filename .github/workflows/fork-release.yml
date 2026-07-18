@@ -173,18 +173,18 @@ jobs:
           # (APPLE_*/AZURE_*) is skipped for this unsigned fork build.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
 
+      # packages/desktop/src-tauri/tauri.conf.json only targets
+      # ["deb", "rpm", "dmg", "nsis", "app"] — AppImage/MSI are never produced,
+      # so don't collect them (the release job used to require both and
+      # hard-fail with "Pattern ... does not match any files").
       - name: Collect Linux artifacts
         if: runner.os == 'Linux'
         run: |
           set -e
           OUT=packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle
           mkdir -p dist-desktop
-          # .deb
-          cp "$OUT"/deb/*.deb dist-desktop/opencode-desktop-linux-x64.deb 2>/dev/null || true
-          # AppImage
-          cp "$OUT"/appimage/*.AppImage dist-desktop/opencode-desktop-linux-x64.AppImage 2>/dev/null || true
+          cp "$OUT"/deb/*.deb dist-desktop/opencode-desktop-linux-x64.deb
           ls -lh dist-desktop/
 
       - name: Collect Windows artifacts
@@ -194,7 +194,6 @@ jobs:
           $out = "packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle"
           New-Item -ItemType Directory -Force dist-desktop | Out-Null
           Get-ChildItem "$out/nsis/*.exe" | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.exe"
-          Get-ChildItem "$out/msi/*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1 | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.msi"
           Get-ChildItem dist-desktop
 
       - uses: actions/upload-artifact@v4
@@ -447,7 +446,5 @@ jobs:
             release/opencode-linux-x64.tar.gz
             release/opencode-windows-x64.zip
             release/opencode-desktop-linux-x64.deb
-            release/opencode-desktop-linux-x64.AppImage
             release/opencode-desktop-windows-x64.exe
-            release/opencode-desktop-windows-x64.msi
             release/opencode-mobile.apk
