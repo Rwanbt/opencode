@@ -14,7 +14,7 @@
 // mutations — when the file store updates content via produce(), the
 // `source()` getter returns the new string and Dynamic re-evaluates.
 
-import { Match, Switch } from "solid-js"
+import { createMemo, Match, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { checksum } from "@opencode-ai/util/encode"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -75,60 +75,74 @@ export function ViewerPanel(props: ViewerPanelProps) {
   // expression in the Dynamic's file prop, which triggers a re-render of
   // the file component. A plain string value would be captured at first
   // render and never refresh.
-  const renderFile = (source: () => string) => (
-    <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        // WHY: overrides createDefaultOptions' "scroll" default — this viewer
-        // always wires line-commenting (commentsUi below), and the
-        // popover/tools bar isn't scoped to absorb the viewer's own
-        // horizontal scroll under "scroll" mode, so it pushes the outer
-        // .scroll-view__viewport wider instead of staying contained.
-        overflow="wrap"
-        file={(() => {
-          const contents = source()
-          return {
-            name: props.path() ?? "",
-            contents,
-            cacheKey: checksum(contents),
-          }
-        })()}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={props.activeSelection()}
-        commentedLines={props.commentedLines()}
-        onRendered={() => {
-          props.scrollSync.queueRestore()
-        }}
-        annotations={props.commentsUi.annotations()}
-        renderAnnotation={props.commentsUi.renderAnnotation}
-        renderHoverUtility={props.commentsUi.renderHoverUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          props.commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={props.commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          props.commentsUi.onLineSelectionEnd(range)
-        }}
-        search={props.search}
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: props.path(),
-          current: props.state()?.content,
-          onLoad: props.scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
-    </div>
-  )
+  const renderFile = (source: () => string) => {
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C2): this object used to be
+    // built inline as a plain IIFE, re-run on EVERY read of props.file
+    // downstream in @opencode-ai/ui's file.tsx (text(), lineCount(), draw(),
+    // applySelection(), the notifyShadowReady readiness check — none of them
+    // memoized, several fire on unrelated changes like a line selection).
+    // Each read recomputed checksum(), an O(n) hash over the whole file, so
+    // selecting a line on a large file re-hashed the entire content for no
+    // reason. createMemo makes this recompute only when `source()` or
+    // `props.path()` actually change — every other read of props.file
+    // downstream gets the cached object back.
+    const file = createMemo(() => {
+      const contents = source()
+      return {
+        name: props.path() ?? "",
+        contents,
+        cacheKey: checksum(contents),
+      }
+    })
+
+    return (
+      <div class="relative overflow-hidden pb-40">
+        <Dynamic
+          component={fileComponent}
+          mode="text"
+          // WHY: overrides createDefaultOptions' "scroll" default — this viewer
+          // always wires line-commenting (commentsUi below), and the
+          // popover/tools bar isn't scoped to absorb the viewer's own
+          // horizontal scroll under "scroll" mode, so it pushes the outer
+          // .scroll-view__viewport wider instead of staying contained.
+          overflow="wrap"
+          file={file()}
+          enableLineSelection
+          enableHoverUtility
+          selectedLines={props.activeSelection()}
+          commentedLines={props.commentedLines()}
+          onRendered={() => {
+            props.scrollSync.queueRestore()
+          }}
+          annotations={props.commentsUi.annotations()}
+          renderAnnotation={props.commentsUi.renderAnnotation}
+          renderHoverUtility={props.commentsUi.renderHoverUtility}
+          onLineSelected={(range: SelectedLineRange | null) => {
+            props.commentsUi.onLineSelected(range)
+          }}
+          onLineNumberSelectionEnd={props.commentsUi.onLineNumberSelectionEnd}
+          onLineSelectionEnd={(range: SelectedLineRange | null) => {
+            props.commentsUi.onLineSelectionEnd(range)
+          }}
+          search={props.search}
+          class="select-text"
+          media={{
+            mode: "auto",
+            path: props.path(),
+            current: props.state()?.content,
+            onLoad: props.scrollSync.queueRestore,
+            onError: (args: { kind: "image" | "audio" | "svg" }) => {
+              if (args.kind !== "svg") return
+              showToast({
+                variant: "error",
+                title: language.t("toast.file.loadFailed.title"),
+              })
+            },
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <ScrollView

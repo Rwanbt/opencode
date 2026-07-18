@@ -26,6 +26,7 @@ import {
   applyViewerScheme,
   clearReadyWatcher,
   createReadyWatcher,
+  disposeReadyWatcher,
   getViewerHost,
   getViewerRoot,
   notifyShadowReady,
@@ -295,7 +296,12 @@ function useFileViewer(config: ViewerConfig) {
   })
 
   onCleanup(() => {
-    clearReadyWatcher(ready)
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C3): true disposal — this is the
+    // component's real teardown, not an intermediate reset between render
+    // cycles (those still use clearReadyWatcher, e.g. in renderViewer below).
+    // See disposeReadyWatcher's doc comment for why clearReadyWatcher alone
+    // left a settle-frame RAF able to fire onReady() after unmount.
+    disposeReadyWatcher(ready)
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)

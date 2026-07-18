@@ -1,15 +1,46 @@
 type ReadyWatcher = {
   observer?: MutationObserver
   token: number
+  frame?: number
+  disposed?: boolean
 }
 
 export function createReadyWatcher(): ReadyWatcher {
   return { token: 0 }
 }
 
+// Disconnects the observer for the CURRENT watch cycle. Used internally by
+// notifyShadowReady between/within cycles (e.g. right before setting up a
+// fresh MutationObserver, or once "ready" is detected and the observer is no
+// longer needed) — deliberately does NOT bump `token` or cancel a pending
+// settle-frame RAF, so it can run mid-cycle without invalidating the very
+// callback it's about to trigger.
 export function clearReadyWatcher(state: ReadyWatcher) {
   state.observer?.disconnect()
   state.observer = undefined
+}
+
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY C3): true disposal, for the owning
+// component's teardown — no further notifyShadowReady call will ever follow
+// for this watcher. `clearReadyWatcher` alone was not enough: it never
+// bumped `token`, so a settle-frame RAF chain already in flight (scheduled
+// by notifyShadowReady's runReady/step, between "ready detected" and
+// settleFrames elapsing) would still run to completion and call `onReady()`
+// on a torn-down component — re-installing MutationObserver/ResizeObserver
+// watchers that then leak (their own cleanup already ran and won't run
+// again) and firing `onRendered` late enough to undo an already-settled
+// remount's scroll position. This cancels the pending frame outright,
+// bumps the token so any callback that already fired before cancellation
+// took effect finds itself stale, and marks the watcher disposed. Idempotent
+// — safe to call more than once, or on a watcher that was never armed.
+export function disposeReadyWatcher(state: ReadyWatcher) {
+  clearReadyWatcher(state)
+  if (state.frame !== undefined) {
+    cancelAnimationFrame(state.frame)
+    state.frame = undefined
+  }
+  state.token += 1
+  state.disposed = true
 }
 
 export function getViewerHost(container: HTMLElement | undefined) {
@@ -74,6 +105,12 @@ export function notifyShadowReady(opts: {
   onReady: () => void
   settleFrames?: number
 }) {
+  // FORK (C3): a disposed watcher belongs to a torn-down component — never
+  // start new work on it. Structurally this shouldn't happen (Solid stops
+  // re-running a disposed component's effects), but it's a cheap guard
+  // against a future caller misusing the API across a remount boundary.
+  if (opts.state.disposed) return
+
   clearReadyWatcher(opts.state)
   opts.state.token += 1
 
@@ -82,15 +119,16 @@ export function notifyShadowReady(opts: {
 
   const runReady = () => {
     const step = (left: number) => {
+      opts.state.frame = undefined
       if (token !== opts.state.token) return
       if (left <= 0) {
         opts.onReady()
         return
       }
-      requestAnimationFrame(() => step(left - 1))
+      opts.state.frame = requestAnimationFrame(() => step(left - 1))
     }
 
-    requestAnimationFrame(() => step(settle))
+    opts.state.frame = requestAnimationFrame(() => step(settle))
   }
 
   const observeRoot = (root: ShadowRoot) => {
