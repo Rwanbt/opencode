@@ -48,7 +48,7 @@ const DialogSettingsDesktop: Component = () => {
                   </Tabs.Trigger>
                   <Tabs.Trigger value="audio">
                     <Icon name="speaker" />
-                    Audio
+                    {language.t("settings.fork.audio.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="shortcuts">
                     <Icon name="keyboard" />
@@ -70,24 +70,24 @@ const DialogSettingsDesktop: Component = () => {
                   </Tabs.Trigger>
                   <Tabs.Trigger value="configuration">
                     <Icon name="console" />
-                    Configuration
+                    {language.t("settings.localConfig.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="benchmark">
                     <Icon name="settings-gear" />
-                    Benchmark
+                    {language.t("settings.fork.benchmark.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="observability">
                     <Icon name="settings-gear" />
-                    Observability
+                    {language.t("settings.fork.observability.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="plugins">
                     <Icon name="mcp" />
-                    Plugins
+                    {language.t("settings.fork.plugins.title")}
                   </Tabs.Trigger>
                   <Show when={platform.os === "android"}>
                     <Tabs.Trigger value="android">
                       <Icon name="settings-gear" />
-                      Android
+                      {language.t("settings.fork.android.title")}
                     </Tabs.Trigger>
                   </Show>
                 </div>

@@ -110,7 +110,7 @@ export const SettingsObservabilityTimeline: Component<{
                     <Show when={entry.hasOrphan}>
                       <span class="rounded bg-surface-warning-base px-1.5 py-0.5 text-11-regular text-text-strong">{language.t("settings.fork.observability.orphaned")}</span>
                     </Show>
-                    {entry.items.length} event{entry.items.length === 1 ? "" : "s"}
+                    {language.t("settings.fork.observability.eventCount", { count: entry.items.length })}
                   </span>
                 </div>
                 <div class="relative h-4 w-full rounded bg-surface-inset">
@@ -143,7 +143,7 @@ export const SettingsObservabilityTimeline: Component<{
                           <div class="mt-2 flex flex-col gap-1">
                             <div class="flex items-center gap-1 text-11-medium text-icon-critical-base">
                               <Icon name="warning" />
-                              {event.localFull ? "Full content captured (opt-in)" : "Redacted content captured (opt-in)"}
+                              {event.localFull ? language.t("settings.fork.observability.fullContentCaptured") : language.t("settings.fork.observability.redactedContentCaptured")}
                             </div>
                             <pre class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-inset p-2 text-11-regular text-text-strong">{content()}</pre>
                           </div>

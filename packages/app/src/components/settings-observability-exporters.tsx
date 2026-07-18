@@ -35,7 +35,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
 
   const saveLangfuse = async () => {
     if (!host() || !publicKey() || !secretKey()) {
-      showToast({ variant: "error", title: "Missing fields", description: "Host, public key, and secret key are all required." })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.exporterMissingFields"), description: language.t("settings.fork.observability.exporterMissingFieldsDescription") })
       return
     }
     setBusy(true)
@@ -50,9 +50,9 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       )
       setSecretKey("")
       await configActions.refetch()
-      showToast({ variant: "success", title: "Langfuse exporter configured" })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.exporterConfigured") })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to save exporter", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.exporterSaveError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -69,9 +69,9 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
         }),
       )
       await configActions.refetch()
-      showToast({ variant: "success", title: `${type} exporter removed` })
+      showToast({ variant: "success", title: language.t("settings.fork.observability.exporterRemoved", { type }) })
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to remove exporter", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.exporterRemoveError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -88,7 +88,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       )
       await configActions.refetch()
     } catch (error) {
-      showToast({ variant: "error", title: "Unable to save setting", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.exporterSettingError"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -102,12 +102,12 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       setTestResults(result.results)
       const allOk = result.results.every((r) => r.ok)
       if (!result.results.length) {
-        showToast({ variant: "error", title: "No exporters configured", description: "Configure an exporter above first." })
+        showToast({ variant: "error", title: language.t("settings.fork.observability.noExporters"), description: language.t("settings.fork.observability.configureExporterFirst") })
       } else {
-        showToast({ variant: allOk ? "success" : "error", title: allOk ? "All exporters reachable" : "One or more exporters failed" })
+        showToast({ variant: allOk ? "success" : "error", title: allOk ? language.t("settings.fork.observability.allExportersReachable") : language.t("settings.fork.observability.someExportersFailed") })
       }
     } catch (error) {
-      showToast({ variant: "error", title: "Test failed", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.exporterTestFailed"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -122,7 +122,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
       const result = await unwrap(sdk.client.observability.exporters.preview({ eventId }))
       setPreview(result)
     } catch (error) {
-      showToast({ variant: "error", title: language.t("settings.fork.observability.previewButton") + " failed", description: error instanceof Error ? error.message : "Request failed" })
+      showToast({ variant: "error", title: language.t("settings.fork.observability.previewFailed"), description: error instanceof Error ? error.message : language.t("settings.fork.observability.requestFailed") })
     } finally {
       setBusy(false)
     }
@@ -146,7 +146,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
                   <span class="text-12-medium text-text-strong">{exporter.type}</span> — {exporter.host} ({exporter.publicKey})
                 </div>
                 <Button variant="secondary" size="small" disabled={busy()} onClick={() => void removeExporter(exporter.type)}>
-                  Remove
+                  {language.t("settings.fork.observability.removeExporter")}
                 </Button>
               </div>
             )}
@@ -194,7 +194,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
                   <div class="flex items-center gap-2 rounded-md px-3 py-2 text-12-regular" classList={{ "bg-surface-success-weak": r.ok, "bg-surface-critical-base text-text-on-critical-base": !r.ok }}>
                     <Icon name={r.ok ? "check" : "warning"} />
                     <span class="text-12-medium">{r.exporter}</span>
-                    <span>{r.ok ? `ok (${r.attempts} attempt${r.attempts === 1 ? "" : "s"})` : `failed after ${r.attempts} attempts: ${r.error}`}</span>
+                    <span>{r.ok ? language.t("settings.fork.observability.exporterTestOk", { count: r.attempts }) : language.t("settings.fork.observability.exporterTestFailedAfter", { count: r.attempts, error: r.error ?? "" })}</span>
                   </div>
                 )}
               </For>
@@ -224,7 +224,7 @@ export const SettingsObservabilityExporters: Component<{ events: EventItem[] }> 
           {(result) => (
             <Show
               when={result().exportable}
-              fallback={<div class="mt-3 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">Not exportable: {result().reason}</div>}
+              fallback={<div class="mt-3 rounded-md bg-surface-warning-base px-3 py-2 text-12-regular text-text-strong">{language.t("settings.fork.observability.notExportable", { reason: result().reason ?? "" })}</div>}
             >
               <pre class="mt-3 overflow-x-auto rounded-md bg-surface-inset px-3 py-2 text-11-regular text-text-weak">{JSON.stringify(result().projection, null, 2)}</pre>
             </Show>

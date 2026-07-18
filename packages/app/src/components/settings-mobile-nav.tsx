@@ -38,14 +38,14 @@ export const SettingsMobileNav: Component = () => {
 
   const categories = () => [
     { value: "general" as const, icon: "sliders" as const, label: language.t("settings.tab.general") },
-    { value: "audio" as const, icon: "speaker" as const, label: "Audio" },
+    { value: "audio" as const, icon: "speaker" as const, label: language.t("settings.fork.audio.title") },
     { value: "shortcuts" as const, icon: "keyboard" as const, label: language.t("settings.tab.shortcuts") },
     { value: "providers" as const, icon: "providers" as const, label: language.t("settings.providers.title") },
     { value: "models" as const, icon: "models" as const, label: language.t("settings.models.title") },
-    { value: "configuration" as const, icon: "console" as const, label: "Configuration" },
-    { value: "benchmark" as const, icon: "settings-gear" as const, label: "Benchmark" },
-    { value: "plugins" as const, icon: "mcp" as const, label: "Plugins" },
-    { value: "observability" as const, icon: "settings-gear" as const, label: "Observability" },
+    { value: "configuration" as const, icon: "console" as const, label: language.t("settings.localConfig.title") },
+    { value: "benchmark" as const, icon: "settings-gear" as const, label: language.t("settings.fork.benchmark.title") },
+    { value: "plugins" as const, icon: "mcp" as const, label: language.t("settings.fork.plugins.title") },
+    { value: "observability" as const, icon: "settings-gear" as const, label: language.t("settings.fork.observability.title") },
     ...(platform.os === "android"
       ? [{ value: "android" as const, icon: "settings-gear" as const, label: "Android" }]
       : []),

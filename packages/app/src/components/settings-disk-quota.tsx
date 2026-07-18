@@ -9,14 +9,13 @@ import { useLanguage } from "@/context/language"
 
 const WARN_BYTES = 500 * 1024 * 1024 // 500 MB
 
-function fmtBytes(n: number) {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} Go`
-  return `${(n / 1e6).toFixed(0)} Mo`
-}
-
 export function SettingsDiskQuota() {
   const language = useLanguage()
   const sdk = useSDK()
+  const fmtBytes = (n: number) => {
+    if (n >= 1e9) return `${(n / 1e9).toFixed(1)} ${language.t("settings.fork.android.gigabytes")}`
+    return `${(n / 1e6).toFixed(0)} ${language.t("settings.fork.android.megabytes")}`
+  }
   const [disk] = createResource<{ available: number; total: number } | null>(async () => {
     try {
       const res = await fetch(`${sdk.url}/disk?directory=${encodeURIComponent(sdk.directory)}`)
@@ -46,7 +45,7 @@ export function SettingsDiskQuota() {
             }
           >
             <span class="text-12-medium text-[#ef4444]">
-              ⚠ {fmtBytes(d().available)} libres — espace faible
+              {language.t("settings.fork.observability.diskLow", { available: fmtBytes(d().available) })}
             </span>
           </Show>
         </SettingsRow>

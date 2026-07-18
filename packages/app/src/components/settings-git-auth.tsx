@@ -47,10 +47,10 @@ export function SettingsGitAuth() {
       if (authType() === "none") {
         body = { type: "none" }
       } else if (authType() === "https-token") {
-        if (!token()) { setSaveError("Token requis"); return }
+        if (!token()) { setSaveError(language.t("settings.fork.gitAuth.tokenRequired")); return }
         body = { type: "https-token", token: token(), username: username() || "x" }
       } else {
-        if (!privateKey()) { setSaveError("Clé SSH requise"); return }
+        if (!privateKey()) { setSaveError(language.t("settings.fork.gitAuth.sshKeyRequired")); return }
         body = { type: "ssh-key", privateKey: privateKey(), passphrase: passphrase() || undefined }
       }
       const res = await fetch(`${sdk.url}/git/credentials?directory=${encodeURIComponent(sdk.directory)}`, {
@@ -58,7 +58,7 @@ export function SettingsGitAuth() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      if (!res.ok) { setSaveError("Erreur serveur"); return }
+      if (!res.ok) { setSaveError(language.t("settings.fork.gitAuth.serverError")); return }
       setSaveOk(true)
       setEditing(false)
       setToken("")
@@ -92,7 +92,7 @@ export function SettingsGitAuth() {
         <div class="flex flex-col gap-0.5">
           <span class="text-13-medium text-text-base">{language.t("settings.fork.gitAuth.title")}</span>
           <span class="text-11-regular text-text-weaker">
-            Credentials pour git push / pull (HTTPS token ou clé SSH)
+            {language.t("settings.fork.gitAuth.description")}
           </span>
         </div>
 
@@ -101,17 +101,17 @@ export function SettingsGitAuth() {
           <Switch>
             <Match when={masked()?.type === "https-token"}>
               <span class="text-10-regular text-[#22c55e] px-2 py-0.5 rounded border border-[#22c55e]/30">
-                HTTPS token ✓
+                {language.t("settings.fork.gitAuth.httpsTokenActive")} ✓
               </span>
             </Match>
             <Match when={masked()?.type === "ssh-key"}>
               <span class="text-10-regular text-[#22c55e] px-2 py-0.5 rounded border border-[#22c55e]/30">
-                SSH key ✓
+                {language.t("settings.fork.gitAuth.sshKeyActive")} ✓
               </span>
             </Match>
             <Match when={masked()?.type === "none" || !masked()}>
               <span class="text-10-regular text-text-weaker px-2 py-0.5 rounded border border-border-weak-base">
-                Non configuré
+                {language.t("settings.fork.gitAuth.notConfigured")}
               </span>
             </Match>
           </Switch>
@@ -122,10 +122,10 @@ export function SettingsGitAuth() {
       <Show when={!editing()}>
         <div class="flex gap-2 px-4">
           <Button size="small" variant="ghost" onClick={() => startEdit("https-token")}>
-            {masked()?.type === "https-token" ? "Modifier token" : "Token HTTPS"}
+            {masked()?.type === "https-token" ? language.t("settings.fork.gitAuth.editToken") : language.t("settings.fork.gitAuth.tokenButton")}
           </Button>
           <Button size="small" variant="ghost" onClick={() => startEdit("ssh-key")}>
-            {masked()?.type === "ssh-key" ? "Modifier clé SSH" : "Clé SSH"}
+            {masked()?.type === "ssh-key" ? language.t("settings.fork.gitAuth.editSshKey") : language.t("settings.fork.gitAuth.sshButton")}
           </Button>
           <Show when={masked()?.type !== "none"}>
             <Button
@@ -140,7 +140,7 @@ export function SettingsGitAuth() {
                 refetch()
               }}
             >
-              Supprimer
+              {language.t("common.delete")}
             </Button>
           </Show>
         </div>
@@ -176,8 +176,7 @@ export function SettingsGitAuth() {
                   autocomplete="off"
                 />
                 <span class="text-10-regular text-text-weaker">
-                  GitHub : Settings → Developer settings → Personal access tokens → Fine-grained
-                  (scope : Contents read+write)
+                  {language.t("settings.fork.gitAuth.tokenHint")}
                 </span>
               </div>
             </Match>
@@ -200,13 +199,13 @@ export function SettingsGitAuth() {
                 <input
                   class={inputClass}
                   type="password"
-                  placeholder="(aucune)"
+                  placeholder={language.t("settings.fork.gitAuth.nonePlaceholder")}
                   value={passphrase()}
                   onInput={(e) => setPassphrase(e.currentTarget.value)}
                   autocomplete="off"
                 />
                 <span class="text-10-regular text-text-weaker">
-                  Note : les passphrase SSH ne sont pas encore supportées — utiliser une clé non chiffrée.
+                  {language.t("settings.fork.gitAuth.passphraseHint")}
                 </span>
               </div>
             </Match>
@@ -218,14 +217,14 @@ export function SettingsGitAuth() {
 
           <div class="flex gap-2">
             <Button size="small" onClick={save} disabled={saving()}>
-              {saving() ? "Enregistrement…" : "Enregistrer"}
+              {saving() ? language.t("settings.fork.gitAuth.saveProgress") : language.t("common.save")}
             </Button>
             <Button
               size="small"
               variant="ghost"
               onClick={() => { setEditing(false); setSaveError(null) }}
             >
-              Annuler
+              {language.t("common.cancel")}
             </Button>
           </div>
         </div>

@@ -23,12 +23,12 @@ function statusDotClass(kind: McpStatusKind | undefined) {
   return "bg-text-weaker"
 }
 
-function statusLabel(kind: McpStatusKind | undefined) {
-  if (kind === "connected") return "connecté"
-  if (kind === "failed") return "erreur"
-  if (kind === "needs_auth") return "auth. requise"
-  if (kind === "needs_client_registration") return "enregistrement requis"
-  if (kind === "disabled") return "désactivé"
+function statusLabel(language: ReturnType<typeof useLanguage>, kind: McpStatusKind | undefined) {
+  if (kind === "connected") return language.t("settings.fork.plugins.statusConnected")
+  if (kind === "failed") return language.t("settings.fork.plugins.statusError")
+  if (kind === "needs_auth") return language.t("settings.fork.plugins.statusAuthRequired")
+  if (kind === "needs_client_registration") return language.t("settings.fork.plugins.statusRegistrationRequired")
+  if (kind === "disabled") return language.t("settings.fork.plugins.statusDisabled")
   return ""
 }
 
@@ -47,7 +47,7 @@ const McpSection: Component = () => {
   if (!sync) {
     return (
       <div class="text-12-regular text-text-weak text-center py-6 bg-surface-base rounded-lg">
-        MCP non disponible dans ce contexte.
+        {language.t("settings.fork.plugins.unavailable")}
       </div>
     )
   }
@@ -178,7 +178,7 @@ const McpSection: Component = () => {
                   <div class="flex flex-col gap-0.5 flex-1 min-w-0">
                     <div class="flex items-center gap-2">
                       <span class="text-14-medium text-text-strong truncate">{server.name}</span>
-                      <span class="text-11-regular text-text-weaker shrink-0">{statusLabel(kind())}</span>
+                      <span class="text-11-regular text-text-weaker shrink-0">{statusLabel(language, kind())}</span>
                     </div>
                     <Show when={error()}>
                       <span class="text-11-regular text-[#ef4444] truncate">{error()}</span>
@@ -194,7 +194,7 @@ const McpSection: Component = () => {
                         disabled={isPending()}
                         onClick={() => auth.mutate(server.name)}
                       >
-                        Autoriser
+                        {language.t("settings.fork.plugins.authorize")}
                       </Button>
                     </Show>
 
@@ -210,7 +210,7 @@ const McpSection: Component = () => {
                       type="button"
                       class="text-text-weaker hover:text-[#ef4444] transition-colors p-1 rounded disabled:opacity-40"
                       disabled={isPending()}
-                      title={`Supprimer ${server.name}`}
+                      title={language.t("settings.fork.plugins.confirmRemove", { name: server.name })}
                       onClick={() => remove.mutate(server.name)}
                     >
                       <Icon name="trash" class="w-3.5 h-3.5" />
@@ -247,14 +247,14 @@ const McpSection: Component = () => {
               class={`px-3 py-1 text-12-regular rounded border transition-colors ${addType() === "remote" ? "border-accent-primary text-accent-primary bg-accent-primary/10" : "border-border-weak-base text-text-weak hover:border-border-base"}`}
               onClick={() => setAddType("remote")}
             >
-              Remote (HTTP)
+              {language.t("settings.fork.plugins.remote")}
             </button>
             <button
               type="button"
               class={`px-3 py-1 text-12-regular rounded border transition-colors ${addType() === "local" ? "border-accent-primary text-accent-primary bg-accent-primary/10" : "border-border-weak-base text-text-weak hover:border-border-base"}`}
               onClick={() => setAddType("local")}
             >
-              Local (stdio)
+              {language.t("settings.fork.plugins.local")}
             </button>
           </div>
 
@@ -272,7 +272,7 @@ const McpSection: Component = () => {
                 label={language.t("settings.fork.plugins.command")}
                 value={addCommand()}
                 onChange={setAddCommand}
-                placeholder="/usr/local/bin/mon-mcp-server"
+                placeholder={language.t("settings.fork.plugins.commandPlaceholderExample")}
               />
             }
           >
@@ -280,7 +280,7 @@ const McpSection: Component = () => {
               label={language.t("settings.fork.plugins.url")}
               value={addUrl()}
               onChange={setAddUrl}
-              placeholder="https://mon-serveur.example.com/mcp"
+              placeholder={language.t("settings.fork.plugins.urlPlaceholderExample")}
             />
           </Show>
 
@@ -295,7 +295,7 @@ const McpSection: Component = () => {
                 setAddCommand("")
               }}
             >
-              Annuler
+              {language.t("common.cancel")}
             </Button>
             <Button
               size="small"
@@ -358,7 +358,7 @@ const SkillsSection: Component = () => {
         showToast({ variant: "error", title: language.t("settings.fork.plugins.installFailed"), description: error })
       } else {
         const info = (await res.json()) as SkillInfo
-        showToast({ variant: "success", title: `Skill "${info.name}" installé` })
+        showToast({ variant: "success", title: language.t("settings.fork.plugins.skillInstalled", { name: info.name }) })
         setInstallUrl("")
         void refetchSkills()
       }
@@ -376,7 +376,7 @@ const SkillsSection: Component = () => {
       if (!res.ok) {
         showToast({ variant: "error", title: language.t("settings.fork.plugins.uninstallFailed") })
       } else {
-        showToast({ variant: "success", title: `Skill "${name}" supprimé` })
+        showToast({ variant: "success", title: language.t("settings.fork.plugins.skillUninstalled", { name }) })
         void refetchSkills()
       }
     } catch (e) {
@@ -464,19 +464,19 @@ const SkillsSection: Component = () => {
         <div class="px-4 pb-4 leading-relaxed">
           <p class="mb-3 mt-1">
             {language.t("settings.fork.plugins.skillDocumentation")}{" "}
-            <span class="font-mono text-text-base">~/.config/opencode/skills/</span> ou{" "}
-            <span class="font-mono text-text-base">.opencode/skills/</span> (projet).
+            <span class="font-mono text-text-base">~/.config/opencode/skills/</span> {language.t("settings.fork.plugins.or")} {" "}
+            <span class="font-mono text-text-base">.opencode/skills/</span> ({language.t("settings.fork.plugins.project")}.)
           </p>
           <pre class="bg-background-stronger rounded p-3 text-11-regular font-mono overflow-x-auto whitespace-pre text-text-base mb-3">{`---
-name: mon-skill
-description: Description courte
+name: my-skill
+description: ${language.t("settings.fork.plugins.skillExampleDescription")}
 metadata:
   category: text-only
 ---
 
 # Instructions
 
-Texte ajouté au prompt système...`}</pre>
+${language.t("settings.fork.plugins.skillExampleInstructions")}`}</pre>
           <p class="text-11-regular opacity-70">
             {language.t("settings.fork.plugins.categories")} <span class="font-mono">text-only</span> ({language.t("settings.fork.plugins.systemPrompt")}),{" "}
             <span class="font-mono">js</span> ({language.t("settings.fork.plugins.webviewSandbox")}),{" "}
@@ -505,8 +505,8 @@ export const SettingsPlugins: Component = () => {
       <div class="flex items-center gap-1 mb-4" role="tablist">
         {(
           [
-            ["mcp", "Serveurs MCP"],
-            ["skills", "Skills"],
+            ["mcp", language.t("settings.fork.plugins.tabMcp")],
+            ["skills", language.t("settings.fork.plugins.tabSkills")],
           ] as const
         ).map(([value, label]) => (
           <button

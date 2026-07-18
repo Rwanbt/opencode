@@ -142,10 +142,10 @@ export const SettingsConfiguration: Component = () => {
             >
               <SegmentedButton<AcceleratorMode>
                 options={[
-                  { value: "auto", label: "Auto" },
-                  { value: "cpu", label: "CPU" },
-                  { value: "gpu", label: "GPU" },
-                  { value: "npu", label: "NPU" },
+                  { value: "auto", label: language.t("settings.localConfig.optionAuto") },
+                  { value: "cpu", label: language.t("settings.localConfig.optionCpu") },
+                  { value: "gpu", label: language.t("settings.localConfig.optionGpu") },
+                  { value: "npu", label: language.t("settings.localConfig.optionNpu") },
                 ]}
                 value={config.accelerator}
                 onChange={(v) => update("accelerator", v)}
@@ -153,7 +153,7 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Auto detects: Hexagon NPU on Snapdragon 8 Gen 1+, Vulkan on MediaTek 9000+/Exynos 2200+, OpenCL on other Adreno, CPU otherwise. Manual overrides device tier routing.
+            {language.t("settings.localConfig.acceleratorHint")}
           </div>
         </div>
 
@@ -192,11 +192,11 @@ export const SettingsConfiguration: Component = () => {
                 valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
-                    custom: "Custom",
-                    fast: "Fast (low VRAM, quick responses)",
-                    quality: "Quality (balanced, recommended)",
-                    eco: "Eco (minimal VRAM usage)",
-                    "long-context": "Long Context (128K+, q4_0 KV)",
+                    custom: language.t("settings.localConfig.presetCustom"),
+                    fast: language.t("settings.localConfig.presetFast"),
+                    quality: language.t("settings.localConfig.presetQuality"),
+                    eco: language.t("settings.localConfig.presetEco"),
+                    "long-context": language.t("settings.localConfig.presetLongContext"),
                   }
                   return m[x] ?? x
                 }}
@@ -225,7 +225,7 @@ export const SettingsConfiguration: Component = () => {
                 size="normal"
                 options={["auto", "manual"]}
                 current={config.outputTokensMode}
-                label={(x) => x === "auto" ? "Auto (recommended)" : "Manual"}
+                label={(x) => x === "auto" ? language.t("settings.localConfig.optionAutoRecommended") : language.t("settings.localConfig.optionManual")}
                 onSelect={(v) => { if (v) update("outputTokensMode", v as any) }}
               />
             </SettingsRow>
@@ -244,7 +244,7 @@ export const SettingsConfiguration: Component = () => {
             </Show>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Auto mode: uses min(model_limit, available_context / 3) for optimal balance between response length and conversation history.
+            {language.t("settings.localConfig.outputModeHint")}
           </div>
         </div>
 
@@ -260,7 +260,7 @@ export const SettingsConfiguration: Component = () => {
                 size="normal"
                 options={["auto", "manual"]}
                 current={config.contextMode}
-                label={(x) => x === "auto" ? "Auto (recommended)" : "Manual"}
+                label={(x) => x === "auto" ? language.t("settings.localConfig.optionAutoRecommended") : language.t("settings.localConfig.optionManual")}
                 onSelect={(v) => { if (v) update("contextMode", v as any) }}
               />
             </SettingsRow>
@@ -334,10 +334,10 @@ export const SettingsConfiguration: Component = () => {
                 current={config.kvCacheType}
                 label={(x) => {
                   const m: Record<string, string> = {
-                    auto: "Auto (q8_0)",
-                    q8_0: "Q8_0 (balanced)",
-                    q4_0: "Q4_0 (compact)",
-                    f16: "FP16 (quality)",
+                    auto: language.t("settings.localConfig.quantAuto"),
+                    q8_0: language.t("settings.localConfig.quantQ8"),
+                    q4_0: language.t("settings.localConfig.quantQ4"),
+                    f16: language.t("settings.localConfig.quantF16"),
                   }
                   return m[x] ?? x
                 }}
@@ -346,7 +346,7 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            With llama.cpp b8731+, Hadamard rotation is auto-applied to Q4_0/Q8_0 for near-lossless compression (TurboQuant PR #21038).
+            {language.t("settings.localConfig.quantizationHint")}
           </div>
         </div>
 
@@ -366,9 +366,9 @@ export const SettingsConfiguration: Component = () => {
                 valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
-                    auto: "Auto (--fit, recommended)",
-                    "gpu-max": "GPU priority (max layers on GPU)",
-                    balanced: "Balanced (stable throughput)",
+                    auto: language.t("settings.localConfig.offloadAuto"),
+                    "gpu-max": language.t("settings.localConfig.offloadGpuMax"),
+                    balanced: language.t("settings.localConfig.offloadBalanced"),
                   }
                   return m[x] ?? x
                 }}
@@ -377,7 +377,7 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Auto uses llama.cpp --fit to detect VRAM and place layers optimally. For MoE models (Gemma 26B), overflow experts go to CPU automatically.
+            {language.t("settings.localConfig.offloadHint")}
           </div>
         </div>
 
@@ -397,9 +397,9 @@ export const SettingsConfiguration: Component = () => {
                 valueClass="truncate"
                 label={(x) => {
                   const m: Record<string, string> = {
-                    auto: "Auto (recommended)",
-                    on: "Force on (SSD streaming)",
-                    off: "Force off (all in RAM)",
+                    auto: language.t("settings.localConfig.optionAutoRecommended"),
+                    on: language.t("settings.localConfig.mmapOn"),
+                    off: language.t("settings.localConfig.mmapOff"),
                   }
                   return m[x] ?? x
                 }}
@@ -408,7 +408,7 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            mmap lets the OS page model weights from SSD on demand. Useful for large models that exceed RAM. Disable for maximum speed if the model fits in RAM.
+            {language.t("settings.localConfig.mmapHint")}
           </div>
         </div>
 
@@ -427,7 +427,7 @@ export const SettingsConfiguration: Component = () => {
             </SettingsRow>
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-1 px-1">
-            Uses a small model to draft tokens, verified by the main model. Requires extra VRAM. Active after next server restart.
+            {language.t("settings.localConfig.speculativeHint")}
           </div>
         </div>
 
@@ -450,7 +450,7 @@ export const SettingsConfiguration: Component = () => {
                 <SettingsSlider
                   value={config.threads}
                   min={0} max={16} step={1}
-                  format={(v) => v === 0 ? "auto" : String(v)}
+                  format={(v) => v === 0 ? language.t("settings.localConfig.optionAuto") : String(v)}
                   onChange={(v) => update("threads", Math.round(v))}
                 />
               </SettingsRow>
@@ -485,7 +485,7 @@ export const SettingsConfiguration: Component = () => {
               </SettingsRow>
             </SettingsList>
             <div class="text-11-regular text-text-weak mt-1 px-1">
-              These options take effect after the next model load. Disable cache reuse if you see "cache reuse is not supported - ignoring n_cache_reuse" warnings (Gemma 4 SWA architecture).
+              {language.t("settings.localConfig.advancedHint")}
             </div>
           </Show>
         </div>
@@ -554,6 +554,7 @@ function SegmentedButton<T extends string>(props: {
 }
 
 function DraftModelSelect(props: { current: string; onSelect: (v: string) => void }) {
+  const language = useLanguage()
   const [tick, setTick] = createSignal(0)
   const [models] = createResource(tick, async () => {
     try {
@@ -580,7 +581,7 @@ function DraftModelSelect(props: { current: string; onSelect: (v: string) => voi
       options={["", ...(models() ?? []).map((m) => m.filename)]}
       current={props.current}
       label={(x) => {
-        if (x === "") return "None (disabled)"
+        if (x === "") return language.t("settings.localConfig.draftNone")
         const m = models()?.find((m) => m.filename === x)
         const name = x.replace(/\.gguf$/i, "")
         return m ? `${name} (${formatSize(m.size)})` : name
@@ -593,7 +594,8 @@ function DraftModelSelect(props: { current: string; onSelect: (v: string) => voi
 }
 
 function VramWidget() {
-  const [vram, setVram] = createSignal<{ total_mib: number; used_mib: number; free_mib: number; gpu_name: string } | null>(null)
+  const language = useLanguage()
+  const [vram, setVram] = createSignal<{ total_mib: number; used_mib: number; free_mib: number; gpu_name: string; isDeviceRam?: boolean } | null>(null)
 
   ;(async () => {
     try {
@@ -609,6 +611,7 @@ function VramWidget() {
           used_mib: mem.used_mb,
           free_mib: mem.available_mb,
           gpu_name: "Device RAM",
+          isDeviceRam: true,
         })
       } catch { /* no memory info available */ }
     }
@@ -621,7 +624,7 @@ function VramWidget() {
         return (
           <div class="bg-surface-base rounded-lg px-4 py-3">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-13-medium text-text-strong">{info().gpu_name}</span>
+              <span class="text-13-medium text-text-strong">{info().isDeviceRam ? language.t("settings.localConfig.deviceRam") : info().gpu_name}</span>
               <span class="text-12-regular text-text-weak">
                 {info().used_mib} / {info().total_mib} MiB ({pct()}%)
               </span>
@@ -638,8 +641,8 @@ function VramWidget() {
               />
             </div>
             <div class="flex justify-between mt-1">
-              <span class="text-11-regular text-text-weak">{info().free_mib} MiB free</span>
-              <span class="text-11-regular text-text-weak">{info().gpu_name === "Device RAM" ? "RAM" : "VRAM"}</span>
+              <span class="text-11-regular text-text-weak">{language.t("settings.localConfig.freeSpace", { free: info().free_mib })}</span>
+              <span class="text-11-regular text-text-weak">{info().isDeviceRam ? "RAM" : "VRAM"}</span>
             </div>
           </div>
         )
@@ -648,13 +651,13 @@ function VramWidget() {
   )
 }
 
-const THERMAL_MSG: Record<string, string> = {
-  fair: "Device is warm — inference may be slightly slower.",
-  serious: "Device is hot — GPU layers reduced to protect hardware.",
-  critical: "Device is critically hot — local inference disabled until it cools.",
-}
-
 function ThermalWidget() {
+  const language = useLanguage()
+  const THERMAL_MSG: Record<string, string> = {
+    fair: language.t("settings.localConfig.thermalFair"),
+    serious: language.t("settings.localConfig.thermalSerious"),
+    critical: language.t("settings.localConfig.thermalCritical"),
+  }
   const [thermal, setThermal] = createSignal<"nominal" | "fair" | "serious" | "critical">("nominal")
 
   const poll = async () => {

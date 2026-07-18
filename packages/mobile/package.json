@@ -13,8 +13,8 @@
     "build:android": "bun scripts/check-android-runtime.mjs && tauri android build --target aarch64",
     "build:ios": "tauri ios build",
     "tauri": "tauri",
-    "test": "bun test --preload ./happydom.ts ./src",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --preload ./happydom.ts ./src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml"
+    "test": "bun test --max-concurrency=1 --preload ./happydom.ts ./src",
+    "test:ci": "mkdir -p .artifacts/unit && bun test --max-concurrency=1 --preload ./happydom.ts ./src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml"
   },
   "dependencies": {
     "@opencode-ai/app": "workspace:*",

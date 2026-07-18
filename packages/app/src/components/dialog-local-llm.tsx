@@ -43,12 +43,12 @@ type CatalogEntry = {
 // vision:true = model has multimodal capability when paired with a mmproj projector.
 // Download the projector via HuggingFace search (search the repo name, expand, download mmproj).
 const MODEL_CATALOG: CatalogEntry[] = [
-  { id: "gemma-4-e4b", name: "Gemma 4 E4B", description: "Google's latest expert — 131K context, 140+ languages, best quality locally", size: "5.0 GB", sizeBytes: 4_977_169_088, url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf", filename: "gemma-4-E4B-it-Q4_K_M.gguf", recommended: true, vision: true },
-  { id: "gemma-4-e2b", name: "Gemma 4 E2B", description: "Gemma 4 at half capacity — fits mid-range hardware", size: "3.1 GB", sizeBytes: 3_106_735_776, url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf", filename: "gemma-4-E2B-it-Q4_K_M.gguf", vision: true },
-  { id: "gemma-3-4b", name: "Gemma 3 4B", description: "Google's previous-gen coding-capable small model", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf", filename: "gemma-3-4b-it-Q4_K_M.gguf", vision: true },
-  { id: "qwen3-4b", name: "Qwen3 4B", description: "Great multilingual instruct model", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf", filename: "Qwen3-4B-Q4_K_M.gguf" },
-  { id: "qwen3-1.7b", name: "Qwen3 1.7B", description: "Fast & lightweight", size: "1.1 GB", sizeBytes: 1_100_000_000, url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf", filename: "Qwen3-1.7B-Q4_K_M.gguf" },
-  { id: "qwen3-0.6b", name: "Qwen3 0.6B", description: "Ultra-light — ideal as draft for speculative decoding", size: "0.5 GB", sizeBytes: 500_000_000, url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf", filename: "Qwen3-0.6B-Q4_K_M.gguf" },
+  { id: "gemma-4-e4b", name: "Gemma 4 E4B", description: "settings.localLlm.catalogGemma4E4b", size: "5.0 GB", sizeBytes: 4_977_169_088, url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf", filename: "gemma-4-E4B-it-Q4_K_M.gguf", recommended: true, vision: true },
+  { id: "gemma-4-e2b", name: "Gemma 4 E2B", description: "settings.localLlm.catalogGemma4E2b", size: "3.1 GB", sizeBytes: 3_106_735_776, url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf", filename: "gemma-4-E2B-it-Q4_K_M.gguf", vision: true },
+  { id: "gemma-3-4b", name: "Gemma 3 4B", description: "settings.localLlm.catalogGemma3", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf", filename: "gemma-3-4b-it-Q4_K_M.gguf", vision: true },
+  { id: "qwen3-4b", name: "Qwen3 4B", description: "settings.localLlm.catalogQwen4b", size: "2.5 GB", sizeBytes: 2_500_000_000, url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf", filename: "Qwen3-4B-Q4_K_M.gguf" },
+  { id: "qwen3-1.7b", name: "Qwen3 1.7B", description: "settings.localLlm.catalogQwen17b", size: "1.1 GB", sizeBytes: 1_100_000_000, url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf", filename: "Qwen3-1.7B-Q4_K_M.gguf" },
+  { id: "qwen3-0.6b", name: "Qwen3 0.6B", description: "settings.localLlm.catalogQwen06b", size: "0.5 GB", sizeBytes: 500_000_000, url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf", filename: "Qwen3-0.6B-Q4_K_M.gguf" },
 ]
 
 // Filename patterns for models known to support vision when a mmproj is present.
@@ -187,10 +187,10 @@ export function DialogLocalLLM() {
     const vram = vramMib()
     if (vram === 0) return ""
     const freeAfterModel = vram - modelSizeGB * 1024
-    if (freeAfterModel > 4096) return "Fits easily"
-    if (freeAfterModel > 1024) return "Good fit"
-    if (freeAfterModel > 0) return "Tight — try smaller quant"
-    return "Too large for your GPU"
+    if (freeAfterModel > 4096) return language.t("settings.localLlm.quant.fitsEasily")
+    if (freeAfterModel > 1024) return language.t("settings.localLlm.quant.goodFit")
+    if (freeAfterModel > 0) return language.t("settings.localLlm.quant.tight")
+    return language.t("settings.localLlm.quant.tooLarge")
   }
 
   function vramBadgeClass(modelSizeGB: number): string {
@@ -221,7 +221,7 @@ export function DialogLocalLLM() {
         if (!ctrl.signal.aborted) setHfResults(results)
       } catch (e: any) {
         if (e?.name === "AbortError") return
-        setHfError("Search failed. Check your connection.")
+        setHfError(language.t("settings.localLlm.searchError"))
         setHfResults([])
       } finally {
         if (!ctrl.signal.aborted) setHfSearching(false)
@@ -269,7 +269,7 @@ export function DialogLocalLLM() {
       // Auto-register local-llm provider with all downloaded models
       await registerLocalModels()
     } catch (e) {
-      setError(`Download failed: ${e}`)
+      setError(language.t("settings.localLlm.downloadFailed", { error: String(e) }))
       setDownloading((prev) => { const n = { ...prev }; delete n[filename]; return n })
     }
   }
@@ -385,7 +385,7 @@ export function DialogLocalLLM() {
         console.warn("[LLM] Failed to register provider:", e)
       }
     } catch (e) {
-      setError(`Load failed: ${e instanceof Error ? e.message : e}`)
+      setError(language.t("settings.localLlm.loadFailed", { error: e instanceof Error ? e.message : String(e) }))
     }
     setLoading(null)
   }
@@ -403,7 +403,7 @@ export function DialogLocalLLM() {
         })
       } catch {}
     } catch (e) {
-      setError(`Stop failed: ${e}`)
+      setError(language.t("settings.localLlm.stopFailed", { error: String(e) }))
     }
     setLoading(null)
   }
@@ -415,7 +415,7 @@ export function DialogLocalLLM() {
       await invokeTauri("delete_model", { filename })
       refetch()
     } catch (e) {
-      setError(`Delete failed: ${e}`)
+      setError(language.t("settings.localLlm.deleteFailed", { error: String(e) }))
     }
     setLoading(null)
   }
@@ -450,11 +450,11 @@ export function DialogLocalLLM() {
         {/* VRAM info */}
         <Show when={vramMib() > 0}>
           <div class="text-12-regular text-text-weak bg-surface-inset rounded-md px-3 py-1.5">
-            GPU: {(vramMib() / 1024).toFixed(1)} GB VRAM — {
-              vramMib() >= 12288 ? "Large models (7B+ Q5)" :
-              vramMib() >= 8192 ? "Medium models (4-7B Q4)" :
-              vramMib() >= 4096 ? "Small models (2-4B Q4)" :
-              "Tiny models only (< 2B)"
+            {language.t("settings.localLlm.gpuInfo", { vram: (vramMib() / 1024).toFixed(1) })} {
+              vramMib() >= 12288 ? language.t("settings.localLlm.largeModels") :
+              vramMib() >= 8192 ? language.t("settings.localLlm.mediumModels") :
+              vramMib() >= 4096 ? language.t("settings.localLlm.smallModels") :
+              language.t("settings.localLlm.tinyModelsOnly")
             }
           </div>
         </Show>
@@ -482,7 +482,7 @@ export function DialogLocalLLM() {
                       <Tag>{language.t("settings.localLlm.active")}</Tag>
                     </Show>
                     <Button size="small" variant="ghost" class="text-text-critical-base" disabled={loading() !== null} onClick={() => handleDelete(model.filename)}>
-                      Delete
+{language.t("settings.localLlm.delete")}
                     </Button>
                   </div>
                 </div>
@@ -499,7 +499,7 @@ export function DialogLocalLLM() {
                     <span class="text-12-regular text-text-weak">{formatBytes(proj.size)}</span>
                   </div>
                   <Button size="small" variant="ghost" class="text-text-critical-base" disabled={loading() !== null} onClick={() => handleDelete(proj.filename)}>
-                    Delete
+                    {language.t("settings.localLlm.delete")}
                   </Button>
                 </div>
               )}
@@ -525,7 +525,7 @@ export function DialogLocalLLM() {
                     </Show>
                   </div>
                   <span class="text-12-regular text-text-weak">
-                    {item.description} — {item.size}
+                    {language.t(item.description as Parameters<typeof language.t>[0])} — {item.size}
                     <Show when={vramMib() > 0 && recommendQuant(item.sizeBytes / 1e9)}>
                       {" · "}<span class={vramBadgeClass(item.sizeBytes / 1e9)}>{recommendQuant(item.sizeBytes / 1e9)}</span>
                     </Show>
@@ -537,7 +537,7 @@ export function DialogLocalLLM() {
                 <Show when={isDownloaded(item.filename)} fallback={
                   <Show when={downloading()[item.filename] !== undefined} fallback={
                     <Button size="small" variant="secondary" onClick={() => handleDownload(item.url, item.filename)}>
-                      Download
+  {language.t("settings.localLlm.download")}
                     </Button>
                   }>
                     <span class="text-12-regular text-text-weak">{Math.round((downloading()[item.filename] ?? 0) * 100)}%</span>
@@ -589,7 +589,7 @@ export function DialogLocalLLM() {
                       >
                         <div class="flex flex-col min-w-0 flex-1">
                           <span class="text-13-regular text-text-strong truncate">{result.name}</span>
-                          <span class="text-11-regular text-text-weak">{result.author} — {formatDownloads(result.downloads)} downloads — {result.ggufFiles.length} GGUF file{result.ggufFiles.length > 1 ? "s" : ""}</span>
+                          <span class="text-11-regular text-text-weak">{result.author} — {language.t("settings.localLlm.downloadSummary", { downloads: formatDownloads(result.downloads), count: result.ggufFiles.length })}</span>
                         </div>
                         <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" class="text-text-weak" />
                       </button>
@@ -609,7 +609,7 @@ export function DialogLocalLLM() {
                                   <Show when={isDownloaded(fname)} fallback={
                                     <Show when={downloading()[fname] !== undefined} fallback={
                                       <Button size="small" variant="secondary" onClick={() => handleDownload(file.url, fname)}>
-                                        Download
+                    {language.t("settings.localLlm.download")}
                                       </Button>
                                     }>
                                       <span class="text-12-regular text-text-weak">{Math.round((downloading()[fname] ?? 0) * 100)}%</span>
@@ -640,7 +640,7 @@ export function DialogLocalLLM() {
                                     <Show when={isDownloaded(fname)} fallback={
                                       <Show when={downloading()[fname] !== undefined} fallback={
                                         <Button size="small" variant="secondary" onClick={() => handleDownload(file.url, fname)}>
-                                          Download
+                      {language.t("settings.localLlm.download")}
                                         </Button>
                                       }>
                                         <span class="text-12-regular text-text-weak">{Math.round((downloading()[fname] ?? 0) * 100)}%</span>

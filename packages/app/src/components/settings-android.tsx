@@ -17,10 +17,10 @@ function invokeTauri<T = unknown>(cmd: string, args?: Record<string, unknown>): 
 // ─── Thermal widget ──────────────────────────────────────────────────────────
 
 const THERMAL_LABEL: Record<string, string> = {
-  nominal: "Normal",
-  fair: "Chaud",
-  serious: "Très chaud",
-  critical: "Critique",
+  nominal: "settings.fork.android.thermalNormal",
+  fair: "settings.fork.android.thermalFair",
+  serious: "settings.fork.android.thermalSerious",
+  critical: "settings.fork.android.thermalCritical",
 }
 
 const THERMAL_COLOR: Record<string, string> = {
@@ -51,7 +51,11 @@ function ThermalRow() {
     <SettingsRow title={language.t("settings.fork.android.temperature")} description={language.t("settings.fork.android.temperatureDescription")}>
       <div class="flex items-center gap-2">
         <div class={`w-2 h-2 rounded-full shrink-0 ${THERMAL_COLOR[thermal()] ?? "bg-text-weaker"}`} />
-        <span class="text-13-regular text-text-base">{THERMAL_LABEL[thermal()] ?? thermal()}</span>
+        <span class="text-13-regular text-text-base">{(() => {
+          const state = thermal()
+          const key = THERMAL_LABEL[state]
+          return key ? language.t(key as Parameters<typeof language.t>[0]) : state
+        })()}</span>
       </div>
     </SettingsRow>
   )
@@ -81,7 +85,7 @@ function MemoryRow() {
             <div class="flex flex-col gap-1.5 w-full max-w-[200px]">
               <div class="flex justify-between text-12-regular">
                 <span class="text-text-weaker">
-                  {info().used_mb} / {info().total_mb} Mo
+                  {info().used_mb} / {info().total_mb} {language.t("settings.fork.android.megabytes")}
                 </span>
                 <span class="text-text-weak">{pct()}%</span>
               </div>
@@ -140,7 +144,7 @@ function StoragePermissionRow() {
         when={granted()}
         fallback={
           <Button size="small" onClick={openSettings}>
-            Accorder
+            {language.t("settings.fork.android.grant")}
           </Button>
         }
       >
@@ -198,15 +202,14 @@ function BatteryRow() {
 
 const WARN_BYTES = 500 * 1024 * 1024 // 500 MB
 
-function fmtBytes(n: number) {
-  if (n < 0) return "—"
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} Go`
-  return `${(n / 1e6).toFixed(0)} Mo`
-}
-
 function DiskRow() {
   const language = useLanguage()
   const sdk = useSDK()
+  const fmtBytes = (n: number) => {
+    if (n < 0) return "—"
+    if (n >= 1e9) return `${(n / 1e9).toFixed(1)} ${language.t("settings.fork.android.gigabytes")}`
+    return `${(n / 1e6).toFixed(0)} ${language.t("settings.fork.android.megabytes")}`
+  }
   const [disk] = createResource<{ available: number; total: number } | null>(async () => {
     try {
       const res = await fetch(`${sdk.url}/disk?directory=${encodeURIComponent(sdk.directory)}`)
@@ -222,16 +225,16 @@ function DiskRow() {
       {(d) => (
         <SettingsRow
           title={language.t("settings.fork.android.disk")}
-          description={`${fmtBytes(d().available)} disponibles / ${fmtBytes(d().total)}`}
+          description={language.t("settings.fork.android.diskAvailable", { available: fmtBytes(d().available), total: fmtBytes(d().total) })}
         >
           <Show
             when={d().available >= 0 && d().available < WARN_BYTES}
             fallback={
-              <span class="text-11-regular text-[#22c55e]">{fmtBytes(d().available)} libres</span>
+              <span class="text-11-regular text-[#22c55e]">{fmtBytes(d().available)} {language.t("settings.fork.android.diskFree")}</span>
             }
           >
             <span class="text-11-regular text-[#ef4444] font-medium">
-              ⚠ {fmtBytes(d().available)} — espace faible
+              ⚠ {fmtBytes(d().available)} — {language.t("settings.fork.android.diskLow")}
             </span>
           </Show>
         </SettingsRow>
@@ -253,9 +256,7 @@ export const SettingsAndroid: Component = () => {
           <StoragePermissionRow />
         </SettingsList>
         <p class="text-11-regular text-text-weaker leading-relaxed px-1">
-          L'accès All Files Access est nécessaire pour que le terminal puisse lire et écrire dans le
-          stockage partagé. Si le bouton ne s'ouvre pas directement, allez dans{" "}
-          <span class="font-mono">{language.t("settings.fork.android.allFilesPath")}</span>.
+          {language.t("settings.fork.android.allFilesHint")} <span class="font-mono">{language.t("settings.fork.android.allFilesPath")}</span>.
         </p>
       </div>
 

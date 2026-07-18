@@ -96,12 +96,12 @@ export const SettingsBenchmark: Component = () => {
   async function runBenchmark() {
     const modelFilename = selectedModel()
     if (!modelFilename) {
-      setError("No model selected")
+      setError(language.t("settings.fork.benchmark.noModelSelected"))
       return
     }
     setRunning(true)
     setError(null)
-    setProgressMessage("Loading model…")
+    setProgressMessage(language.t("settings.fork.benchmark.loadingModel"))
 
     try {
       // Make sure the chosen model is loaded (no-op if already current).
@@ -114,7 +114,7 @@ export const SettingsBenchmark: Component = () => {
         console.warn("[Benchmark] load_llm_model returned:", e)
       }
 
-      setProgressMessage("Running inference (128 prefill + 64 decode)…")
+      setProgressMessage(language.t("settings.fork.benchmark.runningInference"))
 
       const result: {
         prompt_tokens: number
@@ -149,7 +149,7 @@ export const SettingsBenchmark: Component = () => {
       saveHistory(next)
       setProgressMessage("")
     } catch (e: any) {
-      const msg = String(e?.message ?? e ?? "unknown error")
+      const msg = e?.message ? String(e.message) : e ? String(e) : language.t("settings.fork.benchmark.unknownError")
       setError(msg)
       setProgressMessage("")
     } finally {
@@ -192,7 +192,7 @@ export const SettingsBenchmark: Component = () => {
               <div class="flex flex-col gap-1 min-w-0 flex-1">
                 <span class="text-13-medium text-text-strong">{language.t("settings.fork.benchmark.targetModel")}</span>
                 <span class="text-11-regular text-text-weak">
-                  Pick a downloaded model to benchmark (will be loaded if not already running)
+                  {language.t("settings.fork.benchmark.targetModelDescription")}
                 </span>
               </div>
               <Select
@@ -207,11 +207,11 @@ export const SettingsBenchmark: Component = () => {
               <div class="flex flex-col gap-1 min-w-0 flex-1">
                 <span class="text-13-medium text-text-strong">{language.t("settings.fork.benchmark.activeBackend")}</span>
                 <span class="text-11-regular text-text-weak">
-                  Detected automatically (use the Configuration tab's Accelerator switch to change)
+                  {language.t("settings.fork.benchmark.activeBackendDescription")}
                 </span>
               </div>
               <span class="text-13-medium text-text-strong px-3 py-1.5 bg-surface-inset rounded-md">
-                {backend() ?? "auto"}
+                {backend() ?? language.t("settings.fork.benchmark.backendAuto")}
               </span>
             </div>
             <div class="flex items-center gap-3 mt-2">

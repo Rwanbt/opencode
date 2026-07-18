@@ -86,7 +86,7 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "error",
           icon: "circle-x",
-          title: "Failed to update remote access",
+          title: language.t("settings.desktop.remote.toast.updateFailed"),
           description: err instanceof Error ? err.message : String(err),
         })
       })
@@ -106,7 +106,7 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "error",
           icon: "circle-x",
-          title: "Failed to reset remote password",
+          title: language.t("settings.desktop.remote.toast.resetPasswordFailed"),
           description: err instanceof Error ? err.message : String(err),
         })
       })
@@ -132,7 +132,7 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "error",
           icon: "circle-x",
-          title: "Failed to save credentials",
+          title: language.t("settings.desktop.remote.toast.credentialsFailed"),
           description: err instanceof Error ? err.message : String(err),
         })
       })
@@ -148,7 +148,7 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "default",
           icon: "check",
-          title: "Certificate exported",
+          title: language.t("settings.desktop.remote.toast.certificateExported"),
           description: path,
         })
       })
@@ -156,7 +156,7 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "error",
           icon: "circle-x",
-          title: "Failed to export certificate",
+          title: language.t("settings.desktop.remote.toast.certificateExportFailed"),
           description: err instanceof Error ? err.message : String(err),
         })
       })
@@ -174,15 +174,15 @@ export const SettingsRemoteAccess: Component = () => {
         showToast({
           variant: "default",
           icon: "check",
-          title: "Certificate rotated",
-          description: "A new certificate has been generated. Restart and re-install it on all clients.",
+          title: language.t("settings.desktop.remote.toast.certificateRotated"),
+          description: language.t("settings.desktop.remote.toast.certificateRotatedDescription"),
         })
       })
       .catch((err: unknown) => {
         showToast({
           variant: "error",
           icon: "circle-x",
-          title: "Failed to rotate certificate",
+          title: language.t("settings.desktop.remote.toast.certificateRotateFailed"),
           description: err instanceof Error ? err.message : String(err),
         })
       })
@@ -320,7 +320,7 @@ export const SettingsRemoteAccess: Component = () => {
                   }}
                   disabled={!info()}
                 >
-                  Personnaliser
+                  {language.t("common.edit")}
                 </Button>
               </div>
               {/* Inline editor */}
@@ -350,7 +350,7 @@ export const SettingsRemoteAccess: Component = () => {
                   </div>
                   <div class="flex gap-2 justify-end">
                     <Button variant="secondary" size="small" onClick={() => setEditingCredentials(false)}>
-                      Annuler
+                      {language.t("common.cancel")}
                     </Button>
                     <Button
                       variant="primary"
@@ -358,7 +358,7 @@ export const SettingsRemoteAccess: Component = () => {
                       onClick={onSaveCredentials}
                       disabled={busy() || (!editUsername().trim() && !editPassword().trim())}
                     >
-                      Sauvegarder
+                      {language.t("common.save")}
                     </Button>
                   </div>
                 </div>

@@ -34,7 +34,7 @@ const DEFAULT_AUDIO: AudioSettings = {
 
 // Pocket TTS voices (Les Misérables + custom)
 const TTS_VOICES: { id: string; label: string }[] = [
-  { id: "alba", label: "Alba (default)" },
+  { id: "alba", label: "Alba" },
   { id: "fantine", label: "Fantine" },
   { id: "cosette", label: "Cosette" },
   { id: "eponine", label: "Eponine" },
@@ -161,8 +161,8 @@ export const SettingsAudio: Component = () => {
                 options={["auto", "en", "fr", "de", "es", "it"]}
                 current={settings.sttLanguage}
                 label={(x) => {
-                  const m: Record<string, string> = { auto: "Auto-detect", en: "English", fr: "French", de: "German", es: "Spanish", it: "Italian" }
-                  return m[x] ?? x
+                  const m: Record<string, Parameters<typeof language.t>[0]> = { auto: "settings.fork.audio.languageAuto", en: "settings.fork.audio.languageEnglish", fr: "settings.fork.audio.languageFrench", de: "settings.fork.audio.languageGerman", es: "settings.fork.audio.languageSpanish", it: "settings.fork.audio.languageItalian" }
+                  return m[x] ? language.t(m[x]) : x
                 }}
                 onSelect={(v) => { if (v) update("sttLanguage", v) }}
               />
@@ -180,8 +180,8 @@ export const SettingsAudio: Component = () => {
             <SettingsRow
               title={language.t("settings.fork.audio.provider")}
               description={isMobile()
-                ? "Kokoro (built-in ONNX). Pocket TTS is desktop-only."
-                : "TTS engine to use for speech synthesis"}
+                ? language.t("settings.fork.audio.kokoroProviderDescription")
+                : language.t("settings.fork.audio.providerDescription")}
             >
               <div class="flex items-center gap-2">
                 <Show
@@ -192,7 +192,7 @@ export const SettingsAudio: Component = () => {
                     size="normal"
                     options={["pocket", "kokoro"]}
                     current={settings.ttsProvider || "pocket"}
-                    label={(id) => id === "kokoro" ? "Kokoro (ONNX, GPU)" : "Pocket TTS (Kyutai)"}
+                    label={(id) => id === "kokoro" ? language.t("settings.fork.audio.kokoroOption") : language.t("settings.fork.audio.pocketOption")}
                     onSelect={(v) => { if (v) handleProviderChange(v as "pocket" | "kokoro") }}
                   />
                 </Show>
@@ -203,7 +203,7 @@ export const SettingsAudio: Component = () => {
                     onClick={handleDownloadKokoro}
                     disabled={kokoroDownloading()}
                   >
-                    {kokoroDownloading() ? `Downloading... ${Math.round(downloadProgress() * 100)}%` : "Download (~336 MB)"}
+                    {kokoroDownloading() ? language.t("settings.fork.audio.downloading", { progress: Math.round(downloadProgress() * 100) }) : language.t("settings.fork.audio.downloadModel")}
                   </Button>
                 </Show>
               </div>
@@ -314,8 +314,8 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       showToast({
-        title: "Voice test failed",
-        description: `Could not synthesize with "${voiceName}": ${msg}`,
+        title: language.t("settings.fork.audio.voiceTestFailed"),
+        description: language.t("settings.fork.audio.voiceTestError", { voice: voiceName, error: msg }),
         variant: "error",
       })
     } finally {
@@ -446,7 +446,7 @@ function VoiceCloneSection(props: { currentVoice: string; onSelectClone: (name: 
               >
                 {uploading() ? language.t("settings.fork.audio.processing") : language.t("settings.fork.audio.uploadWav")}
               </Button>
-              <Tooltip placement="top" value={recording() ? "Stop recording" : "Record voice sample"}>
+              <Tooltip placement="top" value={recording() ? language.t("settings.fork.audio.stopRecording") : language.t("settings.fork.audio.recordVoice")}>
                 <IconButton
                   icon="microphone"
                   variant={recording() ? "primary" : "ghost"}

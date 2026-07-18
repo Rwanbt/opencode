@@ -40,7 +40,7 @@ const ConfigExportImport: Component = () => {
     setExporting(true)
     try {
       const result = await globalSDK.client.config.get()
-      if (!result.data) throw new Error("Aucune donnée reçue du serveur")
+      if (!result.data) throw new Error(language.t("settings.fork.config.noDataReceived"))
       const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
