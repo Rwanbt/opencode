@@ -55,7 +55,12 @@ jobs:
 
       - name: Build CLI (cross-compile all targets via Bun)
         working-directory: packages/opencode
-        run: bun run script/build.ts --skip-embed-web-ui
+        # --all: build-cli runs once on ubuntu-latest but build-tauri needs both
+        # linux and windows CLI binaries (see SIDECAR_BINARIES in
+        # packages/desktop/scripts/utils.ts). Without --all, script/build.ts
+        # defaults to the host target only (see the comment above singleFlag in
+        # that script) and the windows artifact ends up empty.
+        run: bun run script/build.ts --skip-embed-web-ui --all
         env:
           OPENCODE_VERSION: ${{ steps.ver.outputs.version }}
           OPENCODE_CHANNEL: fork
@@ -159,23 +164,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
-      - name: Build Tauri bundle (unsigned)
+      - name: Build Tauri bundle (updater-signed, no OS code signing)
         working-directory: packages/desktop
         run: cargo tauri build --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json
         env:
-          # Omit TAURI_SIGNING_PRIVATE_KEY / APPLE_* / AZURE_* — unsigned fork build.
-          TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
+          # tauri.prod.conf.json ships an updater public key, so Tauri hard-fails
+          # without a matching private key even when OS-level code signing
+          # (APPLE_*/AZURE_*) is skipped for this unsigned fork build.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      # packages/desktop/src-tauri/tauri.conf.json only targets
+      # ["deb", "rpm", "dmg", "nsis", "app"] — AppImage/MSI are never produced,
+      # so don't collect them (the release job used to require both and
+      # hard-fail with "Pattern ... does not match any files").
       - name: Collect Linux artifacts
         if: runner.os == 'Linux'
         run: |
           set -e
           OUT=packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle
           mkdir -p dist-desktop
-          # .deb
-          cp "$OUT"/deb/*.deb dist-desktop/opencode-desktop-linux-x64.deb 2>/dev/null || true
-          # AppImage
-          cp "$OUT"/appimage/*.AppImage dist-desktop/opencode-desktop-linux-x64.AppImage 2>/dev/null || true
+          cp "$OUT"/deb/*.deb dist-desktop/opencode-desktop-linux-x64.deb
           ls -lh dist-desktop/
 
       - name: Collect Windows artifacts
@@ -185,7 +194,6 @@ jobs:
           $out = "packages/desktop/src-tauri/target/${{ matrix.settings.target }}/release/bundle"
           New-Item -ItemType Directory -Force dist-desktop | Out-Null
           Get-ChildItem "$out/nsis/*.exe" | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.exe"
-          Get-ChildItem "$out/msi/*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1 | Copy-Item -Destination "dist-desktop/opencode-desktop-windows-x64.msi"
           Get-ChildItem dist-desktop
 
       - uses: actions/upload-artifact@v4
@@ -438,7 +446,5 @@ jobs:
             release/opencode-linux-x64.tar.gz
             release/opencode-windows-x64.zip
             release/opencode-desktop-linux-x64.deb
-            release/opencode-desktop-linux-x64.AppImage
             release/opencode-desktop-windows-x64.exe
-            release/opencode-desktop-windows-x64.msi
             release/opencode-mobile.apk
