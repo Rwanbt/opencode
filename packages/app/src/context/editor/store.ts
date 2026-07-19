@@ -268,6 +268,13 @@ export function createEditorStore(deps: EditorDeps) {
   /** Resolve a 409 conflict: keep disk (reload) or force mine (overwrite). */
   async function resolveConflict(path: string, content: string, action: "reload" | "overwrite"): Promise<DocEffect> {
     if (action === "reload") return reload(path)
+    const entry = state.entries[path]
+    // FORK (CORRECTIF F5, 2026-07-19): don't clear the conflict banner or
+    // rebase the baseline until we actually hold the save slot. If a
+    // concurrent save is already in flight, report busy WITHOUT mutating
+    // state — the caller (handleOverwrite) treats busy as a no-op and the
+    // banner + baseline stay exactly as they were.
+    if (entry?.saving) return { type: "busy" }
     try {
       const disk = await deps.readRaw(path)
       if (disk.type === "not-found") {
@@ -275,6 +282,9 @@ export function createEditorStore(deps: EditorDeps) {
         mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
+      // Re-check saving after the await — a save could have started
+      // (e.g. autosave) during readRaw. Closes the race window.
+      if (state.entries[path]?.saving) return { type: "busy" }
       set(path, { baseline: { content: disk.content, hash: disk.stamp.hash }, conflict: false })
       return save(path, content)
     } catch {
@@ -359,8 +369,15 @@ export function createEditorStore(deps: EditorDeps) {
       mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
+      // FORK (CORRECTIF F3): a transport failure is an error, not a silent
+      // success — symmetric with save()'s catch above. Never call markClean()
+      // here: after an exception, disk state is unknown and no write is
+      // proven. markMissing() keeps the conservative "missing" contract that
+      // recreate() already uses on a not-found write, and clears "saving"
+      // without discarding the CodeMirror buffer.
       set(path, { saving: false })
-      return { type: "none" }
+      mirror(path, (fs) => fs.markMissing(path))
+      return { type: "error" }
     }
   }
 

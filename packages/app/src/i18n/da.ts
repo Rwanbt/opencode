@@ -982,6 +982,7 @@ export const dict = {
   "fileOps.copyRelativePath": "Copy Relative Path",
   "toast.file.openFailed": "Failed to open file",
   "toast.file.saveFailed": "Failed to save file",
+  "toast.file.saveBusy": "Save already in progress, try again",
   "toast.file.saved": "Saved",
   "toast.file.saving": "Saving…",
   "toast.file.reloadFailed": "Failed to reload file",

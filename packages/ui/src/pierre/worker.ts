@@ -38,7 +38,11 @@ function createPool(lineDiffType: "none" | "word-alt") {
     },
   )
 
-  pool.initialize()
+  // FORK (CORRECTIF F9, 2026-07-19): initialize() returns a Promise — fire-
+  // and-forget here (callers don't await pool readiness, they poll
+  // isInitialized()/queue work), but an unhandled async init failure (e.g. a
+  // WASM boot error) would otherwise surface as an unhandled rejection.
+  pool.initialize().catch(() => {})
   return pool
 }
 

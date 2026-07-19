@@ -249,6 +249,71 @@ describe("editor store — conflict resolution", () => {
     expect(e.conflict).toBe(false)
     expect(e.baseline.content).toBe("my-edits")
   })
+
+  // FORK (CORRECTIF F5, 2026-07-19): resolveConflict("overwrite") used to
+  // clear the conflict flag and rebase the baseline unconditionally, BEFORE
+  // calling save() — if a concurrent save was already in flight (autosave
+  // racing the user's "Overwrite disk" click), save() would return "busy"
+  // but the conflict banner had already vanished and the baseline had
+  // already been silently rebased to disk content that was never actually
+  // reconciled with the user's edits.
+  test("resolve overwrite while a save is already in flight → busy, WITHOUT touching conflict/baseline (F5)", async () => {
+    let resolveWrite: (r: WriteResult) => void = () => {}
+    const disk = new Map<string, string>([["a.ts", "v1"]])
+    const deps: EditorDeps = {
+      async readRaw(path) {
+        return { type: "ok", content: disk.get(path)!, stamp: { hash: hash(disk.get(path)!) } }
+      },
+      write: () => new Promise<WriteResult>((resolve) => (resolveWrite = resolve)),
+    }
+    const store = createEditorStore(deps)
+    await store.open("a.ts")
+    disk.set("a.ts", "agent-wrote-this") // disk moved on — this is the conflict
+    store.setDirty("a.ts", true)
+
+    // Put the entry into "saving" via an unrelated in-flight save (mirrors
+    // an autosave racing the user's overwrite click).
+    const inFlight = store.save("a.ts", "v2-in-flight")
+    expect(store.get("a.ts")!.saving).toBe(true)
+
+    const eff = await store.resolveConflict("a.ts", "my-edits", "overwrite")
+
+    // Must report busy WITHOUT ever calling deps.readRaw's follow-up state
+    // mutation — conflict must stay whatever it already was (this entry was
+    // opened via open(), which doesn't set conflict, so it starts false;
+    // the point is baseline must NOT have been rebased to "agent-wrote-this").
+    expect(eff).toEqual({ type: "busy" })
+    expect(store.get("a.ts")!.baseline.content).toBe("v1")
+
+    resolveWrite({ type: "ok", content: "v2-in-flight", stamp: { hash: hash("v2-in-flight") }, formatted: false })
+    await inFlight
+  })
+
+  test("resolve overwrite: saving flag re-checked after the readRaw await (race window closed)", async () => {
+    // A save() that starts WHILE resolveConflict's readRaw is in flight must
+    // still be caught — the pre-await guard alone would miss it, since
+    // resolveConflict's saving check ran before this save() existed.
+    const disk = new Map<string, string>([["a.ts", "v1"]])
+    const deps: EditorDeps = {
+      async readRaw(path) {
+        return { type: "ok", content: disk.get(path)!, stamp: { hash: hash(disk.get(path)!) } }
+      },
+      write: () => new Promise<WriteResult>(() => {}), // never resolves — save stays in flight
+    }
+    const store = createEditorStore(deps)
+    await store.open("a.ts")
+    store.setDirty("a.ts", true)
+
+    const resolvePromise = store.resolveConflict("a.ts", "my-edits", "overwrite")
+    // Race a save() in right after resolveConflict has started (both are
+    // microtask-driven off the same readRaw()); by the time resolveConflict's
+    // readRaw resolves, this save should already have claimed "saving".
+    store.save("a.ts", "v2-race") // never awaited — write() never resolves by design
+    expect(store.get("a.ts")!.saving).toBe(true)
+
+    const eff = await resolvePromise
+    expect(eff).toEqual({ type: "busy" })
+  })
 })
 
 describe("editor store — watcher protocol (anti data-loss)", () => {
@@ -430,7 +495,10 @@ describe("editor store — error resilience (network/SDK exceptions)", () => {
     expect(store.get("a.ts")!.missing).toBe(true)
   })
 
-  test("recreate() with throwing write clears saving flag", async () => {
+  test("recreate() with throwing write returns error, clears saving, stays missing (CORRECTIF F3)", async () => {
+    // Was {type:"none"} — a silent success asymmetric with save()'s catch.
+    // A transport failure proves nothing about disk state; markClean must
+    // never be reachable from this path.
     const store = createEditorStore({
       async readRaw() {
         return { type: "not-found" }
@@ -441,7 +509,8 @@ describe("editor store — error resilience (network/SDK exceptions)", () => {
     })
     await store.open("a.ts")
     const eff = await store.recreate("a.ts", "content")
-    expect(eff).toEqual({ type: "none" })
+    expect(eff).toEqual({ type: "error" })
     expect(store.get("a.ts")!.saving).toBe(false)
+    expect(store.get("a.ts")!.missing).toBe(true)
   })
 })

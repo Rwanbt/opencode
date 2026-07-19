@@ -1,6 +1,6 @@
 import type { FileDiff, Project, UserMessage } from "../types/sdk-shim"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getWorkerPools } from "@opencode-ai/ui/pierre/worker"
+import { getWorkerPool } from "@opencode-ai/ui/pierre/worker"
 import { useMutation } from "@tanstack/solid-query"
 import {
   onCleanup,
@@ -852,14 +852,30 @@ export default function Page() {
 
   onMount(() => {
     makeEventListener(document, "keydown", handleKeyDown)
-    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 7): getWorkerPools() is
-    // memoized module-level (safe to call repeatedly) — pre-warming here
-    // hides the Shiki-WASM/Worker cold-start behind normal session
-    // navigation instead of paying it synchronously on the first file open.
-    // Real-device finding (Android WebView, slower Worker/WASM boot than
-    // desktop): colors on the first file opened in a session lag noticeably
-    // behind content.
-    getWorkerPools()
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 7 / CORRECTIF F9,
+    // 2026-07-19): getWorkerPool() is memoized module-level (safe to call
+    // repeatedly) — pre-warming here hides the Shiki-WASM/Worker cold-start
+    // behind normal session navigation instead of paying it synchronously on
+    // the first file open. Real-device finding (Android WebView, slower
+    // Worker/WASM boot than desktop): colors on the first file opened in a
+    // session lag noticeably behind content.
+    //
+    // Only "unified" is pre-warmed — the read-only viewer's pool. "split"
+    // (the diff/review viewer) may never open in a given session, so it
+    // stays lazy, created on first actual use. Deferred to idle so it never
+    // competes with session mount work, and best-effort: a worker/WASM boot
+    // failure here must never surface as an unhandled rejection or block
+    // the session from opening.
+    const warmUnifiedWorkerPool = () => {
+      try {
+        getWorkerPool("unified")
+      } catch {
+        // pre-warm is best-effort — the pool is created lazily again on
+        // first real use if this failed.
+      }
+    }
+    if (typeof requestIdleCallback !== "undefined") requestIdleCallback(warmUnifiedWorkerPool)
+    else warmUnifiedWorkerPool()
   })
 
   onCleanup(() => {

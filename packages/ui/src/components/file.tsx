@@ -26,6 +26,7 @@ import { createFileFind } from "../pierre/file-find"
 import {
   applyViewerScheme,
   clearReadyWatcher,
+  createAnnotationApplyTracker,
   createReadyWatcher,
   disposeReadyWatcher,
   getViewerHost,
@@ -464,17 +465,14 @@ function useAnnotationRerender<A>(opts: {
   // is expected to be a stable reference (a Solid memo, or the same EMPTY_
   // ANNOTATIONS constant below) when nothing relevant changed, so this is a
   // plain reference check, not a deep comparison.
-  let lastApplied: A[] | undefined
+  // FORK (CORRECTIF F2): tracker lives in file-runtime.ts so the identity
+  // guard (target identity AND annotations identity) is unit-testable
+  // without pulling in @pierre/diffs — see its definition for the full
+  // rationale.
+  const tracker = createAnnotationApplyTracker<AnnotationTarget<A>, A>()
   createEffect(() => {
     opts.viewer.rendered()
-    const active = opts.current()
-    if (!active) return
-    const annotations = opts.annotations()
-    if (annotations !== lastApplied) {
-      active.setLineAnnotations(annotations)
-      active.rerender()
-      lastApplied = annotations
-    }
+    tracker.apply(opts.current(), opts.annotations())
     requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
   })
 }

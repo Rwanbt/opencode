@@ -60,20 +60,31 @@ async function runCloseGuardOnSave(opts: {
   fileStore: ReturnType<typeof createFileStore>
   editor: ReturnType<typeof createEditorStore>
   effects: CloseGuardSideEffects
+  // Test-only override — production always calls saveWithRetry(path) with
+  // the default of 2 (close-guard.tsx:141). Exposed here so a "retries
+  // exhausted" scenario doesn't have to burn ~4s of real waitForSaveSlot
+  // polling (mirrors the retriesLeft override editor-panel.test.ts's C.8
+  // uses for the same reason).
+  retriesLeft?: number
 }) {
-  const { filePath, fileStore, editor, effects } = opts
+  const { filePath, fileStore, editor, effects, retriesLeft } = opts
   // FORK (round 3) — Fix A line: prefer live CM content (registered as a
   // getter on mount) over the baseline in FileStore.content. The fallback
   // to content covers "editor mounted but getter effect not yet run" or
   // "tab fired close-guard before the CM ref settled". FORK (C11):
   // saveWithRetry re-reads live content and retries past a busy no-op.
-  const eff = await saveWithRetry({ filePath, fileStore, editor })
+  const eff = await saveWithRetry({ filePath, fileStore, editor }, retriesLeft ?? 2)
   // FORK (round 3) — Fix B branch: never close the tab on save failure.
   // FORK (C11): "busy" (retries exhausted) must be treated the same way —
   // otherwise the tab closes as if saved while nothing was written.
   if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error" || eff.type === "busy") {
     if (eff.type === "error") {
       effects.toasts.push({ variant: "error", title: "toast.file.saveFailed" })
+    } else if (eff.type === "busy") {
+      // FORK (CORRECTIF F10, 2026-07-19): unlike conflict/missing, a busy
+      // give-up has no persistent EditorBanner — without this toast the
+      // dialog just closes with no feedback at all.
+      effects.toasts.push({ variant: "default", title: "toast.file.saveBusy" })
     }
     // setPending(null) BEFORE dialog.close() so the dialog.onClose callback
     // sees pending === null and does not double-resolve. Mirrored here by
@@ -384,6 +395,45 @@ describe("close-guard.onSave (round 3, Fix B — never close on save failure)", 
     expect(effects.dialogClosed).toBe(1)
     expect(effects.pendingResolved).toEqual(["closed"])
     expect(writeCalls).toBe(2)
+  })
+
+  test("F10: busy retries exhausted → dialog still closes (Fix B) but a toast surfaces the give-up", async () => {
+    // FORK (CORRECTIF F10, 2026-07-19): before this fix, conflict/missing had
+    // EditorBanner as persistent feedback and error had a toast, but an
+    // exhausted busy give-up had NEITHER — the close-guard dialog just closed
+    // with zero indication anything went wrong.
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "ok", content: "v1", stamp: { hash: hash("v1") } }
+      },
+      write: () => new Promise<WriteResult>(() => {}), // never resolves — save stays in flight forever
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    fileStore.markClean("a.ts", "v1", { hash: hash("v1") })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+    void editor.save("a.ts", "v2-stuck") // never resolves; saving stays true forever
+    expect(editor.get("a.ts")!.saving).toBe(true)
+
+    const effects: CloseGuardSideEffects = {
+      layoutClosedTabs: [],
+      dialogClosed: 0,
+      pendingResolved: [],
+      toasts: [],
+    }
+    // retriesLeft: 0 skips the wait/retry loop and exercises the "give up"
+    // branch directly (see runCloseGuardOnSave's doc comment).
+    const eff = await runCloseGuardOnSave({ filePath: "a.ts", fileStore, editor, effects, retriesLeft: 0 })
+
+    expect(eff.type).toBe("busy")
+    // Fix B: the tab is NOT closed as if saved — nothing was written.
+    expect(effects.layoutClosedTabs).toEqual([])
+    // But the dialog still resolves (the user asked to close; we don't trap
+    // them forever behind a stuck save) — with feedback this time.
+    expect(effects.dialogClosed).toBe(1)
+    expect(effects.pendingResolved).toEqual(["cancelled"])
+    expect(effects.toasts).toEqual([{ variant: "default", title: "toast.file.saveBusy" }])
   })
 })
 

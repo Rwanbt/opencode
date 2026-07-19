@@ -45,6 +45,51 @@ export function disposeReadyWatcher(state: ReadyWatcher) {
   state.disposed = true
 }
 
+// ---------------------------------------------------------------------------
+// Annotation re-apply tracking
+// FORK (CORRECTIF F2, 2026-07-19): extracted from components/file.tsx's
+// useAnnotationRerender so the identity-tracking guard is unit-testable
+// without pulling in @pierre/diffs (see the line-row helpers above for the
+// same rationale). renderViewer() always creates a fresh render target
+// initialized with lineAnnotations:[] on every content re-render — reference
+// equality on the annotations array alone is only a valid "nothing to do"
+// signal for the SAME target. A re-render that swaps in a new instance while
+// the annotations array reference stays stable (the common case: a memoized
+// prop) must still re-apply, or the new instance keeps its empty seed and any
+// existing line comments disappear.
+// ---------------------------------------------------------------------------
+
+export type AnnotationApplyTarget<A> = {
+  setLineAnnotations: (annotations: A[]) => void
+  rerender: () => void
+}
+
+export function createAnnotationApplyTracker<T extends AnnotationApplyTarget<A>, A>() {
+  let lastTarget: T | undefined
+  let lastApplied: A[] | undefined
+  return {
+    // Returns true if a re-apply happened (useful for tests/assertions).
+    apply(target: T | undefined, annotations: A[]): boolean {
+      if (!target) return false
+      const targetChanged = target !== lastTarget
+      const annotationsChanged = annotations !== lastApplied
+      if (!targetChanged && !annotationsChanged) return false
+      // A fresh target already starts with no annotations. Avoid a redundant
+      // rerender for the stable empty array, while still recording the target
+      // so a later non-empty annotation change is applied normally.
+      if (targetChanged && !annotationsChanged && annotations.length === 0) {
+        lastTarget = target
+        return false
+      }
+      target.setLineAnnotations(annotations)
+      target.rerender()
+      lastTarget = target
+      lastApplied = annotations
+      return true
+    },
+  }
+}
+
 export function getViewerHost(container: HTMLElement | undefined) {
   if (!container) return
   const host = container.querySelector("diffs-container")
@@ -161,6 +206,19 @@ export function notifyShadowReady(opts: {
   if (opts.state.disposed) return
 
   clearReadyWatcher(opts.state)
+  // FORK (CORRECTIF F4, 2026-07-19): a superseding cycle must cancel the
+  // previous cycle's pending settle/check RAF, not just bump the token.
+  // clearReadyWatcher() deliberately leaves state.frame alone (see its own
+  // comment) — but leaving a stale RAF alive here lets it occupy
+  // state.frame right as the new cycle's MutationObserver callback checks
+  // `state.frame !== undefined` to decide whether to schedule checkReady.
+  // If exactly one mutation arrives before the stale RAF fires, that check
+  // is swallowed and the new cycle never becomes ready. Mirrors
+  // disposeReadyWatcher's frame cancellation.
+  if (opts.state.frame !== undefined) {
+    cancelAnimationFrame(opts.state.frame)
+    opts.state.frame = undefined
+  }
   opts.state.token += 1
 
   const token = opts.state.token
@@ -182,6 +240,15 @@ export function notifyShadowReady(opts: {
 
   const observeRoot = (root: ShadowRoot) => {
     if (opts.isReady(root)) {
+      // FORK (CORRECTIF F6, 2026-07-19): when getRoot() finds no root yet,
+      // notifyShadowReady installs a MutationObserver on opts.container to
+      // wait for the shadow root to appear (state.observer, below). If that
+      // root shows up already ready, this branch must disconnect that
+      // observer before running — otherwise later container mutations
+      // re-trigger observeRoot -> runReady -> onReady repeatedly (duplicate
+      // scroll/watcher restoration). The not-ready branch below already does
+      // this via clearReadyWatcher(); this branch must be symmetric.
+      clearReadyWatcher(opts.state)
       runReady()
       return
     }

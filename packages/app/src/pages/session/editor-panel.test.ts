@@ -1,23 +1,22 @@
 import { test, expect, describe } from "bun:test"
 import { createFileStore } from "@/context/file/store"
-import { createEditorStore, type EditorDeps, type WriteResult } from "@/context/editor/store"
+import { createEditorStore, type DocEffect, type EditorDeps, type WriteResult } from "@/context/editor/store"
+import { runSaveAction } from "@/context/editor/save-action"
 
 // FORK (AutoExit-Edit-On-Save 2026-06-29, PLAN-EDITEUR-IDE-AUTOEXIT-EDIT-ON-SAVE):
 // Behavioral tests for the new `props.setEditing(false)` calls in
 // editor-panel.tsx (Fix A on handleCtrlS, Fix B on handleOverwrite).
 //
-// Mirrors the close-guard-integration.test.ts pattern: the handler logic
-// is reproduced verbatim as a pure function and exercised against
-// createFileStore + createEditorStore mocks. Side effects (setEditing,
-// onSave, toasts) are captured in lists so we can assert on them.
-//
-// Reference: editor-panel.tsx:170-195 (handleCtrlS), editor-panel.tsx:208-224
-// (handleOverwrite). The 2 added lines are:
-//   - line ~194 (handleCtrlS success): `props.setEditing(false)`
-//   - line ~226 (handleOverwrite success): `props.setEditing(false)`
-// Any drift from the live implementation breaks these tests — and removing
-// either setEditing(false) line makes the corresponding `expect(setEditingLog)`
-// assertion fail. This is the regression net for the feature.
+// FORK (CORRECTIF F11, 2026-07-19): these helpers used to hand-copy the
+// busy/conflict/missing/error/success branching from editor-panel.tsx's
+// handlers — a real fix to one of the branches (F1, F3) had to land twice,
+// once in the component and once here, with nothing enforcing the copy
+// stayed in sync (see the old REVIEW's M4). They now call runSaveAction()
+// (save-action.ts), the SAME function editor-panel.tsx's handlers call —
+// only the component-specific wiring (which callback maps to which side
+// effect: setEditing, onSave/onOverwrite/onRecreate, toasts) remains here.
+// A regression in the shared branching now fails every test that exercises
+// it, in both handleCtrlS and handleOverwrite/handleRecreate at once.
 
 const hash = (s: string) => `h:${s.length}:${s}`
 
@@ -33,9 +32,6 @@ async function waitForSaveSlot(editor: ReturnType<typeof createEditorStore>, fil
   return true
 }
 
-// Reproduces the handleCtrlS body verbatim (editor-panel.tsx), INCLUDING the
-// `props.setEditing(false)` line in the success branch (AutoExit-Edit-On-Save
-// 2026-06-29) AND the C11 "busy" retry branch (PLAN-READONLY-VIEWER-REACTIVITY).
 async function runHandleCtrlS(
   opts: {
     filePath: string
@@ -46,40 +42,29 @@ async function runHandleCtrlS(
     toasts: Array<{ variant: string; title: string }>
   },
   retriesLeft = 2,
-): Promise<{ eff: { type: string }; onSaveCalls: number }> {
+): Promise<{ eff: DocEffect; onSaveCalls: number }> {
   const { filePath, editor, content, setEditingLog, onSave, toasts } = opts
-  // settings.general.formatOnSave() — irrelevant here, we don't assert on it.
-  const format = false
-  // Faithful reproduction of handleCtrlS:
-  const eff = await editor.save(filePath, content, format)
-  // applyDocEffect is a no-op when eff.type !== "set" — skipped in this fixture.
-  // ← THE C11 BRANCH: "busy" is a no-op (another save was in flight), not a
-  // success — wait for the slot to free, then retry with this call's content.
-  if (eff.type === "busy") {
-    if (retriesLeft <= 0) return { eff, onSaveCalls: 0 }
-    const free = await waitForSaveSlot(editor, filePath)
-    if (!free) return { eff, onSaveCalls: 0 }
-    return runHandleCtrlS(opts, retriesLeft - 1)
-  }
-  if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
-    if (eff.type === "error") {
-      toasts.push({ variant: "error", title: "toast.file.saveFailed" })
-    }
-    return { eff, onSaveCalls: 0 }
-  }
-  // ← THE C1 LINE (PLAN-READONLY-VIEWER-REACTIVITY): the exact bytes now on
-  // disk — the backend's reformatted content wins, otherwise the sent content.
-  const finalContent = (eff as { type: string; content?: string }).type === "set" ? (eff as { content?: string }).content : content
-  await onSave(finalContent)
-  toasts.push({ variant: "success", title: "toast.file.saved" })
-  // ← THE NEW LINE: AutoExit on save success.
-  setEditingLog.push(false)
-  return { eff, onSaveCalls: 1 }
+  let onSaveCalls = 0
+  const eff = await runSaveAction({
+    path: filePath,
+    getContent: () => content,
+    // settings.general.formatOnSave() — irrelevant here, we don't assert on it.
+    attempt: (path, c) => editor.save(path, c, false),
+    applyDocEffect: () => {}, // no-op when eff.type !== "set" — skipped in this fixture
+    onNonSuccess: (eff) => {
+      if (eff.type === "error") toasts.push({ variant: "error", title: "toast.file.saveFailed" })
+    },
+    onSuccess: async (finalContent) => {
+      await onSave(finalContent)
+      toasts.push({ variant: "success", title: "toast.file.saved" })
+      setEditingLog.push(false)
+      onSaveCalls = 1
+    },
+    retry: { waitForSlot: (p) => waitForSaveSlot(editor, p), retriesLeft },
+  })
+  return { eff, onSaveCalls }
 }
 
-// Reproduces the handleOverwrite body verbatim (editor-panel.tsx), INCLUDING
-// the `props.setEditing(false)` line in the success branch AND the C11
-// "busy" no-op guard.
 async function runHandleOverwrite(opts: {
   filePath: string
   editor: ReturnType<typeof createEditorStore>
@@ -87,20 +72,52 @@ async function runHandleOverwrite(opts: {
   setEditingLog: (boolean | undefined)[]
   onOverwrite: (content?: string) => Promise<void>
   toasts: Array<{ variant: string; title: string }>
-}) {
+}): Promise<{ eff: DocEffect; onOverwriteCalls: number }> {
   const { filePath, editor, content, setEditingLog, onOverwrite, toasts } = opts
-  const eff = await editor.resolveConflict(filePath, content, "overwrite")
-  if (eff.type === "busy") return { eff, onOverwriteCalls: 0 }
-  if (eff.type === "error") {
-    toasts.push({ variant: "error", title: "toast.file.saveFailed" })
-    return { eff, onOverwriteCalls: 0 }
-  }
-  // ← THE C1 LINE (PLAN-READONLY-VIEWER-REACTIVITY): same "set" vs sent-content logic.
-  const finalContent = (eff as { type: string; content?: string }).type === "set" ? (eff as { content?: string }).content : content
-  await onOverwrite(finalContent)
-  // ← THE NEW LINE: AutoExit on conflict overwrite success.
-  setEditingLog.push(false)
-  return { eff, onOverwriteCalls: 1 }
+  let onOverwriteCalls = 0
+  const eff = await runSaveAction({
+    path: filePath,
+    getContent: () => content,
+    attempt: (path, c) => editor.resolveConflict(path, c, "overwrite"),
+    applyDocEffect: () => {},
+    onNonSuccess: (eff) => {
+      if (eff.type === "error") toasts.push({ variant: "error", title: "toast.file.saveFailed" })
+    },
+    onSuccess: async (finalContent) => {
+      await onOverwrite(finalContent)
+      setEditingLog.push(false)
+      onOverwriteCalls = 1
+    },
+    // No `retry`: handleOverwrite does not retry on busy, unlike handleCtrlS.
+  })
+  return { eff, onOverwriteCalls }
+}
+
+async function runHandleRecreate(opts: {
+  filePath: string
+  editor: ReturnType<typeof createEditorStore>
+  content: string
+  onRecreate: (content?: string) => Promise<void>
+  toasts: Array<{ variant: string; title: string }>
+}): Promise<{ eff: DocEffect; onRecreateCalls: number }> {
+  const { filePath, editor, content, onRecreate, toasts } = opts
+  let onRecreateCalls = 0
+  const eff = await runSaveAction({
+    path: filePath,
+    getContent: () => content,
+    attempt: (path, c) => editor.recreate(path, c, false),
+    applyDocEffect: () => {},
+    onNonSuccess: (eff) => {
+      if (eff.type === "error") toasts.push({ variant: "error", title: "toast.file.saveFailed" })
+    },
+    onSuccess: async (finalContent) => {
+      await onRecreate(finalContent)
+      onRecreateCalls = 1
+    },
+    // No `retry`, and no setEditing(false) on success — handleRecreate
+    // never exits edit mode, unlike handleCtrlS/handleOverwrite.
+  })
+  return { eff, onRecreateCalls }
 }
 
 // Fake deps — same shape as close-guard-integration.test.ts. The `disk` map
@@ -381,6 +398,238 @@ describe("EditorPanel.handleOverwrite — auto-exit edit mode (Fix B)", () => {
     expect(toasts).toEqual([{ variant: "error", title: "toast.file.saveFailed" }])
     expect(result.onOverwriteCalls).toBe(0)
     expect(result.eff.type).toBe("error")
+  })
+})
+
+// FORK (CORRECTIF F1, 2026-07-19): resolveConflict("overwrite") can resolve
+// non-success in two ways besides "error" — readRaw finds the file gone
+// ("missing"), or the internal write() itself hits a fresh 409 because disk
+// changed again between the readRaw and the write ("conflict"). Before the
+// fix, both fell through to onOverwrite + setEditing(false), seeding the
+// viewer with content never persisted and discarding the CodeMirror buffer.
+describe("EditorPanel.handleOverwrite — non-success outcomes preserve the buffer (F1)", () => {
+  test("F1.a missing path: file gone on disk → setEditing NOT called, no seed, no buffer loss", async () => {
+    const disk = new Map<string, string>() // "a.ts" never existed / already deleted
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write(): Promise<WriteResult> {
+        throw new Error("write should not be reached — readRaw resolves to missing first")
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    // open() also hits readRaw("not-found") — entry starts in "missing".
+    await editor.open("a.ts")
+
+    const setEditingLog: (boolean | undefined)[] = []
+    const toasts: Array<{ variant: string; title: string }> = []
+    const onOverwrite = async () => {
+      throw new Error("onOverwrite should NOT be called when the file is missing")
+    }
+
+    const result = await runHandleOverwrite({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      setEditingLog,
+      onOverwrite,
+      toasts,
+    })
+
+    expect(result.eff.type).toBe("missing")
+    expect(result.onOverwriteCalls).toBe(0)
+    expect(setEditingLog).toEqual([])
+    expect(toasts).toEqual([])
+    expect(disk.size).toBe(0)
+  })
+
+  test("F1.b conflict path: disk changes again between readRaw and write → setEditing NOT called, no seed, no buffer loss", async () => {
+    // readRaw always reports the latest disk content (so resolveConflict
+    // rebases baseline + clears the conflict flag), but write() itself is
+    // rigged to always report a fresh 409 — simulating another writer
+    // racing in between the readRaw and the write inside resolveConflict.
+    const disk = new Map<string, string>([["a.ts", "v1-baseline"]])
+    const deps: EditorDeps = {
+      async readRaw(p) {
+        return { type: "ok", content: disk.get(p)!, stamp: { hash: hash(disk.get(p)!) } }
+      },
+      async write(): Promise<WriteResult> {
+        return { type: "conflict" }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    const setEditingLog: (boolean | undefined)[] = []
+    const toasts: Array<{ variant: string; title: string }> = []
+    const onOverwrite = async () => {
+      throw new Error("onOverwrite should NOT be called on a re-raced conflict")
+    }
+
+    const result = await runHandleOverwrite({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      setEditingLog,
+      onOverwrite,
+      toasts,
+    })
+
+    expect(result.eff.type).toBe("conflict")
+    expect(result.onOverwriteCalls).toBe(0)
+    expect(setEditingLog).toEqual([])
+    expect(toasts).toEqual([])
+    // Disk untouched by the rejected write.
+    expect(disk.get("a.ts")).toBe("v1-baseline")
+  })
+})
+
+// FORK (CORRECTIF F3, 2026-07-19): recreate()'s catch used to return
+// {type:"none"} — a silent success — asymmetric with save()'s catch
+// ({type:"error"}). handleRecreate also only guarded busy/error, so a
+// conflict/missing from the internal write fell through to onRecreate as if
+// disk persistence had been proven. These tests pin the store.ts catch fix
+// AND the handleRecreate non-success guard.
+describe("EditorPanel.handleRecreate — non-success outcomes (F3)", () => {
+  test("F3.a exception path: write() throws → store returns error (not none), no onRecreate, error toast", async () => {
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write(): Promise<WriteResult> {
+        throw new Error("simulated transport failure")
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    const toasts: Array<{ variant: string; title: string }> = []
+    const onRecreate = async () => {
+      throw new Error("onRecreate should NOT be called when the write throws")
+    }
+
+    const result = await runHandleRecreate({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      onRecreate,
+      toasts,
+    })
+
+    // Pins the store.ts fix directly: catch must return "error", never "none".
+    expect(result.eff.type).toBe("error")
+    expect(result.onRecreateCalls).toBe(0)
+    expect(toasts).toEqual([{ variant: "error", title: "toast.file.saveFailed" }])
+    // The entry must stay conservatively "missing" — markClean is never
+    // reachable from this catch.
+    expect(editor.get("a.ts")?.missing).toBe(true)
+  })
+
+  test("F3.b conflict path: internal write reports a fresh 409 → no onRecreate, no toast, no phantom success", async () => {
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write(): Promise<WriteResult> {
+        return { type: "conflict" }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    const toasts: Array<{ variant: string; title: string }> = []
+    const onRecreate = async () => {
+      throw new Error("onRecreate should NOT be called on conflict")
+    }
+
+    const result = await runHandleRecreate({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      onRecreate,
+      toasts,
+    })
+
+    expect(result.eff.type).toBe("conflict")
+    expect(result.onRecreateCalls).toBe(0)
+    expect(toasts).toEqual([])
+  })
+
+  test("F3.c missing path: internal write reports not-found → no onRecreate, no toast, no phantom success", async () => {
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write(): Promise<WriteResult> {
+        return { type: "not-found" }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    const toasts: Array<{ variant: string; title: string }> = []
+    const onRecreate = async () => {
+      throw new Error("onRecreate should NOT be called on missing")
+    }
+
+    const result = await runHandleRecreate({
+      filePath: "a.ts",
+      editor,
+      content: "v2-live-edits",
+      onRecreate,
+      toasts,
+    })
+
+    expect(result.eff.type).toBe("missing")
+    expect(result.onRecreateCalls).toBe(0)
+    expect(toasts).toEqual([])
+  })
+
+  test("F3.d success path: write succeeds → onRecreate called with final content", async () => {
+    const disk = new Map<string, string>()
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "not-found" }
+      },
+      async write({ path: p, content }): Promise<WriteResult> {
+        disk.set(p, content)
+        return { type: "ok", content, stamp: { hash: hash(content) }, formatted: false }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    const toasts: Array<{ variant: string; title: string }> = []
+    let received: string | undefined
+    const onRecreate = async (content?: string) => {
+      received = content
+    }
+
+    const result = await runHandleRecreate({
+      filePath: "a.ts",
+      editor,
+      content: "v2-recreated",
+      onRecreate,
+      toasts,
+    })
+
+    expect(result.eff.type).toBe("none")
+    expect(result.onRecreateCalls).toBe(1)
+    expect(received).toBe("v2-recreated")
+    expect(disk.get("a.ts")).toBe("v2-recreated")
+    expect(toasts).toEqual([])
   })
 })
 

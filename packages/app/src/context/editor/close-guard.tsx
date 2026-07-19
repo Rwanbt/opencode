@@ -151,6 +151,13 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
             if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error" || eff.type === "busy") {
               if (eff.type === "error") {
                 showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+              } else if (eff.type === "busy") {
+                // FORK (CORRECTIF F10, 2026-07-19): unlike conflict/missing,
+                // a busy give-up has no persistent EditorBanner — without a
+                // toast, the dialog just closes with no feedback at all.
+                // No "warning" ToastVariant exists (only default/success/
+                // error/loading) — "default" is the correct non-error tone.
+                showToast({ variant: "default", title: language.t("toast.file.saveBusy") })
               }
               // Banner conflict/missing is already shown by EditorBanner via
               // the reactive editorEntry. Order matters: setPending(null)

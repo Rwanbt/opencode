@@ -25,6 +25,8 @@ import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
 import { createGenerationTracker } from "./file/generation"
+import { createScopeEpochTracker } from "./file/scope-epoch"
+import { requireFileContent } from "./file/load-response"
 import {
   selectionFromLines,
   type FileState,
@@ -75,6 +77,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     // that was already in flight before the seed) could overwrite fresher
     // content with stale bytes after the fact.
     const gen = createGenerationTracker()
+    // FORK (CORRECTIF F8, 2026-07-19): gen.clear() resets each path's
+    // generation counter to 0 on every scope change, so a directory round
+    // trip (A -> B -> A) can hand two DIFFERENT requests for the same path
+    // the SAME numeric generation — one from the old A visit still in
+    // flight, one from the new A visit. `scope() !== directory` doesn't
+    // distinguish them either: both requests capture directory="A", and
+    // scope() reads "A" again once the round trip completes, so both pass.
+    // If the stale request resolves last, its bytes win and stick until the
+    // next refresh. scopeEpoch is strictly monotonic and never reset (see
+    // scope-epoch.ts), so it uniquely tags each scope visit regardless of
+    // how many times the user revisits the same directory.
+    const scopeEpochTracker = createScopeEpochTracker()
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -110,6 +124,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     createEffect(() => {
       scope()
+      scopeEpochTracker.bump()
       inflight.clear()
       gen.clear()
       resetFileContentLru()
@@ -189,21 +204,33 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
       const myGen = gen.bump(file)
+      // FORK (CORRECTIF F8): captured synchronously, same tick as myGen —
+      // see scopeEpochTracker's declaration for why this closes the
+      // A->B->A gap that `scope() !== directory` and the per-path gen
+      // counter both miss.
+      const myEpoch = scopeEpochTracker.capture()
 
-      const promise = Promise.all([
+      const promise: Promise<void> = Promise.all([
         sdk.client.file.read({ path: file }),
         sdk.client.file.readRaw({ path: file }),
       ])
         .then(([read, raw]) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
           if (scope() !== directory) return
           // A newer seed() or load() call for this path started after this
           // one — this response is stale, drop it instead of overwriting
           // fresher content (PLAN-READONLY-VIEWER-REACTIVITY Phase 2).
           if (!gen.isCurrent(file, myGen)) return
-          const content = read.data
+          const content = requireFileContent(read.data, read.error)
+          // FORK (CORRECTIF F7, 2026-07-19): read.data is a FileContent
+          // object, including for a legitimate empty file (content.content
+          // === ""), so `!content` only trips when the SDK genuinely
+          // returned no data — a failed request, not an empty file. Route
+          // that through the catch below instead of calling setLoaded with
+          // undefined, which would clobber content already seeded by a
+          // recent save/recreate/overwrite with bytes that were never
+          // actually stale.
           setLoaded(file, content)
-
-          if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
 
@@ -225,6 +252,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           }
         })
         .catch((e) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
           if (scope() !== directory) return
           // A superseded fetch failing is not a user-facing error — a newer
           // seed()/load() already owns this path's displayed content.
@@ -232,7 +260,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
         })
         .finally(() => {
-          inflight.delete(key)
+          // FORK (CORRECTIF F8): only remove OUR entry — a newer load() for
+          // the same key may already have replaced it in `inflight` (e.g.
+          // after a scope-clear + immediate re-request), and this stale
+          // `finally` must not delete a pending promise it doesn't own.
+          if (inflight.get(key) === promise) inflight.delete(key)
         })
 
       inflight.set(key, promise)

@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { clearReadyWatcher, createReadyWatcher, disposeReadyWatcher, notifyShadowReady, watchViewerLineRows } from "./file-runtime"
+import {
+  clearReadyWatcher,
+  createAnnotationApplyTracker,
+  createReadyWatcher,
+  disposeReadyWatcher,
+  notifyShadowReady,
+  watchViewerLineRows,
+} from "./file-runtime"
 
 // FORK (PLAN-READONLY-VIEWER-REACTIVITY C3 / C12): file-runtime.ts had zero
 // test coverage before this file. These tests pin the notifyShadowReady /
@@ -217,6 +224,92 @@ describe("notifyShadowReady", () => {
     flushFrames()
     expect(readyCalls).toBe(10)
   })
+
+  test("F4: a leftover settle-frame RAF from a superseded cycle does not swallow the new cycle's single mutation", () => {
+    const state = createReadyWatcher()
+    let readyCalls = 0
+
+    // Cycle 1: root ready immediately, settleFrames=1 leaves a pending
+    // settle RAF (RAF-A) — deliberately NOT flushed before cycle 2 starts.
+    notifyShadowReady({
+      state,
+      container: fakeContainer,
+      getRoot: () => fakeRoot,
+      isReady: () => true,
+      settleFrames: 1,
+      onReady: () => {
+        readyCalls += 1
+      },
+    })
+    expect(rafQueue.size).toBe(1) // RAF-A pending
+
+    // Cycle 2 supersedes before RAF-A fires: root exists but is NOT ready
+    // yet, so notifyShadowReady installs a MutationObserver instead of
+    // going straight to runReady().
+    let cycle2Ready = false
+    notifyShadowReady({
+      state,
+      container: fakeContainer,
+      getRoot: () => fakeRoot,
+      isReady: () => cycle2Ready,
+      onReady: () => {
+        readyCalls += 10
+      },
+    })
+    // FORK (CORRECTIF F4) pins this: the stale RAF-A must be cancelled by
+    // the supersession itself, not left dangling.
+    expect(rafQueue.size).toBe(0)
+
+    const observer = FakeMutationObserver.instances[0]!
+    cycle2Ready = true
+    // Exactly ONE mutation arrives. Before the F4 fix, RAF-A would still be
+    // occupying state.frame here, so the observer callback's
+    // `state.frame !== undefined` guard would swallow this mutation and
+    // checkReady would never be scheduled — cycle 2 would never become
+    // ready without a second, coincidental mutation.
+    observer.trigger()
+    expect(rafQueue.size).toBe(1) // checkReady scheduled
+
+    flushFrames() // consumes checkReady(): isReady() true -> schedules the settle frame
+    expect(readyCalls).toBe(0)
+    flushFrames() // consumes the settle frame -> onReady
+    expect(readyCalls).toBe(10)
+  })
+
+  test("F6: root already ready when it appears — the container observer is disconnected, not left dangling", () => {
+    const state = createReadyWatcher()
+    let readyCalls = 0
+    let root: ShadowRoot | undefined
+
+    notifyShadowReady({
+      state,
+      container: fakeContainer,
+      getRoot: () => root,
+      isReady: () => true, // once a root exists, it's immediately ready
+      onReady: () => {
+        readyCalls += 1
+      },
+    })
+
+    expect(FakeMutationObserver.instances.length).toBe(1)
+    const containerObserver = FakeMutationObserver.instances[0]!
+    expect(containerObserver.disconnected).toBe(false)
+
+    // The shadow root appears, already ready (e.g. Pierre inserted it and
+    // rendered synchronously before the next mutation batch).
+    root = fakeRoot
+    containerObserver.trigger()
+
+    // FORK (CORRECTIF F6) pins this: observeRoot's ready branch must
+    // disconnect the container observer, mirroring its not-ready branch.
+    // Without the fix, this stays false and a later container mutation
+    // re-triggers observeRoot -> runReady -> onReady (duplicate
+    // scroll/watcher restoration).
+    expect(containerObserver.disconnected).toBe(true)
+
+    flushFrames() // settle frame -> onReady
+    expect(readyCalls).toBe(1)
+  })
 })
 
 describe("disposeReadyWatcher (C3 — no task survives destruction)", () => {
@@ -400,5 +493,72 @@ describe("watchViewerLineRows", () => {
     const stop = watchViewerLineRows(root)
     flushFrames()
     expect(() => stop()).not.toThrow()
+  })
+})
+
+// FORK (CORRECTIF F2, 2026-07-19): components/file.tsx's renderViewer()
+// always creates a fresh render target initialized with lineAnnotations:[].
+// The tracker must re-apply annotations whenever EITHER the target or the
+// annotations array identity changes — reference equality on annotations
+// alone is only a valid no-op signal when the target hasn't also changed.
+describe("createAnnotationApplyTracker (F2 — annotation loss on instance replacement)", () => {
+  function fakeTarget() {
+    const calls: { setLineAnnotations: number; rerender: number } = { setLineAnnotations: 0, rerender: 0 }
+    return {
+      calls,
+      setLineAnnotations: () => {
+        calls.setLineAnnotations += 1
+      },
+      rerender: () => {
+        calls.rerender += 1
+      },
+    }
+  }
+
+  test("new target, same annotations reference → still re-applies (the core F2 bug)", () => {
+    const tracker = createAnnotationApplyTracker<ReturnType<typeof fakeTarget>, { line: number }>()
+    const annotations = [{ line: 1 }]
+
+    const t1 = fakeTarget()
+    expect(tracker.apply(t1, annotations)).toBe(true)
+    expect(t1.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+
+    // Simulates renderViewer() swapping in a fresh instance (e.g. a
+    // post-save re-render) while the annotations prop is a stable/memoized
+    // reference — the exact scenario that wiped line comments before F2.
+    const t2 = fakeTarget()
+    expect(tracker.apply(t2, annotations)).toBe(true)
+    expect(t2.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+  })
+
+  test("empty file: new target, no annotations → rerender still NOT called on the second identical call (optimization preserved)", () => {
+    const tracker = createAnnotationApplyTracker<ReturnType<typeof fakeTarget>, never>()
+    const empty: never[] = []
+
+    const t1 = fakeTarget()
+    expect(tracker.apply(t1, empty)).toBe(true)
+    expect(t1.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+
+    // Same target, same annotations reference again → no-op (this is the
+    // guard Phase 6.4 introduced to avoid a redundant full re-render on
+    // every content render).
+    expect(tracker.apply(t1, empty)).toBe(false)
+    expect(t1.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+  })
+
+  test("same target, annotations reference changes → re-applies", () => {
+    const tracker = createAnnotationApplyTracker<ReturnType<typeof fakeTarget>, { line: number }>()
+    const t1 = fakeTarget()
+    const a1 = [{ line: 1 }]
+    const a2 = [{ line: 2 }]
+
+    expect(tracker.apply(t1, a1)).toBe(true)
+    expect(tracker.apply(t1, a2)).toBe(true)
+    expect(t1.calls).toEqual({ setLineAnnotations: 2, rerender: 2 })
+  })
+
+  test("undefined target is a no-op", () => {
+    const tracker = createAnnotationApplyTracker<ReturnType<typeof fakeTarget>, { line: number }>()
+    expect(tracker.apply(undefined, [{ line: 1 }])).toBe(false)
   })
 })
