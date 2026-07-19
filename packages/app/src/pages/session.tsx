@@ -1,5 +1,6 @@
 import type { FileDiff, Project, UserMessage } from "../types/sdk-shim"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { getWorkerPools } from "@opencode-ai/ui/pierre/worker"
 import { useMutation } from "@tanstack/solid-query"
 import {
   onCleanup,
@@ -851,6 +852,14 @@ export default function Page() {
 
   onMount(() => {
     makeEventListener(document, "keydown", handleKeyDown)
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 7): getWorkerPools() is
+    // memoized module-level (safe to call repeatedly) — pre-warming here
+    // hides the Shiki-WASM/Worker cold-start behind normal session
+    // navigation instead of paying it synchronously on the first file open.
+    // Real-device finding (Android WebView, slower Worker/WASM boot than
+    // desktop): colors on the first file opened in a session lag noticeably
+    // behind content.
+    getWorkerPools()
   })
 
   onCleanup(() => {
