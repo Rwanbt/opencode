@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
@@ -26,7 +27,7 @@ import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
 import { createGenerationTracker } from "./file/generation"
 import { createScopeEpochTracker } from "./file/scope-epoch"
-import { requireFileContent } from "./file/load-response"
+import { requireFileContent, sameFileMetadata } from "./file/load-response"
 import {
   selectionFromLines,
   type FileState,
@@ -69,6 +70,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
+    const metadataInflight = new Map<string, Promise<void>>()
     // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1/Phase 2): seed() and every
     // real load() fetch bump the generation for that path; a load()
     // response only applies if its captured generation is still current
@@ -126,6 +128,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope()
       scopeEpochTracker.bump()
       inflight.clear()
+      metadataInflight.clear()
       gen.clear()
       resetFileContentLru()
       batch(() => {
@@ -280,7 +283,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     // ~425ms total, see PLAN-READONLY-VIEWER-REACTIVITY-2026-07-16.md cause
     // C1). Synchronous and side-effect-free beyond the store write — callers
     // that also need VCS diff/patch info (not part of a save result) should
-    // follow up with a non-blocking `load(path, {force:true})`.
+    // follow up with refreshMetadata(), which applies only VCS diff/patch.
     const seed = (input: string, content: string) => {
       const file = path.normalize(input)
       if (!file) return
@@ -297,6 +300,57 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       evictContent(new Set([file]))
     }
 
+    const refreshMetadata = (input: string) => {
+      const file = path.normalize(input)
+      if (!file) return Promise.resolve()
+
+      const directory = scope()
+      const currentGeneration = gen.current(file)
+      if (currentGeneration === undefined) return Promise.resolve()
+      const key = directory + "\n" + file + "\n" + currentGeneration
+
+      const pending = metadataInflight.get(key)
+      if (pending) return pending
+
+      const myEpoch = scopeEpochTracker.capture()
+      markViewerTiming("refresh-metadata-start", { path: file })
+      const promise: Promise<void> = sdk.client.file
+        .read({ path: file })
+        .then((read) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
+          if (scope() !== directory) return
+          if (!gen.isCurrent(file, currentGeneration)) return
+
+          const incoming = requireFileContent(read.data, read.error)
+          const current = store.file[file]?.content
+          if (!current || sameFileMetadata(current, incoming)) return
+
+          setStore(
+            "file",
+            file,
+            "content",
+            produce((draft) => {
+              if (!draft) return
+              draft.diff = incoming.diff
+              draft.patch = incoming.patch
+            }),
+          )
+        })
+        .catch((error) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
+          if (scope() !== directory) return
+          if (!gen.isCurrent(file, currentGeneration)) return
+          setLoadError(file, errorMessage(error, language.t("error.chain.unknown")))
+          markViewerTiming("refresh-metadata-error", { path: file })
+        })
+        .finally(() => {
+          if (metadataInflight.get(key) === promise) metadataInflight.delete(key)
+          markViewerTiming("refresh-metadata-end", { path: file })
+        })
+
+      metadataInflight.set(key, promise)
+      return promise
+    }
     const search = (query: string, dirs: "true" | "false") =>
       sdk.client.find.files({ query: query.replaceAll("\\", "/"), dirs }).then(
         (x) => (x.data ?? []).map(path.normalize),
@@ -370,6 +424,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       get,
       load,
       seed,
+      refreshMetadata,
       scrollTop,
       scrollLeft,
       setScrollTop,

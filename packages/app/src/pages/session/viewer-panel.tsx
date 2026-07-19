@@ -21,6 +21,7 @@ import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import type { FileState } from "@/context/file/types"
@@ -69,6 +70,9 @@ export interface ViewerPanelProps {
 export function ViewerPanel(props: ViewerPanelProps) {
   const fileComponent = useFileComponent()
   const language = useLanguage()
+  const platform = usePlatform()
+  const viewerPlatform = () =>
+    platform.platform === "mobile" ? "mobile-webview" : platform.platform
 
   // WHY: source is a getter (() => string), not a value, so the JSX reads
   // it inside each render — when the store mutates .content via produce,
@@ -101,6 +105,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
         <Dynamic
           component={fileComponent}
           mode="text"
+          viewerPlatform={viewerPlatform()}
           // WHY: overrides createDefaultOptions' "scroll" default — this viewer
           // always wires line-commenting (commentsUi below), and the
           // popover/tools bar isn't scoped to absorb the viewer's own

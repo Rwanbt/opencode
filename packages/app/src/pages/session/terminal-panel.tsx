@@ -357,6 +357,11 @@ export function TerminalPanel() {
     if (!(active instanceof HTMLElement)) return
     if (!root?.contains(active)) return
     active.blur()
+    const frame = requestAnimationFrame(() => {
+      if (opened()) return
+      document.querySelector<HTMLElement>('[aria-controls="terminal-panel"]')?.focus()
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
   })
 
   createEffect(() => {
@@ -427,7 +432,7 @@ export function TerminalPanel() {
       classList={{
         "border-t border-border-weak-base": opened(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active(),
+          !size.active() && !isMobile(),
         // Mobile: full-height overlay over the session content, matching
         // the file viewer/explorer panel (session-side-panel.tsx) — see
         // #terminal-panel's mobile rule in mobile.css for the position:
@@ -443,20 +448,22 @@ export function TerminalPanel() {
         }}
         style={{ height: isMobile() ? "100%" : `${pane()}px` }}
       >
-        <div class="hidden md:block" onPointerDown={() => size.start()}>
-          <ResizeHandle
-            direction="vertical"
-            size={pane()}
-            min={100}
-            max={max()}
-            collapseThreshold={50}
-            onResize={(next) => {
-              size.touch()
-              layout.terminal.resize(next)
-            }}
-            onCollapse={close}
-          />
-        </div>
+        <Show when={!isMobile()}>
+          <div onPointerDown={() => size.start()}>
+            <ResizeHandle
+              direction="vertical"
+              size={pane()}
+              min={100}
+              max={max()}
+              collapseThreshold={50}
+              onResize={(next) => {
+                size.touch()
+                layout.terminal.resize(next)
+              }}
+              onCollapse={close}
+            />
+          </div>
+        </Show>
         <Show
           when={terminal.ready()}
           fallback={

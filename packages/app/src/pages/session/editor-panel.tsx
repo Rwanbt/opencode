@@ -215,8 +215,8 @@ export function EditorPanel(props: EditorPanelProps) {
             showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
           }
         },
-        onSuccess: async (finalContent) => {
-          await props.onSave(finalContent)
+        onSuccess: async (finalContent, _sentContent, effect) => {
+          if (effect.type !== "unchanged") await props.onSave(finalContent)
           showToast({ variant: "success", title: language.t("toast.file.saved") })
           // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so
           // the viewer re-mounts and the editor (CM) unmounts. NOT done on

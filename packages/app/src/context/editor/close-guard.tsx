@@ -148,7 +148,13 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
             // edits in those cases. FORK (C11): "busy" (retries exhausted —
             // a save never released the path) must be treated the same way,
             // otherwise the tab closes as if saved while nothing was written.
-            if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error" || eff.type === "busy") {
+            if (
+              eff.type === "conflict" ||
+              eff.type === "missing" ||
+              eff.type === "error" ||
+              eff.type === "busy" ||
+              eff.type === "absent"
+            ) {
               if (eff.type === "error") {
                 showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
               } else if (eff.type === "busy") {

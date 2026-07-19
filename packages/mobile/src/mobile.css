@@ -644,7 +644,7 @@ a:active,
 @media (max-width: 767px), (max-height: 767px) {
   [data-component="dialog"][data-size="x-large"] [data-slot="dialog-container"] {
     width: 100vw !important;
-    height: var(--vvh, 100dvh) !important;
+    height: auto !important;
     max-height: var(--vvh, 100dvh) !important;
   }
 
@@ -756,6 +756,7 @@ a,
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    bottom: 0 !important;
     z-index: 30 !important;
     border-bottom: 1px solid var(--border-weaker-base, #333) !important;
     overflow-y: auto !important;
@@ -797,16 +798,15 @@ a,
      file-tree panel above, so it can dominate the screen instead of
      squeezing into the flex layout (which left the composer visible,
      overlapping on top of it — see terminal-panel.tsx's height:100%).
-     Height is pinned to `--vvh` (see "KEYBOARD AVOIDANCE" above) instead
-     of trusting the inline `height:100%` to resolve correctly through the
-     ancestor chain — same reasoning as #root: percentage/dvh heights
-     don't reliably shrink when the soft keyboard opens on MIUI WebView,
-     which left the terminal squeezed to near-zero height under the IME. */
+     The workspace is the containing block below SessionHeader. Pinning both
+     edges keeps the overlay inside that block as the visual viewport changes;
+     a viewport-height value here would overshoot by the header height. */
   #terminal-panel.mobile-side-panel {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    bottom: 0 !important;
     z-index: 30 !important;
     border-top: none !important;
   }
@@ -816,7 +816,7 @@ a,
      terminal-panel.tsx's inline `height: 0px` closed state (which has no
      !important) and the panel could never close. */
   #terminal-panel.mobile-side-panel:not([aria-hidden="true"]) {
-    height: var(--vvh, 100dvh) !important;
+    height: auto !important;
   }
 }
 

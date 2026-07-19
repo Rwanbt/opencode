@@ -78,6 +78,45 @@ describe("editor store — open", () => {
 })
 
 describe("editor store — dirty + save", () => {
+  test("identical save clears dirty state without calling the backend", async () => {
+    let writeCalls = 0
+    const { deps } = fakeDeps({ "a.ts": "v1" })
+    const store = createEditorStore({
+      ...deps,
+      async write(input) {
+        writeCalls += 1
+        return deps.write(input)
+      },
+    })
+    await store.open("a.ts")
+    store.setDirty("a.ts", true)
+
+    const eff = await store.save("a.ts", "v1")
+
+    expect(eff).toEqual({ type: "unchanged", content: "v1" })
+    expect(writeCalls).toBe(0)
+    expect(store.get("a.ts")!.saving).toBe(false)
+    expect(store.get("a.ts")!.dirty).toBe(false)
+  })
+
+  test("clean metadata does not bypass a write when CodeMirror differs from baseline", async () => {
+    let writeCalls = 0
+    const { deps, disk } = fakeDeps({ "a.ts": "v1" })
+    const store = createEditorStore({
+      ...deps,
+      async write(input) {
+        writeCalls += 1
+        return deps.write(input)
+      },
+    })
+    await store.open("a.ts")
+
+    const eff = await store.save("a.ts", "v2")
+
+    expect(eff).toEqual({ type: "none" })
+    expect(writeCalls).toBe(1)
+    expect(disk.get("a.ts")).toBe("v2")
+  })
   test("setDirty toggles", async () => {
     const { deps } = fakeDeps({ "a.ts": "x" })
     const store = createEditorStore(deps)

@@ -21,10 +21,10 @@ export interface RunSaveActionOptions {
   getContent: () => string
   attempt: (path: string, content: string) => Promise<DocEffect>
   applyDocEffect: (eff: DocEffect) => void
-  /** Called for conflict/missing/error — NOT for busy (that's a distinct no-op, see DocEffect's "busy" doc). */
+  /** Called for conflict/missing/error/absent — NOT for busy (that's a distinct no-op, see DocEffect's "busy" doc). */
   onNonSuccess?: (eff: DocEffect) => void
-  /** Called on set/none. Receives the exact bytes now on disk (eff.content when reformatted, otherwise the sent content) and the content that was actually sent. */
-  onSuccess: (finalContent: string | undefined, sentContent: string) => Promise<void>
+  /** Called on set/none/unchanged. Receives the exact bytes now on disk (eff.content when reformatted, otherwise the sent content) and the content that was actually sent. */
+  onSuccess: (finalContent: string, sentContent: string, effect: DocEffect) => Promise<void>
   /** Omit to never retry on busy (handleOverwrite/handleRecreate's current behavior). */
   retry?: {
     waitForSlot: (path: string) => Promise<boolean>
@@ -47,13 +47,13 @@ export async function runSaveAction(opts: RunSaveActionOptions): Promise<DocEffe
     return eff
   }
 
-  if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
+  if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error" || eff.type === "absent") {
     opts.onNonSuccess?.(eff)
     return eff
   }
 
-  // eff.type is "set" or "none" here — the only two success outcomes.
-  const finalContent = eff.type === "set" ? eff.content : content
-  await opts.onSuccess(finalContent, content)
+  // The remaining outcomes are successful: a write (set/none) or a semantic no-op (unchanged).
+  const finalContent = eff.type === "set" || eff.type === "unchanged" ? eff.content : content
+  await opts.onSuccess(finalContent, content, eff)
   return eff
 }

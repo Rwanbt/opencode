@@ -25,17 +25,27 @@
 
 export type ViewerTimingEvent =
   | "save-start"
+  | "save-noop"
+  | "save-write-start"
+  | "save-write-end"
   | "write-complete"
   | "store-mirror"
   | "refresh-sdk-start"
   | "refresh-sdk-complete"
+  | "refresh-metadata-start"
+  | "refresh-metadata-end"
+  | "refresh-metadata-error"
   | "refresh-seed"
   | "editing-false"
   | "viewer-mount-start"
+  | "viewer-render-start"
+  | "viewer-render-end"
   | "notify-shadow-ready-start"
   | "notify-shadow-ready-end"
   | "layout-fix-start"
   | "layout-fix-end"
+  | "layout-ready"
+  | "viewer-stable"
   | "viewer-ready"
 
 export interface ViewerTimingMark {
@@ -137,12 +147,26 @@ export function viewerTimingLatency(
  */
 export function logViewerTimingSummary(path?: string) {
   const roundTrip = viewerTimingLatency("refresh-sdk-start", "refresh-sdk-complete", path)
+  const saveToSeed = viewerTimingLatency("save-start", "refresh-seed", path)
+  const seedToEditingFalse = viewerTimingLatency("refresh-seed", "editing-false", path)
+  const render = viewerTimingLatency("viewer-render-start", "viewer-render-end", path)
+  const shadowReady = viewerTimingLatency("editing-false", "notify-shadow-ready-end", path)
+  const shadowToLayout = viewerTimingLatency("notify-shadow-ready-end", "layout-ready", path)
+  const layoutToStable = viewerTimingLatency("layout-ready", "viewer-stable", path)
   const remount = viewerTimingLatency("editing-false", "viewer-ready", path)
+  const saveToStable = viewerTimingLatency("save-start", "viewer-stable", path)
   const total = viewerTimingLatency("save-start", "viewer-ready", path)
   // eslint-disable-next-line no-console -- summary output, not a stray log.
   console.table({
-    "refresh-sdk round-trip (C1)": roundTrip,
-    "editing-false -> viewer-ready (Pierre remount)": remount,
+    "refresh-sdk round-trip (legacy C1)": roundTrip,
+    "save-start -> seed": saveToSeed,
+    "seed -> editing-false": seedToEditingFalse,
+    "viewer render() scheduling": render,
+    "editing-false -> shadow-ready": shadowReady,
+    "shadow-ready -> layout-ready": shadowToLayout,
+    "layout-ready -> viewer-stable": layoutToStable,
+    "editing-false -> viewer-ready": remount,
+    "save-start -> viewer-stable": saveToStable,
     "save-start -> viewer-ready (total)": total,
   })
 }

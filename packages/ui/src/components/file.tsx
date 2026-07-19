@@ -26,15 +26,20 @@ import { createFileFind } from "../pierre/file-find"
 import {
   applyViewerScheme,
   clearReadyWatcher,
+  countViewerLines,
   createAnnotationApplyTracker,
   createReadyWatcher,
   disposeReadyWatcher,
   getViewerHost,
+  getViewerLayoutStrategy,
   getViewerRoot,
   notifyShadowReady,
+  shouldVirtualizeViewer,
   observeViewerScheme,
   watchViewerLineRows,
   watchViewerTokenStyles,
+  type ViewerLayoutPass,
+  type ViewerLayoutPlatform,
 } from "../pierre/file-runtime"
 import {
   findCodeSelectionSide,
@@ -48,8 +53,6 @@ import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
-
-const VIRTUALIZE_BYTES = 500_000
 
 // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): a stable reference for
 // "no annotations", so useAnnotationRerender's reference-equality skip
@@ -69,6 +72,7 @@ type SharedProps<T> = {
   commentedLines?: SelectedLineRange[]
   onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
   onRendered?: () => void
+  viewerPlatform?: ViewerLayoutPlatform
   class?: string
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
@@ -115,6 +119,7 @@ const sharedKeys = [
   "onLineSelectionEnd",
   "onLineNumberSelectionEnd",
   "onRendered",
+  "viewerPlatform",
   "preloadedDiff",
 ] as const
 
@@ -154,6 +159,7 @@ function useFileViewer(config: ViewerConfig) {
   let container!: HTMLDivElement
   let overlay!: HTMLDivElement
   let selectionFrame: number | undefined
+  let commentFrame: number | undefined
   let dragFrame: number | undefined
   let dragStart: number | undefined
   let dragEnd: number | undefined
@@ -284,7 +290,9 @@ function useFileViewer(config: ViewerConfig) {
   createEffect(() => {
     rendered()
     const ranges = config.commentedLines()
-    requestAnimationFrame(() => {
+    if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
+    commentFrame = requestAnimationFrame(() => {
+      commentFrame = undefined
       const root = getRoot()
       if (!root) return
       config.markCommented(root, ranges)
@@ -313,9 +321,11 @@ function useFileViewer(config: ViewerConfig) {
     disposeReadyWatcher(ready)
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
+    if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
 
     selectionFrame = undefined
+    commentFrame = undefined
     dragFrame = undefined
     dragStart = undefined
     dragEnd = undefined
@@ -453,6 +463,7 @@ function useAnnotationRerender<A>(opts: {
   viewer: Viewer
   current: () => AnnotationTarget<A> | undefined
   annotations: () => A[]
+  onRerender?: () => void
 }) {
   // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): `rerender()` always does
   // `render({..., forceRender: true})` — a full Pierre re-render regardless
@@ -472,8 +483,8 @@ function useAnnotationRerender<A>(opts: {
   const tracker = createAnnotationApplyTracker<AnnotationTarget<A>, A>()
   createEffect(() => {
     opts.viewer.rendered()
-    tracker.apply(opts.current(), opts.annotations())
-    requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
+    const applied = tracker.apply(opts.current(), opts.annotations())
+    if (applied) opts.onRerender?.()
   })
 }
 
@@ -725,11 +736,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return String(value)
   }
 
-  const lineCount = () => {
-    const value = text()
-    const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
-    return Math.max(1, total)
-  }
+  const lineCount = createMemo(() => countViewerLines(text()))
 
   const bytes = createMemo(() => {
     const value = local.file.contents as unknown
@@ -744,7 +751,17 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return String(value).length
   })
 
-  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
+  const virtual = createMemo(() => shouldVirtualizeViewer({ bytes: bytes(), lineCount: lineCount() }))
+
+  const layoutStrategy = createMemo(() =>
+    getViewerLayoutStrategy({
+      platform: local.viewerPlatform ?? "web",
+      isVirtual: virtual(),
+      lineCount: lineCount(),
+      supportsSubgrid:
+        typeof CSS !== "undefined" && CSS.supports("grid-template-rows", "subgrid"),
+    }),
+  )
 
   const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
 
@@ -763,8 +780,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
     if (!root) return false
 
     const total = lineCount()
-    if (root.querySelectorAll("[data-line]").length < total) return false
-
     if (!range) {
       current.setSelectedLines(null)
       return true
@@ -864,17 +879,36 @@ function TextViewer<T>(props: TextFileProps<T>) {
       viewer,
       isReady: (root) => {
         if (virtual()) return root.querySelector("[data-line]") != null
-        return root.querySelectorAll("[data-line]").length >= lineCount()
+        return root.querySelector(`[data-line="${lineCount()}"]`) != null
       },
       onReady: () => {
         markViewerTiming("notify-shadow-ready-end", { path: local.file.name })
-        stopSubgridWatch?.()
-        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
+        const root = viewer.getRoot()
         stopTokenStyleWatch?.()
-        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
+        stopTokenStyleWatch = watchViewerTokenStyles(root)
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
-        local.onRendered?.()
+
+        stopSubgridWatch?.()
+        markViewerTiming("layout-fix-start", {
+          path: local.file.name,
+          detail: { strategy: layoutStrategy(), bytes: bytes(), lines: lineCount(), virtual: virtual() },
+        })
+        if (!root) {
+          notify()
+          return
+        }
+        stopSubgridWatch = watchViewerLineRows(root, {
+          strategy: layoutStrategy(),
+          onPass: (result: ViewerLayoutPass) => {
+            markViewerTiming("layout-fix-end", { path: local.file.name, detail: { ...result } })
+            markViewerTiming("layout-ready", { path: local.file.name, detail: { ...result } })
+          },
+          onStable: (result: ViewerLayoutPass) => {
+            markViewerTiming("viewer-stable", { path: local.file.name, detail: { ...result } })
+            local.onRendered?.()
+          },
+        })
       },
     })
   }
@@ -893,6 +927,15 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
     const virtualizer = virtuals.get()
 
+    stopSubgridWatch?.()
+    stopSubgridWatch = undefined
+    stopTokenStyleWatch?.()
+    stopTokenStyleWatch = undefined
+
+    markViewerTiming("viewer-render-start", {
+      path: local.file.name,
+      detail: { bytes: bytes(), lines: lineCount(), virtual: isVirtual },
+    })
     renderViewer({
       viewer,
       current: instance,
@@ -913,12 +956,20 @@ function TextViewer<T>(props: TextFileProps<T>) {
       },
       onReady: notify,
     })
+    markViewerTiming("viewer-render-end", { path: local.file.name })
   })
 
   useAnnotationRerender<LineAnnotation<T>>({
     viewer,
     current: () => instance,
     annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
+    onRerender: () => {
+      stopSubgridWatch?.()
+      stopSubgridWatch = undefined
+      stopTokenStyleWatch?.()
+      stopTokenStyleWatch = undefined
+      notify()
+    },
   })
 
   // -- cleanup --
@@ -1028,11 +1079,27 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
   const virtuals = createSharedVirtualStrategy(() => viewer.container)
 
-  const large = createMemo(() => {
+  const diffMetrics = createMemo(() => {
     const before = typeof local.before?.contents === "string" ? local.before.contents : ""
     const after = typeof local.after?.contents === "string" ? local.after.contents : ""
-    return Math.max(before.length, after.length) > 500_000
+    return {
+      before,
+      after,
+      bytes: Math.max(before.length, after.length),
+      lineCount: Math.max(countViewerLines(before), countViewerLines(after)),
+    }
   })
+  const large = createMemo(() => shouldVirtualizeViewer(diffMetrics()))
+
+  const layoutStrategy = createMemo(() =>
+    getViewerLayoutStrategy({
+      platform: local.viewerPlatform ?? "web",
+      isVirtual: large(),
+      lineCount: diffMetrics().lineCount,
+      supportsSubgrid:
+        typeof CSS !== "undefined" && CSS.supports("grid-template-rows", "subgrid"),
+    }),
+  )
 
   const largeOptions = {
     lineDiffType: "none",
@@ -1066,14 +1133,33 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       isReady: (root) => root.querySelector("[data-line]") != null,
       settleFrames: 1,
       onReady: () => {
-        stopSubgridWatch?.()
-        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
+        const root = viewer.getRoot()
         stopTokenStyleWatch?.()
-        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
+        stopTokenStyleWatch = watchViewerTokenStyles(root)
         done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
-        local.onRendered?.()
+
+        stopSubgridWatch?.()
+        markViewerTiming("layout-fix-start", {
+          path: local.after.name,
+          detail: { strategy: layoutStrategy(), virtual: large() },
+        })
+        if (!root) {
+          notify()
+          return
+        }
+        stopSubgridWatch = watchViewerLineRows(root, {
+          strategy: layoutStrategy(),
+          onPass: (result: ViewerLayoutPass) => {
+            markViewerTiming("layout-fix-end", { path: local.after.name, detail: { ...result } })
+            markViewerTiming("layout-ready", { path: local.after.name, detail: { ...result } })
+          },
+          onStable: (result: ViewerLayoutPass) => {
+            markViewerTiming("viewer-stable", { path: local.after.name, detail: { ...result } })
+            local.onRendered?.()
+          },
+        })
       },
     })
   }
@@ -1089,9 +1175,14 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = virtuals.get()
-    const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const beforeContents = diffMetrics().before
+    const afterContents = diffMetrics().after
     const done = preserve(viewer)
+
+    stopSubgridWatch?.()
+    stopSubgridWatch = undefined
+    stopTokenStyleWatch?.()
+    stopTokenStyleWatch = undefined
 
     onCleanup(done)
 
@@ -1100,6 +1191,10 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       return sampledChecksum(contents)
     }
 
+    markViewerTiming("viewer-render-start", {
+      path: local.after.name,
+      detail: { bytes: Math.max(beforeContents.length, afterContents.length), virtual: large() },
+    })
     renderViewer({
       viewer,
       current: instance,
@@ -1120,12 +1215,20 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       },
       onReady: () => notify(done),
     })
+    markViewerTiming("viewer-render-end", { path: local.after.name })
   })
 
   useAnnotationRerender<DiffLineAnnotation<T>>({
     viewer,
     current: () => instance,
     annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
+    onRerender: () => {
+      stopSubgridWatch?.()
+      stopSubgridWatch = undefined
+      stopTokenStyleWatch?.()
+      stopTokenStyleWatch = undefined
+      notify()
+    },
   })
 
   // -- cleanup --

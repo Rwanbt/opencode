@@ -84,4 +84,19 @@ describe("viewer-timing", () => {
       expect(viewerTimingLatency("save-start", "editing-false")).toBeDefined()
     })
   })
-})
+
+  test("viewer-ready is recorded only after layout-ready and viewer-stable", () => {
+    enableViewerTiming()
+    const path = "large.ts"
+    markViewerTiming("notify-shadow-ready-end", { path })
+    markViewerTiming("layout-ready", { path })
+    markViewerTiming("viewer-stable", { path })
+    markViewerTiming("viewer-ready", { path })
+
+    expect(getViewerTimingMarks().map((mark) => mark.event)).toEqual([
+      "notify-shadow-ready-end",
+      "layout-ready",
+      "viewer-stable",
+      "viewer-ready",
+    ])
+  })})

@@ -22,6 +22,7 @@ import { getSynchronizedGridRows } from "./file-runtime"
 type FakeStyle = { lineHeight: string }
 let computedStyles: WeakMap<object, FakeStyle>
 let originalGetComputedStyle: typeof getComputedStyle | undefined
+let computedStyleCalls: number
 
 function fakeRow(scrollHeight: number, lineHeight = "24"): HTMLElement {
   const el = { scrollHeight } as unknown as HTMLElement
@@ -35,8 +36,10 @@ function fakeContainer(children: HTMLElement[]): HTMLElement {
 
 beforeEach(() => {
   computedStyles = new WeakMap()
+  computedStyleCalls = 0
   originalGetComputedStyle = globalThis.getComputedStyle
   globalThis.getComputedStyle = ((el: object) => {
+    computedStyleCalls += 1
     return (computedStyles.get(el) ?? { lineHeight: "24" }) as CSSStyleDeclaration
   }) as typeof getComputedStyle
 })
@@ -114,4 +117,16 @@ describe("getSynchronizedGridRows", () => {
     expect(tracks[49]).toBe("48px")
     expect(tracks[0]).toBe("24px")
   })
+})
+describe("large-file row measurement budget", () => {
+  for (const lineCount of [1_000, 10_000, 50_000]) {
+    test(lineCount.toLocaleString("en-US") + " rows use one style lookup and one linear pass", () => {
+      const gutter = fakeContainer(Array.from({ length: lineCount }, () => fakeRow(24)))
+      const content = fakeContainer(Array.from({ length: lineCount }, () => fakeRow(24)))
+      const result = getSynchronizedGridRows(gutter, content)
+
+      expect(result?.split(" ")).toHaveLength(lineCount)
+      expect(computedStyleCalls).toBe(1)
+    })
+  }
 })

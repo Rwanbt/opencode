@@ -54,11 +54,13 @@ async function runHandleCtrlS(
     onNonSuccess: (eff) => {
       if (eff.type === "error") toasts.push({ variant: "error", title: "toast.file.saveFailed" })
     },
-    onSuccess: async (finalContent) => {
-      await onSave(finalContent)
+    onSuccess: async (finalContent, _sentContent, effect) => {
+      if (effect.type !== "unchanged") {
+        await onSave(finalContent)
+        onSaveCalls = 1
+      }
       toasts.push({ variant: "success", title: "toast.file.saved" })
       setEditingLog.push(false)
-      onSaveCalls = 1
     },
     retry: { waitForSlot: (p) => waitForSaveSlot(editor, p), retriesLeft },
   })
@@ -257,13 +259,18 @@ describe("EditorPanel.handleCtrlS — auto-exit edit mode (Fix A)", () => {
     expect(result.eff.type).toBe("error")
   })
 
-  test("C.1b success on a clean file (no edits): save no-op → setEditing(false) still called", async () => {
-    // User hits Ctrl+S on a file they haven't edited yet. The save is a
-    // backend no-op (writes the same content back). We accept this exits
-    // edit mode — Ctrl+S is an explicit "I'm done" gesture.
+  test("C.1b clean file: exits edit mode without writing or refreshing the viewer", async () => {
+    let writeCalls = 0
     const { deps } = fakeDeps({ "a.ts": "v1-baseline" })
     const fileStore = createFileStore()
-    const editor = createEditorStore({ ...deps, fileStore })
+    const editor = createEditorStore({
+      ...deps,
+      fileStore,
+      async write(input) {
+        writeCalls += 1
+        return deps.write(input)
+      },
+    })
 
     await editor.open("a.ts")
     // NOT calling setDirty — file is clean.
@@ -282,7 +289,9 @@ describe("EditorPanel.handleCtrlS — auto-exit edit mode (Fix A)", () => {
     })
 
     expect(setEditingLog).toEqual([false])
-    expect(result.eff.type).toBe("none")
+    expect(result.eff).toEqual({ type: "unchanged", content: "v1-baseline" })
+    expect(result.onSaveCalls).toBe(0)
+    expect(writeCalls).toBe(0)
   })
 
   test("C.4 missing path: file deleted on disk → setEditing NOT called, banner recreate", async () => {

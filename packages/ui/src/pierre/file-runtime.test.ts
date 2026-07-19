@@ -467,7 +467,9 @@ describe("watchViewerLineRows", () => {
   test("a resize triggers the same coalesced schedule as a mutation", () => {
     const root = fakeLineRowsRoot()
     watchViewerLineRows(root)
-    flushFrames() // consume the initial schedule() frame
+    flushFrames() // consume the initial measured-layout frame
+    flushFrames() // first stability frame
+    flushFrames() // second stability frame disconnects observation
     expect(rafQueue.size).toBe(0)
 
     FakeResizeObserver.instances[0]!.trigger()
@@ -531,19 +533,19 @@ describe("createAnnotationApplyTracker (F2 — annotation loss on instance repla
     expect(t2.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
   })
 
-  test("empty file: new target, no annotations → rerender still NOT called on the second identical call (optimization preserved)", () => {
+  test("fresh target with no annotations skips the redundant force rerender", () => {
     const tracker = createAnnotationApplyTracker<ReturnType<typeof fakeTarget>, never>()
     const empty: never[] = []
 
     const t1 = fakeTarget()
-    expect(tracker.apply(t1, empty)).toBe(true)
-    expect(t1.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+    expect(tracker.apply(t1, empty)).toBe(false)
+    expect(t1.calls).toEqual({ setLineAnnotations: 0, rerender: 0 })
 
     // Same target, same annotations reference again → no-op (this is the
     // guard Phase 6.4 introduced to avoid a redundant full re-render on
     // every content render).
     expect(tracker.apply(t1, empty)).toBe(false)
-    expect(t1.calls).toEqual({ setLineAnnotations: 1, rerender: 1 })
+    expect(t1.calls).toEqual({ setLineAnnotations: 0, rerender: 0 })
   })
 
   test("same target, annotations reference changes → re-applies", () => {

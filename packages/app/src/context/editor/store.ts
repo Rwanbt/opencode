@@ -70,7 +70,9 @@ export interface EditorDeps {
 /** What the caller (CM component) should do with the document after an action. */
 export type DocEffect =
   | { type: "set"; content: string } // replace the CM doc with this content
-  | { type: "none" } // saved successfully, leave the CM doc untouched (no reformat)
+  | { type: "none" } // write succeeded, leave the CM doc untouched (no reformat)
+  | { type: "unchanged"; content: string } // clean identical buffer: no backend write
+  | { type: "absent" } // no editor entry exists for this path
   | { type: "conflict" } // save blocked by 409 — show the conflict banner
   | { type: "missing" } // file gone on disk — show the delete-on-disk actions
   | { type: "error" } // FORK (REGRESSION FIX 2026-06-27): backend write failed
@@ -180,12 +182,25 @@ export function createEditorStore(deps: EditorDeps) {
   /** Save the current CM content with the hash precondition. */
   async function save(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    // No entry ⇒ nothing was ever open for this path — a legitimate no-op,
-    // not a race (see close-guard's "ghost path" case). Distinct from
+    // No entry ⇒ nothing was ever open for this path. Report it explicitly,
+    // rather than treating the ghost path as a successful save (see close-guard's
+    // "ghost path" case). Distinct from
     // `entry.saving`, a real in-flight save (autosave or a concurrent
     // manual save) — that's the "busy" case a caller must retry (C11).
-    if (!entry) return { type: "none" }
+    if (!entry) return { type: "absent" }
     if (entry.saving) return { type: "busy" }
+    if (
+      !entry.stale &&
+      !entry.conflict &&
+      !entry.missing &&
+      content === entry.baseline.content
+    ) {
+      set(path, { dirty: false })
+      mirror(path, (fs) => fs.markClean(path, entry.baseline.content, { hash: entry.baseline.hash }))
+      markViewerTiming("save-noop", { path, detail: { bytes: content.length } })
+      return { type: "unchanged", content: entry.baseline.content }
+    }
+    markViewerTiming("save-write-start", { path, detail: { bytes: content.length } })
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {
@@ -194,6 +209,7 @@ export function createEditorStore(deps: EditorDeps) {
       // — a conflict/missing/error result is still "the write round-trip
       // finished", a useful signal on its own for timing the SDK call.
       markViewerTiming("write-complete", { path, detail: { result: res.type } })
+      markViewerTiming("save-write-end", { path, detail: { result: res.type } })
       if (res.type === "conflict") {
         set(path, { saving: false, conflict: true })
         mirror(path, (fs) => fs.markConflict(path))
@@ -336,9 +352,11 @@ export function createEditorStore(deps: EditorDeps) {
    */
   async function recreate(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    // See save() above for the "none" (no entry) vs "busy" (in-flight) split.
-    if (!entry) return { type: "none" }
+    // See save() above for the "absent" (no entry) vs "busy" (in-flight) split.
+    if (!entry) return { type: "absent" }
     if (entry.saving) return { type: "busy" }
+
+    markViewerTiming("save-write-start", { path, detail: { bytes: content.length } })
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {

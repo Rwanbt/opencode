@@ -885,7 +885,8 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+      <div data-component="session-workspace" class="relative flex-1 min-h-0 flex flex-col">
+        <div data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
@@ -1049,10 +1050,10 @@ export default function Page() {
           size={size}
         />
 
-        {/* Sibling of SessionSidePanel (not the outer header/keyboard-hints
-            level) so its mobile full-height overlay (mobile.css
-            #terminal-panel.mobile-side-panel) covers the session content
-            without covering SessionHeader — matching SessionSidePanel. */}
+        </div>
+
+        {/* Desktop: full-width bottom pane below the horizontal workspace.
+            Mobile: absolute overlay anchored to the relative workspace. */}
         <TerminalPanel />
       </div>
 

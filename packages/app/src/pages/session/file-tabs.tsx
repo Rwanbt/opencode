@@ -83,7 +83,7 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
   // reload, overwrite, recreate — never a reformat-free assumption, they
   // pass whatever CodeMirror/the backend actually persisted), `seedContent`
   // seeds the viewer cache directly and synchronously, then kicks off a
-  // NON-BLOCKING background load() to backfill VCS diff/patch info (not
+  // NON-BLOCKING refreshMetadata() to backfill only VCS diff/patch info (not
   // part of a save result) — the generation counter in context/file.tsx
   // ensures a slow/superseded background response can never overwrite
   // fresher content. `onDiscard` has no fresh content to seed with (nothing
@@ -94,7 +94,9 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
     if (seedContent !== undefined) {
       file.seed(p, seedContent)
       markViewerTiming("refresh-seed", { path: p })
-      void file.load(p, { force: true }) // background VCS backfill, not awaited
+      const refresh = () => void file.refreshMetadata(p)
+      if (typeof requestIdleCallback === "function") requestIdleCallback(refresh, { timeout: 1_000 })
+      else globalThis.setTimeout(refresh, 0)
       return
     }
     markViewerTiming("refresh-sdk-start", { path: p })
