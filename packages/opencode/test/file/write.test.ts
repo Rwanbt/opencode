@@ -1,13 +1,30 @@
-import { test, expect, describe } from "bun:test"
+import { test, expect, describe, spyOn, beforeEach, afterEach } from "bun:test"
 import path from "path"
 import { Bus } from "../../src/bus"
 import { File } from "../../src/file"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
+import { LSPServer } from "../../src/lsp/server"
 import { tmpdir } from "../fixture/fixture"
 
 // Behavioral coverage for the file write API (ADR-0004): write / readRaw /
 // rename / move / delete. Path-escape coverage lives in path-traversal.test.ts.
+
+// FORK (LSP-SAVE-LATENCY): File.write()'s notifyWrite() fires LSP.touchFile()
+// in the background (P0 — see src/file/index.ts). A few tests below write
+// real .ts files, and MULTIPLE configured servers match that extension
+// (Typescript, Deno, ESLint, Oxlint, ...) — any of them finding a real binary
+// on this dev machine would spawn a REAL process purely as an unintended side
+// effect of testing unrelated file-write/format behavior. None of these
+// tests assert anything about LSP status, so keep the whole suite
+// deterministic by never letting ANY real language server spawn.
+let lspSpawnSpies: ReturnType<typeof spyOn>[]
+beforeEach(() => {
+  lspSpawnSpies = Object.values(LSPServer).map((server) => spyOn(server, "spawn").mockResolvedValue(undefined))
+})
+afterEach(() => {
+  for (const spy of lspSpawnSpies) spy.mockRestore()
+})
 
 async function waitFor(predicate: () => boolean, timeout = 1000) {
   const start = Date.now()
@@ -319,5 +336,46 @@ describe("File.remove", () => {
         expect(await Bun.file(path.join(tmp.path, "a.txt")).exists()).toBe(true)
       },
     })
+  })
+})
+
+// FORK (LSP-SAVE-LATENCY, P0): notifyWrite()'s LSP.touchFile() must be
+// fire-and-forget — a slow/hung LSP spawn (e.g. rust-analyzer initializing a
+// real crate) must never delay File.write()'s response. See
+// packages/opencode/src/file/index.ts notifyWrite/notifyDelete.
+describe("File.write — does not block on LSP notify (P0)", () => {
+  test("write() resolves quickly even if the matching LSP server hangs on spawn", async () => {
+    await using tmp = await tmpdir()
+    const spy = spyOn(LSPServer.Typescript, "spawn").mockReturnValue(new Promise(() => {}))
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const start = Date.now()
+          await File.write({ path: "slow.ts", content: "export const x = 1" })
+          expect(Date.now() - start).toBeLessThan(500)
+          expect(await Bun.file(path.join(tmp.path, "slow.ts")).text()).toBe("export const x = 1")
+        },
+      })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  test("remove() resolves quickly even if the matching LSP server hangs on spawn", async () => {
+    await using tmp = await tmpdir({ init: async (dir) => Bun.write(path.join(dir, "slow.ts"), "x") })
+    const spy = spyOn(LSPServer.Typescript, "spawn").mockReturnValue(new Promise(() => {}))
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const start = Date.now()
+          await File.remove({ path: "slow.ts" })
+          expect(Date.now() - start).toBeLessThan(500)
+        },
+      })
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

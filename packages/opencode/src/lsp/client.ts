@@ -117,6 +117,20 @@ export namespace LSPClient {
       45_000,
     ).catch((err) => {
       l.error("initialize error", { error: err })
+      // FORK (LSP-SAVE-LATENCY): a failed/timed-out initialize leaves
+      // connection.listen()'s onRequest/onNotification handlers (e.g.
+      // workspace/configuration) still registered. If the server sends one
+      // of those after we've given up — or the caller kills the process in
+      // response to this throw (ensureClient's catch) — a queued response
+      // write can land on an already-destroyed stdin stream, surfacing as an
+      // unhandled "Cannot call write after a stream was destroyed" rejection
+      // outside this promise chain entirely (vscode-jsonrpc's own internal
+      // write queue, not something our caller's .catch() can see). Disposing
+      // here stops the connection from processing/writing anything further
+      // before we ever throw.
+      try {
+        connection.dispose()
+      } catch {}
       throw new InitializeError(
         { serverID: input.serverID },
         {
@@ -240,7 +254,15 @@ export namespace LSPClient {
         l.info("shutting down")
         // Send shutdown request to LSP server before closing the connection
         try { await withTimeout(connection.sendRequest("shutdown"), 2000) } catch {}
-        try { connection.sendNotification("exit") } catch {}
+        // FORK (LSP-SAVE-LATENCY): sendNotification() returns a promise —
+        // the message write happens asynchronously through the writer's
+        // internal semaphore/queue, not synchronously on this call. The
+        // previous `try { ... } catch {}` (no await) only guarded against a
+        // SYNCHRONOUS throw; the actual write could still reject later,
+        // after this function had already moved on to connection.end() /
+        // dispose() a few lines down — an unhandled rejection with nothing
+        // left to catch it. Must be awaited to actually catch it.
+        try { await connection.sendNotification("exit") } catch {}
         // Small delay to let the notification flush through the stream
         await new Promise((r) => setTimeout(r, 50))
         try { connection.end() } catch {}

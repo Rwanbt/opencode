@@ -18,6 +18,11 @@ export async function InstanceBootstrap() {
   ShareNext.init()
   Format.init()
   await LSP.init()
+  // FORK (LSP-SAVE-LATENCY, P2): fire-and-forget — must never delay project open.
+  // init() only prepares config-aware server state (no spawn); warmup() is what
+  // actually starts the project's dominant-language server(s) in the background,
+  // so a first save doesn't pay the full cold-spawn+initialize cost.
+  void LSP.warmup().catch((err) => Log.Default.warn("LSP warmup failed", { error: err }))
   File.init()
   FileWatcher.init()
   Vcs.init()
