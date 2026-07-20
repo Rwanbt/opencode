@@ -43,9 +43,9 @@ export const SettingsMobileNav: Component = () => {
     { value: "providers" as const, icon: "providers" as const, label: language.t("settings.providers.title") },
     { value: "models" as const, icon: "models" as const, label: language.t("settings.models.title") },
     { value: "configuration" as const, icon: "console" as const, label: language.t("settings.localConfig.title") },
-    { value: "benchmark" as const, icon: "settings-gear" as const, label: language.t("settings.fork.benchmark.title") },
+    { value: "benchmark" as const, icon: "speedometer" as const, label: language.t("settings.fork.benchmark.title") },
     { value: "plugins" as const, icon: "mcp" as const, label: language.t("settings.fork.plugins.title") },
-    { value: "observability" as const, icon: "settings-gear" as const, label: language.t("settings.fork.observability.title") },
+    { value: "observability" as const, icon: "eye" as const, label: language.t("settings.fork.observability.title") },
     ...(platform.os === "android"
       ? [{ value: "android" as const, icon: "settings-gear" as const, label: "Android" }]
       : []),

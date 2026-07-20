@@ -25,6 +25,34 @@ type CloseGuardSideEffects = {
   toasts: Array<{ variant: string; title: string }>
 }
 
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): waits for an in-flight save to
+// release the path. Mirrors close-guard.tsx's waitForSaveSlot.
+async function waitForSaveSlot(editor: ReturnType<typeof createEditorStore>, filePath: string, maxWaitMs = 2000) {
+  const start = Date.now()
+  while (editor.get(filePath)?.saving) {
+    if (Date.now() - start > maxWaitMs) return false
+    await new Promise((resolve) => setTimeout(resolve, 2))
+  }
+  return true
+}
+
+// FORK (C11): mirrors close-guard.tsx's saveWithRetry — retries with the
+// freshest live content if a concurrent save (e.g. autosave) was already
+// in flight, instead of returning a "busy" no-op straight through.
+async function saveWithRetry(
+  opts: { filePath: string; fileStore: ReturnType<typeof createFileStore>; editor: ReturnType<typeof createEditorStore> },
+  retriesLeft = 2,
+) {
+  const { filePath, fileStore, editor } = opts
+  const live = fileStore.getDraftContent(filePath) ?? fileStore.get(filePath)?.content ?? ""
+  const eff = await editor.save(filePath, live)
+  if (eff.type !== "busy") return eff
+  if (retriesLeft <= 0) return eff
+  const free = await waitForSaveSlot(editor, filePath)
+  if (!free) return eff
+  return saveWithRetry(opts, retriesLeft - 1)
+}
+
 // Reproduces the close-guard.onSave body verbatim. Returns the same DocEffect
 // the real handler would so the test can assert on it.
 async function runCloseGuardOnSave(opts: {
@@ -32,18 +60,31 @@ async function runCloseGuardOnSave(opts: {
   fileStore: ReturnType<typeof createFileStore>
   editor: ReturnType<typeof createEditorStore>
   effects: CloseGuardSideEffects
+  // Test-only override — production always calls saveWithRetry(path) with
+  // the default of 2 (close-guard.tsx:141). Exposed here so a "retries
+  // exhausted" scenario doesn't have to burn ~4s of real waitForSaveSlot
+  // polling (mirrors the retriesLeft override editor-panel.test.ts's C.8
+  // uses for the same reason).
+  retriesLeft?: number
 }) {
-  const { filePath, fileStore, editor, effects } = opts
+  const { filePath, fileStore, editor, effects, retriesLeft } = opts
   // FORK (round 3) — Fix A line: prefer live CM content (registered as a
   // getter on mount) over the baseline in FileStore.content. The fallback
   // to content covers "editor mounted but getter effect not yet run" or
-  // "tab fired close-guard before the CM ref settled".
-  const live = fileStore.getDraftContent(filePath) ?? fileStore.get(filePath)?.content ?? ""
-  const eff = await editor.save(filePath, live)
+  // "tab fired close-guard before the CM ref settled". FORK (C11):
+  // saveWithRetry re-reads live content and retries past a busy no-op.
+  const eff = await saveWithRetry({ filePath, fileStore, editor }, retriesLeft ?? 2)
   // FORK (round 3) — Fix B branch: never close the tab on save failure.
-  if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
+  // FORK (C11): "busy" (retries exhausted) must be treated the same way —
+  // otherwise the tab closes as if saved while nothing was written.
+  if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error" || eff.type === "busy") {
     if (eff.type === "error") {
       effects.toasts.push({ variant: "error", title: "toast.file.saveFailed" })
+    } else if (eff.type === "busy") {
+      // FORK (CORRECTIF F10, 2026-07-19): unlike conflict/missing, a busy
+      // give-up has no persistent EditorBanner — without this toast the
+      // dialog just closes with no feedback at all.
+      effects.toasts.push({ variant: "default", title: "toast.file.saveBusy" })
     }
     // setPending(null) BEFORE dialog.close() so the dialog.onClose callback
     // sees pending === null and does not double-resolve. Mirrored here by
@@ -211,7 +252,7 @@ describe("close-guard.onSave (round 3, Fix B — never close on save failure)", 
     const editor = createEditorStore({ ...depsWithResult(writeResult), fileStore })
     fileStore.markClean("a.ts", "v1", { hash: hash("v1") })
     // editor.open is async — must complete so save() finds an entry. Otherwise
-    // save() short-circuits with {type:"none"} (no entry → no save).
+    // save() short-circuits with {type:"busy"} (no entry → nothing attempted).
     return { fileStore, editor, open: editor.open("a.ts") }
   }
 
@@ -300,6 +341,99 @@ describe("close-guard.onSave (round 3, Fix B — never close on save failure)", 
     expect(effects.dialogClosed).toBe(1)
     expect(effects.pendingResolved).toEqual(["closed"])
     expect(effects.toasts).toEqual([])
+  })
+
+  test("busy (autosave in flight): retries with live content, tab closed only once really saved (C11)", async () => {
+    // Regression for PLAN-READONLY-VIEWER-REACTIVITY C11: before saveWithRetry,
+    // a "Save and close" click racing an in-flight autosave returned the same
+    // {type:"none"} as a real success and fell through to the tab-close path
+    // — closing the tab while nothing had actually been written to disk.
+    const disk = new Map<string, string>([["a.ts", "v1"]])
+    let writeCalls = 0
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "ok", content: disk.get("a.ts")!, stamp: { hash: hash(disk.get("a.ts")!) } }
+      },
+      async write({ content }): Promise<WriteResult> {
+        writeCalls++
+        if (writeCalls === 1) {
+          // The in-flight "autosave" write takes a moment, so the close-guard
+          // save below observes `saving: true` and gets "busy" on its first
+          // attempt.
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        disk.set("a.ts", content)
+        return { type: "ok", content, stamp: { hash: hash(content) }, formatted: false }
+      },
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    fileStore.markClean("a.ts", "v1", { hash: hash("v1") })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+
+    // Autosave fires first (fire-and-forget), the close-guard dialog's "Save
+    // and close" races in right after with the true latest live content.
+    const autosavePromise = editor.save("a.ts", "v2-autosave-snapshot")
+    expect(editor.get("a.ts")!.saving).toBe(true)
+    fileStore.setDraftGetter("a.ts", () => "v3-latest-live-edits")
+
+    const effects: CloseGuardSideEffects = {
+      layoutClosedTabs: [],
+      dialogClosed: 0,
+      pendingResolved: [],
+      toasts: [],
+    }
+    const eff = await runCloseGuardOnSave({ filePath: "a.ts", fileStore, editor, effects })
+    await autosavePromise
+
+    // The retry persisted the freshest live content, not the stale autosave
+    // snapshot, and the tab only closed once that real save succeeded.
+    expect(disk.get("a.ts")).toBe("v3-latest-live-edits")
+    expect(eff.type).toBe("none")
+    expect(effects.layoutClosedTabs).toEqual(["a.ts"])
+    expect(effects.dialogClosed).toBe(1)
+    expect(effects.pendingResolved).toEqual(["closed"])
+    expect(writeCalls).toBe(2)
+  })
+
+  test("F10: busy retries exhausted → dialog still closes (Fix B) but a toast surfaces the give-up", async () => {
+    // FORK (CORRECTIF F10, 2026-07-19): before this fix, conflict/missing had
+    // EditorBanner as persistent feedback and error had a toast, but an
+    // exhausted busy give-up had NEITHER — the close-guard dialog just closed
+    // with zero indication anything went wrong.
+    const deps: EditorDeps = {
+      async readRaw() {
+        return { type: "ok", content: "v1", stamp: { hash: hash("v1") } }
+      },
+      write: () => new Promise<WriteResult>(() => {}), // never resolves — save stays in flight forever
+    }
+    const fileStore = createFileStore()
+    const editor = createEditorStore({ ...deps, fileStore })
+    fileStore.markClean("a.ts", "v1", { hash: hash("v1") })
+    await editor.open("a.ts")
+    editor.setDirty("a.ts", true)
+    void editor.save("a.ts", "v2-stuck") // never resolves; saving stays true forever
+    expect(editor.get("a.ts")!.saving).toBe(true)
+
+    const effects: CloseGuardSideEffects = {
+      layoutClosedTabs: [],
+      dialogClosed: 0,
+      pendingResolved: [],
+      toasts: [],
+    }
+    // retriesLeft: 0 skips the wait/retry loop and exercises the "give up"
+    // branch directly (see runCloseGuardOnSave's doc comment).
+    const eff = await runCloseGuardOnSave({ filePath: "a.ts", fileStore, editor, effects, retriesLeft: 0 })
+
+    expect(eff.type).toBe("busy")
+    // Fix B: the tab is NOT closed as if saved — nothing was written.
+    expect(effects.layoutClosedTabs).toEqual([])
+    // But the dialog still resolves (the user asked to close; we don't trap
+    // them forever behind a stuck save) — with feedback this time.
+    expect(effects.dialogClosed).toBe(1)
+    expect(effects.pendingResolved).toEqual(["cancelled"])
+    expect(effects.toasts).toEqual([{ variant: "default", title: "toast.file.saveBusy" }])
   })
 })
 

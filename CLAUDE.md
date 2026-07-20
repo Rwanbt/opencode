@@ -27,7 +27,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Deployment
 
 - Desktop build: `cd packages/desktop && bun tauri build`
-- Desktop deploy: copy `packages/desktop/src-tauri/target/release/OpenCode.exe` to `C:/Users/barat/AppData/Local/OpenCode/OpenCode.exe`
+- Desktop deploy: copy `packages/desktop/src-tauri/target/release/OpenCode.exe` to `C:/Users/barat/AppData/Local/OpenCode Dev/OpenCode.exe`
+- NEVER deploy to `C:/Users/barat/AppData/Local/OpenCode` (no "Dev" suffix) or `C:/Users/barat/AppData/Local/Programs/@opencode-aidesktop` — those are reserved for the genuine official Electron release (identifier `ai.opencode.desktop`, installed from github.com/anomalyco/opencode releases). This fork's Tauri build always uses identifier `ai.opencode.desktop.dev` / "OpenCode Dev".
 - Android build: `cd packages/mobile && bun tauri android build --target aarch64` (requires `ORT_LIB_LOCATION=D:/tmp/ort-android`)
 - Sidecar (required before desktop build): `cd packages/opencode && bun run build --single --baseline`, then copy to `packages/desktop/sidecars/opencode-cli-x86_64-pc-windows-msvc.exe`
 - NEVER touch Antigravity (the IDE). NEVER kill processes that aren't ours.

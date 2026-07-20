@@ -1,4 +1,5 @@
 import { sampledChecksum } from "@opencode-ai/util/encode"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
@@ -25,12 +26,20 @@ import { createFileFind } from "../pierre/file-find"
 import {
   applyViewerScheme,
   clearReadyWatcher,
+  countViewerLines,
+  createAnnotationApplyTracker,
   createReadyWatcher,
+  disposeReadyWatcher,
   getViewerHost,
+  getViewerLayoutStrategy,
   getViewerRoot,
   notifyShadowReady,
+  shouldVirtualizeViewer,
   observeViewerScheme,
+  watchViewerLineRows,
   watchViewerTokenStyles,
+  type ViewerLayoutPass,
+  type ViewerLayoutPlatform,
 } from "../pierre/file-runtime"
 import {
   findCodeSelectionSide,
@@ -45,7 +54,11 @@ import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
 
-const VIRTUALIZE_BYTES = 500_000
+// FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): a stable reference for
+// "no annotations", so useAnnotationRerender's reference-equality skip
+// actually works for the common case — `?? []` would allocate a fresh empty
+// array on every read, defeating the check every time.
+const EMPTY_ANNOTATIONS: never[] = []
 
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
@@ -59,6 +72,7 @@ type SharedProps<T> = {
   commentedLines?: SelectedLineRange[]
   onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
   onRendered?: () => void
+  viewerPlatform?: ViewerLayoutPlatform
   class?: string
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
@@ -105,6 +119,7 @@ const sharedKeys = [
   "onLineSelectionEnd",
   "onLineNumberSelectionEnd",
   "onRendered",
+  "viewerPlatform",
   "preloadedDiff",
 ] as const
 
@@ -144,6 +159,7 @@ function useFileViewer(config: ViewerConfig) {
   let container!: HTMLDivElement
   let overlay!: HTMLDivElement
   let selectionFrame: number | undefined
+  let commentFrame: number | undefined
   let dragFrame: number | undefined
   let dragStart: number | undefined
   let dragEnd: number | undefined
@@ -274,7 +290,9 @@ function useFileViewer(config: ViewerConfig) {
   createEffect(() => {
     rendered()
     const ranges = config.commentedLines()
-    requestAnimationFrame(() => {
+    if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
+    commentFrame = requestAnimationFrame(() => {
+      commentFrame = undefined
       const root = getRoot()
       if (!root) return
       config.markCommented(root, ranges)
@@ -295,12 +313,19 @@ function useFileViewer(config: ViewerConfig) {
   })
 
   onCleanup(() => {
-    clearReadyWatcher(ready)
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C3): true disposal — this is the
+    // component's real teardown, not an intermediate reset between render
+    // cycles (those still use clearReadyWatcher, e.g. in renderViewer below).
+    // See disposeReadyWatcher's doc comment for why clearReadyWatcher alone
+    // left a settle-frame RAF able to fire onReady() after unmount.
+    disposeReadyWatcher(ready)
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
+    if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
 
     selectionFrame = undefined
+    commentFrame = undefined
     dragFrame = undefined
     dragStart = undefined
     dragEnd = undefined
@@ -438,14 +463,28 @@ function useAnnotationRerender<A>(opts: {
   viewer: Viewer
   current: () => AnnotationTarget<A> | undefined
   annotations: () => A[]
+  onRerender?: () => void
 }) {
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 6): `rerender()` always does
+  // `render({..., forceRender: true})` — a full Pierre re-render regardless
+  // of whether anything actually changed. This effect re-runs on EVERY
+  // `rendered()` bump (i.e. every single content render, via renderViewer),
+  // so without this guard it forced a second full re-render pass right
+  // after the first one, every time, even when there are no annotations at
+  // all (the common case). Skipping when the annotations reference is
+  // unchanged since the last apply turns that into a no-op — annotations()
+  // is expected to be a stable reference (a Solid memo, or the same EMPTY_
+  // ANNOTATIONS constant below) when nothing relevant changed, so this is a
+  // plain reference check, not a deep comparison.
+  // FORK (CORRECTIF F2): tracker lives in file-runtime.ts so the identity
+  // guard (target identity AND annotations identity) is unit-testable
+  // without pulling in @pierre/diffs — see its definition for the full
+  // rationale.
+  const tracker = createAnnotationApplyTracker<AnnotationTarget<A>, A>()
   createEffect(() => {
     opts.viewer.rendered()
-    const active = opts.current()
-    if (!active) return
-    active.setLineAnnotations(opts.annotations())
-    active.rerender()
-    requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
+    const applied = tracker.apply(opts.current(), opts.annotations())
+    if (applied) opts.onRerender?.()
   })
 }
 
@@ -670,104 +709,6 @@ function ViewerShell(props: {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic line-row alignment shared by desktop and Android WebView
-// ---------------------------------------------------------------------------
-
-// WHY: @pierre/diffs lays out [data-gutter]/[data-content] with
-// `grid-template-rows: subgrid`, inheriting row tracks from their
-// [data-code] parent — which never declares explicit tracks and relies on
-// implicit row generation. On Android WebView (Chrome Mobile, confirmed on
-// Chrome 149 despite `CSS.supports('grid-template-rows', 'subgrid')`
-// reporting true), that combination collapses to a single implicit row
-// instead of one per line: every [data-line] renders at the same position
-// and only the last one paints. Verified live via DevTools — giving each
-// container its own explicit `repeat(N, auto)` track list (bypassing the
-// subgrid inheritance) fixes it immediately. The pixel tracks below preserve
-// cross-column row-height matching for wrapped rows on every viewer platform.
-function getSynchronizedGridRows(gutter: HTMLElement, content: HTMLElement) {
-  const gutterRows = Array.from(gutter.children) as HTMLElement[]
-  const contentRows = Array.from(content.children) as HTMLElement[]
-  if (gutterRows.length === 0 || gutterRows.length !== contentRows.length) return
-
-  return gutterRows
-    .map((row, index) => {
-      const contentRow = contentRows[index]
-      const lineHeight = Number.parseFloat(getComputedStyle(contentRow).lineHeight)
-      const contentHeight = contentRow.scrollHeight
-      const gutterHeight = row.scrollHeight
-      const minimumHeight = Number.isFinite(lineHeight) ? lineHeight : 1
-      return `${Math.max(1, Math.ceil(Math.max(contentHeight, gutterHeight, minimumHeight)))}px`
-    })
-    .join(" ")
-}
-
-// WHY: Android WebView reports support for CSS subgrid but does not preserve
-// the shared row tracks used by Pierre. Independent `auto` tracks align normal
-// lines but drift as soon as a wrapped content row becomes taller than its
-// number cell. Measuring both columns and applying the same pixel tracks keeps
-// every number aligned with its corresponding content row.
-function fixSubgridLineRowCollapse(root: ShadowRoot) {
-  for (const gutter of root.querySelectorAll<HTMLElement>("[data-gutter]")) {
-    const parent = gutter.parentElement
-    const content = Array.from(parent?.children ?? []).find(
-      (child) => child !== gutter && child.matches("[data-content]"),
-    ) as HTMLElement | undefined
-    if (!content) continue
-
-    const previousGutterRows = gutter.style.gridTemplateRows
-    const previousContentRows = content.style.gridTemplateRows
-    gutter.style.gridTemplateRows = "none"
-    content.style.gridTemplateRows = "none"
-
-    const rows = getSynchronizedGridRows(gutter, content)
-    if (!rows) {
-      gutter.style.gridTemplateRows = previousGutterRows
-      content.style.gridTemplateRows = previousContentRows
-      continue
-    }
-
-    gutter.style.gridTemplateRows = rows
-    content.style.gridTemplateRows = rows
-  }
-}
-// WHY a persistent observer instead of a one-shot fix in onReady:
-// @pierre/diffs can re-render its shadow DOM more than once per file open
-// (e.g. once the file's initial DOM is inserted, and again as reactive
-// props/derived state settle a tick or two later) — each re-render rebuilds
-// the [data-gutter]/[data-content] children and wipes any inline style
-// applied earlier. A fix applied only in onReady only "sticks" if that
-// happened to be the LAST render, which is unreliable on a genuinely fresh
-// (first) open — confirmed live: a fresh open left both containers on
-// `subgrid` with the one-shot version, while a reopen (second mount) picked
-// up the fix fine. Watching the shadow root and re-applying on every
-// mutation removes that timing dependency entirely.
-function watchViewerLineRows(root: ShadowRoot | undefined): () => void {
-  if (!root || typeof MutationObserver === "undefined") return () => {}
-
-  let frame = 0
-  const schedule = () => {
-    if (frame !== 0) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      fixSubgridLineRowCollapse(root)
-    })
-  }
-
-  const mutationObserver = new MutationObserver(schedule)
-  mutationObserver.observe(root, { childList: true, subtree: true })
-
-  const resizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(schedule)
-  if (resizeObserver && root.host instanceof HTMLElement) resizeObserver.observe(root.host)
-
-  schedule()
-  return () => {
-    mutationObserver.disconnect()
-    resizeObserver?.disconnect()
-    if (frame !== 0) cancelAnimationFrame(frame)
-  }
-}
-
-// ---------------------------------------------------------------------------
 // TextViewer
 // ---------------------------------------------------------------------------
 
@@ -776,6 +717,14 @@ function TextViewer<T>(props: TextFileProps<T>) {
   let viewer!: Viewer
   let stopSubgridWatch: (() => void) | undefined
   let stopTokenStyleWatch: (() => void) | undefined
+
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): component setup runs
+  // once per mount (Solid components are not re-invoked on re-render), so
+  // this line IS "mount start" — including the case that matters most for
+  // cause C1: the full remount triggered by `<Show when={!editing()}>` after
+  // save. props.file may not be set up yet at this exact point for every
+  // caller, so the path tag is best-effort.
+  markViewerTiming("viewer-mount-start", { path: (props.file as { name?: string } | undefined)?.name })
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -787,11 +736,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return String(value)
   }
 
-  const lineCount = () => {
-    const value = text()
-    const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
-    return Math.max(1, total)
-  }
+  const lineCount = createMemo(() => countViewerLines(text()))
 
   const bytes = createMemo(() => {
     const value = local.file.contents as unknown
@@ -806,7 +751,17 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return String(value).length
   })
 
-  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
+  const virtual = createMemo(() => shouldVirtualizeViewer({ bytes: bytes(), lineCount: lineCount() }))
+
+  const layoutStrategy = createMemo(() =>
+    getViewerLayoutStrategy({
+      platform: local.viewerPlatform ?? "web",
+      isVirtual: virtual(),
+      lineCount: lineCount(),
+      supportsSubgrid:
+        typeof CSS !== "undefined" && CSS.supports("grid-template-rows", "subgrid"),
+    }),
+  )
 
   const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
 
@@ -825,8 +780,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
     if (!root) return false
 
     const total = lineCount()
-    if (root.querySelectorAll("[data-line]").length < total) return false
-
     if (!range) {
       current.setSelectedLines(null)
       return true
@@ -917,20 +870,45 @@ function TextViewer<T>(props: TextFileProps<T>) {
   }))
 
   const notify = () => {
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): brackets worker
+    // tokenization + DOM population + Pierre's own shadow-ready detection as
+    // one block — the closest honest proxy for "worker-result" available
+    // without patching the vendored @pierre/diffs worker internals.
+    markViewerTiming("notify-shadow-ready-start", { path: local.file.name })
     notifyRendered({
       viewer,
       isReady: (root) => {
         if (virtual()) return root.querySelector("[data-line]") != null
-        return root.querySelectorAll("[data-line]").length >= lineCount()
+        return root.querySelector(`[data-line="${lineCount()}"]`) != null
       },
       onReady: () => {
-        stopSubgridWatch?.()
-        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
+        markViewerTiming("notify-shadow-ready-end", { path: local.file.name })
+        const root = viewer.getRoot()
         stopTokenStyleWatch?.()
-        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
+        stopTokenStyleWatch = watchViewerTokenStyles(root)
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
-        local.onRendered?.()
+
+        stopSubgridWatch?.()
+        markViewerTiming("layout-fix-start", {
+          path: local.file.name,
+          detail: { strategy: layoutStrategy(), bytes: bytes(), lines: lineCount(), virtual: virtual() },
+        })
+        if (!root) {
+          notify()
+          return
+        }
+        stopSubgridWatch = watchViewerLineRows(root, {
+          strategy: layoutStrategy(),
+          onPass: (result: ViewerLayoutPass) => {
+            markViewerTiming("layout-fix-end", { path: local.file.name, detail: { ...result } })
+            markViewerTiming("layout-ready", { path: local.file.name, detail: { ...result } })
+          },
+          onStable: (result: ViewerLayoutPass) => {
+            markViewerTiming("viewer-stable", { path: local.file.name, detail: { ...result } })
+            local.onRendered?.()
+          },
+        })
       },
     })
   }
@@ -949,6 +927,15 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
     const virtualizer = virtuals.get()
 
+    stopSubgridWatch?.()
+    stopSubgridWatch = undefined
+    stopTokenStyleWatch?.()
+    stopTokenStyleWatch = undefined
+
+    markViewerTiming("viewer-render-start", {
+      path: local.file.name,
+      detail: { bytes: bytes(), lines: lineCount(), virtual: isVirtual },
+    })
     renderViewer({
       viewer,
       current: instance,
@@ -969,12 +956,20 @@ function TextViewer<T>(props: TextFileProps<T>) {
       },
       onReady: notify,
     })
+    markViewerTiming("viewer-render-end", { path: local.file.name })
   })
 
   useAnnotationRerender<LineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
+    onRerender: () => {
+      stopSubgridWatch?.()
+      stopSubgridWatch = undefined
+      stopTokenStyleWatch?.()
+      stopTokenStyleWatch = undefined
+      notify()
+    },
   })
 
   // -- cleanup --
@@ -1084,11 +1079,27 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
   const virtuals = createSharedVirtualStrategy(() => viewer.container)
 
-  const large = createMemo(() => {
+  const diffMetrics = createMemo(() => {
     const before = typeof local.before?.contents === "string" ? local.before.contents : ""
     const after = typeof local.after?.contents === "string" ? local.after.contents : ""
-    return Math.max(before.length, after.length) > 500_000
+    return {
+      before,
+      after,
+      bytes: Math.max(before.length, after.length),
+      lineCount: Math.max(countViewerLines(before), countViewerLines(after)),
+    }
   })
+  const large = createMemo(() => shouldVirtualizeViewer(diffMetrics()))
+
+  const layoutStrategy = createMemo(() =>
+    getViewerLayoutStrategy({
+      platform: local.viewerPlatform ?? "web",
+      isVirtual: large(),
+      lineCount: diffMetrics().lineCount,
+      supportsSubgrid:
+        typeof CSS !== "undefined" && CSS.supports("grid-template-rows", "subgrid"),
+    }),
+  )
 
   const largeOptions = {
     lineDiffType: "none",
@@ -1122,14 +1133,33 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       isReady: (root) => root.querySelector("[data-line]") != null,
       settleFrames: 1,
       onReady: () => {
-        stopSubgridWatch?.()
-        stopSubgridWatch = watchViewerLineRows(viewer.getRoot())
+        const root = viewer.getRoot()
         stopTokenStyleWatch?.()
-        stopTokenStyleWatch = watchViewerTokenStyles(viewer.getRoot())
+        stopTokenStyleWatch = watchViewerTokenStyles(root)
         done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
-        local.onRendered?.()
+
+        stopSubgridWatch?.()
+        markViewerTiming("layout-fix-start", {
+          path: local.after.name,
+          detail: { strategy: layoutStrategy(), virtual: large() },
+        })
+        if (!root) {
+          notify()
+          return
+        }
+        stopSubgridWatch = watchViewerLineRows(root, {
+          strategy: layoutStrategy(),
+          onPass: (result: ViewerLayoutPass) => {
+            markViewerTiming("layout-fix-end", { path: local.after.name, detail: { ...result } })
+            markViewerTiming("layout-ready", { path: local.after.name, detail: { ...result } })
+          },
+          onStable: (result: ViewerLayoutPass) => {
+            markViewerTiming("viewer-stable", { path: local.after.name, detail: { ...result } })
+            local.onRendered?.()
+          },
+        })
       },
     })
   }
@@ -1145,9 +1175,14 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = virtuals.get()
-    const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const beforeContents = diffMetrics().before
+    const afterContents = diffMetrics().after
     const done = preserve(viewer)
+
+    stopSubgridWatch?.()
+    stopSubgridWatch = undefined
+    stopTokenStyleWatch?.()
+    stopTokenStyleWatch = undefined
 
     onCleanup(done)
 
@@ -1156,6 +1191,10 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       return sampledChecksum(contents)
     }
 
+    markViewerTiming("viewer-render-start", {
+      path: local.after.name,
+      detail: { bytes: Math.max(beforeContents.length, afterContents.length), virtual: large() },
+    })
     renderViewer({
       viewer,
       current: instance,
@@ -1176,12 +1215,20 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       },
       onReady: () => notify(done),
     })
+    markViewerTiming("viewer-render-end", { path: local.after.name })
   })
 
   useAnnotationRerender<DiffLineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? EMPTY_ANNOTATIONS,
+    onRerender: () => {
+      stopSubgridWatch?.()
+      stopSubgridWatch = undefined
+      stopTokenStyleWatch?.()
+      stopTokenStyleWatch = undefined
+      notify()
+    },
   })
 
   // -- cleanup --

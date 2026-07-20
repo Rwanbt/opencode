@@ -31,6 +31,12 @@ import { Installation } from "../installation"
 const log = Log.create({ service: "crash-reporter" })
 
 const MAX_REPORTS = 50
+// FORK (SIDECAR-STARTUP-HANG): bounds how many stale reports a single
+// startup purges. A runaway crash loop can accumulate millions of reports
+// (observed in production: 10M+ files in <datadir>/crashes) — unlinking
+// all of them synchronously would itself turn every subsequent startup
+// into a multi-minute stall. Trim gradually across restarts instead.
+const MAX_PURGE_PER_RUN = 1000
 
 export namespace CrashReporter {
   let installed = false
@@ -81,12 +87,19 @@ export namespace CrashReporter {
   function purgeOld() {
     try {
       const dir = crashDir()
+      // FORK (SIDECAR-STARTUP-HANG): filenames are `${isoTimestamp}_${kind}.json`
+      // (see writeReport) — ISO 8601 sorts lexicographically in chronological
+      // order, so a plain string sort gives recency without a statSync() per
+      // file. The previous stat-and-sort-by-mtime approach turned every
+      // startup into an O(n) syscall loop that never finished once the
+      // directory accumulated millions of entries (see MAX_PURGE_PER_RUN).
       const files = fs
         .readdirSync(dir)
         .filter((f) => f.endsWith(".json"))
-        .map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
-        .sort((a, b) => b.m - a.m)
-      for (const { f } of files.slice(MAX_REPORTS)) {
+        .sort()
+      const excess = Math.max(0, files.length - MAX_REPORTS)
+      const toDelete = files.slice(0, Math.min(excess, MAX_PURGE_PER_RUN))
+      for (const f of toDelete) {
         try {
           fs.unlinkSync(path.join(dir, f))
         } catch {}

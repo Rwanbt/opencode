@@ -89,6 +89,7 @@ const lsp = Layer.succeed(
   LSP.Service,
   LSP.Service.of({
     init: () => Effect.void,
+    warmup: () => Effect.void,
     status: () => Effect.succeed([]),
     hasClients: () => Effect.succeed(false),
     touchFile: () => Effect.void,

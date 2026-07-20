@@ -1,13 +1,59 @@
-import { test, expect, describe } from "bun:test"
+import { test, expect, describe, spyOn, beforeAll, afterAll } from "bun:test"
 import path from "path"
 import { Bus } from "../../src/bus"
 import { File } from "../../src/file"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
+import { LSPServer } from "../../src/lsp/server"
 import { tmpdir } from "../fixture/fixture"
 
 // Behavioral coverage for the file write API (ADR-0004): write / readRaw /
 // rename / move / delete. Path-escape coverage lives in path-traversal.test.ts.
+
+// FORK (LSP-SAVE-LATENCY): File.write()'s notifyWrite() fires LSP.touchFile()
+// in the background (P0 — see src/file/index.ts). A few tests below write
+// real .ts files, and MULTIPLE configured servers match that extension
+// (Typescript, Deno, ESLint, Oxlint, ...) — any of them finding a real binary
+// on this dev machine would spawn a REAL process purely as an unintended side
+// effect of testing unrelated file-write/format behavior. None of these
+// tests assert anything about LSP status, so keep the whole suite
+// deterministic by never letting ANY real language server spawn.
+//
+// FORK (LSP-TEST-SUITE-REGRESSION): mocked via beforeAll/afterAll, not
+// beforeEach/afterEach — the fire-and-forget touchFile() triggered by
+// notifyWrite/notifyDelete can still be resolving when a test ends. With a
+// per-test beforeEach/afterEach cycle, afterEach's mockRestore() briefly
+// re-exposes the REAL spawn() before the next test's beforeEach re-mocks it,
+// and a touchFile() call landing in that window spawns a real language
+// server whose connection is never tracked/disposed by this file's own
+// tests — surfacing later as an unhandled ERR_STREAM_DESTROYED when Bun
+// force-kills the leaked process at file teardown. A single beforeAll/afterAll
+// pair keeps spawn() mocked for the file's entire run, with no per-test gap.
+let lspSpawnSpies: ReturnType<typeof spyOn>[]
+// FORK (LSP-TEST-SUITE-REGRESSION): kept separately so the "hangs on spawn"
+// tests below can override its behavior for exactly one call via
+// mockReturnValueOnce() — restoring a NESTED spyOn() on an already-mocked
+// property unwinds all the way back to the true, unmocked spawn() (verified
+// empirically), not to this outer beforeAll mock, which would silently
+// re-expose real spawning for the rest of this file's run.
+let typescriptSpawnSpy: ReturnType<typeof spyOn>
+beforeAll(() => {
+  const servers = Object.values(LSPServer)
+  lspSpawnSpies = servers.map((server) => spyOn(server, "spawn").mockResolvedValue(undefined))
+  typescriptSpawnSpy = lspSpawnSpies[servers.indexOf(LSPServer.Typescript)]
+})
+afterAll(async () => {
+  // FORK (LSP-TEST-SUITE-REGRESSION): the last test's fire-and-forget
+  // touchFile() call (from notifyWrite/notifyDelete) may not have reached
+  // its ensureClient()/spawn() step yet when afterAll fires — restoring the
+  // spies immediately would let that lingering call slip through to the
+  // real, unmocked spawn() (same race the beforeAll/afterAll switch above
+  // closed between tests, now narrowed to this one file-teardown boundary).
+  // Same idiom as client.ts's shutdown() flush delay and preload.ts's
+  // afterEach buffer — give the fire-and-forget chain a moment to land.
+  await new Promise((r) => setTimeout(r, 100))
+  for (const spy of lspSpawnSpies) spy.mockRestore()
+})
 
 async function waitFor(predicate: () => boolean, timeout = 1000) {
   const start = Date.now()
@@ -317,6 +363,42 @@ describe("File.remove", () => {
           File.ConflictError,
         )
         expect(await Bun.file(path.join(tmp.path, "a.txt")).exists()).toBe(true)
+      },
+    })
+  })
+})
+
+// FORK (LSP-SAVE-LATENCY, P0): notifyWrite()'s LSP.touchFile() must be
+// fire-and-forget — a slow/hung LSP spawn (e.g. rust-analyzer initializing a
+// real crate) must never delay File.write()'s response. See
+// packages/opencode/src/file/index.ts notifyWrite/notifyDelete.
+describe("File.write — does not block on LSP notify (P0)", () => {
+  test("write() resolves quickly even if the matching LSP server hangs on spawn", async () => {
+    await using tmp = await tmpdir()
+    // FORK (LSP-TEST-SUITE-REGRESSION): override the shared beforeAll spy for
+    // exactly the next call, not a nested spyOn()/mockRestore() — see the
+    // comment on typescriptSpawnSpy's declaration above.
+    typescriptSpawnSpy.mockReturnValueOnce(new Promise(() => {}))
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const start = Date.now()
+        await File.write({ path: "slow.ts", content: "export const x = 1" })
+        expect(Date.now() - start).toBeLessThan(500)
+        expect(await Bun.file(path.join(tmp.path, "slow.ts")).text()).toBe("export const x = 1")
+      },
+    })
+  })
+
+  test("remove() resolves quickly even if the matching LSP server hangs on spawn", async () => {
+    await using tmp = await tmpdir({ init: async (dir) => Bun.write(path.join(dir, "slow.ts"), "x") })
+    typescriptSpawnSpy.mockReturnValueOnce(new Promise(() => {}))
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const start = Date.now()
+        await File.remove({ path: "slow.ts" })
+        expect(Date.now() - start).toBeLessThan(500)
       },
     })
   })

@@ -1,0 +1,12 @@
+diff --git a/dist/renderers/FileRenderer.js b/dist/renderers/FileRenderer.js
+index 54be5f3..4df5b33 100644
+--- a/dist/renderers/FileRenderer.js
++++ b/dist/renderers/FileRenderer.js
+@@ -58,6 +58,7 @@ var FileRenderer = class {
+ 	cleanUp() {
+ 		this.renderCache = void 0;
+ 		this.highlighter = void 0;
++		this.workerManager?.cleanUpPendingTasks(this);
+ 		this.workerManager = void 0;
+ 		this.onRenderUpdate = void 0;
+ 		this.lineCache = void 0;

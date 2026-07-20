@@ -1,4 +1,5 @@
 import { createStore, produce } from "solid-js/store"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import type { FileStore } from "../file/store"
 
 /**
@@ -69,12 +70,21 @@ export interface EditorDeps {
 /** What the caller (CM component) should do with the document after an action. */
 export type DocEffect =
   | { type: "set"; content: string } // replace the CM doc with this content
-  | { type: "none" } // leave the CM doc untouched
+  | { type: "none" } // write succeeded, leave the CM doc untouched (no reformat)
+  | { type: "unchanged"; content: string } // clean identical buffer: no backend write
+  | { type: "absent" } // no editor entry exists for this path
   | { type: "conflict" } // save blocked by 409 — show the conflict banner
   | { type: "missing" } // file gone on disk — show the delete-on-disk actions
   | { type: "error" } // FORK (REGRESSION FIX 2026-06-27): backend write failed
                        // (e.g. atomicWrite post-rename mismatch) — surface a
                        // SaveFailed toast instead of the phantom "Saved".
+  | { type: "busy" } // FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): another save
+                      // (autosave or a concurrent manual save) is already in
+                      // flight for this path — nothing was attempted. Distinct
+                      // from "none" (which means the save DID succeed, just
+                      // with no CM mutation needed) so the caller can tell a
+                      // no-op busy-guard apart from a real success and must
+                      // not treat it as "saved".
 
 function freshEntry(content: string, hash: string): EditorEntry {
   return { baseline: { content, hash }, dirty: false, stale: false, saving: false, conflict: false, missing: false }
@@ -172,11 +182,34 @@ export function createEditorStore(deps: EditorDeps) {
   /** Save the current CM content with the hash precondition. */
   async function save(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    if (!entry || entry.saving) return { type: "none" }
+    // No entry ⇒ nothing was ever open for this path. Report it explicitly,
+    // rather than treating the ghost path as a successful save (see close-guard's
+    // "ghost path" case). Distinct from
+    // `entry.saving`, a real in-flight save (autosave or a concurrent
+    // manual save) — that's the "busy" case a caller must retry (C11).
+    if (!entry) return { type: "absent" }
+    if (entry.saving) return { type: "busy" }
+    if (
+      !entry.stale &&
+      !entry.conflict &&
+      !entry.missing &&
+      content === entry.baseline.content
+    ) {
+      set(path, { dirty: false })
+      mirror(path, (fs) => fs.markClean(path, entry.baseline.content, { hash: entry.baseline.hash }))
+      markViewerTiming("save-noop", { path, detail: { bytes: content.length } })
+      return { type: "unchanged", content: entry.baseline.content }
+    }
+    markViewerTiming("save-write-start", { path, detail: { bytes: content.length } })
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {
       const res = await deps.write({ path, content, expectedHash: entry.baseline.hash || undefined, format })
+      // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): marks unconditionally
+      // — a conflict/missing/error result is still "the write round-trip
+      // finished", a useful signal on its own for timing the SDK call.
+      markViewerTiming("write-complete", { path, detail: { result: res.type } })
+      markViewerTiming("save-write-end", { path, detail: { result: res.type } })
       if (res.type === "conflict") {
         set(path, { saving: false, conflict: true })
         mirror(path, (fs) => fs.markConflict(path))
@@ -204,6 +237,7 @@ export function createEditorStore(deps: EditorDeps) {
         saving: false,
       })
       mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
+      markViewerTiming("store-mirror", { path })
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
       set(path, { saving: false })
@@ -250,6 +284,13 @@ export function createEditorStore(deps: EditorDeps) {
   /** Resolve a 409 conflict: keep disk (reload) or force mine (overwrite). */
   async function resolveConflict(path: string, content: string, action: "reload" | "overwrite"): Promise<DocEffect> {
     if (action === "reload") return reload(path)
+    const entry = state.entries[path]
+    // FORK (CORRECTIF F5, 2026-07-19): don't clear the conflict banner or
+    // rebase the baseline until we actually hold the save slot. If a
+    // concurrent save is already in flight, report busy WITHOUT mutating
+    // state — the caller (handleOverwrite) treats busy as a no-op and the
+    // banner + baseline stay exactly as they were.
+    if (entry?.saving) return { type: "busy" }
     try {
       const disk = await deps.readRaw(path)
       if (disk.type === "not-found") {
@@ -257,6 +298,9 @@ export function createEditorStore(deps: EditorDeps) {
         mirror(path, (fs) => fs.markMissing(path))
         return { type: "missing" }
       }
+      // Re-check saving after the await — a save could have started
+      // (e.g. autosave) during readRaw. Closes the race window.
+      if (state.entries[path]?.saving) return { type: "busy" }
       set(path, { baseline: { content: disk.content, hash: disk.stamp.hash }, conflict: false })
       return save(path, content)
     } catch {
@@ -308,7 +352,11 @@ export function createEditorStore(deps: EditorDeps) {
    */
   async function recreate(path: string, content: string, format?: boolean): Promise<DocEffect> {
     const entry = state.entries[path]
-    if (!entry || entry.saving) return { type: "none" }
+    // See save() above for the "absent" (no entry) vs "busy" (in-flight) split.
+    if (!entry) return { type: "absent" }
+    if (entry.saving) return { type: "busy" }
+
+    markViewerTiming("save-write-start", { path, detail: { bytes: content.length } })
     set(path, { saving: true })
     mirror(path, (fs) => fs.markSaving(path))
     try {
@@ -339,8 +387,15 @@ export function createEditorStore(deps: EditorDeps) {
       mirror(path, (fs) => fs.markClean(path, res.content, res.stamp))
       return res.formatted ? { type: "set", content: res.content } : { type: "none" }
     } catch {
+      // FORK (CORRECTIF F3): a transport failure is an error, not a silent
+      // success — symmetric with save()'s catch above. Never call markClean()
+      // here: after an exception, disk state is unknown and no write is
+      // proven. markMissing() keeps the conservative "missing" contract that
+      // recreate() already uses on a not-found write, and clears "saving"
+      // without discarding the CodeMirror buffer.
       set(path, { saving: false })
-      return { type: "none" }
+      mirror(path, (fs) => fs.markMissing(path))
+      return { type: "error" }
     }
   }
 

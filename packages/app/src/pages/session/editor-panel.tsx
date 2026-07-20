@@ -17,7 +17,9 @@ import { useFileStore } from "@/context/file/store"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { createAutosave } from "@/context/editor/autosave"
+import { runSaveAction } from "@/context/editor/save-action"
 import { showToast } from "@opencode-ai/ui/toast"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
 import type {
@@ -51,11 +53,16 @@ export interface EditorPanelProps {
   lspCallbacks: LspCallbacks
   onNavigate: (file: string) => void
   onReferences: (refs: LspLocation[]) => void
-  onSave: () => Promise<void>
-  onReload: () => Promise<void>
-  onOverwrite: () => Promise<void>
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1): optional `content` is the
+  // exact final bytes now on disk (the sent content, or the server's
+  // reformatted result if `formatted` was true) — lets the caller seed the
+  // viewer cache directly instead of re-fetching over the SDK. Omitted by
+  // onDiscard, which has no fresh content to offer (nothing was written).
+  onSave: (content?: string) => Promise<void>
+  onReload: (content?: string) => Promise<void>
+  onOverwrite: (content?: string) => Promise<void>
   onDiscard: () => void
-  onRecreate: () => Promise<void>
+  onRecreate: (content?: string) => Promise<void>
 }
 
 export function EditorPanel(props: EditorPanelProps) {
@@ -162,32 +169,72 @@ export function EditorPanel(props: EditorPanelProps) {
     }
   }
 
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): wait for an in-flight save
+  // (autosave or a concurrent manual save) to release the path, so a "busy"
+  // Ctrl+S can retry instead of being silently dropped or — the actual bug —
+  // treated as a success. Bounded by maxWaitMs so a stuck save (e.g. a hung
+  // request) can't wedge the retry forever; the caller just gives up for
+  // this keypress and the user can press Ctrl+S again.
+  const waitForSaveSlot = async (p: string, maxWaitMs = 5000) => {
+    const start = Date.now()
+    while (editorStore.get(p)?.saving) {
+      if (Date.now() - start > maxWaitMs) return false
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return true
+  }
+
+  // FORK (CORRECTIF F11): the busy/conflict/missing/error/success branching
+  // below is shared with handleOverwrite/handleRecreate via runSaveAction
+  // (save-action.ts) — imported here AND by editor-panel.test.ts, so there
+  // is one place that decision lives instead of a hand-copied test mirror.
   const handleCtrlS = async () => {
     const p = props.path()
     if (!p) return
-    const content = props.editorHandle?.getContent() ?? ""
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY Phase 0): "save-start" means
+    // "the user pressed Ctrl+S" — mark once here, not per retry attempt
+    // (runSaveAction's internal recursion re-reads content but must not
+    // re-mark timing on each busy retry).
+    markViewerTiming("save-start", { path: p })
     const format = settings.general.formatOnSave()
     try {
-      const eff = await editorStore.save(p, content, format)
-      applyDocEffect(eff)
-      // WHY: save() never throws (catches internally). A conflict/missing
-      // result is already surfaced by the EditorBanner via the reactive
-      // editorEntry — don't claim success here. REGRESSION FIX 2026-06-27:
-      // an explicit "error" effect now surfaces a SaveFailed toast so a
-      // silently-failed backend write (e.g. atomicWrite post-rename
-      // mismatch from Windows FS caching) doesn't claim success.
-      if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
-        if (eff.type === "error") {
-          showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-        }
-        return
-      }
-      await props.onSave()
-      showToast({ variant: "success", title: language.t("toast.file.saved") })
-      // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
-      // viewer re-mounts and the editor (CM) unmounts. NOT done on
-      // conflict/missing/error above — banner must remain visible.
-      props.setEditing(false)
+      await runSaveAction({
+        path: p,
+        getContent: () => props.editorHandle?.getContent() ?? "",
+        attempt: (path, content) => editorStore.save(path, content, format),
+        applyDocEffect,
+        // WHY: save() never throws (catches internally). A conflict/missing
+        // result is already surfaced by the EditorBanner via the reactive
+        // editorEntry — don't claim success here. REGRESSION FIX
+        // 2026-06-27: an explicit "error" effect now surfaces a SaveFailed
+        // toast so a silently-failed backend write (e.g. atomicWrite
+        // post-rename mismatch from Windows FS caching) doesn't claim
+        // success.
+        onNonSuccess: (eff) => {
+          if (eff.type === "error") {
+            showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+          }
+        },
+        onSuccess: async (finalContent, _sentContent, effect) => {
+          if (effect.type !== "unchanged") await props.onSave(finalContent)
+          showToast({ variant: "success", title: language.t("toast.file.saved") })
+          // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so
+          // the viewer re-mounts and the editor (CM) unmounts. NOT done on
+          // conflict/missing/error/busy above — banner must remain visible /
+          // the retry must get a chance to run first.
+          markViewerTiming("editing-false", { path: p })
+          props.setEditing(false)
+        },
+        // FORK (C11): "busy" means nothing was attempted (another save, e.g.
+        // autosave, was already in flight) — this is NOT a success. Wait for
+        // the in-flight save to finish, then retry with the freshest CM
+        // content (getContent() above is re-read on each retry) so no
+        // keystrokes are silently dropped and the mode never exits on a
+        // no-op save. maxRetries bounds the recursion — a "busy" result can
+        // only mean another save just released or is about to; retrying
+        // more than a couple times would indicate a pathological save loop.
+        retry: { waitForSlot: waitForSaveSlot, retriesLeft: 2 },
+      })
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
@@ -197,8 +244,12 @@ export function EditorPanel(props: EditorPanelProps) {
     const p = props.path()
     if (!p) return
     try {
-      applyDocEffect(await editorStore.reload(p))
-      await props.onReload()
+      const eff = await editorStore.reload(p)
+      applyDocEffect(eff)
+      // FORK (C1): reload() always resolves to {type:"set", content} on
+      // success (or {type:"missing"} on failure) — never "none", so this is
+      // the exact fresh disk content whenever present.
+      await props.onReload(eff.type === "set" ? eff.content : undefined)
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.reloadFailed") })
     }
@@ -207,20 +258,37 @@ export function EditorPanel(props: EditorPanelProps) {
   const handleOverwrite = async () => {
     const p = props.path()
     if (!p) return
-    const content = props.editorHandle?.getContent() ?? ""
     try {
-      const eff = await editorStore.resolveConflict(p, content, "overwrite")
-      applyDocEffect(eff)
-      // See handleCtrlS — also surface backend errors here.
-      if (eff.type === "error") {
-        showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-        return
-      }
-      await props.onOverwrite()
-      // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false so the
-      // viewer re-mounts after the user explicitly resolved the conflict by
-      // overwriting disk. NOT done on error above.
-      props.setEditing(false)
+      await runSaveAction({
+        path: p,
+        getContent: () => props.editorHandle?.getContent() ?? "",
+        // See handleCtrlS — also surface backend errors here, and don't
+        // treat a "busy" no-op (another save raced in) as a resolved
+        // conflict (C11). No `retry` here: unlike handleCtrlS, an overwrite
+        // busy no-op does not retry — the user re-clicks "Overwrite disk".
+        attempt: (path, content) => editorStore.resolveConflict(path, content, "overwrite"),
+        applyDocEffect,
+        // FORK (CORRECTIF F1): resolveConflict("overwrite") can return
+        // "missing" (readRaw not-found) or "conflict" (disk changed again
+        // between readRaw and the internal write) — neither is a success.
+        // Falling through to onOverwrite/setEditing(false) would seed the
+        // viewer with bytes never written to disk and unmount CodeMirror,
+        // losing the unsaved buffer. The EditorBanner renders the
+        // conflict/missing state reactively.
+        onNonSuccess: (eff) => {
+          if (eff.type === "error") {
+            showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+          }
+        },
+        onSuccess: async (finalContent) => {
+          await props.onOverwrite(finalContent)
+          // FORK (AutoExit-Edit-On-Save 2026-06-29): flip editing to false
+          // so the viewer re-mounts after the user explicitly resolved the
+          // conflict by overwriting disk. NOT done on non-success above.
+          markViewerTiming("editing-false", { path: p })
+          props.setEditing(false)
+        },
+      })
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }
@@ -237,15 +305,33 @@ export function EditorPanel(props: EditorPanelProps) {
   const handleRecreate = async () => {
     const p = props.path()
     if (!p) return
-    const content = props.editorHandle?.getContent() ?? ""
     const format = settings.general.formatOnSave()
     try {
-      const eff = await editorStore.recreate(p, content, format)
-      applyDocEffect(eff)
-      // See handleCtrlS.
-      if (eff.type === "error") {
-        showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
-      }
+      await runSaveAction({
+        path: p,
+        getContent: () => props.editorHandle?.getContent() ?? "",
+        // See handleCtrlS — "busy" is a no-op, not a failure (C11). No
+        // `retry` here, matching current behavior — the user re-clicks
+        // "Recreate file".
+        attempt: (path, content) => editorStore.recreate(path, content, format),
+        applyDocEffect,
+        // FORK (CORRECTIF F3): conflict/missing/error are all non-success —
+        // a "none" from a caught exception, or a conflict/missing from the
+        // internal write, must not seed the viewer with phantom content nor
+        // claim a silent success.
+        onNonSuccess: (eff) => {
+          if (eff.type === "error") {
+            showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+          }
+        },
+        onSuccess: async (finalContent) => {
+          // BUGFIX (found while wiring C1): props.onRecreate was declared
+          // but never called — the viewer cache never refreshed after
+          // recreating a file that had been deleted on disk, until some
+          // unrelated trigger (e.g. a tab switch) forced a reload.
+          await props.onRecreate(finalContent)
+        },
+      })
     } catch {
       showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
     }

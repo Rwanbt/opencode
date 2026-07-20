@@ -117,6 +117,20 @@ export namespace LSPClient {
       45_000,
     ).catch((err) => {
       l.error("initialize error", { error: err })
+      // FORK (LSP-SAVE-LATENCY): a failed/timed-out initialize leaves
+      // connection.listen()'s onRequest/onNotification handlers (e.g.
+      // workspace/configuration) still registered. If the server sends one
+      // of those after we've given up — or the caller kills the process in
+      // response to this throw (ensureClient's catch) — a queued response
+      // write can land on an already-destroyed stdin stream, surfacing as an
+      // unhandled "Cannot call write after a stream was destroyed" rejection
+      // outside this promise chain entirely (vscode-jsonrpc's own internal
+      // write queue, not something our caller's .catch() can see). Disposing
+      // here stops the connection from processing/writing anything further
+      // before we ever throw.
+      try {
+        connection.dispose()
+      } catch {}
       throw new InitializeError(
         { serverID: input.serverID },
         {
@@ -137,6 +151,21 @@ export namespace LSPClient {
       [path: string]: number
     } = {}
 
+    // FORK (LSP-TEST-SUITE-REGRESSION): File.notifyWrite/notifyDelete call
+    // LSP.touchFile() fire-and-forget (by design — must never block a save).
+    // That write can still be mid-flight through vscode-jsonrpc's internal
+    // writer queue when shutdown() tears down the connection, landing on an
+    // already-destroyed stream (ERR_STREAM_DESTROYED). `shuttingDown` stops
+    // new writes the instant shutdown begins; `pending` lets shutdown() wait
+    // for whatever was already in flight before it destroys the stream.
+    let shuttingDown = false
+    const pending = new Set<Promise<unknown>>()
+    function track<T>(p: Promise<T>): Promise<T> {
+      pending.add(p)
+      p.finally(() => pending.delete(p))
+      return p
+    }
+
     const result = {
       root: input.root,
       get serverID() {
@@ -147,6 +176,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
+          if (shuttingDown) return
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)
@@ -154,52 +184,64 @@ export namespace LSPClient {
 
           const version = files[input.path]
           if (version !== undefined) {
+            if (shuttingDown) return
             log.info("workspace/didChangeWatchedFiles", input)
-            await connection.sendNotification("workspace/didChangeWatchedFiles", {
-              changes: [
-                {
-                  uri: pathToFileURL(input.path).href,
-                  type: 2, // Changed
-                },
-              ],
-            })
+            await track(
+              connection.sendNotification("workspace/didChangeWatchedFiles", {
+                changes: [
+                  {
+                    uri: pathToFileURL(input.path).href,
+                    type: 2, // Changed
+                  },
+                ],
+              }),
+            )
 
+            if (shuttingDown) return
             const next = version + 1
             files[input.path] = next
             log.info("textDocument/didChange", {
               path: input.path,
               version: next,
             })
-            await connection.sendNotification("textDocument/didChange", {
-              textDocument: {
-                uri: pathToFileURL(input.path).href,
-                version: next,
-              },
-              contentChanges: [{ text }],
-            })
+            await track(
+              connection.sendNotification("textDocument/didChange", {
+                textDocument: {
+                  uri: pathToFileURL(input.path).href,
+                  version: next,
+                },
+                contentChanges: [{ text }],
+              }),
+            )
             return
           }
 
+          if (shuttingDown) return
           log.info("workspace/didChangeWatchedFiles", input)
-          await connection.sendNotification("workspace/didChangeWatchedFiles", {
-            changes: [
-              {
-                uri: pathToFileURL(input.path).href,
-                type: 1, // Created
-              },
-            ],
-          })
+          await track(
+            connection.sendNotification("workspace/didChangeWatchedFiles", {
+              changes: [
+                {
+                  uri: pathToFileURL(input.path).href,
+                  type: 1, // Created
+                },
+              ],
+            }),
+          )
 
+          if (shuttingDown) return
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
-          await connection.sendNotification("textDocument/didOpen", {
-            textDocument: {
-              uri: pathToFileURL(input.path).href,
-              languageId,
-              version: 0,
-              text,
-            },
-          })
+          await track(
+            connection.sendNotification("textDocument/didOpen", {
+              textDocument: {
+                uri: pathToFileURL(input.path).href,
+                languageId,
+                version: 0,
+                text,
+              },
+            }),
+          )
           files[input.path] = 0
           return
         },
@@ -238,9 +280,25 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
+        // FORK (LSP-TEST-SUITE-REGRESSION): flip synchronously, before any
+        // await — stops notify.open()'s per-write checks from starting new
+        // writes from this point on. Then wait for whatever notify.open()
+        // call was already mid-write (tracked in `pending`) so its write
+        // lands before the connection is torn down below, instead of racing
+        // connection.end()/dispose() and landing on a destroyed stream.
+        shuttingDown = true
+        await Promise.allSettled([...pending])
         // Send shutdown request to LSP server before closing the connection
         try { await withTimeout(connection.sendRequest("shutdown"), 2000) } catch {}
-        try { connection.sendNotification("exit") } catch {}
+        // FORK (LSP-SAVE-LATENCY): sendNotification() returns a promise —
+        // the message write happens asynchronously through the writer's
+        // internal semaphore/queue, not synchronously on this call. The
+        // previous `try { ... } catch {}` (no await) only guarded against a
+        // SYNCHRONOUS throw; the actual write could still reject later,
+        // after this function had already moved on to connection.end() /
+        // dispose() a few lines down — an unhandled rejection with nothing
+        // left to catch it. Must be awaited to actually catch it.
+        try { await connection.sendNotification("exit") } catch {}
         // Small delay to let the notification flush through the stream
         await new Promise((r) => setTimeout(r, 50))
         try { connection.end() } catch {}

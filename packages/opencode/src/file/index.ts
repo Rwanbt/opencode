@@ -593,6 +593,15 @@ export namespace File {
 
         assertInsideProject(full)
 
+        // FORK (LSP-SAVE-LATENCY, P2): warm this file's LSP server in the
+        // background the moment it's opened for viewing/editing — mirrors the
+        // forked touchFile in tool/read.ts:81, so a cold spawn+initialize (e.g.
+        // rust-analyzer on a real crate) overlaps with the user's read/think
+        // time instead of landing entirely on their first save. Fire-and-forget
+        // and harmless for images/binaries: touchFile()/getClients() already
+        // no-op per file extension.
+        void LSP.touchFile(full, false).catch((err) => log.warn("touchFile failed", { full, error: err }))
+
         if (isImageByExtension(file)) {
           const exists = yield* appFs.existsSafe(full)
           if (exists) {
@@ -945,16 +954,21 @@ export namespace File {
     const key = toCanonicalRelative(full)
     Bus.publish(Event.Edited, { file: key })
     await Bus.publish(FileWatcher.Event.Updated, { file: key, event: kind })
-    // LSP refresh is best-effort in 1a; the editor consumes diagnostics in Phase 2.
-    // LSP.touchFile still takes the absolute path — its own internal contract.
-    await LSP.touchFile(full, false).catch(() => {})
+    // FORK (LSP-SAVE-LATENCY): must be fire-and-forget, not awaited — a cold LSP
+    // spawn (e.g. rust-analyzer's initialize handshake on a real crate) can take
+    // tens of seconds. This call was previously `await`ed despite the comment
+    // below already saying "best-effort", which meant every save round-tripped
+    // through the editor blocked on it. LSP.touchFile still takes the absolute
+    // path — its own internal contract.
+    void LSP.touchFile(full, false).catch((err) => log.warn("touchFile failed", { full, error: err }))
   }
 
   async function notifyDelete(full: string) {
     const key = toCanonicalRelative(full)
     Bus.publish(Event.Edited, { file: key })
     await Bus.publish(FileWatcher.Event.Updated, { file: key, event: "unlink" })
-    await LSP.touchFile(full, false).catch(() => {})
+    // FORK (LSP-SAVE-LATENCY): same fire-and-forget rationale as notifyWrite above.
+    void LSP.touchFile(full, false).catch((err) => log.warn("touchFile failed", { full, error: err }))
   }
 
   // WHY (R2 in PLAN-EDITEUR-IDE-DEFINITIF): the frontend FileStore keys file

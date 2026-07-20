@@ -31,6 +31,7 @@ import { installFileKeybindings } from "@/pages/session/file-keybindings"
 import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { createScrollSync } from "@/pages/session/scroll-content-sync"
 import { createLspActions } from "@/pages/session/lsp-actions"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 
 // Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
 // (session-side-panel.tsx) keep their import path stable.
@@ -71,11 +72,36 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
 
   // Editor action side-effects: refresh the read-mode cache after a write so
   // the viewer reflects the new bytes. EditorPanel handles save/reload/etc.;
-  // these wrappers only coordinate the post-action file.load().
-  const refreshAfterEditor = async () => {
+  // these wrappers only coordinate the post-action refresh.
+  //
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY cause C1, resolved): Phase 0
+  // measured this file.load({force:true}) as the dominant source of
+  // save→viewer-ready latency (~200ms of a ~425ms total) — a redundant
+  // backend round-trip (2 SDK calls internally) re-fetching content
+  // editorStore.save() already wrote and mirrored into FileStore
+  // synchronously. When the caller already knows the final bytes (save,
+  // reload, overwrite, recreate — never a reformat-free assumption, they
+  // pass whatever CodeMirror/the backend actually persisted), `seedContent`
+  // seeds the viewer cache directly and synchronously, then kicks off a
+  // NON-BLOCKING refreshMetadata() to backfill only VCS diff/patch info (not
+  // part of a save result) — the generation counter in context/file.tsx
+  // ensures a slow/superseded background response can never overwrite
+  // fresher content. `onDiscard` has no fresh content to seed with (nothing
+  // was written to disk) and keeps the original blocking real-load path.
+  const refreshAfterEditor = async (seedContent?: string) => {
     const p = path()
     if (!p) return
+    if (seedContent !== undefined) {
+      file.seed(p, seedContent)
+      markViewerTiming("refresh-seed", { path: p })
+      const refresh = () => void file.refreshMetadata(p)
+      if (typeof requestIdleCallback === "function") requestIdleCallback(refresh, { timeout: 1_000 })
+      else globalThis.setTimeout(refresh, 0)
+      return
+    }
+    markViewerTiming("refresh-sdk-start", { path: p })
     await file.load(p, { force: true })
+    markViewerTiming("refresh-sdk-complete", { path: p })
   }
 
   // LSP glue (rename + code actions) — owns its own signals + handlers. The
@@ -191,11 +217,11 @@ export function FileTabContent(props: { tab: string; override?: boolean }) {
           lspCallbacks={lspCallbacks}
           onNavigate={handleNavigate}
           onReferences={handleReferences}
-          onSave={() => refreshAfterEditor()}
-          onReload={() => refreshAfterEditor()}
-          onOverwrite={() => refreshAfterEditor()}
+          onSave={(content) => refreshAfterEditor(content)}
+          onReload={(content) => refreshAfterEditor(content)}
+          onOverwrite={(content) => refreshAfterEditor(content)}
           onDiscard={() => refreshAfterEditor()}
-          onRecreate={() => refreshAfterEditor()}
+          onRecreate={(content) => refreshAfterEditor(content)}
         />
       </Show>
 

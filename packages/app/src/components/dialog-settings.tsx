@@ -73,11 +73,11 @@ const DialogSettingsDesktop: Component = () => {
                     {language.t("settings.localConfig.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="benchmark">
-                    <Icon name="settings-gear" />
+                    <Icon name="speedometer" />
                     {language.t("settings.fork.benchmark.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="observability">
-                    <Icon name="settings-gear" />
+                    <Icon name="eye" />
                     {language.t("settings.fork.observability.title")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="plugins">

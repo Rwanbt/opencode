@@ -55,6 +55,33 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
   const [pending, setPending] = createSignal<Pending | null>(null)
   const [saving, setSaving] = createSignal(false)
 
+  // FORK (PLAN-READONLY-VIEWER-REACTIVITY C11): editor.save() can return
+  // {type:"busy"} when an autosave (or another concurrent save) is already
+  // in flight for this path — nothing was attempted. Without this retry,
+  // "Save and close" would fall through the conflict/missing/error check
+  // below and close the tab as if the save had succeeded, silently
+  // discarding the dirty buffer. Wait for the in-flight save to clear, then
+  // retry with the freshest live content, same pattern as
+  // editor-panel.tsx's handleCtrlS.
+  const waitForSaveSlot = async (path: string, maxWaitMs = 5000) => {
+    const start = Date.now()
+    while (editor.get(path)?.saving) {
+      if (Date.now() - start > maxWaitMs) return false
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return true
+  }
+
+  const saveWithRetry = async (path: string, retriesLeft = 2) => {
+    const live = fileStore.getDraftContent(path) ?? fileStore.get(path)?.content ?? ""
+    const eff = await editor.save(path, live)
+    if (eff.type !== "busy") return eff
+    if (retriesLeft <= 0) return eff
+    const free = await waitForSaveSlot(path)
+    if (!free) return eff
+    return saveWithRetry(path, retriesLeft - 1)
+  }
+
   const api: EditorCloseGuard = {
     close(tab: string): Promise<DirtyCloseResult> {
       const filePath = tab === "context" || tab === "review" ? undefined : pathHelpers.pathFromTab(tab)
@@ -108,19 +135,35 @@ export function EditorCloseGuardProvider(props: { children: JSX.Element }): JSX.
             // producing a silent no-op write when expectedHash matched disk.
             // Fallback order: live CM → baseline (covers editor not yet
             // mounted, or tab close-guard fired before the getter effect ran).
-            const live =
-              fileStore.getDraftContent(p.path) ?? fileStore.get(p.path)?.content ?? ""
-            const eff = await editor.save(p.path, live)
+            // FORK (C11): saveWithRetry re-reads the live content and retries
+            // if a concurrent save (e.g. autosave) was already in flight —
+            // see waitForSaveSlot/saveWithRetry above.
+            const eff = await saveWithRetry(p.path)
             setSaving(false)
             // FORK (round 3, EC1) — Fix B: never close the tab if save failed.
             // A 409 (external edit), 404 (file deleted), or 500 (backend error)
             // must keep the tab open so the user can resolve via the existing
             // conflict/missing banner or retry. The previous implementation
             // closed the tab unconditionally, silently dropping the user's
-            // edits in those cases.
-            if (eff.type === "conflict" || eff.type === "missing" || eff.type === "error") {
+            // edits in those cases. FORK (C11): "busy" (retries exhausted —
+            // a save never released the path) must be treated the same way,
+            // otherwise the tab closes as if saved while nothing was written.
+            if (
+              eff.type === "conflict" ||
+              eff.type === "missing" ||
+              eff.type === "error" ||
+              eff.type === "busy" ||
+              eff.type === "absent"
+            ) {
               if (eff.type === "error") {
                 showToast({ variant: "error", title: language.t("toast.file.saveFailed") })
+              } else if (eff.type === "busy") {
+                // FORK (CORRECTIF F10, 2026-07-19): unlike conflict/missing,
+                // a busy give-up has no persistent EditorBanner — without a
+                // toast, the dialog just closes with no feedback at all.
+                // No "warning" ToastVariant exists (only default/success/
+                // error/loading) — "default" is the correct non-error tone.
+                showToast({ variant: "default", title: language.t("toast.file.saveBusy") })
               }
               // Banner conflict/missing is already shown by EditorBanner via
               // the reactive editorEntry. Order matters: setPending(null)

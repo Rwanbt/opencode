@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
+import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
@@ -24,6 +25,9 @@ import {
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
+import { createGenerationTracker } from "./file/generation"
+import { createScopeEpochTracker } from "./file/scope-epoch"
+import { requireFileContent, sameFileMetadata } from "./file/load-response"
 import {
   selectionFromLines,
   type FileState,
@@ -66,6 +70,27 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
+    const metadataInflight = new Map<string, Promise<void>>()
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1/Phase 2): seed() and every
+    // real load() fetch bump the generation for that path; a load()
+    // response only applies if its captured generation is still current
+    // when it resolves. Without this, seed(pathA, "fresh") followed by a
+    // slower, now-superseded load() response (e.g. the watcher, or a load()
+    // that was already in flight before the seed) could overwrite fresher
+    // content with stale bytes after the fact.
+    const gen = createGenerationTracker()
+    // FORK (CORRECTIF F8, 2026-07-19): gen.clear() resets each path's
+    // generation counter to 0 on every scope change, so a directory round
+    // trip (A -> B -> A) can hand two DIFFERENT requests for the same path
+    // the SAME numeric generation — one from the old A visit still in
+    // flight, one from the new A visit. `scope() !== directory` doesn't
+    // distinguish them either: both requests capture directory="A", and
+    // scope() reads "A" again once the round trip completes, so both pass.
+    // If the stale request resolves last, its bytes win and stick until the
+    // next refresh. scopeEpoch is strictly monotonic and never reset (see
+    // scope-epoch.ts), so it uniquely tags each scope visit regardless of
+    // how many times the user revisits the same directory.
+    const scopeEpochTracker = createScopeEpochTracker()
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -101,7 +126,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     createEffect(() => {
       scope()
+      scopeEpochTracker.bump()
       inflight.clear()
+      metadataInflight.clear()
+      gen.clear()
       resetFileContentLru()
       batch(() => {
         setStore("file", reconcile({}))
@@ -178,17 +206,34 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (pending) return pending
 
       setLoading(file)
+      const myGen = gen.bump(file)
+      // FORK (CORRECTIF F8): captured synchronously, same tick as myGen —
+      // see scopeEpochTracker's declaration for why this closes the
+      // A->B->A gap that `scope() !== directory` and the per-path gen
+      // counter both miss.
+      const myEpoch = scopeEpochTracker.capture()
 
-      const promise = Promise.all([
+      const promise: Promise<void> = Promise.all([
         sdk.client.file.read({ path: file }),
         sdk.client.file.readRaw({ path: file }),
       ])
         .then(([read, raw]) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
           if (scope() !== directory) return
-          const content = read.data
+          // A newer seed() or load() call for this path started after this
+          // one — this response is stale, drop it instead of overwriting
+          // fresher content (PLAN-READONLY-VIEWER-REACTIVITY Phase 2).
+          if (!gen.isCurrent(file, myGen)) return
+          const content = requireFileContent(read.data, read.error)
+          // FORK (CORRECTIF F7, 2026-07-19): read.data is a FileContent
+          // object, including for a legitimate empty file (content.content
+          // === ""), so `!content` only trips when the SDK genuinely
+          // returned no data — a failed request, not an empty file. Route
+          // that through the catch below instead of calling setLoaded with
+          // undefined, which would clobber content already seeded by a
+          // recent save/recreate/overwrite with bytes that were never
+          // actually stale.
           setLoaded(file, content)
-
-          if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
 
@@ -210,17 +255,102 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           }
         })
         .catch((e) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
           if (scope() !== directory) return
+          // A superseded fetch failing is not a user-facing error — a newer
+          // seed()/load() already owns this path's displayed content.
+          if (!gen.isCurrent(file, myGen)) return
           setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
         })
         .finally(() => {
-          inflight.delete(key)
+          // FORK (CORRECTIF F8): only remove OUR entry — a newer load() for
+          // the same key may already have replaced it in `inflight` (e.g.
+          // after a scope-clear + immediate re-request), and this stale
+          // `finally` must not delete a pending promise it doesn't own.
+          if (inflight.get(key) === promise) inflight.delete(key)
         })
 
       inflight.set(key, promise)
       return promise
     }
 
+    // FORK (PLAN-READONLY-VIEWER-REACTIVITY C1/Phase 2): seed the viewer
+    // cache directly with content already known to the caller (e.g. the
+    // exact bytes editorStore.save() just wrote and mirrored into FileStore)
+    // instead of re-fetching it over the SDK. Eliminates the redundant
+    // network/IPC round-trip that was the dominant cost between "save
+    // complete" and "viewer shows the new content" (measured ~200ms of a
+    // ~425ms total, see PLAN-READONLY-VIEWER-REACTIVITY-2026-07-16.md cause
+    // C1). Synchronous and side-effect-free beyond the store write — callers
+    // that also need VCS diff/patch info (not part of a save result) should
+    // follow up with refreshMetadata(), which applies only VCS diff/patch.
+    const seed = (input: string, content: string) => {
+      const file = path.normalize(input)
+      if (!file) return
+      ensure(file)
+      gen.bump(file)
+      // WHY type: "text" hardcoded, not inferred: seed() is only ever called
+      // with content the editor just wrote via CodeMirror — binary files are
+      // never editable (editor-panel.tsx's canEdit() excludes NUL bytes), so
+      // a seeded payload is text by construction. diff/patch are
+      // intentionally omitted — see the seed() doc comment above.
+      const payload: NonNullable<FileState["content"]> = { type: "text", content }
+      setLoaded(file, payload)
+      touchFileContent(file, approxBytes(payload))
+      evictContent(new Set([file]))
+    }
+
+    const refreshMetadata = (input: string) => {
+      const file = path.normalize(input)
+      if (!file) return Promise.resolve()
+
+      const directory = scope()
+      const currentGeneration = gen.current(file)
+      if (currentGeneration === undefined) return Promise.resolve()
+      const key = directory + "\n" + file + "\n" + currentGeneration
+
+      const pending = metadataInflight.get(key)
+      if (pending) return pending
+
+      const myEpoch = scopeEpochTracker.capture()
+      markViewerTiming("refresh-metadata-start", { path: file })
+      const promise: Promise<void> = sdk.client.file
+        .read({ path: file })
+        .then((read) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
+          if (scope() !== directory) return
+          if (!gen.isCurrent(file, currentGeneration)) return
+
+          const incoming = requireFileContent(read.data, read.error)
+          const current = store.file[file]?.content
+          if (!current || sameFileMetadata(current, incoming)) return
+
+          setStore(
+            "file",
+            file,
+            "content",
+            produce((draft) => {
+              if (!draft) return
+              draft.diff = incoming.diff
+              draft.patch = incoming.patch
+            }),
+          )
+        })
+        .catch((error) => {
+          if (!scopeEpochTracker.isCurrent(myEpoch)) return
+          if (scope() !== directory) return
+          if (!gen.isCurrent(file, currentGeneration)) return
+          setLoadError(file, errorMessage(error, language.t("error.chain.unknown")))
+          markViewerTiming("refresh-metadata-error", { path: file })
+        })
+        .finally(() => {
+          if (metadataInflight.get(key) === promise) metadataInflight.delete(key)
+          markViewerTiming("refresh-metadata-end", { path: file })
+        })
+
+      metadataInflight.set(key, promise)
+      return promise
+    }
     const search = (query: string, dirs: "true" | "false") =>
       sdk.client.find.files({ query: query.replaceAll("\\", "/"), dirs }).then(
         (x) => (x.data ?? []).map(path.normalize),
@@ -293,6 +423,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
       get,
       load,
+      seed,
+      refreshMetadata,
       scrollTop,
       scrollLeft,
       setScrollTop,
