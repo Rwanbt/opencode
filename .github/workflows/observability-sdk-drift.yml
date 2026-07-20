@@ -11,6 +11,9 @@ on:
       - '.github/workflows/observability-sdk-drift.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   sdk-drift:
     runs-on: ubuntu-latest
