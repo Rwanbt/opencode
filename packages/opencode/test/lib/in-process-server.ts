@@ -26,6 +26,7 @@
  *     CRUD routes, WS ticket flow end-to-end) in-process.
  */
 import { Server } from "../../src/server/server"
+import { Instance } from "../../src/project/instance"
 
 export interface InProcessServer {
   url: string
@@ -67,6 +68,12 @@ export async function withInProcessServer(opts: InProcessServerOptions = {}): Pr
     fetch: (path: string, init?: RequestInit) => fetch(new URL(path, url), init),
     close: async () => {
       await server.stop(true)
+      // FORK (LSP-TEST-SUITE-REGRESSION): server.stop() only tears down the Bun
+      // HTTP listener — any Instance.provide()/InstanceBootstrap() triggered
+      // while this server was running (and any LSP process warmup() spawned as
+      // a result) is never disposed otherwise. Leaks a real child process per
+      // test file using this harness under F1 without this.
+      await Instance.disposeAll().catch(() => {})
       // restore env
       if (prevPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
       else process.env.OPENCODE_SERVER_PASSWORD = prevPassword

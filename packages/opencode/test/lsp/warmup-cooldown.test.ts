@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
+import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import * as Lsp from "../../src/lsp/index"
 import { LSPServer } from "../../src/lsp/server"
@@ -7,6 +7,15 @@ import { tmpdir } from "../fixture/fixture"
 
 // Coverage for LSP-SAVE-LATENCY P1 (broken-server cooldown, status reporting)
 // and P2 (warmup). See src/lsp/index.ts.
+
+// FORK (LSP-TEST-SUITE-REGRESSION): test/preload.ts disables LSP.warmup() by
+// default for the whole suite. This file specifically tests warmup(), so it
+// opts back in — and restores the suite-wide default afterward so the
+// derogation doesn't leak into files that run later in the same bun process.
+delete process.env.OPENCODE_DISABLE_LSP_WARMUP
+afterAll(() => {
+  process.env.OPENCODE_DISABLE_LSP_WARMUP = "true"
+})
 
 function withInstance(fn: (dir: string) => Promise<void>) {
   return async () => {

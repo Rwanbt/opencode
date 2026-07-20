@@ -110,6 +110,58 @@ describe("util.process", () => {
     expect(await proc.exited).toBe(0)
   })
 
+  test("stop() terminates a real process quickly (nominal case)", async () => {
+    const target = Process.spawn(node("setInterval(() => {}, 10_000)"), {
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    const started = Date.now()
+    await Process.stop(target)
+    // FORK (LSP-TEST-SUITE-REGRESSION): the 5s taskkill timeout must never
+    // trigger in the sane case — a real, responsive taskkill returns almost
+    // immediately.
+    expect(Date.now() - started).toBeLessThan(3_000)
+    // stop() only waits for taskkill's own exit, not for Node to finish
+    // processing `target`'s "exit" event — await it explicitly instead of
+    // racing exitCode/signalCode right after stop() resolves.
+    await target.exited
+  }, 5_000)
+
+  test("stop() bounds a hanging taskkill instead of waiting forever (Windows)", async () => {
+    if (process.platform !== "win32") return
+
+    // FORK (LSP-TEST-SUITE-REGRESSION): reproduces the 6-minute project.initGit
+    // hang — shadow the real taskkill.exe on PATH with a script that never
+    // exits on its own, and verify Process.stop() still returns in bounded
+    // time (via the abort timeout) instead of hanging indefinitely.
+    await using tmp = await tmpdir()
+    const fakeBinDir = path.join(tmp.path, "fake-bin")
+    await fs.mkdir(fakeBinDir, { recursive: true })
+    // Self-bounded to ~8s so an orphaned grandchild (Node's kill() only
+    // terminates the direct cmd.exe child on Windows, not the whole tree)
+    // cleans itself up quickly instead of lingering for the test run.
+    await Bun.write(path.join(fakeBinDir, "taskkill.cmd"), "@echo off\r\nping -n 8 127.0.0.1 >nul\r\n")
+
+    const target = Process.spawn(node("setInterval(() => {}, 10_000)"), {
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    const originalPath = process.env.PATH
+    process.env.PATH = fakeBinDir + path.delimiter + originalPath
+    try {
+      const started = Date.now()
+      await Process.stop(target)
+      // Bound is generous (observed ~7s: 5s abort trigger + Windows process
+      // teardown overhead) — the point is proving this is bounded at all,
+      // not hanging for the 6 minutes seen before this fix.
+      expect(Date.now() - started).toBeLessThan(9_000)
+      await target.exited
+    } finally {
+      process.env.PATH = originalPath
+      target.kill()
+    }
+  }, 15_000)
+
   test("rejects missing commands without leaking unhandled errors", async () => {
     await using tmp = await tmpdir()
     const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))

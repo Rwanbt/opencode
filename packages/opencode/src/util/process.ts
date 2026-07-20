@@ -154,8 +154,14 @@ export namespace Process {
       return
     }
 
+    // FORK (LSP-TEST-SUITE-REGRESSION): taskkill itself can hang under OS-level
+    // process/handle starvation (observed: a 6-minute hang on project.initGit's
+    // afterEach, propagating from here through LSPClient.shutdown() →
+    // pool.shutdownAll() → Instance.disposeAll()). Bound it — if taskkill
+    // doesn't exit within 5s, fall through to proc.kill() below regardless.
     const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
       nothrow: true,
+      abort: AbortSignal.timeout(5_000),
     })
 
     if (out.code === 0) return

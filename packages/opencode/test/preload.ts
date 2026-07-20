@@ -63,6 +63,13 @@ process.env["OPENCODE_TEST_HOME"] = testHome
 const testManagedConfigDir = path.join(dir, "managed")
 process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
 process.env["OPENCODE_DISABLE_DEFAULT_PLUGINS"] = "true"
+// FORK (LSP-TEST-SUITE-REGRESSION): LSP.warmup() (bootstrap.ts) spawns a real
+// language-server process on every Instance.provide() — fine for a real
+// session (once), but the test suite creates thousands of short-lived
+// instances. Disabled by default; opt back in per-file via
+// `delete process.env.OPENCODE_DISABLE_LSP_WARMUP` for the few tests that
+// specifically exercise LSP.warmup()/spawn behavior.
+process.env["OPENCODE_DISABLE_LSP_WARMUP"] = "true"
 
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
