@@ -1617,6 +1617,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "GitHub 계정을 연결하면 저장소에 접근하고 git 작업을 인증할 수 있습니다.",
   "settings.fork.githubAuth.connectButton": "GitHub로 연결",
+  "settings.fork.githubAuth.advancedOptions": "고급 옵션",
+  "settings.fork.githubAuth.advancedOptionsWarning": "이 방법은 고급 설정을 위한 것입니다. GitHub 연결을 사용하는 것이 좋습니다.",
   "settings.fork.githubAuth.notConfigured": "이 빌드에는 GitHub가 구성되어 있지 않습니다",
   "settings.fork.githubAuth.authorizeTitle": "GitHub에서 OpenCode 승인",
   "settings.fork.githubAuth.copyCode": "코드 복사",

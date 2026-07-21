@@ -1699,6 +1699,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "Poveži svoj GitHub nalog da pristupiš svojim repozitorijima i autentifikuješ git operacije.",
   "settings.fork.githubAuth.connectButton": "Poveži se sa GitHub-om",
+  "settings.fork.githubAuth.advancedOptions": "Napredne opcije",
+  "settings.fork.githubAuth.advancedOptionsWarning": "Ova metoda je namijenjena naprednim konfiguracijama. Preporučuje se povezivanje putem GitHub-a.",
   "settings.fork.githubAuth.notConfigured": "GitHub nije konfigurisan za ovu verziju",
   "settings.fork.githubAuth.authorizeTitle": "Autorizuj OpenCode na GitHub-u",
   "settings.fork.githubAuth.copyCode": "Kopiraj kod",

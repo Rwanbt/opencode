@@ -1693,6 +1693,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "Forbind din GitHub-konto for at få adgang til dine repositories og autentificere git-handlinger.",
   "settings.fork.githubAuth.connectButton": "Forbind med GitHub",
+  "settings.fork.githubAuth.advancedOptions": "Avancerede indstillinger",
+  "settings.fork.githubAuth.advancedOptionsWarning": "Denne metode er beregnet til avancerede konfigurationer. Det anbefales at oprette forbindelse med GitHub.",
   "settings.fork.githubAuth.notConfigured": "GitHub er ikke konfigureret til denne build",
   "settings.fork.githubAuth.authorizeTitle": "Godkend OpenCode på GitHub",
   "settings.fork.githubAuth.copyCode": "Kopiér kode",

@@ -1638,6 +1638,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "Verbinde dein GitHub-Konto, um auf deine Repositories zuzugreifen und Git-Vorgänge zu authentifizieren.",
   "settings.fork.githubAuth.connectButton": "Mit GitHub verbinden",
+  "settings.fork.githubAuth.advancedOptions": "Erweiterte Optionen",
+  "settings.fork.githubAuth.advancedOptionsWarning": "Diese Methode ist für fortgeschrittene Konfigurationen gedacht. Die Anmeldung mit GitHub wird empfohlen.",
   "settings.fork.githubAuth.notConfigured": "GitHub ist für diesen Build nicht konfiguriert",
   "settings.fork.githubAuth.authorizeTitle": "OpenCode bei GitHub autorisieren",
   "settings.fork.githubAuth.copyCode": "Code kopieren",

@@ -1688,6 +1688,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "连接你的 GitHub 账户以访问你的仓库并对 git 操作进行身份验证。",
   "settings.fork.githubAuth.connectButton": "使用 GitHub 连接",
+  "settings.fork.githubAuth.advancedOptions": "高级选项",
+  "settings.fork.githubAuth.advancedOptionsWarning": "此方法适用于高级配置。建议使用 GitHub 连接。",
   "settings.fork.githubAuth.notConfigured": "此构建版本尚未配置 GitHub",
   "settings.fork.githubAuth.authorizeTitle": "在 GitHub 上授权 OpenCode",
   "settings.fork.githubAuth.copyCode": "复制代码",

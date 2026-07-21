@@ -1611,6 +1611,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "اربط حساب GitHub الخاص بك للوصول إلى مستودعاتك ومصادقة عمليات git.",
   "settings.fork.githubAuth.connectButton": "الاتصال باستخدام GitHub",
+  "settings.fork.githubAuth.advancedOptions": "خيارات متقدمة",
+  "settings.fork.githubAuth.advancedOptionsWarning": "هذه الطريقة مخصصة للإعدادات المتقدمة. يُنصح بالاتصال عبر GitHub.",
   "settings.fork.githubAuth.notConfigured": "لم يتم تهيئة GitHub لهذا الإصدار",
   "settings.fork.githubAuth.authorizeTitle": "تفويض OpenCode على GitHub",
   "settings.fork.githubAuth.copyCode": "نسخ الرمز",

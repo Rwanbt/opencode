@@ -1689,6 +1689,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "เชื่อมต่อบัญชี GitHub ของคุณเพื่อเข้าถึงที่เก็บข้อมูลและยืนยันตัวตนสำหรับการทำงานของ git",
   "settings.fork.githubAuth.connectButton": "เชื่อมต่อด้วย GitHub",
+  "settings.fork.githubAuth.advancedOptions": "ตัวเลือกขั้นสูง",
+  "settings.fork.githubAuth.advancedOptionsWarning": "วิธีนี้เหมาะสำหรับการตั้งค่าขั้นสูง แนะนำให้เชื่อมต่อด้วย GitHub",
   "settings.fork.githubAuth.notConfigured": "ยังไม่ได้ตั้งค่า GitHub สำหรับบิลด์นี้",
   "settings.fork.githubAuth.authorizeTitle": "อนุญาต OpenCode บน GitHub",
   "settings.fork.githubAuth.copyCode": "คัดลอกรหัส",

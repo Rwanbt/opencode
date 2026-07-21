@@ -1622,6 +1622,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "Depolarına erişmek ve git işlemlerini doğrulamak için GitHub hesabını bağla.",
   "settings.fork.githubAuth.connectButton": "GitHub ile bağlan",
+  "settings.fork.githubAuth.advancedOptions": "Gelişmiş seçenekler",
+  "settings.fork.githubAuth.advancedOptionsWarning": "Bu yöntem gelişmiş yapılandırmalar içindir. GitHub ile bağlanmanız önerilir.",
   "settings.fork.githubAuth.notConfigured": "GitHub bu yapı için yapılandırılmamış",
   "settings.fork.githubAuth.authorizeTitle": "GitHub'da OpenCode'u yetkilendir",
   "settings.fork.githubAuth.copyCode": "Kodu kopyala",

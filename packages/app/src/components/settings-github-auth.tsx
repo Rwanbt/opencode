@@ -7,6 +7,7 @@ import { createResource, createSignal, Match, onCleanup, Show, Switch } from "so
 import { Button } from "@opencode-ai/ui/button"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 interface GithubIdentity {
   login: string
@@ -59,6 +60,7 @@ type FlowState =
 export function SettingsGithubAuth() {
   const language = useLanguage()
   const sdk = useSDK()
+  const platform = usePlatform()
 
   const [status, { refetch: refetchStatus }] = createResource<GithubStatus>(async () => {
     try {
@@ -131,6 +133,11 @@ export function SettingsGithubAuth() {
         verificationUriComplete: auth.verificationUriComplete,
         intervalSeconds: auth.intervalSeconds,
       })
+      // FORK: open the browser immediately — the user should never have to
+      // notice or click a second button to reach GitHub. The visible "Open
+      // GitHub" button remains as a manual fallback (popup blocked, browser
+      // closed by accident, etc.), not the primary path to get there.
+      platform.openLink(auth.verificationUriComplete ?? auth.verificationUri)
       pollTimer = setTimeout(() => poll(auth.intervalSeconds), auth.intervalSeconds * 1000)
     } catch {
       setFlow({ kind: "error", message: language.t("settings.fork.githubAuth.errorGeneric") })
@@ -236,9 +243,13 @@ export function SettingsGithubAuth() {
                     </Button>
                   </div>
                   <div class="flex gap-2">
-                    <a href={f.verificationUriComplete ?? f.verificationUri} target="_blank" rel="noreferrer">
-                      <Button size="small">{language.t("settings.fork.githubAuth.openGithub")}</Button>
-                    </a>
+                    {/* FORK: must go through platform.openLink — it routes to the
+                        system browser (Custom Tabs on Android via the Tauri
+                        `opener` plugin) rather than navigating a raw <a target=
+                        "_blank">, which some embedded WebViews resolve in-place. */}
+                    <Button size="small" onClick={() => platform.openLink(f.verificationUriComplete ?? f.verificationUri)}>
+                      {language.t("settings.fork.githubAuth.openGithub")}
+                    </Button>
                     <Button size="small" variant="ghost" onClick={cancel}>
                       {language.t("common.cancel")}
                     </Button>

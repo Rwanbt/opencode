@@ -1,6 +1,7 @@
 import { type Component, Show, createMemo, createResource, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -623,13 +624,29 @@ export const SettingsGeneral: Component = () => {
           }}
         </Show>*/}
 
-        {/* FORK: GitHub account connection — OAuth Device Flow, above Remote Access per spec */}
+        {/* FORK: GitHub account connection — OAuth Device Flow, above Remote Access per spec.
+            "Se connecter avec GitHub" is the ONLY primary action; manual git
+            credentials (SSH key / PAT) are folded under a collapsed "Advanced
+            options" disclosure — never shown as an equally-weighted method. */}
         <SettingsGithubAuth />
 
-        <SettingsRemoteAccess />
+        <Collapsible class="border-t border-border-weak-base">
+          <Collapsible.Trigger class="flex items-center gap-1 px-4 py-2 text-12-regular text-text-weak hover:text-text-base">
+            <Collapsible.Arrow />
+            {language.t("settings.fork.githubAuth.advancedOptions")}
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div class="px-4 pb-2">
+              <span class="text-11-regular text-text-weaker">
+                {language.t("settings.fork.githubAuth.advancedOptionsWarning")}
+              </span>
+            </div>
+            {/* FORK: Stretch — git push/pull auth (any host, manual token/SSH key) */}
+            <SettingsGitAuth />
+          </Collapsible.Content>
+        </Collapsible>
 
-        {/* FORK: Stretch — git push/pull auth */}
-        <SettingsGitAuth />
+        <SettingsRemoteAccess />
 
         {/* FORK: Stretch — disk quota warning (hidden on Windows where statfs is unavailable) */}
         <SettingsList>

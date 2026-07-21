@@ -1617,6 +1617,8 @@ export const dict = {
   "settings.fork.githubAuth.title": "GitHub",
   "settings.fork.githubAuth.description": "GitHub アカウントを接続すると、リポジトリへのアクセスと git 操作の認証ができます。",
   "settings.fork.githubAuth.connectButton": "GitHub で接続",
+  "settings.fork.githubAuth.advancedOptions": "詳細オプション",
+  "settings.fork.githubAuth.advancedOptionsWarning": "この方法は高度な設定向けです。GitHub での接続を推奨します。",
   "settings.fork.githubAuth.notConfigured": "このビルドでは GitHub が設定されていません",
   "settings.fork.githubAuth.authorizeTitle": "GitHub で OpenCode を許可",
   "settings.fork.githubAuth.copyCode": "コードをコピー",
