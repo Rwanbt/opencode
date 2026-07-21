@@ -644,7 +644,15 @@ a:active,
 @media (max-width: 767px), (max-height: 767px) {
   [data-component="dialog"][data-size="x-large"] [data-slot="dialog-container"] {
     width: 100vw !important;
-    height: auto !important;
+    /* Must stay a definite height (not auto): [data-component="dialog"] uses
+       align-items:center (not stretch), so an auto height here never gets a
+       flex-stretch fallback. dialog-content's max-height:100% (dialog.css)
+       only resolves against a definite parent height — with auto it silently
+       becomes unbounded, dialog-content grows to fit all Settings content,
+       and nothing is left to scroll (content just overflows past the screen
+       edge with no scrollbar). Regressed by 47ff606ebf, unrelated to that
+       commit's actual terminal-panel fix. */
+    height: var(--vvh, 100dvh) !important;
     max-height: var(--vvh, 100dvh) !important;
   }
 
