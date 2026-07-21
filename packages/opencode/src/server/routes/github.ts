@@ -5,7 +5,7 @@
 // built from GithubIdentity/GithubCapabilities/GitRuntimeReport, none of
 // which carry the token field of GithubSession.
 import { Hono } from "hono"
-import { describeRoute, validator, resolver } from "hono-openapi"
+import { describeRoute, resolver } from "hono-openapi"
 import z from "zod"
 import * as GithubAuth from "../../github/auth"
 import * as GithubClient from "../../github/client"
