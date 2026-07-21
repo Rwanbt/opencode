@@ -344,6 +344,36 @@ pub(super) fn prepare_toolchain_wrappers(
         }
     }
 
+    // 1b. Wrap git-core internals (git-remote-https, git-remote-http,
+    //     git-http-backend, git-http-fetch, …) — spawned by `git` via an
+    //     absolute path resolved from its own exec-path (`usr/libexec/git-core`
+    //     on Alpine), exactly like cc1/collect2 above. Without this, `git
+    //     clone`/`push`/`pull` over https:// fail with SIGSYS ("Bad system
+    //     call") or EACCES ("Permission denied") because the kernel's direct
+    //     execve of an unwrapped app_data_file ELF is blocked/unsafe under the
+    //     untrusted_app SELinux policy — the musl hidden-visibility issue
+    //     means an LD_PRELOAD execve hook never sees this spawn either.
+    let git_core_root = rootfs_dir.join("usr/libexec/git-core");
+    if let Ok(entries) = fs::read_dir(&git_core_root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            // Skip .so plugins and symlinks (e.g. git-remote-https -> git-remote-http);
+            // wrap_one already skips symlinks itself, but .so has no extension
+            // gate here since git-core ships none — kept for parity with the
+            // gcc libexec loop in case a future Alpine build adds one.
+            if p.extension().and_then(|e| e.to_str()) == Some("so") {
+                continue;
+            }
+            if let Err(e) = wrap_one(&p) {
+                log::warn!(
+                    "[OpenCode] prepare_toolchain_wrappers: failed to wrap git-core {}: {} — git clone/push/pull over https will fail",
+                    p.display(),
+                    e
+                );
+            }
+        }
+    }
+
     // 2. Wrap binutils + target-prefixed binutils + rustc-specific LLVM tools.
     let binutils_targets = [
         "as", "ld.bfd", "ld.gold", "ar", "ranlib", "strip",
@@ -417,6 +447,9 @@ pub(super) fn prepare_toolchain_wrappers(
         // Existing core toolchain
         "rustc", "cargo", "python", "python3", "node", "npm", "node-gyp",
         "pip", "pip3", "rustup",
+        // Git (push/pull/fetch over https; internal git-core helpers wrapped
+        // separately above since they're spawned by absolute path, not PATH)
+        "git",
         // Phase 1 extension: debug + profiling
         "gdb", "lldb", "strace", "ltrace",
         // PHP stack
