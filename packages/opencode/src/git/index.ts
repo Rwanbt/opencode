@@ -5,6 +5,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { makeRuntime } from "@/effect/run-service"
 // FORK: Stretch — git auth credentials (HTTPS token / SSH key)
 import { buildAuthEnv, readCredentials } from "./credentials"
+// FORK: GitHub OAuth session fallback — only used when no manual credential
+// (above) is configured, and only ever for github.com remotes.
+import { buildGithubAuthEnv } from "@/github/credentials"
 
 export namespace Git {
   const cfg = [
@@ -372,16 +375,25 @@ export namespace Git {
       })
 
       // Build auth env vars for network git operations (push/pull/fetch).
-      // Never throws — falls back to no auth on any error.
-      const getAuthEnv = () =>
+      // Never throws — falls back to no auth on any error. Manual credentials
+      // (any host) take priority; only when none are configured do we fall
+      // back to a connected GitHub OAuth session, and only for github.com
+      // remotes (buildGithubAuthEnv is a no-op for anything else).
+      const getAuthEnv = (cwd: string, remote: string) =>
         Effect.promise(readCredentials)
           .pipe(Effect.orElseSucceed(() => ({ type: "none" as const })))
           .pipe(
-            Effect.flatMap((creds) =>
-              Effect.promise(() => buildAuthEnv(creds)).pipe(
+            Effect.flatMap((creds) => {
+              if (creds.type !== "none") {
+                return Effect.promise(() => buildAuthEnv(creds)).pipe(
+                  Effect.orElseSucceed(() => ({ env: {} as Record<string, string>, tempKeyPath: undefined })),
+                )
+              }
+              return Effect.promise(() => buildGithubAuthEnv(cwd, remote)).pipe(
+                Effect.map((r) => ({ env: r.env, tempKeyPath: undefined as string | undefined })),
                 Effect.orElseSucceed(() => ({ env: {} as Record<string, string>, tempKeyPath: undefined })),
-              ),
-            ),
+              )
+            }),
           )
 
       // Push the current branch to remote. Injects auth credentials if configured.
@@ -390,7 +402,7 @@ export namespace Git {
         if (!safeRefArg(remote) || (branch !== undefined && !safeRefArg(branch)))
           return { ok: false, error: "invalid remote or branch name" } satisfies PushResult
         const args = branch ? ["push", remote, branch] : ["push", remote]
-        const { env, tempKeyPath } = yield* getAuthEnv()
+        const { env, tempKeyPath } = yield* getAuthEnv(cwd, remote)
         try {
           const result = yield* run(args, { cwd, env })
           return {
@@ -411,7 +423,7 @@ export namespace Git {
         if (!safeRefArg(remote) || (branch !== undefined && !safeRefArg(branch)))
           return { ok: false, error: "invalid remote or branch name" } satisfies PullResult
         const args = branch ? ["pull", "--rebase", remote, branch] : ["pull", "--rebase", remote]
-        const { env, tempKeyPath } = yield* getAuthEnv()
+        const { env, tempKeyPath } = yield* getAuthEnv(cwd, remote)
         try {
           const result = yield* run(args, { cwd, env })
           return {

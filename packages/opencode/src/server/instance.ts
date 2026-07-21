@@ -26,6 +26,7 @@ import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
 import { LspRoutes } from "./routes/lsp"
 import { GitRoutes } from "./routes/git"
+import { GithubRoutes } from "./routes/github"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
@@ -397,6 +398,8 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/lsp", LspRoutes())
     // FORK: Phase 3 Git write routes — add/reset/commit/push/pull/log/blame/branches
     .route("/git", GitRoutes())
+    // FORK: GitHub account connection — OAuth Device Flow + capability diagnostics
+    .route("/github", GithubRoutes())
     .get(
       "/formatter",
       describeRoute({
