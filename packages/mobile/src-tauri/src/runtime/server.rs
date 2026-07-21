@@ -35,15 +35,36 @@ fn auth_storage_key() -> Result<String, String> {
         .map_err(|e| format!("JavaVM::from_raw: {e:?}"))?;
     let mut env = vm.attach_current_thread().map_err(|e| format!("attach: {e:?}"))?;
     let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
-    let value = env
-        .call_method(&activity, "getAuthStorageKey", "()Ljava/lang/String;", &[])
+    let result = env.call_method(&activity, "getAuthStorageKey", "()Ljava/lang/String;", &[]);
+
+    // A pending Java exception does NOT necessarily surface as an `Err` from
+    // `call_method` in this jni crate version — it can leave `result` as an
+    // `Ok` wrapping a null/default JObject, which then silently decodes to an
+    // EMPTY Rust String below instead of failing loudly. That empty string
+    // was passed straight through as OPENCODE_AUTH_ENCRYPTION_KEY, so the
+    // GitHub session write failed downstream with a confusing, unrelated
+    // "must be a 32-byte base64 key" error instead of the real cause here.
+    // Always check for a pending exception FIRST, before trusting the result.
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_describe(); // dumps the Java stack trace to logcat
+        let _ = env.exception_clear();
+        return Err("getAuthStorageKey threw a Java exception (see logcat for the stack trace)".to_string());
+    }
+
+    let value = result
         .map_err(|e| format!("getAuthStorageKey: {e:?}"))?
         .l()
         .map_err(|e| format!("getAuthStorageKey return: {e:?}"))?;
+    if value.is_null() {
+        return Err("getAuthStorageKey returned null".to_string());
+    }
     let value: String = env
         .get_string((&value).into())
         .map_err(|e| format!("auth key string: {e:?}"))?
         .into();
+    if value.is_empty() {
+        return Err("getAuthStorageKey returned an empty string".to_string());
+    }
     Ok(value)
 }
 
@@ -215,7 +236,7 @@ pub async fn start_embedded_server(
     let bash_path = bin_link_dir.join("bash");
     let bash_env_path = home_dir.join(".bashrc");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_AUTH_ENCRYPTION_KEY={auth_key}\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
         home = home_dir.display(),
         bash_env = bash_env_path.display(),
         cert = ca_bundle_path.display(),
@@ -224,6 +245,7 @@ pub async fn start_embedded_server(
         shell = bash_path.display(),
         pty = nlib_dir.join("librust_pty.so").display(),
         pw = password,
+        auth_key = auth_key,
         xdg_data = home_dir.join(".local/share").display(),
         xdg_state = home_dir.join(".local/state").display(),
         xdg_cache = home_dir.join(".cache").display(),

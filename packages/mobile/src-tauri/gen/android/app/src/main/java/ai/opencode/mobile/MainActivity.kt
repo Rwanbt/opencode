@@ -39,22 +39,34 @@ class MainActivity : TauriActivity() {
           .build(),
       )
       generator.generateKey()
+      // Reload: `store` was loaded before this alias existed. AndroidKeyStore
+      // key generation goes through a separate system service (keystore2/
+      // Keymint) — on some OEM builds (observed on MIUI) a `KeyStore` handle
+      // loaded before the key was created does not reliably see it on the
+      // very next `getKey()` call, so `getKey()` returns null and the
+      // `Cipher.init()` below throws immediately. Reloading forces a fresh
+      // read of the current alias set before we ever touch the new key.
+      store.load(null)
     }
+    val key = store.getKey(alias, null)
+      ?: throw IllegalStateException("AndroidKeyStore alias '$alias' exists but getKey() returned null")
     val prefs = getSharedPreferences("opencode_secure_auth", MODE_PRIVATE)
     val wrapped = prefs.getString("wrapped_key", null)
     val raw = if (wrapped == null) {
       ByteArray(32).also { SecureRandom().nextBytes(it) }.also { keyBytes ->
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, store.getKey(alias, null))
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         prefs.edit().putString("wrapped_key", Base64.encodeToString(cipher.iv + cipher.doFinal(keyBytes), Base64.NO_WRAP)).apply()
       }
     } else {
       val packed = Base64.decode(wrapped, Base64.NO_WRAP)
       val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-      cipher.init(Cipher.DECRYPT_MODE, store.getKey(alias, null), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+      cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, packed.copyOfRange(0, 12)))
       cipher.doFinal(packed.copyOfRange(12, packed.size))
     }
-    return Base64.encodeToString(raw, Base64.NO_WRAP)
+    val encoded = Base64.encodeToString(raw, Base64.NO_WRAP)
+    check(raw.size == 32) { "generated auth key is ${raw.size} bytes, expected 32" }
+    return encoded
   }
 
   private var hadAllFilesAccessAtCreate: Boolean = false
