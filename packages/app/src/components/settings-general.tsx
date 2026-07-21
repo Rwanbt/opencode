@@ -24,6 +24,7 @@ import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 import { SettingsRow } from "./settings-row"
+import { SettingsGithubAuth } from "./settings-github-auth"
 import { SettingsRemoteAccess } from "./settings-remote-access"
 import { SettingsGitAuth } from "./settings-git-auth"
 import { SettingsDiskQuota } from "./settings-disk-quota"
@@ -621,6 +622,9 @@ export const SettingsGeneral: Component = () => {
             )
           }}
         </Show>*/}
+
+        {/* FORK: GitHub account connection — OAuth Device Flow, above Remote Access per spec */}
+        <SettingsGithubAuth />
 
         <SettingsRemoteAccess />
 
