@@ -124,6 +124,10 @@ const TECHNICAL_ALLOWLIST = new Set([
   "settings.fork.plugins.serverNamePlaceholder",
   "settings.fork.plugins.commandPlaceholderExample",
   "settings.fork.plugins.urlPlaceholderExample",
+  "settings.fork.githubAuth.title",
+  "settings.fork.githubAuth.diagnosticsHttpsHelperLabel",
+  "settings.fork.githubAuth.gitHttpsStatusLabel",
+  "settings.fork.githubAuth.apiStatusLabel",
 ])
 
 // Recursively collect every language.t("literal.key") call from the
