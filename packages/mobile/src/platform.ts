@@ -142,15 +142,16 @@ const pkg = { version: "0.1.0" }
 // Lazy-load Tauri plugins to prevent crash if not available
 async function loadPlugins() {
   try {
-    const [http, os, notification, process, store, clipboard] = await Promise.all([
+    const [http, os, notification, process, store, clipboard, opener] = await Promise.all([
       import("@tauri-apps/plugin-http").catch(() => null),
       import("@tauri-apps/plugin-os").catch(() => null),
       import("@tauri-apps/plugin-notification").catch(() => null),
       import("@tauri-apps/plugin-process").catch(() => null),
       import("@tauri-apps/plugin-store").catch(() => null),
       import("@tauri-apps/plugin-clipboard-manager").catch(() => null),
+      import("@tauri-apps/plugin-opener").catch(() => null),
     ])
-    return { http, os, notification, process, store, clipboard }
+    return { http, os, notification, process, store, clipboard, opener }
   } catch {
     return null
   }
@@ -243,7 +244,17 @@ export async function createPlatform(): Promise<Platform> {
     version: pkg.version,
 
     openLink(url: string) {
-      window.open(url, "_blank")
+      // FORK: must open the system browser (Custom Tabs), never the app's
+      // embedded WebView — load-bearing for the GitHub OAuth Device Flow,
+      // which requires the user to authenticate on github.com itself, not
+      // inside a surface this app controls. `window.open` inside a Tauri
+      // Android WebView just navigates the same view (or no-ops); it does
+      // NOT spawn a real external browser.
+      if (plugins?.opener?.openUrl) {
+        void plugins.opener.openUrl(url).catch(() => window.open(url, "_blank"))
+      } else {
+        window.open(url, "_blank")
+      }
     },
 
     async restart() {

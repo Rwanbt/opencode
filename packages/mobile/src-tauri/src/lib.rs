@@ -366,7 +366,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_haptics::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init());
 
     // Register Android-only embedded runtime commands
     #[cfg(target_os = "android")]
