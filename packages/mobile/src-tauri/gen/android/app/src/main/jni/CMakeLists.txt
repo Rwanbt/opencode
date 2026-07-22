@@ -55,6 +55,15 @@ target_link_libraries(llama_jni
 add_library(rust_pty SHARED rust_pty.c)
 target_link_libraries(rust_pty android log)
 
+# Native Git dispatcher. Git re-execs <GIT_EXEC_PATH>/git and its remote
+# helpers; app_data_file scripts are denied under untrusted_app, so runtime
+# paths symlink to this APK-extracted PIE executable.
+add_executable(git_dispatch git_dispatch.c)
+set_target_properties(git_dispatch PROPERTIES
+    OUTPUT_NAME "libgit_dispatch"
+    SUFFIX ".so"
+)
+
 # ─── SIGSYS trace shim ───────────────────────────────────────────────
 # LD_PRELOAD into child processes spawned by pty_server to capture the
 # exact seccomp-blocked syscall number. Diagnostic-only; remove once

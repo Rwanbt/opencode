@@ -236,7 +236,7 @@ pub async fn start_embedded_server(
     let bash_path = bin_link_dir.join("bash");
     let bash_env_path = home_dir.join(".bashrc");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_AUTH_ENCRYPTION_KEY={auth_key}\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_AUTH_ENCRYPTION_KEY={auth_key}\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\nOPENCODE_MOBILE_MUSL_LINKER={musl_linker}\nOPENCODE_MOBILE_ROOTFS_DIR={rootfs}\n",
         home = home_dir.display(),
         bash_env = bash_env_path.display(),
         cert = ca_bundle_path.display(),
@@ -253,7 +253,8 @@ pub async fn start_embedded_server(
         path_val = path,
         lib_path_val = lib_path,
         proxy = proxy_url,
-
+        musl_linker = ld_musl.display(),
+        rootfs = rootfs_dir.display(),
     );
     // Also add NO_PROXY for local connections
     let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
@@ -761,12 +762,9 @@ fn build_tool_functions(dir: &Path, nlib_dir: &Path) -> String {
     // Syntax:
     //   LD_LIBRARY_PATH=$rootfs/lib:$rootfs/usr/lib  libmusl_linker.so  $rootfs/usr/bin/git  "$@"
     //
-    // Caveat: binaries that fork sub-binaries via execve (e.g. `git clone`
-    // → `git-remote-https`) still hit the same EACCES. Basic git (init,
-    // status, add, commit, log, diff, branch, checkout) uses internal
-    // functions only and works. Clone/push/fetch need additional work
-    // (bundle git-core binaries individually via the same trick, or ship
-    // a patched Termux proot later).
+    // Git subprocesses use the same route: prepare_toolchain_wrappers replaces
+    // git-core's self-dispatch symlink and wraps its remote helpers, so
+    // clone/push/fetch over HTTPS remain inside the native linker chain.
     let ld_musl_path = nlib_dir.join("libmusl_linker.so");
     let rootfs_path = dir.join("rootfs");
     let rootfs_lib_path = format!(

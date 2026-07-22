@@ -8,6 +8,9 @@ import { buildAuthEnv, readCredentials } from "./credentials"
 // FORK: GitHub OAuth session fallback — only used when no manual credential
 // (above) is configured, and only ever for github.com remotes.
 import { buildGithubAuthEnv } from "@/github/credentials"
+// FORK: Android git spawn — see android-launcher.ts for why "git" cannot be
+// spawned directly (bare or absolute path) from Bun on Android.
+import { resolveGitInvocation } from "./android-launcher"
 
 export namespace Git {
   const cfg = [
@@ -162,9 +165,10 @@ export namespace Git {
 
       const run = Effect.fn("Git.run")(
         function* (args: string[], opts: Options) {
-          const proc = ChildProcess.make("git", [...cfg, ...args], {
+          const invocation = resolveGitInvocation()
+          const proc = ChildProcess.make(invocation.bin, invocation.args([...cfg, ...args]), {
             cwd: opts.cwd,
-            env: opts.env,
+            env: { ...invocation.env, ...opts.env },
             extendEnv: true,
             stdin: "ignore",
             stdout: "pipe",

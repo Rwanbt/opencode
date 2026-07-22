@@ -9,6 +9,7 @@
 import { execFile } from "node:child_process"
 import os from "node:os"
 import { redact } from "@/security/dlp"
+import { resolveGitInvocation } from "@/git/android-launcher"
 import type { GitFailureCategory, GitRuntimeReport } from "./schema"
 
 const PROBE_TIMEOUT_MS = 15_000
@@ -46,6 +47,15 @@ function run(bin: string, args: string[], env?: Record<string, string>): Promise
   })
 }
 
+// All actual `git` invocations route through here rather than calling
+// run("git", ...) directly — see android-launcher.ts for why: on Android,
+// "git" must be spawned as libmusl_linker.so with the rootfs git binary as
+// its first argument, never as a bare/absolute path to the wrapper script.
+function runGit(args: string[], env?: Record<string, string>): Promise<RunResult> {
+  const invocation = resolveGitInvocation()
+  return run(invocation.bin, invocation.args(args), { ...invocation.env, ...env })
+}
+
 /** Exported for direct unit testing (test/github/diagnostics.test.ts) — the
  *  mapping logic is the valuable, easily-testable part; `diagnose()` itself
  *  needs a real (or broken) git installation to exercise end to end. */
@@ -78,12 +88,12 @@ export function categorize(stderr: string, code: number | null, signal: string |
  *  AGENTS.md forbids network dependencies in unit tests. Production callers
  *  never pass it; the default hits the real read-only public-repo probe. */
 export async function diagnose(
-  probeNetwork: (url: string) => Promise<RunResult> = (url) => run("git", ["ls-remote", "--exit-code", url, "HEAD"]),
+  probeNetwork: (url: string) => Promise<RunResult> = (url) => runGit(["ls-remote", "--exit-code", url, "HEAD"]),
 ): Promise<GitRuntimeReport> {
   const platform = os.platform()
   const architecture = os.arch()
 
-  const version = await run("git", ["--version"])
+  const version = await runGit(["--version"])
   if (version.code !== 0) {
     return {
       gitAvailable: false,
@@ -104,7 +114,7 @@ export async function diagnose(
   }
   const gitVersion = version.stdout.trim()
 
-  const execPathResult = await run("git", ["--exec-path"])
+  const execPathResult = await runGit(["--exec-path"])
   const execPath = execPathResult.code === 0 ? execPathResult.stdout.trim() : undefined
 
   let httpsHelperFound = false
@@ -166,7 +176,7 @@ export async function diagnose(
  *  server/routes/github.ts) since building the auth env is credentials.ts's
  *  job, not diagnostics'. */
 export async function probeAuthenticated(env: Record<string, string>): Promise<{ ok: boolean; safeMessage?: string }> {
-  const probe = await run("git", ["ls-remote", "--exit-code", PROBE_URL, "HEAD"], env)
+  const probe = await runGit(["ls-remote", "--exit-code", PROBE_URL, "HEAD"], env)
   if (probe.code === 0) return { ok: true }
   return { ok: false, safeMessage: redact(probe.stderr).text || "git ls-remote failed" }
 }

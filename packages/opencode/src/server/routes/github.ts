@@ -229,7 +229,8 @@ export function GithubRoutes() {
           // session, not of the current project.
           const env = await githubOnlyEnv(token)
           const probe = await withTimeout(GithubDiagnostics.probeAuthenticated(env), TEST_TIMEOUT)
-          capabilities.gitHttpsAvailable = probe.ok || capabilities.apiReachable
+          // API reachability is independent from the local Git HTTPS transport.
+          capabilities.gitHttpsAvailable = probe.ok
           capabilities.gitHttpsAuthenticated = probe.ok
         } catch (err) {
           log.warn("github.testConnection git probe failed", {

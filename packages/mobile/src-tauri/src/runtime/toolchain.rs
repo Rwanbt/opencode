@@ -180,11 +180,12 @@ pub(super) fn prepare_toolchain_wrappers(
 
     let bash_exec = nlib_dir.join("libbash_exec.so");
     let musl_linker = nlib_dir.join("libmusl_linker.so");
+    let git_dispatch = nlib_dir.join("libgit_dispatch.so");
 
-    if !bash_exec.exists() || !musl_linker.exists() {
+    if !bash_exec.exists() || !musl_linker.exists() || !git_dispatch.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "libbash_exec.so or libmusl_linker.so not found in nativeLibraryDir",
+            "Android native exec helpers are incomplete in nativeLibraryDir",
         ));
     }
 
@@ -380,6 +381,65 @@ pub(super) fn prepare_toolchain_wrappers(
     //     untrusted_app SELinux policy — the musl hidden-visibility issue
     //     means an LD_PRELOAD execve hook never sees this spawn either.
     let git_core_root = rootfs_dir.join("usr/libexec/git-core");
+
+    // Git first re-execs itself through the exec-path before invoking an HTTPS
+    // helper. Scripts under app_data_file work from run-as but SELinux denies
+    // them in the real untrusted_app domain. Point the dispatcher at an
+    // APK-extracted PIE executable, which routes usr/bin/git back through
+    // libmusl_linker.so.
+    let git_dispatcher = git_core_root.join("git");
+    let git_binary = rootfs_dir.join("usr/bin/git");
+    if git_binary.exists() {
+        let already_native = fs::read_link(&git_dispatcher)
+            .map(|target| target == git_dispatch)
+            .unwrap_or(false);
+        if !already_native {
+            if fs::symlink_metadata(&git_dispatcher).is_ok() {
+                fs::remove_file(&git_dispatcher)?;
+            }
+            std::os::unix::fs::symlink(&git_dispatch, &git_dispatcher)?;
+        }
+    }
+
+    let wrap_git_core = |file: &Path| -> std::io::Result<()> {
+        if file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.ends_with(".elf64"))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        let backup = PathBuf::from(format!("{}.elf64", file.display()));
+        let metadata = fs::symlink_metadata(file)?;
+        if metadata.file_type().is_symlink() {
+            return Ok(());
+        }
+
+        if backup.exists() {
+            fs::remove_file(file)?;
+            std::os::unix::fs::symlink(&git_dispatch, file)?;
+            return Ok(());
+        }
+        if !metadata.is_file() || metadata.len() < 1024 {
+            return Ok(());
+        }
+
+        let mut magic = [0u8; 4];
+        {
+            use std::io::Read;
+            let mut input = fs::File::open(file)?;
+            let _ = input.read(&mut magic);
+        }
+        if magic != [0x7f, b'E', b'L', b'F'] {
+            return Ok(());
+        }
+
+        fs::rename(file, &backup)?;
+        std::os::unix::fs::symlink(&git_dispatch, file)?;
+        Ok(())
+    };
     if let Ok(entries) = fs::read_dir(&git_core_root) {
         for entry in entries.flatten() {
             let p = entry.path();
@@ -390,7 +450,7 @@ pub(super) fn prepare_toolchain_wrappers(
             if p.extension().and_then(|e| e.to_str()) == Some("so") {
                 continue;
             }
-            if let Err(e) = wrap_one(&p) {
+            if let Err(e) = wrap_git_core(&p) {
                 log::warn!(
                     "[OpenCode] prepare_toolchain_wrappers: failed to wrap git-core {}: {} — git clone/push/pull over https will fail",
                     p.display(),

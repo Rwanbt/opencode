@@ -23,7 +23,20 @@ if (existsSync(envFile)) {
       if (eq > 0) {
         const key = line.slice(0, eq)
         const val = line.slice(eq + 1)
-        if (!process.env[key]) process.env[key] = val
+        if (key === "PATH") {
+          // PATH is a special case: Bun always synthesizes some non-empty
+          // default for it, so the plain "only apply if unset" rule below
+          // never fires here — the wrappers/bin dirs Rust computed (needed
+          // to resolve git/cargo/php/etc. through the SELinux-safe shebang
+          // chain — see prepare_toolchain_wrappers) would silently never
+          // make it into child_process PATH lookups (execFile/spawn use
+          // process.env.PATH, not the OS-level environ this file works
+          // around). Prepend instead of skipping.
+          const existing = process.env.PATH
+          process.env.PATH = existing ? `${val}:${existing}` : val
+        } else if (!process.env[key]) {
+          process.env[key] = val
+        }
       }
     }
   } catch {}

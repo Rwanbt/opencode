@@ -10,13 +10,19 @@
 // configured that token for arbitrary hosts they intend to use it with).
 import { execFile } from "node:child_process"
 import * as GithubAuth from "./auth"
+import { resolveGitInvocation } from "../git/android-launcher"
 
 const GITHUB_HOST = "github.com"
 const URL_SCOPE = `http.https://${GITHUB_HOST}/.extraheader`
 
 function getRemoteUrl(cwd: string, remote: string): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile("git", ["remote", "get-url", remote], { cwd, timeout: 5_000 }, (error, stdout) => {
+    const invocation = resolveGitInvocation()
+    execFile(invocation.bin, invocation.args(["remote", "get-url", remote]), {
+      cwd,
+      timeout: 5_000,
+      env: { ...process.env, ...invocation.env },
+    }, (error, stdout) => {
       resolve(error ? undefined : stdout.trim())
     })
   })

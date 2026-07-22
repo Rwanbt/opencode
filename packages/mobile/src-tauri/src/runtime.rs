@@ -518,6 +518,7 @@ mod tests {
         // Interposer libs must exist or the function bails early.
         std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
         std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libgit_dispatch.so"), b"stub").unwrap();
 
         // A fake ELF deep in the gcc libexec tree: ELF magic + >= 1024 bytes.
         let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
@@ -526,6 +527,16 @@ mod tests {
         let mut elf = vec![0x7f, b'E', b'L', b'F'];
         elf.resize(elf.len() + 2048, 0u8);
         std::fs::write(&cc1, &elf).unwrap();
+
+        // Alpine's git-core dispatcher is a symlink back to the raw musl Git
+        // ELF. Git re-execs this path before starting git-remote-https, so it
+        // must point to the APK-extracted native dispatcher.
+        let git_core = rootfs.join("usr/libexec/git-core");
+        std::fs::create_dir_all(&git_core).unwrap();
+        let git_binary = rootfs.join("usr/bin/git");
+        std::fs::write(&git_binary, &elf).unwrap();
+        let git_dispatcher = git_core.join("git");
+        std::os::unix::fs::symlink("../../bin/git", &git_dispatcher).unwrap();
 
         // First pass: cc1 becomes a script, original bytes saved to cc1.elf64.
         prepare_toolchain_wrappers(&rootfs, &nlib, &cache).expect("first pass should succeed");
@@ -539,6 +550,17 @@ mod tests {
         assert!(
             std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
             "cc1 must become a shebang script"
+        );
+        let native_dispatcher = nlib.join("libgit_dispatch.so");
+        assert_eq!(
+            std::fs::read_link(&git_dispatcher).unwrap(),
+            native_dispatcher,
+            "git dispatcher must point to the APK-extracted native executable"
+        );
+        assert_eq!(
+            std::fs::read(&git_binary).unwrap(),
+            elf,
+            "canonical usr/bin/git must remain an ELF"
         );
 
         // Second pass must not double-wrap nor mangle the backup.
@@ -555,6 +577,15 @@ mod tests {
         assert!(
             std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
             "cc1 must remain a shebang script after the second pass"
+        );
+        assert_eq!(
+            std::fs::read_link(&git_dispatcher).unwrap(),
+            native_dispatcher,
+            "git dispatcher symlink must be stable across repeated passes"
+        );
+        assert!(
+            !git_core.join("git.elf64").exists(),
+            "git dispatcher must not create a duplicate ELF backup"
         );
 
         let _ = std::fs::remove_dir_all(&base);
@@ -658,6 +689,7 @@ mod tests {
         std::fs::create_dir_all(rootfs.join("usr/bin")).unwrap();
         std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
         std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libgit_dispatch.so"), b"stub").unwrap();
 
         let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
         std::fs::create_dir_all(&libexec).unwrap();
