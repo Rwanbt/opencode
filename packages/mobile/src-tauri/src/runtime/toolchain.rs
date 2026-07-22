@@ -188,6 +188,26 @@ pub(super) fn prepare_toolchain_wrappers(
         ));
     }
 
+    // LD_LIBRARY_PATH injected into every wrapper script. The binfmt_script →
+    // libbash_exec.so → libmusl_linker.so chain re-execs the .elf64 from
+    // scratch, so the script's own env (not git's env at exec time) is what
+    // the dynamic linker sees. Without this, ELF helpers under
+    // usr/libexec/git-core/ (git-remote-http, git-http-fetch, …) can't
+    // resolve libcurl.so.4 / libpcre2-8.so.0 / libz.so.1 / libssl.so.3 /
+    // libcrypto.so.3 even though they exist in <rootfs>/usr/lib/ — verified
+    // on-device: with LD_LIBRARY_PATH unset the linker reports
+    // "Error loading shared library libcurl.so.4"; with it set the helper
+    // starts cleanly and waits for the git remote-helper protocol on stdin.
+    // Includes usr/libexec/git-core so helpers there find their dependencies
+    // when the loader is invoked with no LD_LIBRARY_PATH from the parent.
+    // Also includes llvm19/lib (clang-extra-tools) and the JDK lib dir so
+    // java finds libjli.so + libz.so.1 — same set as the entry-point
+    // wrappers further down for consistency.
+    let ld_path = format!(
+        "{r}/usr/lib:{r}/lib:{r}/usr/libexec/git-core:{r}/usr/lib/llvm19/lib:{r}/usr/lib/jvm/java-21-openjdk/lib",
+        r = rootfs_dir.display()
+    );
+
     // Wrap one ELF binary as a shebang-script that re-execs through linker.
     // Idempotent: if `<file>.elf64` already exists we assume `file` is
     // already a wrapper script and skip. Symlinks are skipped — wrapping a
@@ -218,6 +238,10 @@ pub(super) fn prepare_toolchain_wrappers(
         // APK hash, so a wrapper from a prior install points to a now-dead
         // `libbash_exec.so` path and `cc: cannot execute: required file not
         // found`. Always re-write so the shebang tracks the current install.
+        // Also: the script MUST export LD_LIBRARY_PATH so the dynamic linker
+        // (libmusl_linker.so) can resolve libcurl.so.4 / libpcre2-8.so.0 /
+        // libz.so.1 for git-core helpers, and libstdc++.so.6 for cargo/rustc
+        // binutils spawned by absolute path.
         if backup.exists() {
             if let Ok(meta) = &meta_res {
                 if meta.file_type().is_symlink() {
@@ -225,8 +249,9 @@ pub(super) fn prepare_toolchain_wrappers(
                 }
             }
             let script = format!(
-                "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+                "#!{bash}\nexport LD_LIBRARY_PATH=\"{ld}:${{LD_LIBRARY_PATH}}\"\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
                 bash = bash_exec.display(),
+                ld = ld_path,
                 linker = musl_linker.display(),
                 backup = backup.display(),
             );
@@ -268,8 +293,9 @@ pub(super) fn prepare_toolchain_wrappers(
         }
         fs::rename(file, &backup)?;
         let script = format!(
-            "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+            "#!{bash}\nexport LD_LIBRARY_PATH=\"{ld}:${{LD_LIBRARY_PATH}}\"\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
             bash = bash_exec.display(),
+            ld = ld_path,
             linker = musl_linker.display(),
             backup = backup.display(),
         );
