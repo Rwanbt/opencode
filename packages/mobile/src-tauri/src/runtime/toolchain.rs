@@ -414,6 +414,14 @@ pub(super) fn prepare_toolchain_wrappers(
         let backup = PathBuf::from(format!("{}.elf64", file.display()));
         let metadata = fs::symlink_metadata(file)?;
         if metadata.file_type().is_symlink() {
+            if fs::read_link(file)
+                .ok()
+                .and_then(|target| target.file_name().map(|name| name == "git"))
+                .unwrap_or(false)
+            {
+                fs::remove_file(file)?;
+                std::os::unix::fs::symlink(&git_dispatch, file)?;
+            }
             return Ok(());
         }
 

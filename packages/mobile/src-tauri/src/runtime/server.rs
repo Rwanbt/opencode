@@ -201,10 +201,11 @@ pub async fn start_embedded_server(
     // Wrappers dir comes FIRST so cargo / rustc / cc are resolved through the
     // bash + linker chain rather than execve'd as raw musl ELFs (denied by
     // SELinux execute_no_trans).
+    let git_core_path = rootfs_dir.join("usr/libexec/git-core");
     let path = if let Some(ref w) = wrappers_dir {
-        format!("{}:{}:{}:{}", w.display(), bin_link_dir.display(), nlib_dir.display(), sys_path)
+        format!("{}:{}:{}:{}:{}", w.display(), bin_link_dir.display(), nlib_dir.display(), git_core_path.display(), sys_path)
     } else {
-        format!("{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), sys_path)
+        format!("{}:{}:{}:{}", bin_link_dir.display(), nlib_dir.display(), git_core_path.display(), sys_path)
     };
 
     // Phase C: detect whether adbd is running. When the user has USB debugging
@@ -236,7 +237,7 @@ pub async fn start_embedded_server(
     let bash_path = bin_link_dir.join("bash");
     let bash_env_path = home_dir.join(".bashrc");
     let env_content = format!(
-        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nRESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_AUTH_ENCRYPTION_KEY={auth_key}\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nHTTP_PROXY={proxy}\nHTTPS_PROXY={proxy}\nhttp_proxy={proxy}\nhttps_proxy={proxy}\nOPENCODE_MOBILE_MUSL_LINKER={musl_linker}\nOPENCODE_MOBILE_ROOTFS_DIR={rootfs}\n",
+        "HOME={home}\nTERM=xterm-256color\nENV={home}/.mkshrc\nBASH_ENV={bash_env}\nSSL_CERT_FILE={cert}\nNODE_EXTRA_CA_CERTS={cert}\nexport RESOLV_CONF={resolv}\nSHELL={shell}\nBUN_PTY_LIB={pty}\nOPENCODE_PTY_PORT=14098\nOPENCODE_SERVER_USERNAME=opencode\nOPENCODE_SERVER_PASSWORD={pw}\nOPENCODE_CLIENT=mobile-embedded\nOPENCODE_AUTH_STORAGE=encrypted-file\nOPENCODE_AUTH_ENCRYPTION_KEY={auth_key}\nOPENCODE_DISABLE_LSP_DOWNLOAD=false\nTMPDIR={tmp}\nTMP={tmp}\nTEMP={tmp}\nXDG_DATA_HOME={xdg_data}\nXDG_STATE_HOME={xdg_state}\nXDG_CACHE_HOME={xdg_cache}\nXDG_CONFIG_HOME={xdg_config}\nPATH={path_val}\nLD_LIBRARY_PATH={lib_path_val}\nexport HTTP_PROXY={proxy}\nexport HTTPS_PROXY={proxy}\nexport http_proxy={proxy}\nexport https_proxy={proxy}\nexport OPENCODE_MOBILE_MUSL_LINKER={musl_linker}\nexport OPENCODE_MOBILE_ROOTFS_DIR={rootfs}\n",
         home = home_dir.display(),
         bash_env = bash_env_path.display(),
         cert = ca_bundle_path.display(),
@@ -257,7 +258,7 @@ pub async fn start_embedded_server(
         rootfs = rootfs_dir.display(),
     );
     // Also add NO_PROXY for local connections
-    let env_content = format!("{}NO_PROXY=127.0.0.1,localhost\nno_proxy=127.0.0.1,localhost\n", env_content);
+    let env_content = format!("{}export NO_PROXY=127.0.0.1,localhost\nexport no_proxy=127.0.0.1,localhost\n", env_content);
     let env_content = format!("{}OPENCODE_CARGO_PROXY={}\n", env_content, if cargo_proxy_active { "1" } else { "0" });
     // Pin RUSTC + MUSL_LINKER so cargo finds rustc through the wrapper chain
     // even when its `Command::new` ignores PATH ordering.
@@ -773,6 +774,8 @@ fn build_tool_functions(dir: &Path, nlib_dir: &Path) -> String {
         rootfs_path.display(),
         rootfs_path.display()
     );
+    let git_ssl_ca_info = rootfs_path.join("etc/ssl/certs/ca-certificates.crt");
+    let git_exec_path = rootfs_path.join("usr/libexec/git-core");
     let musl_exec_path = rootfs_path.join("usr/lib/libmusl_exec.so");
     let tools = [
         "git", "nano", "less", "vim",
@@ -802,19 +805,34 @@ fn build_tool_functions(dir: &Path, nlib_dir: &Path) -> String {
         // redirected through the musl linker instead of hitting SELinux execute_no_trans.
         // MUSL_LINKER env var tells libmusl_exec where to redirect execve calls.
         // LD_LIBRARY_PATH lets the musl linker find Alpine shared libs at runtime.
-        tool_fns.push_str(&format!(
-            "{t}() {{ \
-                LD_LIBRARY_PATH=\"{libs}\" \
-                LD_PRELOAD=\"{musl_exec}\" \
-                MUSL_LINKER=\"{ld}\" \
-                \"{ld}\" \"{rootfs}/usr/bin/{t}\" \"$@\"; \
-            }}\n",
-            t = t,
-            ld = ld_musl_path.display(),
-            rootfs = rootfs_path.display(),
-            libs = rootfs_lib_path,
-            musl_exec = musl_exec_path.display(),
-        ));
+        // Git re-execs the native Bionic dispatcher for git-core helpers.
+        // Keep that dispatcher free of musl loader variables, while passing
+        // the rootfs library path directly to the musl linker for Git itself.
+        let command = if *t == "git" {
+            format!(
+                "GIT_SSL_CAINFO=\"{ca}\" LD_LIBRARY_PATH=\"\" LD_PRELOAD=\"\" MUSL_LINKER=\"{ld}\" \"{ld}\" --library-path \"{libs}\" \"{rootfs}/usr/bin/git\" --exec-path=\"{exec_path}\"",
+                ld = ld_musl_path.display(),
+                rootfs = rootfs_path.display(),
+                libs = rootfs_lib_path,
+                ca = git_ssl_ca_info.display(),
+                exec_path = git_exec_path.display(),
+            )
+        } else {
+            format!(
+                "GIT_SSL_CAINFO=\"{ca}\" LD_LIBRARY_PATH=\"{libs}\" LD_PRELOAD=\"{musl_exec}\" MUSL_LINKER=\"{ld}\" \"{ld}\" \"{rootfs}/usr/bin/{t}\"",
+                t = t,
+                ld = ld_musl_path.display(),
+                rootfs = rootfs_path.display(),
+                libs = rootfs_lib_path,
+                musl_exec = musl_exec_path.display(),
+                ca = git_ssl_ca_info.display(),
+            )
+        };
+        if is_shell_function_name(t) {
+            tool_fns.push_str(&format!("{t}() {{ {command} \"$@\"; }}\n"));
+        } else {
+            tool_fns.push_str(&format!("alias '{t}'='{command}'\n"));
+        }
     }
     tool_fns
 }
@@ -863,16 +881,29 @@ fn generate_bin_command_functions(bin_link_dir: &Path) -> String {
             "ls" | "grep" => " --color=auto",
             _ => "",
         };
-        out.push_str(&format!(
-            "{name}() {{ \"{path}\"{color_flag} \"$@\"; }}\n",
-            name = name,
-            path = path.display(),
-            color_flag = color_flag,
-        ));
+        if is_shell_function_name(name) {
+            out.push_str(&format!(
+                "{name}() {{ \"{path}\"{color_flag} \"$@\"; }}\n",
+                name = name,
+                path = path.display(),
+                color_flag = color_flag,
+            ));
+        } else {
+            out.push_str(&format!(
+                "alias '{name}'='\"{path}\"'\n",
+                name = name,
+                path = path.display(),
+            ));
+        }
     }
     out
 }
 
+fn is_shell_function_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    matches!(characters.next(), Some(first) if first == '_' || first.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
 /// Write the interactive shell rc files (.mkshrc/.bashrc/.profile) that source
 /// the tool wrappers and set the prompt/aliases (D-01 step 2b extraction).
 fn write_shell_rc_files(home_dir: &Path, mkshrc_path: &Path, tool_fns: &str, bin_link_dir: &Path) {
@@ -1001,13 +1032,41 @@ mod tests {
     }
 
     #[test]
+    fn build_tool_functions_uses_shell_safe_git_toolchain_names() {
+        let dir = temp_test_dir("tool_fns");
+        let nlib_dir = dir.join("native");
+        fs::create_dir_all(&nlib_dir).unwrap();
+
+        let out = build_tool_functions(&dir, &nlib_dir);
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(out.contains("git() {"), "git should remain a function wrapper");
+        assert!(
+            out.contains("GIT_SSL_CAINFO=\""),
+            "Git wrappers must point HTTPS at the bundled rootfs CA bundle"
+        );
+        assert!(
+            out.contains("git() { GIT_SSL_CAINFO=\""),
+            "Git must remain a shell function wrapper"
+        );
+        assert!(
+            out.contains("git() { GIT_SSL_CAINFO=\"")
+                && out.contains("LD_LIBRARY_PATH=\"\" LD_PRELOAD=\"\"")
+                && out.contains("--library-path"),
+            "Git must not leak musl loader variables into the native dispatcher"
+        );
+        assert!(out.contains("alias 'g++'='"), "g++ must use an alias wrapper");
+        assert!(!out.contains("g++() {"), "g++ must never be emitted as a function");
+    }
+
+    #[test]
     fn generate_bin_command_functions_wraps_managed_commands_by_absolute_path() {
         // D-19b: every non-builtin entry actually present in bin_link_dir must
         // get a shell function that calls its own absolute path directly —
         // this is what sidesteps bash's `$PATH`-search SIGSYS (see
         // reference-mobile-bash-path-search-posix-spawn-seccomp.md).
         let dir = temp_test_dir("bin_fns");
-        for name in ["ls", "date", "echo"] {
+        for name in ["ls", "date", "echo", "g++", "ld.bfd"] {
             std::os::unix::fs::symlink("/system/bin/toybox", dir.join(name)).unwrap();
         }
         let out = generate_bin_command_functions(&dir);
@@ -1019,6 +1078,10 @@ mod tests {
             "expected an ls() function calling the absolute path with --color=auto, got: {out}"
         );
         assert!(out.contains("date() {"), "date should get a function too");
+        assert!(out.contains("alias 'g++'='"), "g++ should use a shell-safe alias");
+        assert!(!out.contains("g++() {"), "g++ cannot be a shell function name");
+        assert!(out.contains("alias 'ld.bfd'='"), "ld.bfd should use a shell-safe alias");
+        assert!(!out.contains("ld.bfd() {"), "ld.bfd cannot be a shell function name");
         assert!(
             !out.contains("echo() {"),
             "echo is a shell builtin (SHELL_BUILTIN_OVERLAP) and must not be shadowed"
