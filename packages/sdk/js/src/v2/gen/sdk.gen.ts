@@ -89,6 +89,15 @@ import type {
   GitCommitErrors,
   GitCommitResponses,
   GitGetCredentialsResponses,
+  GithubDeviceCancelResponses,
+  GithubDevicePollResponses,
+  GithubDeviceStartErrors,
+  GithubDeviceStartResponses,
+  GithubDiagnosticsResponses,
+  GithubDisconnectResponses,
+  GithubStatusResponses,
+  GithubTestConnectionErrors,
+  GithubTestConnectionResponses,
   GitLogResponses,
   GitPullResponses,
   GitPushResponses,
@@ -7175,6 +7184,220 @@ export class Git extends HeyApiClient {
   }
 }
 
+export class Github extends HeyApiClient {
+  /**
+   * Get GitHub connection status
+   *
+   * Returns whether a GitHub session is connected (from stored state, no network call) and whether the OAuth app is configured for this build.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GithubStatusResponses, unknown, ThrowOnError>({
+      url: "/github/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Start GitHub Device Flow
+   *
+   * Requests a device/user code pair from GitHub. Call /device/poll on the returned interval.
+   */
+  public deviceStart<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GithubDeviceStartResponses, GithubDeviceStartErrors, ThrowOnError>({
+      url: "/github/device/start",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Poll the pending Device Flow
+   *
+   * Call on the interval returned by /device/start (increase it on slow_down). No request body.
+   */
+  public devicePoll<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GithubDevicePollResponses, unknown, ThrowOnError>({
+      url: "/github/device/poll",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel the pending Device Flow
+   */
+  public deviceCancel<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GithubDeviceCancelResponses, unknown, ThrowOnError>({
+      url: "/github/device/cancel",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disconnect the GitHub account
+   *
+   * Deletes the stored session from whichever backend holds it (keychain / encrypted file / plain file).
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GithubDisconnectResponses, unknown, ThrowOnError>({
+      url: "/github/disconnect",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Live capability check
+   *
+   * Re-validates the GitHub session against the live API and probes git HTTPS with the session's credentials. Distinguishes API reachability from git transport health — never reports 'operational' from the API check alone.
+   */
+  public testConnection<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      GithubTestConnectionResponses,
+      GithubTestConnectionErrors,
+      ThrowOnError
+    >({
+      url: "/github/test-connection",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Git runtime diagnostics
+   *
+   * Unauthenticated probe of the local git installation and HTTPS transport (git --version, exec-path, git-remote-https presence, a read-only ls-remote against a public repo). Safe to run without a GitHub session.
+   */
+  public diagnostics<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GithubDiagnosticsResponses, unknown, ThrowOnError>({
+      url: "/github/diagnostics",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Formatter extends HeyApiClient {
   /**
    * Get formatter status
@@ -7373,6 +7596,11 @@ export class OpencodeClient extends HeyApiClient {
   private _git?: Git
   get git(): Git {
     return (this._git ??= new Git({ client: this.client }))
+  }
+
+  private _github?: Github
+  get github(): Github {
+    return (this._github ??= new Github({ client: this.client }))
   }
 
   private _formatter?: Formatter

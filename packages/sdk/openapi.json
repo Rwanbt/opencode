@@ -14526,6 +14526,284 @@
         ]
       }
     },
+    "/github/status": {
+      "get": {
+        "operationId": "github.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get GitHub connection status",
+        "description": "Returns whether a GitHub session is connected (from stored state, no network call) and whether the OAuth app is configured for this build.",
+        "responses": {
+          "200": {
+            "description": "Connection status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubStatus"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/device/start": {
+      "post": {
+        "operationId": "github.deviceStart",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Start GitHub Device Flow",
+        "description": "Requests a device/user code pair from GitHub. Call /device/poll on the returned interval.",
+        "responses": {
+          "200": {
+            "description": "Device authorization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubDeviceAuthorization"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "GitHub OAuth app not configured for this build"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.deviceStart({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/device/poll": {
+      "post": {
+        "operationId": "github.devicePoll",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Poll the pending Device Flow",
+        "description": "Call on the interval returned by /device/start (increase it on slow_down). No request body.",
+        "responses": {
+          "200": {
+            "description": "Poll result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubPollResult"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.devicePoll({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/device/cancel": {
+      "post": {
+        "operationId": "github.deviceCancel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Cancel the pending Device Flow",
+        "responses": {
+          "200": {
+            "description": "Cancelled"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.deviceCancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/disconnect": {
+      "post": {
+        "operationId": "github.disconnect",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Disconnect the GitHub account",
+        "description": "Deletes the stored session from whichever backend holds it (keychain / encrypted file / plain file).",
+        "responses": {
+          "200": {
+            "description": "Disconnected"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.disconnect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/test-connection": {
+      "post": {
+        "operationId": "github.testConnection",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Live capability check",
+        "description": "Re-validates the GitHub session against the live API and probes git HTTPS with the session's credentials. Distinguishes API reachability from git transport health — never reports 'operational' from the API check alone.",
+        "responses": {
+          "200": {
+            "description": "Capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubCapabilities"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No GitHub session connected"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.testConnection({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/github/diagnostics": {
+      "get": {
+        "operationId": "github.diagnostics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Git runtime diagnostics",
+        "description": "Unauthenticated probe of the local git installation and HTTPS transport (git --version, exec-path, git-remote-https presence, a read-only ls-remote against a public repo). Safe to run without a GitHub session.",
+        "responses": {
+          "200": {
+            "description": "Diagnostics report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitRuntimeReport"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.github.diagnostics({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/formatter": {
       "get": {
         "operationId": "formatter.status",
@@ -14593,6 +14871,572 @@
           }
         },
         "required": ["data", "errors", "success"]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.started": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.started"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["free", "quick", "standard", "deep"]
+              },
+              "providers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["debateID", "tier", "providers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.phase_changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.phase_changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": ["debateID", "phase"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.started": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.started"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": ["debateID", "provider", "phase"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.completed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.completed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "tokens": {
+                "type": "number"
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": ["debateID", "provider", "tokens", "durationMs", "phase"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.provider.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.provider.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "phase1_diverge",
+                  "phase2_extract",
+                  "phase3_converge",
+                  "phase4_synthesize",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": ["debateID", "provider", "error", "phase"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.claim.extracted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.claim.extracted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "claimId": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "novelty": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "claimId", "category", "novelty"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.cost.update": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.cost.update"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "spent": {
+                "type": "number"
+              },
+              "budget": {
+                "type": "number"
+              },
+              "percent": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "spent", "budget", "percent"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.redteam.activated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.redteam.activated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "reason"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.convergence.round": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.convergence.round"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "round": {
+                "type": "number"
+              },
+              "claimsResubmitted": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "round", "claimsResubmitted"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.canary.result": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.canary.result"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "detected": {
+                "type": "boolean"
+              }
+            },
+            "required": ["debateID", "detected"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.halting": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.halting"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "marginalGain": {
+                "type": "number"
+              },
+              "marginalCost": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "reason", "marginalGain", "marginalCost"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.completed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.completed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "blindSpotCount": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "blindSpotCount", "cost", "durationMs"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["debateID", "error"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.collective.debate.budget_warning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "collective.debate.budget_warning"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "debateID": {
+                "type": "string",
+                "pattern": "^dbt_.*"
+              },
+              "percentUsed": {
+                "type": "number"
+              },
+              "tokensUsed": {
+                "type": "number"
+              },
+              "tokenLimit": {
+                "type": "number"
+              }
+            },
+            "required": ["debateID", "percentUsed", "tokensUsed", "tokenLimit"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.prompt.append": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.prompt.append"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.command.execute": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.command.execute"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.toast.show": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.toast.show"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": ["message", "variant"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.session.select": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.session.select"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "description": "Session ID to navigate to",
+                "type": "string",
+                "pattern": "^ses.*"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
       },
       "Project": {
         "type": "object",
@@ -14723,34 +15567,6 @@
               }
             },
             "required": ["directory"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.server.connected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.connected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.global.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "global.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -15592,429 +16408,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.collective.debate.started": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.debate.started"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "tier": {
-                "type": "string",
-                "enum": ["free", "quick", "standard", "deep"]
-              },
-              "providers": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": ["debateID", "tier", "providers"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.debate.phase_changed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.debate.phase_changed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "phase": {
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "phase1_diverge",
-                  "phase2_extract",
-                  "phase3_converge",
-                  "phase4_synthesize",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              }
-            },
-            "required": ["debateID", "phase"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.provider.started": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.provider.started"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "provider": {
-                "type": "string"
-              },
-              "role": {
-                "type": "string"
-              },
-              "phase": {
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "phase1_diverge",
-                  "phase2_extract",
-                  "phase3_converge",
-                  "phase4_synthesize",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              }
-            },
-            "required": ["debateID", "provider", "phase"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.provider.completed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.provider.completed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "provider": {
-                "type": "string"
-              },
-              "tokens": {
-                "type": "number"
-              },
-              "durationMs": {
-                "type": "number"
-              },
-              "phase": {
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "phase1_diverge",
-                  "phase2_extract",
-                  "phase3_converge",
-                  "phase4_synthesize",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              }
-            },
-            "required": ["debateID", "provider", "tokens", "durationMs", "phase"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.provider.failed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.provider.failed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "provider": {
-                "type": "string"
-              },
-              "error": {
-                "type": "string"
-              },
-              "phase": {
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "phase1_diverge",
-                  "phase2_extract",
-                  "phase3_converge",
-                  "phase4_synthesize",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              }
-            },
-            "required": ["debateID", "provider", "error", "phase"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.claim.extracted": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.claim.extracted"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "claimId": {
-                "type": "string"
-              },
-              "category": {
-                "type": "string"
-              },
-              "novelty": {
-                "type": "string"
-              }
-            },
-            "required": ["debateID", "claimId", "category", "novelty"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.cost.update": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.cost.update"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "spent": {
-                "type": "number"
-              },
-              "budget": {
-                "type": "number"
-              },
-              "percent": {
-                "type": "number"
-              }
-            },
-            "required": ["debateID", "spent", "budget", "percent"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.redteam.activated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.redteam.activated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "reason": {
-                "type": "string"
-              }
-            },
-            "required": ["debateID", "reason"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.convergence.round": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.convergence.round"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "round": {
-                "type": "number"
-              },
-              "claimsResubmitted": {
-                "type": "number"
-              }
-            },
-            "required": ["debateID", "round", "claimsResubmitted"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.canary.result": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.canary.result"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "detected": {
-                "type": "boolean"
-              }
-            },
-            "required": ["debateID", "detected"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.halting": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.halting"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "reason": {
-                "type": "string"
-              },
-              "marginalGain": {
-                "type": "number"
-              },
-              "marginalCost": {
-                "type": "number"
-              }
-            },
-            "required": ["debateID", "reason", "marginalGain", "marginalCost"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.debate.completed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.debate.completed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "blindSpotCount": {
-                "type": "number"
-              },
-              "cost": {
-                "type": "number"
-              },
-              "durationMs": {
-                "type": "number"
-              }
-            },
-            "required": ["debateID", "blindSpotCount", "cost", "durationMs"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.debate.failed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.debate.failed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": ["debateID", "error"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.collective.debate.budget_warning": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "collective.debate.budget_warning"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "debateID": {
-                "type": "string",
-                "pattern": "^dbt_.*"
-              },
-              "percentUsed": {
-                "type": "number"
-              },
-              "tokensUsed": {
-                "type": "number"
-              },
-              "tokenLimit": {
-                "type": "number"
-              }
-            },
-            "required": ["debateID", "percentUsed", "tokensUsed", "tokenLimit"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.collective.shadow.divergence": {
         "type": "object",
         "properties": {
@@ -16043,121 +16436,6 @@
               }
             },
             "required": ["sessionID", "question", "severity", "shadowResponse", "divergenceReason"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.prompt.append": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.prompt.append"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.command.execute": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.command.execute"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "session.list",
-                      "session.new",
-                      "session.share",
-                      "session.interrupt",
-                      "session.compact",
-                      "session.page.up",
-                      "session.page.down",
-                      "session.line.up",
-                      "session.line.down",
-                      "session.half.page.up",
-                      "session.half.page.down",
-                      "session.first",
-                      "session.last",
-                      "prompt.clear",
-                      "prompt.submit",
-                      "agent.cycle"
-                    ]
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            },
-            "required": ["command"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.toast.show": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.toast.show"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string",
-                "enum": ["info", "success", "warning", "error"]
-              },
-              "duration": {
-                "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
-              }
-            },
-            "required": ["message", "variant"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.session.select": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.session.select"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "description": "Session ID to navigate to",
-                "type": "string",
-                "pattern": "^ses.*"
-              }
-            },
-            "required": ["sessionID"]
           }
         },
         "required": ["type", "properties"]
@@ -18064,6 +18342,66 @@
       "Event": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.started"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.phase_changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.started"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.completed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.provider.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.claim.extracted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.cost.update"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.redteam.activated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.convergence.round"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.canary.result"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.halting"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.completed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.collective.debate.budget_warning"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
             "$ref": "#/components/schemas/Event.project.updated"
           },
           {
@@ -18074,12 +18412,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.connected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -18154,61 +18486,7 @@
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.collective.debate.started"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.debate.phase_changed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.provider.started"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.provider.completed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.provider.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.claim.extracted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.cost.update"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.redteam.activated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.convergence.round"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.canary.result"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.halting"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.debate.completed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.debate.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.collective.debate.budget_warning"
-          },
-          {
             "$ref": "#/components/schemas/Event.collective.shadow.divergence"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.session.select"
           },
           {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"
@@ -21848,6 +22126,195 @@
           }
         },
         "required": ["name", "current", "remote"]
+      },
+      "GithubIdentity": {
+        "type": "object",
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string"
+          },
+          "profileUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["login", "profileUrl"]
+      },
+      "GithubStatus": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/GithubIdentity"
+          }
+        },
+        "required": ["connected", "configured"]
+      },
+      "GithubDeviceAuthorization": {
+        "type": "object",
+        "properties": {
+          "userCode": {
+            "type": "string"
+          },
+          "verificationUri": {
+            "type": "string"
+          },
+          "verificationUriComplete": {
+            "type": "string"
+          },
+          "expiresInSeconds": {
+            "type": "number"
+          },
+          "intervalSeconds": {
+            "type": "number"
+          }
+        },
+        "required": ["userCode", "verificationUri", "expiresInSeconds", "intervalSeconds"]
+      },
+      "GithubPollResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "slow_down", "expired", "denied", "no_pending_flow", "success", "error"]
+          },
+          "nextIntervalSeconds": {
+            "type": "number"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/GithubIdentity"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["status"]
+      },
+      "GithubCapabilities": {
+        "type": "object",
+        "properties": {
+          "apiReachable": {
+            "type": "boolean"
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "privateRepositoryAccess": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "const": "unknown"
+              }
+            ]
+          },
+          "gitHttpsAvailable": {
+            "type": "boolean"
+          },
+          "gitHttpsAuthenticated": {
+            "type": "boolean"
+          },
+          "gitSshAvailable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "const": "unsupported"
+              }
+            ]
+          },
+          "lastCheckedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "apiReachable",
+          "authenticated",
+          "privateRepositoryAccess",
+          "gitHttpsAvailable",
+          "gitHttpsAuthenticated",
+          "gitSshAvailable",
+          "lastCheckedAt"
+        ]
+      },
+      "GitRuntimeReport": {
+        "type": "object",
+        "properties": {
+          "gitAvailable": {
+            "type": "boolean"
+          },
+          "gitVersion": {
+            "type": "string"
+          },
+          "execPath": {
+            "type": "string"
+          },
+          "httpsHelperFound": {
+            "type": "boolean"
+          },
+          "httpsHelperPath": {
+            "type": "string"
+          },
+          "httpsHelperExecutable": {
+            "type": "boolean"
+          },
+          "httpsProbeSucceeded": {
+            "type": "boolean"
+          },
+          "sshAvailable": {
+            "type": "boolean"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "object",
+            "properties": {
+              "stage": {
+                "type": "string"
+              },
+              "code": {
+                "type": "number"
+              },
+              "signal": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "safeMessage": {
+                "type": "string"
+              }
+            },
+            "required": ["stage", "category", "safeMessage"]
+          }
+        },
+        "required": [
+          "gitAvailable",
+          "httpsHelperFound",
+          "httpsHelperExecutable",
+          "httpsProbeSucceeded",
+          "sshAvailable",
+          "platform",
+          "architecture"
+        ]
       },
       "FormatterStatus": {
         "type": "object",

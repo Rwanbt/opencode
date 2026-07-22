@@ -12,6 +12,237 @@ export type BadRequestError = {
   success: false
 }
 
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventCollectiveDebateStarted = {
+  type: "collective.debate.started"
+  properties: {
+    debateID: string
+    tier: "free" | "quick" | "standard" | "deep"
+    providers: Array<string>
+  }
+}
+
+export type EventCollectiveDebatePhaseChanged = {
+  type: "collective.debate.phase_changed"
+  properties: {
+    debateID: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
+  }
+}
+
+export type EventCollectiveProviderStarted = {
+  type: "collective.provider.started"
+  properties: {
+    debateID: string
+    provider: string
+    role?: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
+  }
+}
+
+export type EventCollectiveProviderCompleted = {
+  type: "collective.provider.completed"
+  properties: {
+    debateID: string
+    provider: string
+    tokens: number
+    durationMs: number
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
+  }
+}
+
+export type EventCollectiveProviderFailed = {
+  type: "collective.provider.failed"
+  properties: {
+    debateID: string
+    provider: string
+    error: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
+  }
+}
+
+export type EventCollectiveClaimExtracted = {
+  type: "collective.claim.extracted"
+  properties: {
+    debateID: string
+    claimId: string
+    category: string
+    novelty: string
+  }
+}
+
+export type EventCollectiveCostUpdate = {
+  type: "collective.cost.update"
+  properties: {
+    debateID: string
+    spent: number
+    budget: number
+    percent: number
+  }
+}
+
+export type EventCollectiveRedteamActivated = {
+  type: "collective.redteam.activated"
+  properties: {
+    debateID: string
+    reason: string
+  }
+}
+
+export type EventCollectiveConvergenceRound = {
+  type: "collective.convergence.round"
+  properties: {
+    debateID: string
+    round: number
+    claimsResubmitted: number
+  }
+}
+
+export type EventCollectiveCanaryResult = {
+  type: "collective.canary.result"
+  properties: {
+    debateID: string
+    detected: boolean
+  }
+}
+
+export type EventCollectiveHalting = {
+  type: "collective.halting"
+  properties: {
+    debateID: string
+    reason: string
+    marginalGain: number
+    marginalCost: number
+  }
+}
+
+export type EventCollectiveDebateCompleted = {
+  type: "collective.debate.completed"
+  properties: {
+    debateID: string
+    blindSpotCount: number
+    cost: number
+    durationMs: number
+  }
+}
+
+export type EventCollectiveDebateFailed = {
+  type: "collective.debate.failed"
+  properties: {
+    debateID: string
+    error: string
+  }
+}
+
+export type EventCollectiveDebateBudgetWarning = {
+  type: "collective.debate.budget_warning"
+  properties: {
+    debateID: string
+    percentUsed: number
+    tokensUsed: number
+    tokenLimit: number
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
 export type Project = {
   id: string
   worktree: string
@@ -59,20 +290,6 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
   }
 }
 
@@ -385,169 +602,6 @@ export type EventTodoUpdated = {
   }
 }
 
-export type EventCollectiveDebateStarted = {
-  type: "collective.debate.started"
-  properties: {
-    debateID: string
-    tier: "free" | "quick" | "standard" | "deep"
-    providers: Array<string>
-  }
-}
-
-export type EventCollectiveDebatePhaseChanged = {
-  type: "collective.debate.phase_changed"
-  properties: {
-    debateID: string
-    phase:
-      | "pending"
-      | "phase1_diverge"
-      | "phase2_extract"
-      | "phase3_converge"
-      | "phase4_synthesize"
-      | "completed"
-      | "failed"
-      | "cancelled"
-  }
-}
-
-export type EventCollectiveProviderStarted = {
-  type: "collective.provider.started"
-  properties: {
-    debateID: string
-    provider: string
-    role?: string
-    phase:
-      | "pending"
-      | "phase1_diverge"
-      | "phase2_extract"
-      | "phase3_converge"
-      | "phase4_synthesize"
-      | "completed"
-      | "failed"
-      | "cancelled"
-  }
-}
-
-export type EventCollectiveProviderCompleted = {
-  type: "collective.provider.completed"
-  properties: {
-    debateID: string
-    provider: string
-    tokens: number
-    durationMs: number
-    phase:
-      | "pending"
-      | "phase1_diverge"
-      | "phase2_extract"
-      | "phase3_converge"
-      | "phase4_synthesize"
-      | "completed"
-      | "failed"
-      | "cancelled"
-  }
-}
-
-export type EventCollectiveProviderFailed = {
-  type: "collective.provider.failed"
-  properties: {
-    debateID: string
-    provider: string
-    error: string
-    phase:
-      | "pending"
-      | "phase1_diverge"
-      | "phase2_extract"
-      | "phase3_converge"
-      | "phase4_synthesize"
-      | "completed"
-      | "failed"
-      | "cancelled"
-  }
-}
-
-export type EventCollectiveClaimExtracted = {
-  type: "collective.claim.extracted"
-  properties: {
-    debateID: string
-    claimId: string
-    category: string
-    novelty: string
-  }
-}
-
-export type EventCollectiveCostUpdate = {
-  type: "collective.cost.update"
-  properties: {
-    debateID: string
-    spent: number
-    budget: number
-    percent: number
-  }
-}
-
-export type EventCollectiveRedteamActivated = {
-  type: "collective.redteam.activated"
-  properties: {
-    debateID: string
-    reason: string
-  }
-}
-
-export type EventCollectiveConvergenceRound = {
-  type: "collective.convergence.round"
-  properties: {
-    debateID: string
-    round: number
-    claimsResubmitted: number
-  }
-}
-
-export type EventCollectiveCanaryResult = {
-  type: "collective.canary.result"
-  properties: {
-    debateID: string
-    detected: boolean
-  }
-}
-
-export type EventCollectiveHalting = {
-  type: "collective.halting"
-  properties: {
-    debateID: string
-    reason: string
-    marginalGain: number
-    marginalCost: number
-  }
-}
-
-export type EventCollectiveDebateCompleted = {
-  type: "collective.debate.completed"
-  properties: {
-    debateID: string
-    blindSpotCount: number
-    cost: number
-    durationMs: number
-  }
-}
-
-export type EventCollectiveDebateFailed = {
-  type: "collective.debate.failed"
-  properties: {
-    debateID: string
-    error: string
-  }
-}
-
-export type EventCollectiveDebateBudgetWarning = {
-  type: "collective.debate.budget_warning"
-  properties: {
-    debateID: string
-    percentUsed: number
-    tokensUsed: number
-    tokenLimit: number
-  }
-}
-
 export type EventCollectiveShadowDivergence = {
   type: "collective.shadow.divergence"
   properties: {
@@ -556,60 +610,6 @@ export type EventCollectiveShadowDivergence = {
     severity: "info" | "warning" | "critical"
     shadowResponse: string
     divergenceReason: string
-  }
-}
-
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
   }
 }
 
@@ -1252,12 +1252,30 @@ export type EventSessionDeleted = {
 }
 
 export type Event =
+  | EventServerConnected
+  | EventGlobalDisposed
+  | EventCollectiveDebateStarted
+  | EventCollectiveDebatePhaseChanged
+  | EventCollectiveProviderStarted
+  | EventCollectiveProviderCompleted
+  | EventCollectiveProviderFailed
+  | EventCollectiveClaimExtracted
+  | EventCollectiveCostUpdate
+  | EventCollectiveRedteamActivated
+  | EventCollectiveConvergenceRound
+  | EventCollectiveCanaryResult
+  | EventCollectiveHalting
+  | EventCollectiveDebateCompleted
+  | EventCollectiveDebateFailed
+  | EventCollectiveDebateBudgetWarning
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
   | EventProjectUpdated
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventServerInstanceDisposed
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -1282,25 +1300,7 @@ export type Event =
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventTodoUpdated
-  | EventCollectiveDebateStarted
-  | EventCollectiveDebatePhaseChanged
-  | EventCollectiveProviderStarted
-  | EventCollectiveProviderCompleted
-  | EventCollectiveProviderFailed
-  | EventCollectiveClaimExtracted
-  | EventCollectiveCostUpdate
-  | EventCollectiveRedteamActivated
-  | EventCollectiveConvergenceRound
-  | EventCollectiveCanaryResult
-  | EventCollectiveHalting
-  | EventCollectiveDebateCompleted
-  | EventCollectiveDebateFailed
-  | EventCollectiveDebateBudgetWarning
   | EventCollectiveShadowDivergence
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -2828,6 +2828,64 @@ export type GitBranchEntry = {
   name: string
   current: boolean
   remote: boolean
+}
+
+export type GithubIdentity = {
+  login: string
+  name?: string
+  avatarUrl?: string
+  profileUrl: string
+}
+
+export type GithubStatus = {
+  connected: boolean
+  configured: boolean
+  identity?: GithubIdentity
+}
+
+export type GithubDeviceAuthorization = {
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresInSeconds: number
+  intervalSeconds: number
+}
+
+export type GithubPollResult = {
+  status: "pending" | "slow_down" | "expired" | "denied" | "no_pending_flow" | "success" | "error"
+  nextIntervalSeconds?: number
+  identity?: GithubIdentity
+  message?: string
+}
+
+export type GithubCapabilities = {
+  apiReachable: boolean
+  authenticated: boolean
+  privateRepositoryAccess: boolean | "unknown"
+  gitHttpsAvailable: boolean
+  gitHttpsAuthenticated: boolean
+  gitSshAvailable: boolean | "unsupported"
+  lastCheckedAt: number
+}
+
+export type GitRuntimeReport = {
+  gitAvailable: boolean
+  gitVersion?: string
+  execPath?: string
+  httpsHelperFound: boolean
+  httpsHelperPath?: string
+  httpsHelperExecutable: boolean
+  httpsProbeSucceeded: boolean
+  sshAvailable: boolean
+  platform: string
+  architecture: string
+  failure?: {
+    stage: string
+    code?: number
+    signal?: string
+    category: string
+    safeMessage: string
+  }
 }
 
 export type FormatterStatus = {
@@ -8902,6 +8960,149 @@ export type GitSetCredentialsResponses = {
 }
 
 export type GitSetCredentialsResponse = GitSetCredentialsResponses[keyof GitSetCredentialsResponses]
+
+export type GithubStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/status"
+}
+
+export type GithubStatusResponses = {
+  /**
+   * Connection status
+   */
+  200: GithubStatus
+}
+
+export type GithubStatusResponse = GithubStatusResponses[keyof GithubStatusResponses]
+
+export type GithubDeviceStartData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/start"
+}
+
+export type GithubDeviceStartErrors = {
+  /**
+   * GitHub OAuth app not configured for this build
+   */
+  503: unknown
+}
+
+export type GithubDeviceStartResponses = {
+  /**
+   * Device authorization
+   */
+  200: GithubDeviceAuthorization
+}
+
+export type GithubDeviceStartResponse = GithubDeviceStartResponses[keyof GithubDeviceStartResponses]
+
+export type GithubDevicePollData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/poll"
+}
+
+export type GithubDevicePollResponses = {
+  /**
+   * Poll result
+   */
+  200: GithubPollResult
+}
+
+export type GithubDevicePollResponse = GithubDevicePollResponses[keyof GithubDevicePollResponses]
+
+export type GithubDeviceCancelData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/cancel"
+}
+
+export type GithubDeviceCancelResponses = {
+  /**
+   * Cancelled
+   */
+  200: unknown
+}
+
+export type GithubDisconnectData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/disconnect"
+}
+
+export type GithubDisconnectResponses = {
+  /**
+   * Disconnected
+   */
+  200: unknown
+}
+
+export type GithubTestConnectionData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/test-connection"
+}
+
+export type GithubTestConnectionErrors = {
+  /**
+   * No GitHub session connected
+   */
+  409: unknown
+}
+
+export type GithubTestConnectionResponses = {
+  /**
+   * Capabilities
+   */
+  200: GithubCapabilities
+}
+
+export type GithubTestConnectionResponse = GithubTestConnectionResponses[keyof GithubTestConnectionResponses]
+
+export type GithubDiagnosticsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/diagnostics"
+}
+
+export type GithubDiagnosticsResponses = {
+  /**
+   * Diagnostics report
+   */
+  200: GitRuntimeReport
+}
+
+export type GithubDiagnosticsResponse = GithubDiagnosticsResponses[keyof GithubDiagnosticsResponses]
 
 export type FormatterStatusData = {
   body?: never
