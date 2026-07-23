@@ -312,6 +312,18 @@ pub async fn start_embedded_server(
         .env("OPENCODE_AUTH_STORAGE", "encrypted-file")
         .env("OPENCODE_AUTH_ENCRYPTION_KEY", &auth_key)
         .env("OPENCODE_CARGO_PROXY", if cargo_proxy_active { "1" } else { "0" })
+        // musl's getaddrinfo can't resolve DNS on Android (see proxy.rs) —
+        // without these, mobile-entry.ts's fetch() proxy-patch never
+        // activates (it's gated on process.env.HTTPS_PROXY) and every
+        // outbound LLM/provider request fails to connect. This is the
+        // server child's OWN process env, separate from the interactive
+        // shell's `.env_vars` file below, which already sets these.
+        .env("HTTP_PROXY", &proxy_url)
+        .env("HTTPS_PROXY", &proxy_url)
+        .env("http_proxy", &proxy_url)
+        .env("https_proxy", &proxy_url)
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
         .env("OPENCODE_DISABLE_LSP_DOWNLOAD", "false")
         .env("BUN_PTY_LIB", nlib_dir.join("librust_pty.so").to_str().unwrap_or(""))
         .env("SHELL", bin_link_dir.join("bash").to_str().unwrap_or("/bin/sh"))

@@ -21,7 +21,15 @@ if (existsSync(envFile)) {
     for (const line of content.split("\n")) {
       const eq = line.indexOf("=")
       if (eq > 0) {
-        const key = line.slice(0, eq)
+        // Some lines are prefixed with `export ` (needed when this file is
+        // also sourced by an interactive POSIX shell, so vars propagate to
+        // its child processes) — strip it so the key matches the bare env
+        // var name. Without this, "export HTTP_PROXY=..." was parsed as
+        // process.env["export HTTP_PROXY"], silently leaving HTTP_PROXY/
+        // HTTPS_PROXY/RESOLV_CONF/etc. unset here and breaking every
+        // outbound fetch (musl can't resolve DNS without the proxy).
+        const rawKey = line.slice(0, eq)
+        const key = rawKey.startsWith("export ") ? rawKey.slice(7) : rawKey
         const val = line.slice(eq + 1)
         if (key === "PATH") {
           // PATH is a special case: Bun always synthesizes some non-empty
