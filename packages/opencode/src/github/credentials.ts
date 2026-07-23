@@ -11,6 +11,7 @@
 import { execFile } from "node:child_process"
 import * as GithubAuth from "./auth"
 import { resolveGitInvocation } from "../git/android-launcher"
+import { readCredentials as readManualGitCredentials } from "../git/credentials"
 
 const GITHUB_HOST = "github.com"
 const URL_SCOPE = `http.https://${GITHUB_HOST}/.extraheader`
@@ -63,5 +64,51 @@ export async function buildGithubAuthEnv(cwd: string, remote: string): Promise<{
     }
   } catch {
     return { env: {} }
+  }
+}
+
+/** Mobile-only: writes the GitHub OAuth token into ~/.gitconfig (same
+ *  github.com-scoped http.extraheader as buildGithubAuthEnv above) so the
+ *  interactive terminal's raw `git push`/`pull`/`fetch`/`clone` — which
+ *  never goes through Git.push()/pull() and its per-invocation
+ *  getAuthEnv() — also authenticates automatically. Desktop already has
+ *  working OS credential helpers and doesn't need this.
+ *
+ *  Trade-off (deliberate, confirmed with the user before implementing):
+ *  unlike the per-invocation env-var injection used everywhere else, this
+ *  token becomes readable by ANY process running in this shell — including
+ *  agent-run bash commands — for as long as the server process lives. Call
+ *  once at server boot (see cli/cmd/serve.ts); does not update live if the
+ *  GitHub session changes while the server keeps running (same limitation
+ *  as the rest of this app's boot-time shell config — restart to refresh).
+ *
+ *  No-op, never throws, on: desktop, no GitHub session connected, or a
+ *  manual git credential already configured for any host (mirrors the
+ *  precedence rule in git/index.ts::getAuthEnv — manual config always wins,
+ *  so we don't silently override a token/key the user set up on purpose). */
+export async function persistGithubGitConfigForTerminal(): Promise<void> {
+  if (process.env.OPENCODE_CLIENT !== "mobile-embedded") return
+  try {
+    const manual = await readManualGitCredentials()
+    if (manual.type !== "none") return
+
+    const token = await GithubAuth.getAccessToken()
+    if (!token) return
+
+    const basic = Buffer.from(`x-access-token:${token}`).toString("base64")
+    const invocation = resolveGitInvocation()
+    await new Promise<void>((resolve) => {
+      execFile(
+        invocation.bin,
+        invocation.args(["config", "--global", URL_SCOPE, `Authorization: Basic ${basic}`]),
+        { timeout: 5_000, env: { ...process.env, ...invocation.env } },
+        (error) => {
+          if (error) console.error(`[github] persistGithubGitConfigForTerminal: ${error.message}`)
+          resolve()
+        },
+      )
+    })
+  } catch (e) {
+    console.error(`[github] persistGithubGitConfigForTerminal: ${e}`)
   }
 }

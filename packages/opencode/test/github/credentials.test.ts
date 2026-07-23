@@ -113,3 +113,79 @@ test("never throws even if cwd is not a git repository", async () => {
     await fs.rm(notARepo, { recursive: true, force: true })
   }
 })
+
+/**
+ * Tests for persistGithubGitConfigForTerminal — the terminal-side bridge
+ * (writes ~/.gitconfig instead of returning per-invocation env vars).
+ */
+import { _resetGitInvocationCacheForTests } from "../../src/git/android-launcher"
+
+let fakeHome: string
+let savedHome: string | undefined
+let savedClient: string | undefined
+
+beforeEach(async () => {
+  fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "oc-github-gitconfig-home-"))
+  savedHome = process.env.HOME
+  savedClient = process.env.OPENCODE_CLIENT
+  process.env.HOME = fakeHome
+  process.env.OPENCODE_CLIENT = "mobile-embedded"
+  _resetGitInvocationCacheForTests()
+})
+
+afterEach(async () => {
+  if (savedHome === undefined) delete process.env.HOME
+  else process.env.HOME = savedHome
+  if (savedClient === undefined) delete process.env.OPENCODE_CLIENT
+  else process.env.OPENCODE_CLIENT = savedClient
+  _resetGitInvocationCacheForTests()
+  await fs.rm(fakeHome, { recursive: true, force: true })
+})
+
+async function readGitconfig(): Promise<string> {
+  return fs.readFile(path.join(fakeHome, ".gitconfig"), "utf8").catch(() => "")
+}
+
+test("persistGithubGitConfigForTerminal is a no-op on desktop", async () => {
+  process.env.OPENCODE_CLIENT = "desktop"
+  await connectFakeSession("gho_desktop_should_not_persist")
+
+  const { persistGithubGitConfigForTerminal } = await import("../../src/github/credentials")
+  await persistGithubGitConfigForTerminal()
+
+  expect(await readGitconfig()).toBe("")
+})
+
+test("persistGithubGitConfigForTerminal is a no-op when no GitHub session is connected", async () => {
+  const { persistGithubGitConfigForTerminal } = await import("../../src/github/credentials")
+  await persistGithubGitConfigForTerminal()
+
+  expect(await readGitconfig()).toBe("")
+})
+
+test("persistGithubGitConfigForTerminal writes a github.com-scoped extraheader when connected", async () => {
+  await connectFakeSession("gho_terminal_token_456")
+
+  const { persistGithubGitConfigForTerminal } = await import("../../src/github/credentials")
+  await persistGithubGitConfigForTerminal()
+
+  const config = await readGitconfig()
+  expect(config).toContain('[http "https://github.com/"]')
+  const expectedBasic = Buffer.from("x-access-token:gho_terminal_token_456").toString("base64")
+  expect(config).toContain(`Authorization: Basic ${expectedBasic}`)
+})
+
+test("persistGithubGitConfigForTerminal defers to a manually configured credential (any host)", async () => {
+  await connectFakeSession("gho_should_be_overridden")
+  const { writeCredentials } = await import("../../src/git/credentials")
+  await writeCredentials({ type: "https-token", token: "manual-token", username: "manual-user" })
+
+  try {
+    const { persistGithubGitConfigForTerminal } = await import("../../src/github/credentials")
+    await persistGithubGitConfigForTerminal()
+
+    expect(await readGitconfig()).toBe("")
+  } finally {
+    await writeCredentials({ type: "none" })
+  }
+})

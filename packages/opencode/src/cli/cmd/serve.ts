@@ -4,6 +4,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import { AuditLog } from "../../session/audit"
 import { initAuthStorage } from "../../auth"
+import { persistGithubGitConfigForTerminal } from "../../github/credentials"
 
 export const ServeCommand = cmd({
   command: "serve",
@@ -29,6 +30,14 @@ export const ServeCommand = cmd({
     const server = Server.listen(opts)
     const scheme = process.env.OPENCODE_TLS_CERT_PATH ? "https" : "http"
     console.log(`opencode server listening on ${scheme}://${server.hostname}:${server.port}`)
+
+    // Mobile only, no-op elsewhere: wire the connected GitHub OAuth session
+    // into ~/.gitconfig so the terminal's raw `git push`/`pull` also
+    // authenticates, not just the dedicated Git.push()/pull() API. Fire
+    // after the server is listening (past all module-init ordering hazards
+    // — see mobile-entry.ts's own env-var bootstrap for a bug caused by
+    // running similar logic too early).
+    await persistGithubGitConfigForTerminal()
 
     // Kick off audit-log retention purger (24h cron, unref()'d). No-op when
     // experimental.audit.enabled === false. Gated at AuditLog.purgeExpired.
