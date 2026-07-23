@@ -414,11 +414,24 @@ pub(super) fn prepare_toolchain_wrappers(
         let backup = PathBuf::from(format!("{}.elf64", file.display()));
         let metadata = fs::symlink_metadata(file)?;
         if metadata.file_type().is_symlink() {
-            if fs::read_link(file)
-                .ok()
-                .and_then(|target| target.file_name().map(|name| name == "git"))
-                .unwrap_or(false)
-            {
+            // nativeLibraryDir is per-install (its path embeds a hash that
+            // changes on every APK reinstall/update). A symlink already
+            // pointing at libgit_dispatch.so from a PRIOR install is stale —
+            // that hash directory is gone once the old install is replaced,
+            // making the symlink dangling (exec fails with ENOENT, surfaced
+            // to the user as "git-upload-pack: inaccessible or not found").
+            // Comparing only the target's basename ("== git") never catches
+            // this because a stale libgit_dispatch.so target also has that
+            // basename — must compare the full resolved path against the
+            // CURRENT run's git_dispatch to detect staleness.
+            let current_target = fs::read_link(file).ok();
+            let is_dispatch_style = current_target
+                .as_ref()
+                .and_then(|target| target.file_name())
+                .map(|name| name == "git" || name == "libgit_dispatch.so")
+                .unwrap_or(false);
+            let already_current = current_target.as_deref() == Some(git_dispatch.as_path());
+            if is_dispatch_style && !already_current {
                 fs::remove_file(file)?;
                 std::os::unix::fs::symlink(&git_dispatch, file)?;
             }
