@@ -23,7 +23,7 @@ import { KnowledgeFailure } from "../domain/errors.js"
 import { parseDocument, type ParsedDocument } from "../parser/parser.js"
 import type { KnowledgeSource, ListOptions, ListedNote, SourceEvent } from "./source.js"
 // One containment definition, shared with the writer.
-import { isContained, realOrNull } from "./containment.js"
+import { isContained, realOrNull, toNfc, toNfd } from "./containment.js"
 
 /** Directories that never hold Class A notes. */
 const SKIPPED_DIRECTORIES = new Set([".git", ".unifia", "node_modules", ".obsidian"])
@@ -97,7 +97,14 @@ async function walkMarkdown(
     if (!name.toLowerCase().endsWith(".md")) continue
     const realFile = realOrNull(full)
     if (realFile === null) continue
-    out.push(relative(realRoot, realFile).split(sep).join("/"))
+    // W-FS-04: normalise the recorded locator to NFC. macOS HFS+ stores
+    // file names in NFD; Windows and most Linux file systems store
+    // bytes verbatim. Wikilinks and edits tend to be written in NFC.
+    // Pinning the locator form to NFC means the rest of the system
+    // (sort, dedup, prefix filter) sees a single canonical form, and
+    // the read path can recognise both forms by normalising the
+    // incoming locator to NFC before joining with the vault root.
+    out.push(relative(realRoot, realFile).split(sep).join("/").normalize("NFC"))
   }
 }
 
@@ -314,66 +321,100 @@ export class VaultSource implements KnowledgeSource {
    * Shared by `readLocator` (which parses) and `list` (which records
    * parse errors rather than aborting). All containment, TOCTOU, and
    * size checks live here so the two callers cannot diverge.
+   *
+   * W-FS-04: the locator is accepted in any normalisation form. The
+   * filesystem stores file names verbatim on most systems, but HFS+/
+   * APFS (macOS) stores them in NFD. The walk records locators in NFC
+   * so callers can compare them byte-for-byte; the read path
+   * recognises the on-disk form (whether NFC or NFD) by trying both
+   * and using the first one that resolves to a contained file. The
+   * normalisation is not applied blindly: only when the literal-byte
+   * lookup would otherwise miss.
    */
   private async readValidatedFile(locator: string): Promise<string | null> {
     // Containment on the lexical path first: reject `..` before touching the
-    // filesystem at all.
-    const full = join(this.root, locator)
-    const lexical = relative(this.root, full)
-    if (lexical.startsWith("..") || isAbsolute(lexical)) {
-      throw KnowledgeFailure.pathUnresolved(`locator escapes the vault root: ${locator}`)
+    // filesystem at all. Run the check on every candidate form so a
+    // normalised alias that climbs out is still refused.
+    for (const candidate of this.normalisedForms(locator)) {
+      const full = join(this.root, candidate)
+      const lexical = relative(this.root, full)
+      if (lexical.startsWith("..") || isAbsolute(lexical)) {
+        throw KnowledgeFailure.pathUnresolved(
+          `locator escapes the vault root: ${locator}`,
+        )
+      }
+      // Then on the real path: a lexically innocent locator can still traverse a
+      // junction or a symlink pointing outside the workspace. A path that does
+      // not resolve at all is simply absent — "not found" and "out of bounds"
+      // are different answers and must not be collapsed.
+      const real = realOrNull(full)
+      if (real === null) continue
+      if (!isContained(this.realRoot, full)) {
+        throw KnowledgeFailure.pathUnresolved(
+          `locator resolves outside the vault root: ${locator}`,
+        )
+      }
+      // W-FS-01 (TOCTOU): a concurrent actor could swap the directory entry at
+      // `full` for a symlink pointing outside the vault between the validation
+      // above and the read below. Re-validate the canonical real path against
+      // the captured identity, then read via that canonical path — not the
+      // lexical one — so a swap of `full` after this point cannot redirect
+      // the read. A change in canonical identity would mean another swap
+      // happened; the comparison makes the contract explicit so a future
+      // audit can confirm it.
+      const realAfter = realOrNull(full)
+      if (realAfter !== real) {
+        throw KnowledgeFailure.pathUnresolved(
+          `locator identity changed after validation: ${locator} (was ${real}, now ${realAfter ?? "unresolved"})`,
+        )
+      }
+      // W-FS-03: stat the canonical path BEFORE the full read so an
+      // oversized note is rejected without first pinning its bytes in
+      // memory. The size cap is a hard bound; the caller is expected to
+      // chunk large notes differently, not to load them and then truncate.
+      let size: number
+      try {
+        const st = await fsp.stat(real)
+        size = st.size
+      } catch {
+        return null
+      }
+      if (size > this.maxNoteBytes) {
+        throw KnowledgeFailure.boundExceeded(
+          `note size ${size} exceeds maxNoteBytes ${this.maxNoteBytes}: ${locator}`,
+          { size, maxNoteBytes: this.maxNoteBytes },
+        )
+      }
+      let raw: string
+      try {
+        // Read the canonical, validated path. The lexical entry could have
+        // been swapped for a symlink; we no longer consult it.
+        raw = await fsp.readFile(real, "utf8")
+      } catch {
+        return null
+      }
+      return raw
     }
-    // Then on the real path: a lexically innocent locator can still traverse a
-    // junction or a symlink pointing outside the workspace. A path that does
-    // not resolve at all is simply absent — "not found" and "out of bounds"
-    // are different answers and must not be collapsed.
-    const real = realOrNull(full)
-    if (real === null) return null
-    if (!isContained(this.realRoot, full)) {
-      throw KnowledgeFailure.pathUnresolved(
-        `locator resolves outside the vault root: ${locator}`,
-      )
-    }
-    // W-FS-01 (TOCTOU): a concurrent actor could swap the directory entry at
-    // `full` for a symlink pointing outside the vault between the validation
-    // above and the read below. Re-validate the canonical real path against
-    // the captured identity, then read via that canonical path — not the
-    // lexical one — so a swap of `full` after this point cannot redirect
-    // the read. A change in canonical identity would mean another swap
-    // happened; the comparison makes the contract explicit so a future
-    // audit can confirm it.
-    const realAfter = realOrNull(full)
-    if (realAfter !== real) {
-      throw KnowledgeFailure.pathUnresolved(
-        `locator identity changed after validation: ${locator} (was ${real}, now ${realAfter ?? "unresolved"})`,
-      )
-    }
-    // W-FS-03: stat the canonical path BEFORE the full read so an
-    // oversized note is rejected without first pinning its bytes in
-    // memory. The size cap is a hard bound; the caller is expected to
-    // chunk large notes differently, not to load them and then truncate.
-    let size: number
-    try {
-      const st = await fsp.stat(real)
-      size = st.size
-    } catch {
-      return null
-    }
-    if (size > this.maxNoteBytes) {
-      throw KnowledgeFailure.boundExceeded(
-        `note size ${size} exceeds maxNoteBytes ${this.maxNoteBytes}: ${locator}`,
-        { size, maxNoteBytes: this.maxNoteBytes },
-      )
-    }
-    let raw: string
-    try {
-      // Read the canonical, validated path. The lexical entry could have
-      // been swapped for a symlink; we no longer consult it.
-      raw = await fsp.readFile(real, "utf8")
-    } catch {
-      return null
-    }
-    return raw
+    return null
+  }
+
+  /**
+   * Candidate forms of `locator` to try, in order.
+   *
+   * The literal form is tried first so a caller passing the exact
+   * bytes the filesystem uses pays no normalisation tax. NFC and NFD
+   * are appended as fallbacks so callers writing in either form can
+   * find a file stored in the other. Duplicates collapse: NFC of an
+   * already-NFC string is a no-op, and a string that happens to be in
+   * both forms only appears once.
+   */
+  private normalisedForms(locator: string): string[] {
+    const forms: string[] = [locator]
+    const nfc = toNfc(locator)
+    if (!forms.includes(nfc)) forms.push(nfc)
+    const nfd = toNfd(locator)
+    if (!forms.includes(nfd)) forms.push(nfd)
+    return forms
   }
 
   watch(_onChange: (event: SourceEvent) => void): () => void {

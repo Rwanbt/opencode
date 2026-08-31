@@ -20,6 +20,23 @@ export function realOrNull(p: string): string | null {
   }
 }
 
+/**
+ * Compose a Unicode string to NFC.
+ *
+ * On HFS+/APFS the filesystem normalises to NFD; on NTFS and most Linux
+ * file systems bytes are stored verbatim. A wikilink written in NFC
+ * therefore has to find a file that may be on disk in NFD (or vice
+ * versa). Normalising both sides to NFC removes the form as a variable.
+ */
+export function toNfc(s: string): string {
+  return s.normalize("NFC")
+}
+
+/** Decompose a Unicode string to NFD — the form macOS HFS+ uses on disk. */
+export function toNfd(s: string): string {
+  return s.normalize("NFD")
+}
+
 /*
  * There is deliberately no async counterpart.
  *
