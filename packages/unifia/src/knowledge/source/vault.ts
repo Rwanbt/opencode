@@ -220,9 +220,25 @@ export class VaultSource implements KnowledgeSource {
         `locator resolves outside the vault root: ${locator}`,
       )
     }
+    // W-FS-01 (TOCTOU): a concurrent actor could swap the directory entry at
+    // `full` for a symlink pointing outside the vault between the validation
+    // above and the read below. Re-validate the canonical real path against
+    // the captured identity, then read via that canonical path — not the
+    // lexical one — so a swap of `full` after this point cannot redirect
+    // the read. A change in canonical identity would mean another swap
+    // happened; the comparison makes the contract explicit so a future
+    // audit can confirm it.
+    const realAfter = realOrNull(full)
+    if (realAfter !== real) {
+      throw KnowledgeFailure.pathUnresolved(
+        `locator identity changed after validation: ${locator} (was ${real}, now ${realAfter ?? "unresolved"})`,
+      )
+    }
     let raw: string
     try {
-      raw = await fsp.readFile(full, "utf8")
+      // Read the canonical, validated path. The lexical entry could have
+      // been swapped for a symlink; we no longer consult it.
+      raw = await fsp.readFile(real, "utf8")
     } catch {
       return null
     }
