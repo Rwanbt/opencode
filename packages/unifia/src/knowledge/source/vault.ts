@@ -121,7 +121,17 @@ export interface VaultSourceConfig {
    * be >= 1; the default tolerates realistic vault depths.
    */
   maxDepth?: number
+  /**
+   * W-FS-03: maximum size in bytes of a single note. The size is checked
+   * before the full read so an oversized note is rejected with a typed
+   * error rather than loaded into memory and then truncated downstream.
+   * Must be > 0; the default is generous.
+   */
+  maxNoteBytes?: number
 }
+
+/** W-FS-03: default cap on a single note's size, in bytes. */
+const DEFAULT_MAX_NOTE_BYTES = 5 * 1024 * 1024
 
 /**
  * A `KnowledgeSource` reading Class A Markdown from a directory.
@@ -138,6 +148,7 @@ export class VaultSource implements KnowledgeSource {
   private readonly realRoot: string
   private readonly excluded: ReadonlySet<string>
   private readonly maxDepth: number
+  private readonly maxNoteBytes: number
   private scanErrors: Array<{ locator: string; message: string }> = []
   private scanStatus: { truncated: boolean; reason: string | null } = {
     truncated: false,
@@ -161,6 +172,12 @@ export class VaultSource implements KnowledgeSource {
     if (!Number.isFinite(this.maxDepth) || this.maxDepth < 1) {
       throw KnowledgeFailure.boundExceeded(
         `maxDepth must be >= 1, got ${String(config.maxDepth)}`,
+      )
+    }
+    this.maxNoteBytes = config.maxNoteBytes ?? DEFAULT_MAX_NOTE_BYTES
+    if (!Number.isFinite(this.maxNoteBytes) || this.maxNoteBytes <= 0) {
+      throw KnowledgeFailure.boundExceeded(
+        `maxNoteBytes must be > 0, got ${String(config.maxNoteBytes)}`,
       )
     }
     this.space = config.space
@@ -217,9 +234,28 @@ export class VaultSource implements KnowledgeSource {
 
     for (const locator of await this.locators()) {
       if (prefix !== undefined && prefix.length > 0 && !locator.startsWith(prefix)) continue
+      // W-FS-03: an oversized note is a scan error, not a reason to
+      // crash the listing. The size check lives in `readValidatedFile`
+      // so it cannot drift between read and list.
+      let raw: string
+      try {
+        raw = await this.readValidatedFile(locator)
+      } catch (e) {
+        if (e instanceof KnowledgeFailure && e.kind === "bound_exceeded") {
+          errors.push({ locator, message: e.message })
+          continue
+        }
+        if (e instanceof Error && /outside the vault root|identity changed/.test(e.message)) {
+          // Containment failure in a listing is a security boundary
+          // being crossed — refuse loudly rather than skip silently.
+          throw e
+        }
+        errors.push({ locator, message: (e as Error).message })
+        continue
+      }
       let parsed: ParsedDocument
       try {
-        parsed = parseDocument(await fsp.readFile(join(this.root, locator), "utf8"))
+        parsed = parseDocument(raw)
       } catch (e) {
         errors.push({ locator, message: (e as Error).message })
         continue
@@ -263,6 +299,23 @@ export class VaultSource implements KnowledgeSource {
   }
 
   private async readLocator(locator: KnowledgeLocator): Promise<ParsedDocument | null> {
+    const raw = await this.readValidatedFile(locator)
+    if (raw === null) return null
+    try {
+      return parseDocument(raw)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Read and validate a single note by locator, returning the raw text.
+   *
+   * Shared by `readLocator` (which parses) and `list` (which records
+   * parse errors rather than aborting). All containment, TOCTOU, and
+   * size checks live here so the two callers cannot diverge.
+   */
+  private async readValidatedFile(locator: string): Promise<string | null> {
     // Containment on the lexical path first: reject `..` before touching the
     // filesystem at all.
     const full = join(this.root, locator)
@@ -295,6 +348,23 @@ export class VaultSource implements KnowledgeSource {
         `locator identity changed after validation: ${locator} (was ${real}, now ${realAfter ?? "unresolved"})`,
       )
     }
+    // W-FS-03: stat the canonical path BEFORE the full read so an
+    // oversized note is rejected without first pinning its bytes in
+    // memory. The size cap is a hard bound; the caller is expected to
+    // chunk large notes differently, not to load them and then truncate.
+    let size: number
+    try {
+      const st = await fsp.stat(real)
+      size = st.size
+    } catch {
+      return null
+    }
+    if (size > this.maxNoteBytes) {
+      throw KnowledgeFailure.boundExceeded(
+        `note size ${size} exceeds maxNoteBytes ${this.maxNoteBytes}: ${locator}`,
+        { size, maxNoteBytes: this.maxNoteBytes },
+      )
+    }
     let raw: string
     try {
       // Read the canonical, validated path. The lexical entry could have
@@ -303,11 +373,7 @@ export class VaultSource implements KnowledgeSource {
     } catch {
       return null
     }
-    try {
-      return parseDocument(raw)
-    } catch {
-      return null
-    }
+    return raw
   }
 
   watch(_onChange: (event: SourceEvent) => void): () => void {
