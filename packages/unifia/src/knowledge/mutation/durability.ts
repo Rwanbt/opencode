@@ -124,11 +124,86 @@ export function fsyncDirectory(path: string): void {
 }
 
 /**
+ * Liveness verdict for a recorded PID.
+ *
+ * - `alive`   : the kernel confirmed the process exists (signal 0 succeeded
+ *                or `EPERM` was raised). The holder is real.
+ * - `dead`    : the kernel confirmed the process is gone (`ESRCH`). Safe
+ *                to reclaim immediately.
+ * - `unknown` : the PID is not a candidate for the kernel check at all
+ *                (non-integer, non-positive, or our own pid surfaced in an
+ *                odd place). The caller must fall back to a different
+ *                policy, never to "steal the lock".
+ */
+export type PidLiveness = "alive" | "dead" | "unknown"
+
+/**
+ * Best-effort liveness check for `pid`.
+ *
+ * Signal 0 on POSIX and the existence check on Windows behave the same
+ * way for this purpose: both throw `ESRCH` for a non-existent pid.
+ *
+ * `unknown` is returned for pids that should not reach the kernel: a
+ * zero, a negative, a non-integer, or a value larger than any pid the
+ * kernel would ever allocate (the signed 32-bit max). The conservative
+ * policy is: if we cannot prove the holder is dead, do not steal the
+ * lock.
+ */
+export function pidLiveness(pid: number): PidLiveness {
+  if (!Number.isInteger(pid) || pid <= 0) return "unknown"
+  if (pid > 0x7fffffff) return "unknown"
+  if (pid === process.pid) return "alive"
+  try {
+    process.kill(pid, 0)
+    return "alive"
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code
+    if (code === "ESRCH") return "dead"
+    if (code === "EPERM") return "alive"
+    return "unknown"
+  }
+}
+
+/**
+ * True iff `pid` is verifiably alive. Kept for tests and for callers
+ * that want a simple boolean (true iff "alive", false otherwise).
+ */
+export function isPidAlive(pid: number): boolean {
+  return pidLiveness(pid) === "alive"
+}
+
+/**
+ * Read the recorded pid from a lock file, if any.
+ *
+ * The lock file is `{ pid, at }` written as JSON. Returns `null` if the
+ * file cannot be read or parsed, so the caller can fall back to the
+ * time-only heuristic.
+ */
+function readLockPid(path: string): number | null {
+  try {
+    const raw = readFileSync(path, "utf8")
+    const parsed = JSON.parse(raw) as { pid?: unknown }
+    if (typeof parsed.pid === "number" && Number.isInteger(parsed.pid)) {
+      return parsed.pid
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Exclusive, cross-process write lock.
  *
  * `O_EXCL` makes acquisition atomic even between processes. The holder's pid
  * and timestamp are recorded so a lock left by a crashed process can be
  * reclaimed instead of blocking the vault forever.
+ *
+ * Reclaim is *liveness-first*: a lock held by a process whose pid is still
+ * alive is never stolen, even if its mtime is older than `LOCK_STALE_MS`.
+ * The time heuristic is the fallback for locks we cannot read, or whose
+ * recorded pid is unverifiable (corrupt file, pid from a previous boot,
+ * cross-platform state).
  */
 export class WriteLock {
   private held = false
@@ -182,6 +257,32 @@ export class WriteLock {
   }
 
   private reclaimIfStale(): boolean {
+    const pid = readLockPid(this.path)
+    if (pid !== null) {
+      const liveness = pidLiveness(pid)
+      if (liveness === "alive") {
+        // The recorded holder is still running. We never steal a live
+        // holder's lock: the operator has to wait, or kill the holder.
+        return false
+      }
+      if (liveness === "dead") {
+        // Dead pid: reclaim regardless of the mtime. A crashed writer is
+        // reclaimed as soon as we notice, instead of after LOCK_STALE_MS.
+        try {
+          unlinkSync(this.path)
+          return true
+        } catch {
+          // Vanished between the failed create and here.
+          return true
+        }
+      }
+      // liveness === "unknown": the recorded pid is not something the
+      // kernel can check (negative, too large, non-integer). Fall back
+      // to the time-only heuristic instead of guessing.
+    }
+
+    // No recorded pid (legacy file, corrupt file, or unverifiable).
+    // Fall back to the time-only heuristic.
     try {
       const age = Date.now() - statSync(this.path).mtimeMs
       if (age < LOCK_STALE_MS) return false
@@ -210,6 +311,12 @@ export interface RecoveryReport {
  * committed and the destination does not already hold it. Everything else is
  * discarded: an unrecorded temporary is a write that never reached the log,
  * and redoing it would invent history.
+ *
+ * For `move` and `restore` entries the WAL carries `previousLocator`: the
+ * path the note used to live at. If the destination already holds the
+ * recorded hash but the source is still there, the write half-completed
+ * before the unlink — we drop the source so the vault never carries two
+ * silent copies of the same note.
  */
 export function recover(root: string, walFile: string): RecoveryReport {
   const report: RecoveryReport = { completed: [], discarded: [], truncatedWalLines: 0 }
@@ -254,6 +361,40 @@ export function recover(root: string, walFile: string): RecoveryReport {
       report.completed.push(destination)
     } catch {
       // Leave it for the next attempt rather than losing recorded content.
+    }
+  }
+
+  // Second pass: a crash between the destination commit and the unlink of
+  // the previous path leaves a duplicate. The WAL told us where the note
+  // used to live, so we can finish the unlink deterministically.
+  for (const entry of entries) {
+    if (entry.previousLocator === undefined) continue
+    if (entry.newHash === null) continue
+    if (entry.kind !== "move" && entry.kind !== "restore") continue
+
+    const destination = join(root, entry.locator)
+    const source = join(root, entry.previousLocator)
+    try {
+      const destinationHash =
+        existsSync(destination) && sha256(readFileSync(destination, "utf8"))
+      if (destinationHash !== entry.newHash) {
+        // The destination is not what the WAL recorded; the write never
+        // landed or has been overwritten. Leave the source alone.
+        continue
+      }
+      if (!existsSync(source)) {
+        // The unlink had already happened; nothing to do.
+        continue
+      }
+      const sourceHash = sha256(readFileSync(source, "utf8"))
+      if (sourceHash !== entry.newHash) {
+        // The source is a different note now (or has been edited). The
+        // recorder's note is at the destination; do not touch the source.
+        continue
+      }
+      unlinkSync(source)
+    } catch {
+      // Leave it for the next attempt; we do not invent unlinks.
     }
   }
 
