@@ -28,11 +28,17 @@ import { isContained, realOrNull } from "./containment.js"
 /** Directories that never hold Class A notes. */
 const SKIPPED_DIRECTORIES = new Set([".git", ".unifia", "node_modules", ".obsidian"])
 
+/** W-FS-02: default bound on walk depth. 50 is far above any realistic
+ *  vault and small enough that a runaway tree cannot exhaust the stack. */
+const DEFAULT_MAX_DEPTH = 50
+
 /**
  * Walk `dir`, collecting locators relative to `realRoot`, POSIX-separated.
  *
  * `visited` holds real paths so a link cycle terminates instead of recursing
- * until the stack gives out.
+ * until the stack gives out. `depth` and `maxDepth` enforce W-FS-02: a tree
+ * deeper than `maxDepth` stops the descent; the caller surfaces the
+ * truncation through the `truncated` flag on the scan result.
  */
 async function walkMarkdown(
   realRoot: string,
@@ -40,7 +46,17 @@ async function walkMarkdown(
   out: string[],
   visited: Set<string>,
   excluded: ReadonlySet<string>,
+  depth: number,
+  maxDepth: number,
+  state: { truncated: boolean; reason: string | null },
 ): Promise<void> {
+  if (depth > maxDepth) {
+    // The caller asked the walk to descend no further. Mark the
+    // truncation so the surface (`locators()`) can expose the reason.
+    state.truncated = true
+    state.reason = "maxDepth"
+    return
+  }
   const realDir = realOrNull(dir)
   if (realDir === null || visited.has(realDir)) return
   visited.add(realDir)
@@ -71,7 +87,11 @@ async function walkMarkdown(
     if (!isContained(realRoot, full)) continue
 
     if (stats.isDirectory()) {
-      await walkMarkdown(realRoot, full, out, visited, excluded)
+      await walkMarkdown(realRoot, full, out, visited, excluded, depth + 1, maxDepth, state)
+      // A truncated subtree must not be reported as a complete scan: the
+      // outer caller would otherwise see `truncated: false` from the
+      // perspective of the next entry and lose the marker.
+      if (state.truncated) return
       continue
     }
     if (!name.toLowerCase().endsWith(".md")) continue
@@ -94,6 +114,13 @@ export interface VaultSourceConfig {
    * every count, ranking and budget doubles.
    */
   excludeDirectories?: readonly string[]
+  /**
+   * W-FS-02: maximum walk depth. The vault root is depth 0; a file at
+   * `lvl3/leaf.md` sits at depth 4. A walk that would descend past this
+   * bound is truncated with `truncated: true, reason: "maxDepth"`. Must
+   * be >= 1; the default tolerates realistic vault depths.
+   */
+  maxDepth?: number
 }
 
 /**
@@ -110,7 +137,12 @@ export class VaultSource implements KnowledgeSource {
   /** `root` with every link resolved; containment is decided against this. */
   private readonly realRoot: string
   private readonly excluded: ReadonlySet<string>
+  private readonly maxDepth: number
   private scanErrors: Array<{ locator: string; message: string }> = []
+  private scanStatus: { truncated: boolean; reason: string | null } = {
+    truncated: false,
+    reason: null,
+  }
 
   constructor(config: VaultSourceConfig) {
     if (!isAbsolute(config.root)) {
@@ -125,12 +157,29 @@ export class VaultSource implements KnowledgeSource {
     }
     this.realRoot = real
     this.excluded = new Set(config.excludeDirectories ?? [])
+    this.maxDepth = config.maxDepth ?? DEFAULT_MAX_DEPTH
+    if (!Number.isFinite(this.maxDepth) || this.maxDepth < 1) {
+      throw KnowledgeFailure.boundExceeded(
+        `maxDepth must be >= 1, got ${String(config.maxDepth)}`,
+      )
+    }
     this.space = config.space
   }
 
   /** Notes skipped by the last `list()` because they failed to parse. */
   get lastScanErrors(): ReadonlyArray<{ locator: string; message: string }> {
     return this.scanErrors
+  }
+
+  /**
+   * State of the most recent `locators()` walk. `truncated: true` means
+   * the walk did not visit every entry under the root; `reason` names
+   * the bound or condition that stopped it. Callers can surface this so
+   * the Inspector or a CLI flag can tell the user "the vault is
+   * partial" without having to introspect the result.
+   */
+  get lastScan(): { truncated: boolean; reason: string | null } {
+    return this.scanStatus
   }
 
   /**
@@ -142,7 +191,19 @@ export class VaultSource implements KnowledgeSource {
    */
   async locators(): Promise<string[]> {
     const out: string[] = []
-    await walkMarkdown(this.realRoot, this.root, out, new Set(), this.excluded)
+    // Each scan starts from a clean truncation state: a previous
+    // truncated run must not leave a stale flag on an empty follow-up.
+    this.scanStatus = { truncated: false, reason: null }
+    await walkMarkdown(
+      this.realRoot,
+      this.root,
+      out,
+      new Set(),
+      this.excluded,
+      0,
+      this.maxDepth,
+      this.scanStatus,
+    )
     out.sort()
     return out
   }
