@@ -82,7 +82,14 @@ export async function cmdStatus(rest: readonly string[]): Promise<number> {
       "Sovereign Knowledge Core V1 — status",
       `  workspace:  ${resolveWorkspace(workspace)}`,
       `  spaces:     ${mounted.join(", ") || "(none)"}`,
-      `  notes:      ${status.candidatesCount}`,
+      // A truncated scan makes the count a floor. Printing it bare would
+      // tell the operator their vault is smaller than it is.
+      `  notes:      ${status.candidatesCount}${status.scan?.truncated === true ? " (partial scan)" : ""}`,
+      ...(status.scan?.truncated === true
+        ? [
+            `  partial:    ${status.scan.reason ?? "unknown"} — not scanned: ${status.scan.truncatedPaths.join(", ") || "(paths not recorded)"}`,
+          ]
+        : []),
       `  index:      ${status.indexVersion} (linear scan over Class A)`,
       `  fts:        ${status.enabled.fts ? "enabled" : "disabled (no FTS5 runtime in V1)"}`,
       `  vector:     ${status.enabled.vector ? "enabled" : "disabled (no embedding model)"}`,
