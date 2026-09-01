@@ -123,6 +123,46 @@ export function fsyncDirectory(path: string): void {
   }
 }
 
+/** Errors a Windows rename raises when a handle is still open on the target. */
+const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EACCES", "EBUSY"])
+
+/** How long `renameDurable` keeps retrying a transient Windows refusal. */
+const RENAME_RETRY_BUDGET_MS = 2_000
+const RENAME_RETRY_POLL_MS = 5
+
+/** Block the thread for `ms`. The write path is synchronous by contract. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/**
+ * Rename `from` over `to`, tolerating Windows' open-handle refusals.
+ *
+ * POSIX `rename` replaces the destination whatever else holds it open.
+ * Windows does not: while any process has a handle on `to` — a concurrent
+ * reader, an antivirus scanner, the search indexer — `MoveFileEx` fails with
+ * `EPERM`, and the write is lost even though the temporary was complete and
+ * fsynced. Measured here at roughly one publish in five with four processes
+ * writing one small file.
+ *
+ * Retrying briefly is the remedy every Windows-targeting tool converges on.
+ * It is bounded: a destination held open indefinitely is a real failure and
+ * still surfaces as one, rather than hanging the caller.
+ */
+export function renameDurable(from: string, to: string): void {
+  const deadline = Date.now() + RENAME_RETRY_BUDGET_MS
+  for (;;) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? ""
+      if (!TRANSIENT_RENAME_CODES.has(code) || Date.now() >= deadline) throw e
+      sleepSync(RENAME_RETRY_POLL_MS)
+    }
+  }
+}
+
 /**
  * Exclusive, cross-process write lock.
  *

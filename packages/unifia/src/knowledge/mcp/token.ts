@@ -43,12 +43,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  renameSync,
   writeSync,
 } from "node:fs"
-import { dirname } from "node:path"
+import { basename, dirname, join } from "node:path"
 import type { McpKnowledgeCapability } from "@unifia/contracts/knowledge"
 import { MCP_KNOWLEDGE_METHODS } from "@unifia/contracts/knowledge"
+import { WriteLock, fsyncDirectory, renameDurable } from "../mutation/durability.js"
 
 /** PERMISSIONS.md §5. */
 export const DEFAULT_TOKEN_TTL_MS = 60 * 60 * 1000
@@ -63,6 +63,38 @@ export const PERSISTENT_FORMAT_VERSION = 0x01
 
 /** POSIX file mode for the persistence file. */
 const PERSISTENT_FILE_MODE = 0o600
+
+/**
+ * Counter making each temporary file name unique within a process.
+ *
+ * The pid alone is not enough: one process can persist twice while an
+ * earlier temporary is still on disk after a failure.
+ */
+let tmpCounter = 0
+
+/**
+ * How long a persist waits for another process to finish before refusing.
+ *
+ * `WriteLock` refuses a contended lock immediately, which is right for the
+ * vault writer: a mutation is a user-visible operation and queueing behind
+ * another one silently is worse than saying the vault is busy. A token
+ * store is the opposite case — the critical section is one small file
+ * write, contention is ordinary, and refusing would turn it into a failed
+ * issuance. So the wait lives here, in the caller that wants it, and stays
+ * bounded so a genuinely wedged holder still surfaces.
+ */
+const STORE_LOCK_WAIT_MS = 5_000
+const STORE_LOCK_POLL_MS = 10
+
+/** Block the thread for `ms`. `persist` is synchronous by contract. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/** True for the "someone else holds the lock" refusal, and nothing else. */
+function isLockContention(e: unknown): boolean {
+  return e instanceof Error && /locked by another writer/.test(e.message)
+}
 
 export interface McpKnowledgeToken {
   id: string
@@ -261,143 +293,248 @@ export class McpTokenRegistry {
 
   // ─── Persistence ────────────────────────────────────────────────────
 
+  /**
+   * Load the store, under the same lock a write takes.
+   *
+   * Reading without it is what makes a concurrent publish fail on Windows:
+   * `MoveFileEx` refuses while any handle is open on the destination, so an
+   * unsynchronised reader turns another process's completed write into an
+   * `EPERM`. Serialising the read costs one short critical section and
+   * removes the collision entirely.
+   */
   private hydrateFromDisk(): void {
     const file = this.path as string
-    if (!existsSync(file)) return
-    const buf = readFileSync(file)
-    if (buf.byteLength < 5) {
-      throw new McpTokenError(
-        `token store at ${file} is truncated: expected at least 5 header bytes, got ${buf.byteLength}`,
-      )
+    const dir = dirname(file)
+    if (!existsSync(dir)) {
+      this.applyEntries(decodeStoreFile(file))
+      return
     }
-    const version = buf[0]
-    if (version === undefined || version !== PERSISTENT_FORMAT_VERSION) {
-      throw new McpTokenVersionError(file, version ?? -1, PERSISTENT_FORMAT_VERSION)
-    }
-    const length = buf.readUInt32LE(1)
-    if (buf.byteLength !== 5 + length) {
-      throw new McpTokenError(
-        `token store at ${file} has length mismatch: header says ${length} payload bytes, file has ${buf.byteLength - 5}`,
-      )
-    }
-    let payload: unknown
-    try {
-      payload = JSON.parse(buf.subarray(5, 5 + length).toString("utf8"))
-    } catch (e) {
-      throw new McpTokenError(
-        `token store at ${file} is not valid JSON: ${(e as Error).message}`,
-      )
-    }
-    this.applyPayload(payload, file)
+    const lock = new WriteLock(join(dir, `${basename(file)}.lock`))
+    this.applyEntries(withBoundedWait(lock, () => decodeStoreFile(file)))
   }
 
-  private applyPayload(payload: unknown, file: string): void {
-    if (typeof payload !== "object" || payload === null) {
-      throw new McpTokenError(`token store at ${file} is not a JSON object`)
+  /**
+   * Load `entries` into memory.
+   *
+   * A tombstoned id keeps its token record when one is present, marked
+   * revoked: `get()` answers with historical metadata after a restart
+   * rather than pretending the token never existed. `resolve()` refuses it
+   * either way.
+   */
+  private applyEntries(entries: Record<string, PersistedEntry>): void {
+    for (const [id, entry] of Object.entries(entries)) {
+      if ("tombstone" in entry) {
+        this.tombstones.set(id, entry.tombstone.at)
+        const existing = this.tokens.get(id)
+        if (existing !== undefined) {
+          existing.revokedAt = new Date(entry.tombstone.at).toISOString()
+        }
+        continue
+      }
+      this.tokens.set(id, entry.token)
     }
-    const obj = payload as Record<string, unknown>
-    const tokens = obj.tokens
-    if (typeof tokens !== "object" || tokens === null || Array.isArray(tokens)) {
-      throw new McpTokenError(`token store at ${file} is missing the "tokens" object`)
-    }
-
-    // First pass: load active token records. A legacy file (or a future
-    // version) that contains an entry we do not understand fails the
-    // whole load — never silently drop.
-    for (const [id, value] of Object.entries(tokens as Record<string, unknown>)) {
-      if (typeof value !== "object" || value === null) {
-        throw new McpTokenError(`token store at ${file} has non-object entry for "${id}"`)
-      }
-      const v = value as Record<string, unknown>
-      if ("tombstone" in v) continue
-      if (!("token" in v)) {
-        throw new McpTokenError(`token store at ${file} has unknown entry shape for "${id}"`)
-      }
-      const t = v.token
-      if (!isToken(t)) {
-        throw new McpTokenError(`token store at ${file} has invalid token record for "${id}"`)
-      }
-      if (t.id !== id) {
-        throw new McpTokenError(
-          `token store at ${file} has id mismatch: key "${id}" != token.id "${t.id}"`,
-        )
-      }
-      this.tokens.set(t.id, t)
-    }
-
-    // Second pass: apply tombstones. A tombstone with no matching token
-    // record is still recorded (so a future `issue` of the same id
-    // cannot reanimate a revoked token — though our 32-byte CSPRNG id
-    // space makes that practically impossible).
-    for (const [id, value] of Object.entries(tokens as Record<string, unknown>)) {
-      const v = value as Record<string, unknown>
-      if (!("tombstone" in v)) continue
-      const ts = v.tombstone
-      if (!isTombstone(ts)) {
-        throw new McpTokenError(`token store at ${file} has malformed tombstone for "${id}"`)
-      }
-      this.tombstones.set(id, ts.at)
-      const t = this.tokens.get(id)
-      if (t !== undefined) t.revokedAt = new Date(ts.at).toISOString()
-    }
-
-    // Third pass: drop any active token that is also tombstoned. The
-    // first pass already loaded it; the second pass marked it revoked.
-    // We do not delete from the map — the in-memory API returns
-    // `revokedAt !== null` from `get()` and refuses it in `resolve()`,
-    // which is enough to satisfy the "drop on read" rule. Keeping the
-    // record lets `get()` return historical metadata after a restart.
   }
 
+  /**
+   * Write the store back, without losing what another process wrote.
+   *
+   * The first version rewrote the file from this registry's memory alone,
+   * through a temporary whose name was a constant. Three things followed
+   * from that. Two processes persisting at once opened the same
+   * `store.tmp` with `"w"`, so one truncated the other's half-written file
+   * and the rename could publish it. Nothing serialised the
+   * read-modify-write, so a daemon that had loaded the file an hour ago
+   * erased every token issued since. And the rename was never followed by
+   * a directory `fsync`, so a crash could lose a revocation the caller had
+   * been told was durable.
+   *
+   * So: take the same cross-process lock the vault writer uses, re-read
+   * the file inside it, merge, write through a temporary unique to this
+   * process and call, and flush the directory entry as well as the file.
+   *
+   * The merge is a union, and revocation wins. A tombstone can never be
+   * displaced by a token record: revoking is monotonic, and a concurrent
+   * `issue` of an id that another process has just revoked must not
+   * reanimate it.
+   */
   private persist(): void {
     if (this.path === undefined) return
     const file = this.path
     const dir = dirname(file)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 
-    const entries: Record<string, PersistedEntry> = {}
+    const lock = new WriteLock(join(dir, `${basename(file)}.lock`))
+    withBoundedWait(lock, () => {
+      // Whatever another process committed since we loaded is authoritative
+      // for the ids we know nothing about.
+      const merged = this.mergedEntries(decodeStoreFile(file))
+
+      const json = JSON.stringify({ tokens: merged } satisfies PersistedPayload, null, 2)
+      const jsonBuf = Buffer.from(json, "utf8")
+      const out = Buffer.alloc(5 + jsonBuf.length)
+      out[0] = PERSISTENT_FORMAT_VERSION
+      out.writeUInt32LE(jsonBuf.length, 1)
+      jsonBuf.copy(out, 5)
+
+      tmpCounter += 1
+      const tmp = `${file}.${process.pid}.${tmpCounter}.tmp`
+      const fd = openSync(tmp, "wx", PERSISTENT_FILE_MODE)
+      try {
+        writeSync(fd, out)
+        fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+      if (process.platform !== "win32") {
+        // Belt-and-braces: some filesystems honour the open() mode, others
+        // ignore it. Best-effort: FUSE / network FS may reject chmod, and
+        // chmod is a no-op on Windows, so failure here is not a bug.
+        try {
+          chmodSync(tmp, PERSISTENT_FILE_MODE)
+        } catch {
+          // Best-effort; some FS drivers (e.g. FUSE) reject chmod.
+        }
+      }
+      renameDurable(tmp, file)
+      // The bytes were flushed above; this flushes the name that points at
+      // them, which is what makes the new store survive a crash.
+      fsyncDirectory(dir)
+
+      // The file now holds strictly more than this registry did. Adopt it,
+      // so the next persist starts from the union rather than re-deriving
+      // a smaller view.
+      this.adopt(merged)
+    })
+  }
+
+  /**
+   * Union of what is on disk and what this registry holds, revocation-first.
+   */
+  private mergedEntries(
+    onDisk: Record<string, PersistedEntry>,
+  ): Record<string, PersistedEntry> {
+    const merged: Record<string, PersistedEntry> = { ...onDisk }
+
+    const tombstone = (id: string, at: number): void => {
+      merged[id] = { tombstone: { revoked: true, at } }
+    }
+
     for (const [id, t] of this.tokens.entries()) {
       if (t.revokedAt !== null) {
-        const at = this.tombstones.get(id) ?? Date.parse(t.revokedAt)
-        entries[id] = { tombstone: { revoked: true, at } }
-      } else {
-        entries[id] = { token: t }
+        tombstone(id, this.tombstones.get(id) ?? Date.parse(t.revokedAt))
+        continue
       }
+      // Never overwrite a tombstone with a live token.
+      const existing = merged[id]
+      if (existing !== undefined && "tombstone" in existing) continue
+      merged[id] = { token: t }
     }
     for (const [id, at] of this.tombstones.entries()) {
-      if (entries[id] === undefined) {
-        entries[id] = { tombstone: { revoked: true, at } }
-      }
+      tombstone(id, at)
     }
-    const payload: PersistedPayload = { tokens: entries }
-
-    const json = JSON.stringify(payload, null, 2)
-    const jsonBuf = Buffer.from(json, "utf8")
-    const out = Buffer.alloc(5 + jsonBuf.length)
-    out[0] = PERSISTENT_FORMAT_VERSION
-    out.writeUInt32LE(jsonBuf.length, 1)
-    jsonBuf.copy(out, 5)
-
-    const tmp = `${file}.tmp`
-    const fd = openSync(tmp, "w", PERSISTENT_FILE_MODE)
-    try {
-      writeSync(fd, out)
-      fsyncSync(fd)
-    } finally {
-      closeSync(fd)
-    }
-    if (process.platform !== "win32") {
-      // Belt-and-braces: some filesystems honour the open() mode, others
-      // ignore it. Best-effort: FUSE / network FS may reject chmod, and
-      // chmod is a no-op on Windows, so failure here is not a bug.
-      try {
-        chmodSync(tmp, PERSISTENT_FILE_MODE)
-      } catch {
-        // Best-effort; some FS drivers (e.g. FUSE) reject chmod.
-      }
-    }
-    renameSync(tmp, file)
+    return merged
   }
+
+  /**
+   * Adopt the committed view, keeping the revoked records already in memory.
+   *
+   * Dropping them would make `get()` on a token this process just revoked
+   * answer "never existed" instead of "revoked".
+   */
+  private adopt(entries: Record<string, PersistedEntry>): void {
+    const revokedInMemory = new Map<string, McpKnowledgeToken>()
+    for (const [id, t] of this.tokens.entries()) {
+      if (t.revokedAt !== null) revokedInMemory.set(id, t)
+    }
+    this.tokens = revokedInMemory
+    this.tombstones = new Map()
+    this.applyEntries(entries)
+  }
+}
+
+/**
+ * Decode and validate the store at `file`, or `{}` when it is absent.
+ *
+ * One decoder for both readers. Hydration and the merge inside `persist`
+ * must agree on what the file says: if the merge were more forgiving, a
+ * record it silently dropped would be erased by the very next write.
+ *
+ * A file that exists but cannot be understood throws. Treating it as empty
+ * would let one write destroy every revocation it failed to parse.
+ */
+function withBoundedWait<T>(lock: WriteLock, work: () => T): T {
+  const deadline = Date.now() + STORE_LOCK_WAIT_MS
+  for (;;) {
+    try {
+      return lock.withLock(work)
+    } catch (e) {
+      // Only contention is retried. `work` throws `McpTokenError`, never
+      // this shape, so a real failure still propagates on the first try.
+      if (!isLockContention(e) || Date.now() >= deadline) throw e
+      sleepSync(STORE_LOCK_POLL_MS)
+    }
+  }
+}
+
+function decodeStoreFile(file: string): Record<string, PersistedEntry> {
+  if (!existsSync(file)) return {}
+  const buf = readFileSync(file)
+  if (buf.byteLength < 5) {
+    throw new McpTokenError(
+      `token store at ${file} is truncated: expected at least 5 header bytes, got ${buf.byteLength}`,
+    )
+  }
+  const version = buf[0]
+  if (version === undefined || version !== PERSISTENT_FORMAT_VERSION) {
+    throw new McpTokenVersionError(file, version ?? -1, PERSISTENT_FORMAT_VERSION)
+  }
+  const length = buf.readUInt32LE(1)
+  if (buf.byteLength !== 5 + length) {
+    throw new McpTokenError(
+      `token store at ${file} has length mismatch: header says ${length} payload bytes, file has ${buf.byteLength - 5}`,
+    )
+  }
+  let payload: unknown
+  try {
+    payload = JSON.parse(buf.subarray(5, 5 + length).toString("utf8"))
+  } catch (e) {
+    throw new McpTokenError(`token store at ${file} is not valid JSON: ${(e as Error).message}`)
+  }
+  if (typeof payload !== "object" || payload === null) {
+    throw new McpTokenError(`token store at ${file} is not a JSON object`)
+  }
+  const tokens = (payload as Record<string, unknown>).tokens
+  if (typeof tokens !== "object" || tokens === null || Array.isArray(tokens)) {
+    throw new McpTokenError(`token store at ${file} is missing the "tokens" object`)
+  }
+
+  const out: Record<string, PersistedEntry> = {}
+  for (const [id, value] of Object.entries(tokens as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) {
+      throw new McpTokenError(`token store at ${file} has non-object entry for "${id}"`)
+    }
+    const v = value as Record<string, unknown>
+    if ("tombstone" in v) {
+      if (!isTombstone(v.tombstone)) {
+        throw new McpTokenError(`token store at ${file} has malformed tombstone for "${id}"`)
+      }
+      out[id] = { tombstone: v.tombstone }
+      continue
+    }
+    if (!("token" in v)) {
+      throw new McpTokenError(`token store at ${file} has unknown entry shape for "${id}"`)
+    }
+    if (!isToken(v.token)) {
+      throw new McpTokenError(`token store at ${file} has invalid token record for "${id}"`)
+    }
+    if (v.token.id !== id) {
+      throw new McpTokenError(
+        `token store at ${file} has id mismatch: key "${id}" != token.id "${v.token.id}"`,
+      )
+    }
+    out[id] = { token: v.token }
+  }
+  return out
 }
 
 function constantTimeEquals(a: string, b: string): boolean {
