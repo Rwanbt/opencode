@@ -27,13 +27,15 @@
  * expose a seam for it.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
+import * as fs from "node:fs"
+import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createHash } from "node:crypto"
 import { VaultMutationWriter, WAL_FILE, LOCK_FILE } from "../../../src/knowledge/mutation/writer.js"
 import { WriteLock } from "../../../src/knowledge/mutation/durability.js"
+import { KnowledgeFailure } from "../../../src/knowledge/domain/errors.js"
 import { parseFrontmatter } from "../../../src/knowledge/parser/frontmatter.js"
 
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex")
@@ -227,3 +229,60 @@ async function seed(root: string, locator: string, body: string) {
 }
 
 void WAL_FILE
+
+/**
+ * P2 follow-up — losing the race after a reclaim is contention, not a crash.
+ *
+ * `acquire` used to run the second `create` unguarded, on the assumption
+ * that reclaiming a stale lock entitles the reclaimer to it. It does not:
+ * between the reclaim and the create, a third process can take it, and
+ * `openSync(path, "wx")` then threw a raw `EEXIST` straight out of
+ * `acquire` — past the typed refusal every caller branches on. Callers
+ * that retry on contention could not recognise it, so a loaded machine
+ * turned a busy vault into a filesystem crash.
+ *
+ * The window is forced here by making the reclaim's own `unlinkSync` hand
+ * the lock to someone else before it returns.
+ */
+describe("P2 — a lost reclaim race is a typed refusal", () => {
+  let root: string
+  const restore: Array<() => void> = []
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "unifia-lockrace-"))
+    mkdirSync(join(root, ".unifia"), { recursive: true })
+  })
+  afterEach(() => {
+    for (const r of restore.splice(0)) r()
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it("refuses with the typed error instead of leaking EEXIST", () => {
+    const path = join(root, LOCK_FILE)
+    // A lock with no readable pid and an old mtime: the time-only heuristic
+    // decides it is abandoned, so the reclaim succeeds.
+    writeFileSync(path, "not json")
+    const longAgo = new Date(Date.now() - 10 * 60_000)
+    utimesSync(path, longAgo, longAgo)
+
+    // The third process: it takes the lock in the instant the reclaim frees it.
+    const spy = spyOn(fs, "unlinkSync")
+    const realUnlink = spy.getMockImplementation() as (p: string) => void
+    spy.mockImplementation(((p: string) => {
+      realUnlink(p)
+      if (p === path) writeFileSync(path, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }))
+    }) as never)
+    restore.push(() => spy.mockRestore())
+
+    let failure: unknown
+    try {
+      new WriteLock(path).acquire()
+    } catch (e) {
+      failure = e
+    }
+
+    expect(failure).toBeInstanceOf(KnowledgeFailure)
+    expect((failure as Error).message).toMatch(/locked by another writer/)
+    // Not the raw filesystem error the caller could not classify.
+    expect((failure as { code?: string }).code).toBeUndefined()
+  })
+})

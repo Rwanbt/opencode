@@ -268,17 +268,29 @@ export class WriteLock {
       return
     }
     mkdirSync(dirname(this.path), { recursive: true })
-    try {
-      this.create()
-    } catch {
-      if (!this.reclaimIfStale()) {
-        throw KnowledgeFailure.mutationRefused(
-          `vault is locked by another writer: ${this.path}`,
-        )
+    // Two attempts: one, and one more after reclaiming a dead holder's lock.
+    //
+    // The second `create` used to be unguarded, on the assumption that
+    // reclaiming entitles us to the lock. It does not: between the reclaim
+    // and the create, a third process can take it. `openSync(path, "wx")`
+    // then threw a raw `EEXIST` straight out of `acquire`, past the typed
+    // refusal every caller branches on — so contention surfaced as a
+    // filesystem crash instead of "the vault is busy", and callers that
+    // retry on contention could not recognise it. Guarding both attempts
+    // the same way means every loss of the race leaves by the same door.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        this.create()
+        this.depth = 1
+        return
+      } catch {
+        if (attempt === 1 || !this.reclaimIfStale()) {
+          throw KnowledgeFailure.mutationRefused(
+            `vault is locked by another writer: ${this.path}`,
+          )
+        }
       }
-      this.create()
     }
-    this.depth = 1
   }
 
   release(): void {
