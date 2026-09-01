@@ -65,9 +65,6 @@ import {
 import { cmdStatus, cmdSources, cmdSearch, } from "./runtime.js"
 import { printUsage } from "./usage.js"
 import { cmdMcp, cmdMcpToken } from "./commands-mcp.js"
-// One flag parser for the whole CLI. The local copy ignored bare
-// `--flag` forms, so a switch like `--strict` was silently dropped.
-import { parseFlags } from "./shared.js"
 import {
   cmdShow,
   cmdTags,
