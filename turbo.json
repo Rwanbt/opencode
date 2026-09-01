@@ -8,13 +8,25 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
+    // The knowledge e2e (test/knowledge/e2e/cli-process.test.ts) exists to catch
+    // the bundler dropping a module from the shipped binary — the defect that
+    // once removed the whole Sovereign Knowledge Core from dist/ while 883
+    // tests stayed green. It can only do that against a binary, so building one
+    // is a dependency of the test task, not a step someone remembers to run.
+    // Not cached: the output is a single ~186 MB executable, and CI stores this
+    // cache per commit under a 10 GB repo-wide budget. Rebuilding costs ~1 min;
+    // evicting every other cache entry costs every job on the repo.
+    "unifia#build": {
+      "outputs": ["dist/**"],
+      "cache": false
+    },
     "unifia#test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "outputs": [],
       "passThroughEnv": ["*"]
     },
     "unifia#test:ci": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },

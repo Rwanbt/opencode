@@ -9,6 +9,7 @@
     "prepare": "effect-language-service patch || true",
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 180000",
+    "test:knowledge": "bun run build --single && bun test test/knowledge",
     "bench:llm": "bun run bench/harness.ts",
     "bench:compare": "bun run bench/compare.ts",
     "probe:android": "bun run script/android-memory-probe.ts",

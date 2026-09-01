@@ -28,7 +28,9 @@
  * the artifact users actually execute. Without one they fall back to the
  * source entrypoint, which still proves the wiring and the flag grammar but
  * proves nothing about the bundle — `CLI_MODE` in the failure output says
- * which held.
+ * which held. That fallback is for developers only: under `CI` a missing
+ * build is a hard failure, because a gate that stops covering the thing it
+ * exists for, quietly, is worse than no gate at all.
  *
  * Measured on this machine: the compiled binary answers `knowledge status` in
  * ~1.6 s, the source entrypoint in 3.9–5.3 s. The 5 s the suite used to allow
@@ -74,6 +76,18 @@ function builtBinary(): string | undefined {
 const BUILT = builtBinary()
 /** Named in failures so a green run cannot be mistaken for the stronger proof. */
 const CLI_MODE = BUILT === undefined ? "source entrypoint (bundle NOT covered)" : `built binary ${BUILT}`
+
+/**
+ * Automation gets no fallback.
+ *
+ * The fallback exists so a developer with no `dist/` still gets the wiring and
+ * flag-grammar coverage. In CI it would turn the one gate that watches the
+ * bundle into a gate that watches nothing, and say so on a line nobody reads.
+ * `unifia#test` and `unifia#test:ci` depend on `unifia#build` in turbo.json,
+ * so an automated run always has a binary to drive; if that edge is ever
+ * removed these tests stop running rather than quietly proving less.
+ */
+const CI = process.env.CI !== undefined && process.env.CI !== "" && process.env.CI !== "false"
 
 /** A note's Class A representation, written the way a user's vault holds it. */
 function note(
@@ -139,6 +153,14 @@ const SECRET = "PHRASE_QUI_NE_DOIT_PAS_FUIR"
 let vault: string
 
 beforeAll(() => {
+  if (CI && BUILT === undefined) {
+    throw new Error(
+      "cli-process: no built CLI under packages/unifia/dist. Refusing the source fallback in CI, " +
+        "where this file is the only thing watching the bundle. Build it first: " +
+        "`bun run build --single` in packages/unifia, which is what the unifia#test:ci -> " +
+        "unifia#build edge in turbo.json does.",
+    )
+  }
   // Printed once so a green run cannot be mistaken for the stronger proof:
   // only the built binary covers the bundle.
   process.stderr.write(`cli-process: driving ${CLI_MODE}\n`)
@@ -152,7 +174,9 @@ beforeAll(() => {
   writeFileSync(join(vault, "memory", "linked.md"), note(3, "alpha voir [[open]] et [[absente]]"))
 })
 
-afterAll(() => rmSync(vault, { recursive: true, force: true }))
+afterAll(() => {
+  if (vault) rmSync(vault, { recursive: true, force: true })
+})
 
 describe("R-0019 — the shipped entrypoint reaches the knowledge core", () => {
   it("answers `knowledge status` at all", async () => {
