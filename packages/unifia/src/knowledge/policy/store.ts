@@ -14,8 +14,9 @@
  * malformed. A bad policy is a hard fail-closed.
  */
 
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { resolve, dirname, isAbsolute } from "node:path"
+import { renameDurable } from "../mutation/durability.js"
 
 export const POLICY_DIR = ".unifia"
 export const POLICY_FILE = `${POLICY_DIR}/policy.json`
@@ -102,7 +103,7 @@ export function writePolicy(workspaceRoot: string, policy: KnowledgePolicy): voi
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   const text = JSON.stringify(policy, null, 2)
   writeFileSync(tmp, text, "utf8")
-  renameSync(tmp, file)
+  renameDurable(tmp, file)
 }
 
 /** Update one or more fields, preserving the rest. */

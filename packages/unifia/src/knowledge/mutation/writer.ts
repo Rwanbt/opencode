@@ -23,7 +23,7 @@
  * without removing it from the vault.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
 import * as fsp from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
 import { dirname, isAbsolute, join } from "node:path"
@@ -52,6 +52,7 @@ import {
   fsyncDirectory,
   readWalTolerant,
   recover,
+  renameDurable,
   writeFileDurable,
   type RecoveryReport,
 } from "./durability.js"
@@ -719,7 +720,7 @@ export class VaultMutationWriter implements MutationWriter {
       }
 
       // 3. make it visible, 4. and flush the directory entry.
-      renameSync(tmp, full)
+      renameDurable(tmp, full)
       fsyncDirectory(dirname(full))
 
       // 5. drop the previous copy under the same lock, so a crash here

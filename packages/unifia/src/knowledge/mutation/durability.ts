@@ -131,7 +131,7 @@ const RENAME_RETRY_BUDGET_MS = 2_000
 const RENAME_RETRY_POLL_MS = 5
 
 /** Block the thread for `ms`. The write path is synchronous by contract. */
-function sleepSync(ms: number): void {
+export function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
@@ -418,7 +418,7 @@ export function recover(root: string, walFile: string): RecoveryReport {
         // The rename had already landed; drop the leftover.
         unlinkSync(tmp)
       } else {
-        renameSync(tmp, destination)
+        renameDurable(tmp, destination)
         fsyncDirectory(dirname(destination))
       }
       report.completed.push(destination)

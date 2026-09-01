@@ -48,7 +48,7 @@ import {
 import { basename, dirname, join } from "node:path"
 import type { McpKnowledgeCapability } from "@unifia/contracts/knowledge"
 import { MCP_KNOWLEDGE_METHODS } from "@unifia/contracts/knowledge"
-import { WriteLock, fsyncDirectory, renameDurable } from "../mutation/durability.js"
+import { WriteLock, fsyncDirectory, renameDurable, sleepSync } from "../mutation/durability.js"
 
 /** PERMISSIONS.md §5. */
 export const DEFAULT_TOKEN_TTL_MS = 60 * 60 * 1000
@@ -85,11 +85,6 @@ let tmpCounter = 0
  */
 const STORE_LOCK_WAIT_MS = 5_000
 const STORE_LOCK_POLL_MS = 10
-
-/** Block the thread for `ms`. `persist` is synchronous by contract. */
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-}
 
 /** True for the "someone else holds the lock" refusal, and nothing else. */
 function isLockContention(e: unknown): boolean {
