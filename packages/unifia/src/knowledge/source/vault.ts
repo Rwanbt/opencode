@@ -12,6 +12,7 @@
  * directly and never consults a derived index.
  */
 
+import { constants } from "node:fs"
 import * as fsp from "node:fs/promises"
 import { isAbsolute, join, relative, sep } from "node:path"
 import type {
@@ -33,6 +34,136 @@ const SKIPPED_DIRECTORIES = new Set([".git", ".unifia", "node_modules", ".obsidi
 const DEFAULT_MAX_DEPTH = 50
 
 /**
+ * How many truncated subtree paths a scan remembers.
+ *
+ * The list is diagnostic, not a work queue: a pathological tree could
+ * produce thousands of them, and the point of a bound is not to replace one
+ * unbounded structure with another.
+ */
+const MAX_RECORDED_TRUNCATIONS = 20
+
+/**
+ * `O_NOFOLLOW` where the platform has it, `0` where it does not.
+ *
+ * Linux and macOS refuse to open a final component that is a symbolic link
+ * when this flag is set, which is the strongest form of the guarantee below.
+ * Windows exposes no equivalent, so there the identity comparison in
+ * `readContainedByHandle` carries the check alone.
+ */
+const O_NOFOLLOW_IF_AVAILABLE = constants.O_NOFOLLOW ?? 0
+
+/** A file's identity, as the kernel reports it. */
+interface FileIdentity {
+  dev: bigint
+  ino: bigint
+}
+
+/**
+ * What a walk saw, and what it did not.
+ *
+ * A scan that stopped short is not the same corpus as a complete one, and a
+ * count derived from it is not the vault's note count. `truncated` says the
+ * difference exists; `truncatedPaths` says where, bounded so the diagnostic
+ * cannot itself grow without limit.
+ */
+export interface VaultScanStatus {
+  truncated: boolean
+  reason: string | null
+  truncatedPaths: string[]
+}
+
+function emptyScanStatus(): VaultScanStatus {
+  return { truncated: false, reason: null, truncatedPaths: [] }
+}
+
+/**
+ * Read `real` through a file descriptor, refusing any substitution.
+ *
+ * P1-A of the 2026-09-01 review: validating a path and then calling `stat`
+ * and `readFile` *on that path* leaves a window. Every one of those calls
+ * resolves the name again, so an actor who replaces the directory entry
+ * between them gets their content read out of a location that passed the
+ * containment check. Re-running `realpath` before the read narrows the
+ * window; it does not close it, because the read still goes by name.
+ *
+ * This closes it by changing what the read is addressed to:
+ *
+ *   1. capture the identity of the validated path with `lstat` (which does
+ *      not follow, so a link substituted here reports *its own* inode);
+ *   2. open it once, with `O_NOFOLLOW` where the platform has it;
+ *   3. `fstat` the descriptor and require the same `dev`/`ino`. A swap that
+ *      raced step 2 shows up as a mismatch — on Windows, where the flag does
+ *      not exist, this is the whole check;
+ *   4. check the size and read the bytes *from the descriptor*.
+ *
+ * After step 2 the descriptor names an inode, not a path, so no later
+ * substitution can redirect the read at all. `null` means absent — a
+ * containment or identity failure throws, because "not found" and "someone
+ * swapped this file" must not reach the caller as the same answer.
+ */
+async function readContainedByHandle(
+  real: string,
+  locator: string,
+  maxNoteBytes: number,
+): Promise<string | null> {
+  const before = await identityOf(real)
+  if (before === null) return null
+
+  let handle: fsp.FileHandle
+  try {
+    handle = await fsp.open(real, constants.O_RDONLY | O_NOFOLLOW_IF_AVAILABLE)
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code === "ELOOP") {
+      // The final component became a symbolic link after it was validated.
+      // That is the attack the flag exists to catch, not a missing file.
+      throw KnowledgeFailure.pathUnresolved(
+        `locator became a link after validation: ${locator}`,
+      )
+    }
+    return null
+  }
+
+  try {
+    const st = await handle.stat({ bigint: true })
+    if (!st.isFile()) {
+      throw KnowledgeFailure.pathUnresolved(
+        `locator is not a regular file: ${locator}`,
+      )
+    }
+    if (st.dev !== before.dev || st.ino !== before.ino) {
+      throw KnowledgeFailure.pathUnresolved(
+        `locator identity changed after validation: ${locator}` +
+          ` (was ${before.dev}:${before.ino}, now ${st.dev}:${st.ino})`,
+      )
+    }
+    // W-FS-03: the size comes from the descriptor, before any bytes are
+    // pinned in memory. The cap is hard; a caller that needs a larger note
+    // is expected to chunk it, not to read it and truncate downstream.
+    const size = Number(st.size)
+    if (size > maxNoteBytes) {
+      throw KnowledgeFailure.boundExceeded(
+        `note size ${size} exceeds maxNoteBytes ${maxNoteBytes}: ${locator}`,
+        { size, maxNoteBytes },
+      )
+    }
+    return await handle.readFile("utf8")
+  } finally {
+    await handle.close().catch(() => undefined)
+  }
+}
+
+/** `dev`/`ino` of `path` without following a final symbolic link. */
+async function identityOf(path: string): Promise<FileIdentity | null> {
+  try {
+    const st = await fsp.lstat(path, { bigint: true })
+    return { dev: st.dev, ino: st.ino }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Walk `dir`, collecting locators relative to `realRoot`, POSIX-separated.
  *
  * `visited` holds real paths so a link cycle terminates instead of recursing
@@ -48,13 +179,17 @@ async function walkMarkdown(
   excluded: ReadonlySet<string>,
   depth: number,
   maxDepth: number,
-  state: { truncated: boolean; reason: string | null },
+  state: VaultScanStatus,
 ): Promise<void> {
   if (depth > maxDepth) {
     // The caller asked the walk to descend no further. Mark the
-    // truncation so the surface (`locators()`) can expose the reason.
+    // truncation so the surface (`locators()`) can expose the reason, and
+    // name the subtree that was cut so the state is diagnosable.
     state.truncated = true
     state.reason = "maxDepth"
+    if (state.truncatedPaths.length < MAX_RECORDED_TRUNCATIONS) {
+      state.truncatedPaths.push(relative(realRoot, dir).split(sep).join("/"))
+    }
     return
   }
   const realDir = realOrNull(dir)
@@ -87,11 +222,12 @@ async function walkMarkdown(
     if (!isContained(realRoot, full)) continue
 
     if (stats.isDirectory()) {
+      // A subtree that hits `maxDepth` marks `state.truncated` and stops
+      // descending — it does not stop the walk. The first version returned
+      // here, so one over-deep directory hid every sibling after it: a
+      // vault could lose most of its notes to a single stray tree, and the
+      // only signal was a boolean the product never read.
       await walkMarkdown(realRoot, full, out, visited, excluded, depth + 1, maxDepth, state)
-      // A truncated subtree must not be reported as a complete scan: the
-      // outer caller would otherwise see `truncated: false` from the
-      // perspective of the next entry and lose the marker.
-      if (state.truncated) return
       continue
     }
     if (!name.toLowerCase().endsWith(".md")) continue
@@ -157,10 +293,7 @@ export class VaultSource implements KnowledgeSource {
   private readonly maxDepth: number
   private readonly maxNoteBytes: number
   private scanErrors: Array<{ locator: string; message: string }> = []
-  private scanStatus: { truncated: boolean; reason: string | null } = {
-    truncated: false,
-    reason: null,
-  }
+  private scanStatus: VaultScanStatus = emptyScanStatus()
 
   constructor(config: VaultSourceConfig) {
     if (!isAbsolute(config.root)) {
@@ -202,7 +335,7 @@ export class VaultSource implements KnowledgeSource {
    * the Inspector or a CLI flag can tell the user "the vault is
    * partial" without having to introspect the result.
    */
-  get lastScan(): { truncated: boolean; reason: string | null } {
+  get lastScan(): Readonly<VaultScanStatus> {
     return this.scanStatus
   }
 
@@ -217,7 +350,7 @@ export class VaultSource implements KnowledgeSource {
     const out: string[] = []
     // Each scan starts from a clean truncation state: a previous
     // truncated run must not leave a stale flag on an empty follow-up.
-    this.scanStatus = { truncated: false, reason: null }
+    this.scanStatus = emptyScanStatus()
     await walkMarkdown(
       this.realRoot,
       this.root,
@@ -244,7 +377,7 @@ export class VaultSource implements KnowledgeSource {
       // W-FS-03: an oversized note is a scan error, not a reason to
       // crash the listing. The size check lives in `readValidatedFile`
       // so it cannot drift between read and list.
-      let raw: string
+      let raw: string | null
       try {
         raw = await this.readValidatedFile(locator)
       } catch (e) {
@@ -252,7 +385,10 @@ export class VaultSource implements KnowledgeSource {
           errors.push({ locator, message: e.message })
           continue
         }
-        if (e instanceof Error && /outside the vault root|identity changed/.test(e.message)) {
+        if (
+          e instanceof Error &&
+          /outside the vault root|identity changed|became a link|not a regular file/.test(e.message)
+        ) {
           // Containment failure in a listing is a security boundary
           // being crossed — refuse loudly rather than skip silently.
           throw e
@@ -260,6 +396,9 @@ export class VaultSource implements KnowledgeSource {
         errors.push({ locator, message: (e as Error).message })
         continue
       }
+      // The walk saw this locator; if it is gone by the time we read it, the
+      // vault changed under us. That is a skip, not a parse error.
+      if (raw === null) continue
       let parsed: ParsedDocument
       try {
         parsed = parseDocument(raw)
@@ -354,45 +493,8 @@ export class VaultSource implements KnowledgeSource {
           `locator resolves outside the vault root: ${locator}`,
         )
       }
-      // W-FS-01 (TOCTOU): a concurrent actor could swap the directory entry at
-      // `full` for a symlink pointing outside the vault between the validation
-      // above and the read below. Re-validate the canonical real path against
-      // the captured identity, then read via that canonical path — not the
-      // lexical one — so a swap of `full` after this point cannot redirect
-      // the read. A change in canonical identity would mean another swap
-      // happened; the comparison makes the contract explicit so a future
-      // audit can confirm it.
-      const realAfter = realOrNull(full)
-      if (realAfter !== real) {
-        throw KnowledgeFailure.pathUnresolved(
-          `locator identity changed after validation: ${locator} (was ${real}, now ${realAfter ?? "unresolved"})`,
-        )
-      }
-      // W-FS-03: stat the canonical path BEFORE the full read so an
-      // oversized note is rejected without first pinning its bytes in
-      // memory. The size cap is a hard bound; the caller is expected to
-      // chunk large notes differently, not to load them and then truncate.
-      let size: number
-      try {
-        const st = await fsp.stat(real)
-        size = st.size
-      } catch {
-        return null
-      }
-      if (size > this.maxNoteBytes) {
-        throw KnowledgeFailure.boundExceeded(
-          `note size ${size} exceeds maxNoteBytes ${this.maxNoteBytes}: ${locator}`,
-          { size, maxNoteBytes: this.maxNoteBytes },
-        )
-      }
-      let raw: string
-      try {
-        // Read the canonical, validated path. The lexical entry could have
-        // been swapped for a symlink; we no longer consult it.
-        raw = await fsp.readFile(real, "utf8")
-      } catch {
-        return null
-      }
+      const raw = await readContainedByHandle(real, locator, this.maxNoteBytes)
+      if (raw === null) continue
       return raw
     }
     return null
