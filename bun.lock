@@ -765,6 +765,7 @@
         "@solid-primitives/scheduled": "1.5.2",
         "@standard-schema/spec": "1.0.0",
         "@unifia/contracts": "workspace:*",
+        "@unifia/mcp-transport": "workspace:*",
         "@unifia/plugin": "workspace:*",
         "@unifia/script": "workspace:*",
         "@unifia/sdk": "workspace:*",

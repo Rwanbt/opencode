@@ -22,6 +22,7 @@ import type {
   ListOptions,
   ListedNote,
   SourceEvent,
+  ScanCoverage,
 } from "./source.js"
 import type { ParsedDocument } from "../parser/parser.js"
 
@@ -51,6 +52,16 @@ export class PersonalSource implements KnowledgeSource {
   list(options: ListOptions): Promise<ListedNote[]> {
     return this.impl.list(options)
   }
+  /**
+   * Coverage of the wrapped source's last scan.
+   *
+   * A decorator that drops this makes a truncated scan look complete to
+   * everything upstream, which is how the flag came to exist with no reader.
+   */
+  get lastScan(): ScanCoverage | undefined {
+    return this.impl.lastScan
+  }
+
   read(locator?: KnowledgeLocator, id?: KnowledgeId): Promise<ParsedDocument | null> {
     return this.impl.read(locator, id)
   }

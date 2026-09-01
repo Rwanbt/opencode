@@ -42,10 +42,26 @@ export interface ListedNote {
   updatedAt: string
 }
 
+/**
+ * What the last scan of a source covered.
+ *
+ * Optional because not every source walks a tree. A source that does one
+ * reports whether it saw all of it: a count taken from a truncated scan is
+ * not the corpus size, and a consumer that cannot tell the difference will
+ * print the smaller number as if it were the answer.
+ */
+export interface ScanCoverage {
+  truncated: boolean
+  reason: string | null
+  truncatedPaths: readonly string[]
+}
+
 export interface KnowledgeSource {
   readonly space: KnowledgeSpace
   /** List notes available in this space. */
   list(options: ListOptions): Promise<ListedNote[]>
+  /** Coverage of the most recent `list`, when this source walks a tree. */
+  readonly lastScan?: ScanCoverage
   /** Read a note by locator or by id. */
   read(locator?: KnowledgeLocator, id?: KnowledgeId): Promise<ParsedDocument | null>
   /** Subscribe to changes. Returns an unsubscribe function. */

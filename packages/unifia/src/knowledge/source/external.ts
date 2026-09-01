@@ -24,6 +24,7 @@ import type {
   ListOptions,
   ListedNote,
   SourceEvent,
+  ScanCoverage,
 } from "./source.js"
 import type { ParsedDocument } from "../parser/parser.js"
 
@@ -99,6 +100,11 @@ export class ExternalSource implements KnowledgeSource {
     this.require("read", "list")
     return this.impl.list(options)
   }
+  /** Coverage of the wrapped source's last scan; see `ScanCoverage`. */
+  get lastScan(): ScanCoverage | undefined {
+    return this.impl.lastScan
+  }
+
   async read(locator?: KnowledgeLocator, id?: KnowledgeId): Promise<ParsedDocument | null> {
     this.require("read", "read")
     return this.impl.read(locator, id)

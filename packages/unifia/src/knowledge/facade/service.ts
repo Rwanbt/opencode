@@ -344,6 +344,12 @@ export class DefaultKnowledgeService implements KnowledgeService {
     // Report what is actually mounted and actually enabled, not a constant.
     const spaces: KnowledgeSpaceKind[] = []
     let candidatesCount = 0
+    // A truncated walk makes `candidatesCount` a floor rather than the
+    // corpus size. The bound existed and was recorded, but nothing above the
+    // source read it, so `status` reported the smaller number as the answer.
+    let truncated = false
+    let truncationReason: string | null = null
+    const truncatedPaths: string[] = []
     for (const source of this.registry.all()) {
       spaces.push(source.space.kind)
       try {
@@ -351,6 +357,15 @@ export class DefaultKnowledgeService implements KnowledgeService {
       } catch {
         // A source that cannot be listed contributes nothing rather than
         // inflating the count.
+        continue
+      }
+      const scan = source.lastScan
+      if (scan?.truncated === true) {
+        truncated = true
+        truncationReason ??= scan.reason
+        for (const p of scan.truncatedPaths) {
+          truncatedPaths.push(`${source.space.kind}:${p}`)
+        }
       }
     }
 
@@ -358,6 +373,9 @@ export class DefaultKnowledgeService implements KnowledgeService {
       indexVersion: "v1",
       rebuiltAt: new Date().toISOString(),
       candidatesCount,
+      ...(truncated
+        ? { scan: { truncated, reason: truncationReason, truncatedPaths } }
+        : {}),
       spaces,
       capabilities: [
         { name: "knowledge_search", readOnly: true },
