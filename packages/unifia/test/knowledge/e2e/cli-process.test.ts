@@ -9,23 +9,71 @@
  * every one of them imported the modules directly. Imports cannot tell you
  * whether the entrypoint reaches the code — only running the entrypoint can.
  *
- * So these tests spawn `bun src/index.ts knowledge …` as a child process and
- * assert on stdout, on the exit code, and on what the run left on disk. They
- * are the slowest tests in the suite and the only ones that would have caught
- * the defect.
+ * So these tests run the CLI as a child process and assert on stdout, on the
+ * exit code, and on what the run left on disk. They deliberately drive it the
+ * way a user does — flags included — because the first wiring attempt passed
+ * every unit test while yargs quietly ate `--workspace` and ran commands
+ * against the wrong vault.
  *
- * They deliberately drive the CLI the way a user does — flags included —
- * because the first wiring attempt passed every unit test while yargs quietly
- * ate `--workspace` and ran commands against the wrong vault.
+ * ## Which CLI they drive, and why it matters
+ *
+ * They used to spawn `bun src/index.ts` — the *source*. That cannot catch the
+ * defect the paragraph above describes. The knowledge core went missing from
+ * the shipped binary because the bundler dropped a module nothing imported;
+ * running from source bundles nothing, so a bundler regression would leave
+ * every assertion here green. The test could not detect the class of defect
+ * it was written for.
+ *
+ * So when a build exists under `dist/`, that is what runs:
+ * the artifact users actually execute. Without one they fall back to the
+ * source entrypoint, which still proves the wiring and the flag grammar but
+ * proves nothing about the bundle — `CLI_MODE` in the failure output says
+ * which held.
+ *
+ * Measured on this machine: the compiled binary answers `knowledge status` in
+ * ~1.6 s, the source entrypoint in 3.9–5.3 s. The 5 s the suite used to allow
+ * was bun's default, never a product budget, and it sat inside the source
+ * entrypoint's spread — which is why these tests failed about half the time.
+ * The explicit budget below covers both paths without hiding either.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const ENTRYPOINT = join(import.meta.dir, "..", "..", "..", "src", "index.ts")
 const PKG_ROOT = join(import.meta.dir, "..", "..", "..")
+
+/**
+ * Generous on purpose: it has to cover a cold compiled binary and a cold
+ * source entrypoint on a loaded machine. It is a harness budget, not a
+ * latency assertion — §12's benchmark is where latency is measured.
+ */
+const RUN_TIMEOUT_MS = 30_000
+
+/**
+ * The compiled CLI, when one has been built.
+ *
+ * `bun run build --single` writes `dist/unifia-<platform>/bin/unifia[.exe]`.
+ * Preferring it is the whole point: it is the only thing here that can tell
+ * you the knowledge core survived bundling.
+ */
+function builtBinary(): string | undefined {
+  const dist = join(PKG_ROOT, "dist")
+  if (!existsSync(dist)) return undefined
+  for (const entry of readdirSync(dist)) {
+    for (const name of ["unifia.exe", "unifia"]) {
+      const candidate = join(dist, entry, "bin", name)
+      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate
+    }
+  }
+  return undefined
+}
+
+const BUILT = builtBinary()
+/** Named in failures so a green run cannot be mistaken for the stronger proof. */
+const CLI_MODE = BUILT === undefined ? "source entrypoint (bundle NOT covered)" : `built binary ${BUILT}`
 
 /** A note's Class A representation, written the way a user's vault holds it. */
 function note(
@@ -60,7 +108,10 @@ interface Run {
 
 /** Run the CLI the way a user would, and wait for it to finish. */
 async function runCli(args: readonly string[]): Promise<Run> {
-  const proc = Bun.spawn(["bun", ENTRYPOINT, "knowledge", ...args], {
+  const argv = BUILT === undefined
+    ? ["bun", ENTRYPOINT, "knowledge", ...args]
+    : [BUILT, "knowledge", ...args]
+  const proc = Bun.spawn(argv, {
     cwd: PKG_ROOT,
     stdout: "pipe",
     stderr: "pipe",
@@ -88,6 +139,9 @@ const SECRET = "PHRASE_QUI_NE_DOIT_PAS_FUIR"
 let vault: string
 
 beforeAll(() => {
+  // Printed once so a green run cannot be mistaken for the stronger proof:
+  // only the built binary covers the bundle.
+  process.stderr.write(`cli-process: driving ${CLI_MODE}\n`)
   vault = mkdtempSync(join(tmpdir(), "unifia-e2e-"))
   mkdirSync(join(vault, "memory"), { recursive: true })
   writeFileSync(join(vault, "memory", "open.md"), note(1, "alpha ouvert au modèle local", undefined, ["alpha"]))
@@ -107,13 +161,13 @@ describe("R-0019 — the shipped entrypoint reaches the knowledge core", () => {
     const r = await runCli(["status"])
     expect(r.code).toBe(0)
     expect(r.stdout).toContain("Sovereign Knowledge Core")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("refuses an unknown subcommand with a non-zero code", async () => {
     const r = await runCli(["definitely-not-a-subcommand"])
     expect(r.code).not.toBe(0)
     expect(`${r.stdout}${r.stderr}`).toContain("unknown subcommand")
-  })
+  }, RUN_TIMEOUT_MS)
 })
 
 describe("R-0019 — a real vault, through a real process", () => {
@@ -123,20 +177,20 @@ describe("R-0019 — a real vault, through a real process", () => {
     const r = await runCli(["search", "alpha", "--workspace", vault])
     expect(r.code).toBe(0)
     expect(r.stdout).toContain("open.md")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("withholds a note the policy denies, and never prints its body", async () => {
     const r = await runCli(["search", "alpha", "--workspace", vault])
     // `closed.md` denies the local model, and the CLI is a local destination.
     expect(r.stdout).not.toContain(SECRET)
     expect(r.stdout).not.toContain("closed.md")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("lists the vault it was pointed at, not another one", async () => {
     const r = await runCli(["list", vault])
     expect(r.code).toBe(0)
     expect(r.stdout).toContain(vault.replace(/\\/g, "/").split("/").pop() ?? "")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("reports a broken wikilink, and exits non-zero because it found one", async () => {
     const r = await runCli(["broken-links", vault])
@@ -145,14 +199,14 @@ describe("R-0019 — a real vault, through a real process", () => {
     // gate a commit hook. Asserting 0 here would have pinned the opposite
     // contract and made a real finding look like a failure.
     expect(r.code).not.toBe(0)
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("resolves the link that does exist", async () => {
     const r = await runCli(["broken-links", vault])
     // `[[open]]` points at open.md and must not be reported; only the
     // genuinely missing target is.
     expect(r.stdout).not.toContain("-> open ")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("parses every note and attributes its findings", async () => {
     const r = await runCli(["validate", vault])
@@ -160,7 +214,7 @@ describe("R-0019 — a real vault, through a real process", () => {
     expect(r.stdout).toContain("notes failed: 0")
     // Same convention: findings exist, so the exit code says so.
     expect(r.code).not.toBe(0)
-  })
+  }, RUN_TIMEOUT_MS)
 })
 
 describe("R-0019 — the egress trail is written by the real process", () => {
@@ -186,7 +240,7 @@ describe("R-0019 — the egress trail is written by the real process", () => {
     } finally {
       rmSync(own, { recursive: true, force: true })
     }
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("records the refusal without quoting what it refused", async () => {
     // The trail is the one artefact that survives the process; a body leaking
@@ -197,7 +251,7 @@ describe("R-0019 — the egress trail is written by the real process", () => {
     expect(raw).toContain('"decision":"deny"')
     expect(raw).not.toContain(SECRET)
     expect(raw).not.toContain("closed.md")
-  })
+  }, RUN_TIMEOUT_MS)
 
   it("survives the process that wrote it", async () => {
     // The point of persisting: a second, independent process can still answer
@@ -206,5 +260,5 @@ describe("R-0019 — the egress trail is written by the real process", () => {
     await runCli(["search", "alpha", "--workspace", vault])
     const after = readFileSync(join(vault, ".unifia", "control-log.jsonl"), "utf8").trim().split("\n").length
     expect(after).toBeGreaterThan(before)
-  })
+  }, RUN_TIMEOUT_MS)
 })
