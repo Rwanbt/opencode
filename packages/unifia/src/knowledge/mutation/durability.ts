@@ -204,14 +204,29 @@ function readLockPid(path: string): number | null {
  * The time heuristic is the fallback for locks we cannot read, or whose
  * recorded pid is unverifiable (corrupt file, pid from a previous boot,
  * cross-platform state).
+ *
+ * The lock is *reentrant*, counted by `depth`. An operation that spans
+ * several writes — `supersede` touches two notes — takes the lock once
+ * and calls `commit` under it; `commit` takes the same lock again. With a
+ * boolean flag the inner `release` unlinked the lock file while the outer
+ * operation was still running, so a second writer could land between the
+ * successor's write and the target's. The counter makes the physical lock
+ * live exactly as long as the outermost `withLock`.
  */
 export class WriteLock {
-  private held = false
+  /**
+   * Number of nested `acquire()` calls currently outstanding. The lock file
+   * exists on disk for `depth > 0` and only for that span.
+   */
+  private depth = 0
 
   constructor(private readonly path: string) {}
 
   acquire(): void {
-    if (this.held) return
+    if (this.depth > 0) {
+      this.depth += 1
+      return
+    }
     mkdirSync(dirname(this.path), { recursive: true })
     try {
       this.create()
@@ -223,17 +238,25 @@ export class WriteLock {
       }
       this.create()
     }
-    this.held = true
+    this.depth = 1
   }
 
   release(): void {
-    if (!this.held) return
-    this.held = false
+    if (this.depth === 0) return
+    this.depth -= 1
+    // An inner release only unwinds the counter: the file stays until the
+    // outermost holder lets go, so no window opens mid-operation.
+    if (this.depth > 0) return
     try {
       unlinkSync(this.path)
     } catch {
       // Already gone; the lock is free either way.
     }
+  }
+
+  /** True while this instance physically holds the lock file. */
+  get isHeld(): boolean {
+    return this.depth > 0
   }
 
   /** Run `work` while holding the lock, releasing it whatever happens. */

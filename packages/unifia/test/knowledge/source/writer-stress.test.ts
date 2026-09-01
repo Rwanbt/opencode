@@ -145,7 +145,7 @@ async function runInProcessTier(n: number) {
     for (const entry of entries) {
       const full = join(root, entry.locator)
       const raw = readFileSync(full, "utf8")
-      expect(sha256(raw)).toBe(entry.newHash)
+      expect(entry.newHash).toBe(sha256(raw))
       const fm = parseFrontmatter(raw).frontmatter
       expect(fm.unifia_lifecycle).toBe("candidate")
     }
@@ -266,7 +266,7 @@ describe("W-MUT-04 — concurrent writers, cross-process tier", () => {
       const raw = readFileSync(join(root, loc), "utf8")
       const entry = entries.find((e) => e.locator === loc)
       expect(entry).toBeDefined()
-      expect(sha256(raw)).toBe(entry?.newHash)
+      expect(entry?.newHash).toBe(sha256(raw))
     }
     expect(existsSync(join(root, ".unifia", "write.lock"))).toBe(false)
   }, 60_000)

@@ -295,7 +295,11 @@ export class VaultMutationWriter implements MutationWriter {
     if (successorId === undefined) {
       throw KnowledgeFailure.mutationRefused("supersede requires successorId")
     }
-    if (successorId === intent.targetId) {
+    const targetIdValue = intent.targetId
+    if (targetIdValue === undefined) {
+      throw KnowledgeFailure.mutationRefused("supersede requires targetId")
+    }
+    if (successorId === targetIdValue) {
       throw KnowledgeFailure.mutationRefused("a note cannot supersede itself")
     }
 
@@ -308,7 +312,7 @@ export class VaultMutationWriter implements MutationWriter {
       // edited, or been superseded since the plan read it.
       let lockedTarget: { locator: string; full: string; raw: string }
       try {
-        lockedTarget = this.locateSync(intent.targetId)
+        lockedTarget = this.locateSync(targetIdValue)
       } catch (e) {
         if (e instanceof KnowledgeFailure && e.kind === "source_inconsistent") throw e
         throw KnowledgeFailure.casMismatch(
@@ -344,7 +348,7 @@ export class VaultMutationWriter implements MutationWriter {
         )
       }
       const successorNote = parseFrontmatter(lockedSuccessor.raw)
-      const targetId = intent.targetId as string
+      const targetId = targetIdValue as string
       if (successorNote.frontmatter.unifia_supersedes.includes(targetId)) {
         throw KnowledgeFailure.mutationRefused(
           `supersession cycle: ${targetId} already in successor ${successorId}.unifia_supersedes`,
