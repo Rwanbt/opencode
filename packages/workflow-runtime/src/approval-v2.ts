@@ -10,6 +10,23 @@ import type { DeploymentScope, OwnershipScope } from "@unifia/contracts"
 // compatibility tests. It is not a production WorkflowRun authority and must
 // not be injected into a live execution path. ApprovalBrokerV4 is the
 // authority façade for new production wiring.
+//
+// Quarantine gates (master plan D-02 section 6):
+//   static  - packages/workflow-runtime/test/approval-v2-quarantine.test.ts
+//             fails if any production module imports this file;
+//   runtime - the constructors below throw unless the test suites opt in via
+//             UNIFIA_ALLOW_LEGACY_APPROVAL_V2=1, so a production process
+//             cannot instantiate the old durable broker even through dynamic
+//             wiring.
+
+function assertQuarantineGateOpen(): void {
+  if (process.env.UNIFIA_ALLOW_LEGACY_APPROVAL_V2 !== "1") {
+    throw new Error(
+      "LEGACY_APPROVAL_V2_QUARANTINED: the store-backed V2 approval broker is " +
+        "test-only; wire ApprovalBrokerV4 on the WorkflowRun authority instead.",
+    )
+  }
+}
 
 export type ApprovalState =
   | "PENDING"
@@ -89,6 +106,10 @@ export interface ApprovalStore {
 export class InMemoryApprovalStore implements ApprovalStore {
   private state: ApprovalStoreState = emptyState()
 
+  constructor() {
+    assertQuarantineGateOpen()
+  }
+
   async load(): Promise<ApprovalStoreState> {
     return clone(this.state)
   }
@@ -99,7 +120,9 @@ export class InMemoryApprovalStore implements ApprovalStore {
 }
 
 export class FileBackedApprovalStore implements ApprovalStore {
-  constructor(private readonly path: string) {}
+  constructor(private readonly path: string) {
+    assertQuarantineGateOpen()
+  }
 
   async load(): Promise<ApprovalStoreState> {
     try {
@@ -129,7 +152,9 @@ export class LocalApprovalBrokerV2 {
   constructor(
     private readonly store: ApprovalStore,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    assertQuarantineGateOpen()
+  }
 
   async request(input: Omit<ApprovalRequestV2, "approvalId" | "createdAtEpochMs" | "state">): Promise<{ approvalId: string; workflowRunId: string }> {
     return this.serial(async () => {

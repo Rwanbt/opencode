@@ -5,7 +5,7 @@
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
 > Phase : **D-02 V4 OPEN + M0 QUALIFICATION OPEN**
-> HEAD local : `bf2671541a`; remote tracking ref : `173117f637`; branche locale en avance de 18 commits.
+> HEAD local : voir `git rev-parse HEAD` (batch D-02 V4 matrix ; parent `1591cd4d68`); remote tracking ref : `173117f637`.
 > ADR-000 substrate final : `NOT_RATIFIED`; finalistes : `UNIFIA_NATIVE`, `DBOS_GO_SQLITE`.
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
@@ -22,9 +22,11 @@ override this section.
 
 - ADR-000 substrate final: `NOT_RATIFIED`; M0 proof is not substrate selection
   proof. Finalists remain `UNIFIA_NATIVE` and `DBOS_GO_SQLITE`.
-- D-02 V4: `OPEN`; the old store-backed V2 broker is quarantined as
-  `LEGACY/TEST-ONLY`. The V4 façade is contract/runtime-test level only until
-  a selected substrate supplies the durable authority implementation.
+- D-02 V4: contract gate `GREEN` (full frozen matrix, 22 tests, mechanical
+  audit in `D02-V4-AUDIT-MATRIX.md`); the production DURABLE gate stays
+  `OPEN` until a selected substrate supplies the authority implementation.
+  The old store-backed V2 broker is quarantined behind static + runtime gates
+  (`LEGACY/TEST-ONLY`, constructor-gated, no barrel re-export).
 - Real DBOS Go host, symmetric FC-32/FC-04/FC-14/FC-25, and valid FC-13
   power-loss evidence remain unexecuted or externally provisioned.
 - Automate browser certification remains `RED`; app/modes e2e measured
@@ -35,20 +37,24 @@ override this section.
 
 | Card | Status | Level | Commit / evidence | Remaining dependency |
 |---|---|---|---|---|
-| D-02 legacy broker | Quarantined | TEST_DOUBLE_ONLY | `LocalApprovalBrokerV2`; legacy suite `12/12` | Replace all live callers with V4/selected authority |
-| D-02 V4 façade | Partial green | CONTRACT_ONLY + TEST_DOUBLE_ONLY | local `6610cfec39`; V4 `8/8`, runtime package `47/47` | Durable WorkflowRun authority, full V4 matrix, ADR-000 |
+| D-02 legacy broker | Quarantined (static + runtime gates) | TEST_DOUBLE_ONLY | `LocalApprovalBrokerV2` constructor-gated; barrel re-export removed; quarantine suite `2/2`; legacy suite `12/12` | Delete once no legacy suite needs it |
+| D-02 V4 façade | Contract green | CONTRACT_ONLY (full matrix) | local batch on `1591cd4d68`; V4 `22/22`, runtime package `61/61`, audit matrix `docs/automation-v2/D02-V4-AUDIT-MATRIX.md` | Durable WorkflowRun authority (production durable gate), ADR-000 |
 | M0 contract feasibility | Green | QUALIFICATION_ONLY | contract suite `177/177` | Does not select a substrate |
 | M0 comparative qualification | Open | QUALIFICATION_ONLY | canonical runner `bf2671541a`; Native `4 PASS/2 BLOCKED/2 NOT_VALID`; DBOS real `1 PASS/2 BLOCKED/5 OTHER` | valid finalist proof for remaining FCs |
 | Workflow catalog / loader | Green | CONTRACT_ONLY | `63/63` and `5/5` | production publication/runtime wiring |
 | Workbench orchestrator | Green | TEST_DOUBLE_ONLY | `28/28` assertions | real authority integration |
-| Monorepo typecheck | Green | BUILD/TYPECHECK | Turbo `47/47` tasks | rerun after subsequent source commit |
+| Monorepo typecheck | Green | BUILD/TYPECHECK | Turbo `47/47` tasks (isolated cache, after V4 matrix batch) | rerun after subsequent source commit |
 | App/modes browser gate | Partial | E2E_CERTIFIED partial | Playwright `25 passed, 5 failed` | fix/reclassify five failures |
 
 ### CURRENT HEAD
 
-`bf2671541a` local after canonical M0 publication; remote tracking ref remains
-`173117f637`. No reset and no force-push. Local evidence publication is
-committed; remote push/release publication is separate and not performed.
+Current batch: D-02 V4 contract matrix hardening (committed on top of
+`1591cd4d68`); remote tracking ref remains `173117f637`. No reset, no
+force-push, no remote push. Local evidence publication is committed;
+remote push/release publication is separate and not performed.
+
+The ledger HEAD line is refreshed by each batch commit (mechanically true
+via `git rev-parse HEAD`).
 
 ## Historical checkpoints / superseded evidence
 

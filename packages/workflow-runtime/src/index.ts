@@ -11,13 +11,14 @@
  *   — wraps the in-memory impl with JSON snapshot persistence.
  * - `v1-migrating.ts` : `V1MigratingAuthority` (M1-11) — wraps any
  *   DurableHistoryAuthority and migrates V1 history records to V2.
+ *
+ * The legacy store-backed V2 approval broker is NOT re-exported here: it is
+ * quarantined (LEGACY/TEST-ONLY, constructor-gated) and importable only via
+ * its module path for the compatibility suites. ApprovalBrokerV4 is the
+ * authority facade for production wiring.
  */
 export * from "./adapter"
 export * from "./in-memory"
 export * from "./file-backed"
 export * from "./v1-migrating"
-export * from "./approval-v2"
-// V4 is the production-shaped façade: durable state/history stay owned by the
-// injected WorkflowRun authority. approval-v2 remains quarantined for legacy
-// compatibility and isolated storage tests until downstream callers migrate.
 export * from "./approval-v4"

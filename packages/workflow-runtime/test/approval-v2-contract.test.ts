@@ -19,6 +19,10 @@
  * is implemented in the production kernel.
  */
 
+// Quarantine runtime gate opt-in: this suite is the LEGACY/TEST-ONLY consumer
+// of the store-backed V2 broker (see src/approval-v2.ts).
+process.env.UNIFIA_ALLOW_LEGACY_APPROVAL_V2 = "1"
+
 import { describe, expect, test } from "bun:test"
 import { FileBackedApprovalStore, InMemoryApprovalStore, LocalApprovalBrokerV2, ApprovalRejectedError } from "../src/approval-v2.ts"
 import { mkdtemp, rm } from "node:fs/promises"
