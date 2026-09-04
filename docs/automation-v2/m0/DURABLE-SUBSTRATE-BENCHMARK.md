@@ -5,116 +5,87 @@
 
 > Source normative : `docs/adr/ADR-000-DURABLE-EXECUTION-SUBSTRATE-M0-FROZEN.md`
 > §20 (output obligatoire) + §22 (final comparison dimensions).
+> **Rafraîchi 2026-09-04** après la matrice P0 symétrique complète
+> (commit source `8afeed2c94`, évidence `a1c3de202d`).
+> L'ancienne version (DBOS "NOT EXECUTED") est historique et périmée.
 
-Document de synthèse comparative Native ↔ DBOS Go. **M0 ne peut
-produire qu'un benchmark partiel** : DBOS Go est NOT EXECUTED
-(Go toolchain absent, voir `WINDOWS_PREFLIGHT.md` §3 et
-`adapters/dbos-go.ts` STUB).
+## 1. Hard correctness — matrice P0 symétrique mesurée
 
-## 1. Hard correctness (la base de la décision)
+Les deux finalistes ont exécuté le même oracle substrate-neutral sur le
+même jeu de critères. Résultats canoniques (gen CURRENT, `a1c3de202d`) :
 
 | FC | Description | UNIFIA_NATIVE | DBOS_GO_SQLITE |
 |---|---|---|---|
-| FC-31A | Canonical value round-trip (21 valeurs IEEE-754) | **PASS** 21/21 | NOT EXECUTED |
-| FC-31B | host-integer vs host-float64 separation (13 vecteurs) | **PASS** 13/13 | NOT EXECUTED |
-| FC-04 | Provider success + local ACK lost | **PASS** (UNKNOWN_EXTERNAL_STATE) | NOT EXECUTED |
-| FC-14 | Second connection to same SQLite file (in-process) | **PASS** | NOT EXECUTED |
-| FC-25 | Stale authority fencing (multi-process) | **BLOCKED** (single-process in M0) | NOT EXECUTED |
-| FC-32 | Replay model declaration | **PASS** (NO) | NOT EXECUTED |
-| FC-13 | Power-loss / storage fault | **NOT VALID** (no methodology in M0 env) | NOT EXECUTED |
-| FC-13-CTRL | Power-loss negative control | **NOT VALID** | NOT EXECUTED |
-| FC-01..FC-30 | Functional criteria (autres) | Non lancés en P0 (à exécuter en P1) | NOT EXECUTED |
+| FC-31A | Canonical value round-trip (21 valeurs IEEE-754) | **PASS** 21/21 | **PASS** 21/21 |
+| FC-31B | Host-integer vs host-float64 separation (20 vecteurs gelés, hôte réel) | **PASS** 20/20 | **PASS** 20/20 (hôte Go réel) |
+| FC-04 | Provider réel séparé (processus OS, journal SQLite propre, HTTP) — vrai ACK perdu au transport | **PASS** | **PASS** |
+| FC-14 | Course d'autorité, 2 VRAIS processus OS, un seul gagnant | **PASS** | **PASS** |
+| FC-25 | Zombie owner réel : freeze barrier → takeover → rejets périmés | **PASS** | **PASS** |
+| FC-32 | Replay conformance (T1/R1/O1 → crash → T2/R2/O2), classification mesurée | **PASS** — YES | **PASS** — YES (récupération DBOS réelle après SIGKILL mid-step) |
+| FC-13 | Power-loss / storage fault | **BLOCKED** | **BLOCKED** |
+| FC-13-CTRL | Power-loss negative control | **BLOCKED** | **BLOCKED** |
 
-**Compteur** : 4 PASS, 1 BLOCKED, 2 NOT VALID sur 7 P0 lancés.
-DBOS Go : 0 / 7 (toolchain absent).
+**Compteur : 6 PASS, 2 BLOCKED pour CHAQUE finaliste.** Aucun FAIL, aucun
+NOT_VALID sur le chemin mesuré. FC-13/FC-13-CTRL exigent une VM jetable
+ou une couche de fault-injection stockage — provisioning externe
+indisponible dans cet environnement (pas de qemu/VBox/vmrun ; Hyper-V
+refuse sans élévation ; `wsl --terminate` est un arrêt contrôlé, pas une
+coupure dure — `kill` n'est pas une preuve power-loss, plan §35).
 
 ## 2. Outcome A / B / C (per pack gelé §21)
 
-### Outcome A — UNIFIA_NATIVE
+- **Outcome A (Native)** : conditions non remplies — tous les REQUIRED
+  gates ne sont pas PASS (FC-13 BLOCKED). Présomption favorable sur tout
+  le chemin mesuré, pas une conclusion.
+- **Outcome B (DBOS)** : conditions non remplies — même contrainte FC-13.
+- **Outcome C (aucun)** : non concluant — BLOCKED n'est pas FAIL ; les
+  deux candidats satisfont tout le chemin mesurable.
 
-Conditions :
-- Tous les REQUIRED gates PASS
-- DBOS ne satisfait pas, ou Native est préféré après que les deux
-  satisfassent correctness
+**Décision A vs B : SOUS-DÉTERMINÉE sur les mesures disponibles** — égalité
+parfaite 6-6 sur le P0 symétrique. La rubrique ne sélectionne pas
+mécaniquement un gagnant ; le plan §40 exclut tout changement de règle a
+posteriori et toute préférence de candidat.
 
-Statut M0 : **partiellement vérifiable**. Les P0 PASS donnent une
-**présomption favorable** mais ne sont pas la full matrix. La
-**full matrix** (FC-01..FC-30, FC-13 avec méthodologie, etc.) doit
-être exécutée pour conclure.
+## 3. Contrainte de ratification (gelé §92)
 
-### Outcome B — DBOS_GO_SQLITE
+ADR-000 devient RATIFIED seulement si notamment :
 
-Conditions :
-- DBOS satisfait tous les REQUIRED gates
-- DBOS gagne l'évaluation architecturale finale
+```text
+power-loss proof valid      ← SEULE CONDITION NON Satisfaite (FC-13, externe)
+second-writer proof valid   ✓ (FC-14, 2 processus réels, les deux candidats)
+M0 Native complete          ✓
+M0 DBOS Go complete         ✓
+Critical/High findings = 0  ✓
+```
 
-Statut M0 : **non vérifiable**. DBOS Go n'a pas été exécuté (Go
-absent). La présomption est neutre ; le go-language-elimination est
-explicitement REJETÉ par le pack gelé.
+**Le gate restant est externe et physique** (VM jetable ou fault-injection
+stockage). ADR-000 reste NOT_RATIFIED mécaniquement — aucune cérémonie ne
+peut le contourner (plan §40, §65 TRUE blocker).
 
-### Outcome C — Aucun candidat ne satisfait
+## 4. Cross-cutting dimensions (per pack gelé §22) — mesuré 2026-09-04
 
-Conditions :
-- Ni Native ni DBOS ne satisfont les REQUIRED gates
-- ADR-000 reste OPEN
-
-Statut M0 : **non concluant**. Le résultat M0 ne permet PAS de
-trancher entre A et C : la full matrix n'a pas été exécutée, et DBOS
-n'a pas été exécuté du tout.
-
-## 3. Recommandation v1.1 review
-
-**Pour Erwan** : ne pas ratifier maintenant. Compléter la full
-matrix (P1+), débloquer l'environnement Go pour exécuter DBOS,
-puis trancher A vs C avec preuves.
-
-**Pour la prochaine session** :
-1. P1 matrix sur Native (FC-01..FC-30, FC-13 power-loss avec VM,
-   FC-25 multi-process réel)
-2. DBOS Go dans environnement Go-équipé
-3. Packaging + resources sur les deux
-4. Exit strategies étoffées
-5. Décision A/B/C
-
-## 4. Cross-cutting dimensions (per pack gelé §22)
-
-| Dimension | UNIFIA_NATIVE (mesuré) | DBOS_GO_SQLITE (estimé) |
+| Dimension | UNIFIA_NATIVE (mesuré) | DBOS_GO_SQLITE (mesuré) |
 |---|---|---|
-| Operational simplicity | 1 process, Bun embedded | 2 processes, Go sidecar |
-| Windows integration | OK (bun:sqlite / better-sqlite3) | Go cross-compile, musl |
-| Packaging | ~30-60 MB binary (Node) | ~30-50 MB Go static |
-| Startup | <300 ms | <1s |
-| Memory | ~60-150 MB | ~50-200 MB |
-| Disk | SQLite + WAL | SQLite + WAL |
-| Upgrade | Node upgrade (frequent) | DBOS upstream |
+| Topologie | 1 process, Bun in-process | 2+ processes (binaire Go + workers autorité) |
+| Binaire/packaging | intégré au harnais Bun (pas de binaire séparé en M0) | **24.1 MB** (`dbos-real-qualify.exe`, Go 1.25.12) |
+| Démarrage (bind + /healthz) | init SQLite + schéma **62 ms** (moy. 5, 59-64) | **282 ms** (moy. 5, 275-294) ; healthz < 1 ms |
+| Stockage | SQLite WAL, synchronous FULL | SQLite WAL, synchronous FULL (même system DB) |
+| Windows | bun:sqlite natif | Go/Windows natif (modernc.org/sqlite via driver DBOS) |
+| Upgrade | Bun upgrade | DBOS upstream (v1.0.0 épinglé) |
 | Backup | file copy + VACUUM | SQLite .backup API |
-| Future mobile path | Faible (Bun/Node pas sur mobile) | Faible (Go mobile possible mais lourd) |
-| Determinism burden | Aucun (imperative) | Élevé (workflow replay) |
-| WorkflowIR constraints | Aucune (imperative) | Implicites (DBOS workflow model) |
-| Maintained code surface | TS/Bun (~22 KB candidate + 30 KB harness) | TS + Go (~équivalent) |
-| Dependency surface | bun:sqlite ou better-sqlite3 | TS + DBOS Go + SQLite driver |
-| Security-response burden | Unifia uniquement | DBOS upstream |
-| Forkability | MIT | MIT |
-| Exit/migration difficulty | Modéré (export JSON Lines) | Modéré (DBOS API) |
-| 5-year TCO | TBD | TBD |
 
-## 5. Verdict M0
+Les dimensions restantes (mémoire RSS longue durée, throughput soutenu,
+packaging final) relèvent du preflight Windows/packaging (I13/I14) et
+n'altèrent pas la contrainte de ratification §92.
 
-**Non concluant**. La sélection A vs C ne peut pas être tranchée
-sans :
-1. Full matrix sur Native
-2. DBOS Go exécuté sur environnement Go-équipé
-3. Cross-comparaison de toutes les dimensions du §22
+## 5. Chemin vers la décision (plan §68 restant)
 
-Le rapport final `DURABLE-SUBSTRATE-BENCHMARK.md` sera produit
-après ces exécutions. **Erwan ne doit pas ratifier maintenant**.
-
-## 6. Source
-
-- `docs/adr/ADR-000-DURABLE-EXECUTION-SUBSTRATE-M0-FROZEN.md` §20, §21, §22
-- `docs/automation-v2/m0/M0_RESULTS_UNIFIA_NATIVE.json`
-- `docs/automation-v2/m0/M0_EXPECTED_NA_UNIFIA_NATIVE.json`
-- `docs/automation-v2/m0/WINDOWS_PREFLIGHT.md`
-- `docs/automation-v2/m0/PACKAGING_RESULTS.md`
-- `docs/automation-v2/m0/EXIT_NATIVE.md`
-- `docs/automation-v2/m0/EXIT_DBOS_GO.md`
+1. **FC-13** : provisionner une VM jetable (Hyper-V élevé, qemu, ou
+   équivalent) + coupure dure du disque virtuel — exécuter FC-13-CTRL
+   puis FC-13 sur les deux finalistes.
+2. Si les REQUIRED gates deviennent tous PASS pour un candidat (et pas
+   l'autre), la rubrique §21 tranche mécaniquement A ou B.
+3. Si les deux passent tout : l'évaluation architecturale finale (§21
+   Outcome A/B) départage — hors périmètre M0 measurement.
+4. Alors seulement : ADR-000 → RATIFIED (§92), puis production wiring
+   (plan §17-§22).
