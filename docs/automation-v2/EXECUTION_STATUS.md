@@ -30,6 +30,9 @@ suivantes sont validées localement :
   est reclassée GREEN. Le secret-leak canary est reclassé PARTIAL : le logger
   et son scan sont testés, mais la preuve cross-surface complète reste un
   blocker GA.
+- Le typecheck monorepo a été rejoué avec un cache Turbo isolé : `47/47`
+  tâches réussies. Le premier défaut réel (`release-hardening` appelait encore
+  l'API V1 supprimée) a été corrigé dans `b8263507a5`.
 
 La branche locale est à cinq commits au-dessus de
 `origin/agent/automate-v2-baseline-20260901`; aucun push n'est effectué sans
@@ -180,13 +183,13 @@ choice), R-013 phase 3.
 
 | Référence | Valeur |
 |---|---|
-| HEAD (commit) | `bca116af10 docs(cert): record orchestrator and secret canary status` |
-| HEAD (sha) | `bca116af10` |
+| HEAD (commit) | `b8263507a5 fix(release-hardening): validate durable workflow authority` |
+| HEAD (sha) | `b8263507a5` |
 | HEAD (tree sha) | (généré au commit) |
 | Branche de travail | `agent/automate-v2-baseline-20260901` |
 | Branche d'origine | `integration/rev3m-20260901/design-automate` |
 | HEAD d'origine (pinned) | `24b04998e2fd861711036501ad3f6e41a63f8c32` |
-| Commits depuis la base | **128** |
+| Commits depuis la base | **129** |
 | Remote | `origin` = `https://github.com/Rwanbt/unifia.git` (**121 commits poussés** 2026-09-03, remote HEAD = local HEAD = `08310d1277`) |
 
 > Le SHA d'origine cité dans le prompt de session,
