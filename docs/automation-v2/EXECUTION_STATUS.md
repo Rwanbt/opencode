@@ -8,7 +8,50 @@
 > Date : 2026-09-03
 > Format imposé par le plan §246 lignes 6140-6170.
 
-## Continuation checkpoint — 2026-09-04
+## CURRENT STATE — reconciled 2026-09-04
+
+Source order used: executable code and measured runs, then the frozen ADR/M0
+pack, then current evidence. Older prose below is historical and does not
+override this section.
+
+### CURRENT BLOCKERS
+
+- ADR-000 substrate final: `NOT_RATIFIED`; M0 proof is not substrate selection
+  proof. Finalists remain `UNIFIA_NATIVE` and `DBOS_GO_SQLITE`.
+- D-02 V4: `OPEN`; the old store-backed V2 broker is quarantined as
+  `LEGACY/TEST-ONLY`. The V4 façade is contract/runtime-test level only until
+  a selected substrate supplies the durable authority implementation.
+- Real DBOS Go host, symmetric FC-32/FC-04/FC-14/FC-25, and valid FC-13
+  power-loss evidence remain unexecuted or externally provisioned.
+- Automate browser certification remains `RED`; app/modes e2e measured
+  `25/30` with five localized failures. GitHub effective protection remains
+  an external gate.
+
+### CURRENT EVIDENCE
+
+| Card | Status | Level | Commit / evidence | Remaining dependency |
+|---|---|---|---|---|
+| D-02 legacy broker | Quarantined | TEST_DOUBLE_ONLY | `LocalApprovalBrokerV2`; legacy suite `12/12` | Replace all live callers with V4/selected authority |
+| D-02 V4 façade | Partial green | CONTRACT_ONLY + TEST_DOUBLE_ONLY | current local changes; V4 `7/7`, runtime package `46/46` | Durable WorkflowRun authority, full V4 matrix, ADR-000 |
+| M0 contract feasibility | Green | QUALIFICATION_ONLY | contract suite `177/177` | Does not select a substrate |
+| M0 comparative qualification | Open | QUALIFICATION_ONLY | runner `16 GREEN, 3 RED, 1 NA, 6 OTHER` | real finalist runs and frozen matrix |
+| Workflow catalog / loader | Green | CONTRACT_ONLY | `63/63` and `5/5` | production publication/runtime wiring |
+| Workbench orchestrator | Green | TEST_DOUBLE_ONLY | `28/28` assertions | real authority integration |
+| Monorepo typecheck | Green | BUILD/TYPECHECK | Turbo `47/47` tasks | rerun after subsequent source commit |
+| App/modes browser gate | Partial | E2E_CERTIFIED partial | Playwright `25 passed, 5 failed` | fix/reclassify five failures |
+
+### CURRENT HEAD
+
+`dab42ec48` local before this V4 source change; remote tracking ref after
+fetch remains `173117f637`. No reset and no force-push. New V4 work is not
+yet committed. Push/publication are separate and not performed.
+
+## Historical checkpoints / superseded evidence
+
+The following checkpoints preserve prior claims and their original context;
+they are not current status.
+
+### Continuation checkpoint — 2026-09-04
 
 ### Batch continuation — local gates
 

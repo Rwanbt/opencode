@@ -17,3 +17,7 @@ export * from "./in-memory"
 export * from "./file-backed"
 export * from "./v1-migrating"
 export * from "./approval-v2"
+// V4 is the production-shaped façade: durable state/history stay owned by the
+// injected WorkflowRun authority. approval-v2 remains quarantined for legacy
+// compatibility and isolated storage tests until downstream callers migrate.
+export * from "./approval-v4"

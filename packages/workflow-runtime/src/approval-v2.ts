@@ -6,6 +6,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import type { DeploymentScope, OwnershipScope } from "@unifia/contracts"
 
+// LEGACY/TEST-ONLY: this store-backed broker is retained solely for V1/V2
+// compatibility tests. It is not a production WorkflowRun authority and must
+// not be injected into a live execution path. ApprovalBrokerV4 is the
+// authority façade for new production wiring.
+
 export type ApprovalState =
   | "PENDING"
   | "APPROVED"
