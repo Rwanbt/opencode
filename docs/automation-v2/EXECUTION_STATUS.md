@@ -8,6 +8,31 @@
 > Date : 2026-09-03
 > Format imposé par le plan §246 lignes 6140-6170.
 
+## Continuation checkpoint — 2026-09-04
+
+Le plan autonome reste actif. Depuis le checkpoint précédent, les actions
+suivantes sont validées localement :
+
+- `d929dc9b5c` isole le port de route workflow historique dans
+  `workbench-server`, sans réintroduire l'ancien exécuteur V1 ; les typechecks
+  ciblés de `workflow-runtime`, `workflow-catalog` et `workbench-server` passent.
+- `9cb6b547ad` rafraîchit les preuves M0 avec une génération courante ; le
+  runner local observe 15 GREEN, 3 RED et 5 blockers, sans transformer les
+  gates non mesurées en PASS.
+- Régressions mesurées : contracts `632/632`, workflow-runtime `39/39`,
+  migration V1→V2 `32/32`, workflow-catalog `63/63`, loader/validator `5/5`,
+  workbench-server `87/87`.
+- Le typecheck Turbo global a démarré mais reste `UNVERIFIED` comme gate
+  complète : Turbo a rencontré une permission d'écriture de son cache partagé
+  avant la fin de l'exécution ; les trois packages impactés sont verts en
+  typecheck direct.
+
+La branche locale est à cinq commits au-dessus de
+`origin/agent/automate-v2-baseline-20260901`; aucun push n'est effectué sans
+autorisation explicite pour ce lot. Les RED ADR-000, DBOS Go, e2e et protection
+GitHub restent des gates externes ou physiques, non des cartes locales à
+marquer artificiellement GREEN.
+
 > ⚠️ **Correction de ce rapport lui-même.** Les deux affirmations suivantes,
 > présentes dans la version du 2026-09-01, sont **fausses** et corrigées
 > ci-dessous (findings F-M2-01 et F-M2-02) :
