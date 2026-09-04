@@ -1,9 +1,9 @@
 {
   "measured": false,
-  "reason": "FC-32 is NOT_VALID until a real T1/R1/O1 → crash → T2/R2/O2 replay scenario is implemented. The M0 surface (startRun + driveAttempt) does not exercise a workflow function through the candidate, so the harness cannot measure replay behavior. Declaring a replayModel value (NO / PARTIAL) is not admissible as PASS — see pack gelé §13: 'measured = false => status != PASS'.",
-  "expectedFromUpstream": "YES (DBOS Conductor requires deterministic orchestration)",
-  "requiredMethodology": "(1) Drive a workflow function in the candidate's host language/runtime that records T1, R1, O1 observations. (2) Crash the candidate's authority mid-workflow. (3) Reopen on the same durable store. (4) Observe which orchestration code re-runs, which observations are replayed, which EffectKeys remain identical, and which effects are re-issued. (5) Declare REQUIRES_DETERMINISTIC_ORCHESTRATION = YES | NO | PARTIAL with measured=true.",
-  "qualificationGenerationId": "gen-1788542702417-rdbsqv",
+  "reason": "The candidate does not expose the FC-32 replay-scenario capability, so its orchestration cannot be measured.",
+  "requiredMethodology": "Implement fc32SetAmbient/fc32StartScenario/fc32RunAttempt/fc32Measure on the candidate: a step workflow whose bodies journal invocations, whose completed outputs replay, whose only ambient read is journaled, and whose external effect executes under a stable EffectKey.",
+  "nextAction": "Implement the capability, then rerun qualification from a clean source commit.",
+  "qualificationGenerationId": "gen-1788552139049-2fi59p",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-32",
   "evidenceFreshness": "CURRENT",
