@@ -327,7 +327,7 @@ func (s *server) start() error {
 	// the candidate must use the real DBOS SQLite driver, not
 	// only modernc.org/sqlite directly). The driver package
 	// registers itself on import (see blank import above).
-	db, err := sql.Open("sqlite", s.sqlDBPath+"?_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_txlock=immediate")
+	db, err := sql.Open("sqlite", s.sqlDBPath+"?_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=busy_timeout(5000)&_txlock=immediate")
 	if err != nil {
 		return fmt.Errorf("open sqlite: %w", err)
 	}
@@ -356,6 +356,8 @@ func (s *server) start() error {
 	// is the canonical workflow identity used by RunWorkflow.
 	dbos.RegisterWorkflow(ctx, StartRunWorkflow, dbos.WithWorkflowName("StartRunWorkflow"))
 	dbos.RegisterWorkflow(ctx, DriveAttemptWorkflow, dbos.WithWorkflowName("DriveAttemptWorkflow"))
+	dbos.RegisterWorkflow(ctx, s.Fc32Workflow, dbos.WithWorkflowName("Fc32Workflow"))
+	dbos.RegisterWorkflow(ctx, s.Fc04DispatchWorkflow, dbos.WithWorkflowName("Fc04DispatchWorkflow"))
 
 	// Launch starts the DBOS runtime (queue runner, scheduler,
 	// conductor client, workflow recovery).
@@ -380,6 +382,9 @@ func (s *server) start() error {
 	mux.HandleFunc("/runs", s.handleStartRun)
 	mux.HandleFunc("/runs/", s.handleRunSubpath)
 	mux.HandleFunc("/attempts/next", s.handleNextAttempt)
+	if err := s.registerFc32Fc04(mux); err != nil {
+		return fmt.Errorf("register fc32/fc04: %w", err)
+	}
 	mux.HandleFunc("/host-adapter/canonize", s.handleCanonize)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -53,9 +53,16 @@ import {
   type ClaimAuthorityResult,
   type ZombieFC25Result,
   type HostAdapterFixture,
+  type Fc32Ambient,
+  type Fc32ScenarioStart,
+  type Fc32AttemptOutcome,
+  type Fc32ScenarioMeasurement,
+  type Fc04DispatchOutcome,
+  type Fc04RecoveryOutcome,
+  type Fc04Measurement,
   type HostAdapterVerdict,
 } from "../contract.ts"
-import { type WorkflowRunId, type AttemptId } from "@unifia/automate-m0-contract"
+import { type WorkflowRunId, type WorkflowVersionId, type LogicalInvocationId, type AttemptId } from "@unifia/automate-m0-contract"
 import { FakeExternalEffectProvider } from "../providers/fake-external.ts"
 import { QualificationNotImplemented } from "../errors.ts"
 
@@ -148,6 +155,7 @@ async function spawnDBOSReal(storeDir: string): Promise<SpawnedProc> {
 export class DBOSRealCandidate implements DurableWorkflowAuthorityQualificationAdapter {
   private proc: ChildProcess | null = null
   private baseUrl: string | null = null
+  private fc32State: { runId: WorkflowRunId; logicalInvocationId: string; attemptIds: AttemptId[] } | null = null
   private storeDir: string
   private version: string
   private buildHash: string
@@ -203,6 +211,122 @@ export class DBOSRealCandidate implements DurableWorkflowAuthorityQualificationA
   async canonizeViaHost(fixture: HostAdapterFixture): Promise<HostAdapterVerdict> {
     return jsonCall(this.requireBase(), "/host-adapter/canonize", { method: "POST", body: fixture, timeoutMs: 5_000 })
   }
+  /* ------------------------------------------------------------------ */
+  /* FC-32 — replay conformance through REAL DBOS recovery              */
+  /*                                                                     */
+  /* The Go binary runs the Fc32Workflow (RunAsStep steps, journals in   */
+  /* the DBOS SQLite system DB). The crash is a real process kill during */
+  /* the first execute-effect body; recovery happens through DBOS        */
+  /* recoverPendingWorkflows on the fresh process — never reconstructed  */
+  /* in this adapter.                                                    */
+  /* ------------------------------------------------------------------ */
+
+  async fc32SetAmbient(runId: WorkflowRunId, ambient: Fc32Ambient): Promise<void> {
+    await jsonCall(this.requireBase(), "/fc32/ambient", { method: "POST", body: { runId, ambient }, timeoutMs: 10_000 })
+  }
+
+  async fc32StartScenario(input: { workflowVersionId: WorkflowVersionId; ambient: Fc32Ambient }): Promise<Fc32ScenarioStart> {
+    const started = await jsonCall<{ runId: string; logicalInvocationId: string }>(this.requireBase(), "/fc32/start", {
+      method: "POST",
+      body: { workflowVersionId: input.workflowVersionId, ambient: input.ambient },
+      timeoutMs: 30_000,
+    })
+    this.fc32State = { runId: started.runId as WorkflowRunId, logicalInvocationId: started.logicalInvocationId, attemptIds: [] }
+    return { runId: started.runId as WorkflowRunId, logicalInvocationId: started.logicalInvocationId as LogicalInvocationId, attemptId: "pending" as AttemptId }
+  }
+
+  async fc32RunAttempt(runId: WorkflowRunId, mode: "crash-before-effect-commit" | "complete"): Promise<Fc32AttemptOutcome> {
+    if (mode === "crash-before-effect-commit") {
+      const started = await jsonCall<{ attemptId: string; workflowId: string }>(this.requireBase(), "/fc32/attempt", {
+        method: "POST",
+        body: { runId, mode },
+        timeoutMs: 30_000,
+      })
+      // The runner kills the process right after this returns: wait until
+      // the external effect is durably journaled (the partial checkpoint).
+      const deadline = Date.now() + 30_000
+      while (Date.now() < deadline) {
+        const progress = await jsonCall<{ effectJournaled: boolean; stepBodyEvents: number }>(this.requireBase(), `/fc32/progress?runId=${encodeURIComponent(runId)}`, { timeoutMs: 5_000 })
+        if (progress.effectJournaled) {
+          this.fc32State?.attemptIds.push(started.attemptId as AttemptId)
+          return { attemptId: started.attemptId as AttemptId, committedThroughStep: "execute-effect-body-journaled", effectExecuted: true }
+        }
+        await delay(200)
+      }
+      throw new Error("fc32 crash window not reached within 30s (effect not journaled)")
+    }
+    // complete/recovery: the fresh process auto-recovers the interrupted
+    // workflow via DBOS; /fc32/recover allocates the recovery attempt and
+    // waits for the materialized final state.
+    const recovered = await jsonCall<{ attemptId: string; recovered: boolean }>(this.requireBase(), "/fc32/recover", {
+      method: "POST",
+      body: { runId },
+      timeoutMs: 120_000,
+    })
+    this.fc32State?.attemptIds.push(recovered.attemptId as AttemptId)
+    return { attemptId: recovered.attemptId as AttemptId, committedThroughStep: "materialize", effectExecuted: true }
+  }
+
+  async fc32Measure(runId: WorkflowRunId, ambientIntent: { readonly initial: Fc32Ambient; readonly afterCrash: Fc32Ambient }): Promise<Fc32ScenarioMeasurement> {
+    const raw = await jsonCall<Record<string, unknown>>(this.requireBase(), `/fc32/measure?runId=${encodeURIComponent(runId)}`, { timeoutMs: 30_000 })
+    const finalState = raw["finalMaterializedState"] ?? null
+    return {
+      measured: true,
+      runId,
+      logicalInvocationId: (this.fc32State?.logicalInvocationId ?? "unknown") as LogicalInvocationId,
+      attemptIds: this.fc32State?.attemptIds ?? [],
+      ambientObservedInitial: ((reads) => reads.length > 0 ? { t: reads[0].t, r: reads[0].r, o: reads[0].o } : ambientIntent.initial)((raw["ambientReads"] as { t: string; r: string; o: string }[] | undefined) ?? []),
+      ambientObservedAfterCrash: ((v) => v ? { t: v.t, r: v.r, o: v.o } : null)((raw["ambientObservedAfterCrash"] as { t: string; r: string; o: string } | null | undefined)) ?? null,
+      ambientReadsPerAttempt: (raw["ambientReadsPerAttempt"] as { attemptId: string; reads: number }[] | undefined) ?? [],
+      rootWorkflowInvocations: (raw["rootWorkflowInvocations"] as number) ?? 0,
+      stepBodyInvocations: (raw["stepBodyInvocations"] as Record<string, number>) ?? {},
+      stepReplays: (raw["stepReplays"] as Record<string, number>) ?? {},
+      effectKeysObserved: (raw["effectKeysObserved"] as string[]) ?? [],
+      externalEffectExecutions: (raw["externalEffectExecutions"] as number) ?? 0,
+      finalMaterializedState: finalState,
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* FC-04 — real external-effect dispatch through the Go candidate      */
+  /* ------------------------------------------------------------------ */
+
+  async fc04Dispatch(input: { runId: WorkflowRunId; effectKey: string; canonicalInput: unknown; providerBaseUrl: string; mode: "drop-ack" | "ack" }): Promise<Fc04DispatchOutcome> {
+    const raw = await jsonCall<{ attemptId: string; status: string; transportError: string | null }>(this.requireBase(), "/fc04/dispatch", {
+      method: "POST",
+      body: { runId: input.runId, effectKey: input.effectKey, canonicalInput: input.canonicalInput, providerBaseUrl: input.providerBaseUrl, mode: input.mode },
+      timeoutMs: 60_000,
+    })
+    return { attemptId: raw.attemptId as AttemptId, status: raw.status, transportError: raw.transportError }
+  }
+
+  async fc04Recover(input: { runId: WorkflowRunId; effectKey: string; providerBaseUrl: string }): Promise<Fc04RecoveryOutcome> {
+    const raw = await jsonCall<{ status: "RECONCILED" | "UNKNOWN_EXTERNAL_STATE"; providerCanonicalResult: unknown | null; blindRetryCount: number }>(this.requireBase(), "/fc04/recover", {
+      method: "POST",
+      body: { runId: input.runId, effectKey: input.effectKey, providerBaseUrl: input.providerBaseUrl },
+      timeoutMs: 30_000,
+    })
+    return { status: raw.status, providerCanonicalResult: raw.providerCanonicalResult, blindRetryCount: raw.blindRetryCount }
+  }
+
+  async fc04Measure(input: { runId: WorkflowRunId; providerBaseUrl: string }): Promise<Fc04Measurement> {
+    const raw = await jsonCall<{ attemptIds: { attemptId: string; status: string }[]; providerJournalConfirmsCommit: boolean; blindRetryCount: number; recoveryStatus: "RECONCILED" | "UNKNOWN_EXTERNAL_STATE" }>(
+      this.requireBase(),
+      `/fc04/measure?runId=${encodeURIComponent(input.runId)}&providerBaseUrl=${encodeURIComponent(input.providerBaseUrl)}`,
+      { timeoutMs: 30_000 },
+    )
+    return {
+      measured: true,
+      runId: input.runId,
+      attemptIds: raw.attemptIds.map((row) => row.attemptId as AttemptId),
+      attemptStatuses: raw.attemptIds.map((row) => row.status),
+      candidateEffectExecutions: raw.attemptIds.length,
+      providerJournalConfirmsCommit: raw.providerJournalConfirmsCommit,
+      blindRetryCount: raw.blindRetryCount,
+      recoveryStatus: raw.recoveryStatus,
+    }
+  }
+
 
   async startRun(input: StartRunInput): Promise<WorkflowRunId> {
     const r = await jsonCall<{ runId: string }>(this.requireBase(), "/runs", {
