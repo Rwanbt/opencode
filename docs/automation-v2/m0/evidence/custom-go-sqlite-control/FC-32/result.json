@@ -3,7 +3,7 @@
   "reason": "The candidate does not expose the FC-32 replay-scenario capability, so its orchestration cannot be measured.",
   "requiredMethodology": "Implement fc32SetAmbient/fc32StartScenario/fc32RunAttempt/fc32Measure on the candidate: a step workflow whose bodies journal invocations, whose completed outputs replay, whose only ambient read is journaled, and whose external effect executes under a stable EffectKey.",
   "nextAction": "Implement the capability, then rerun qualification from a clean source commit.",
-  "qualificationGenerationId": "gen-1788552139049-2fi59p",
+  "qualificationGenerationId": "gen-1788552346089-v4yuix",
   "candidate": "CUSTOM_GO_SQLITE_CONTROL",
   "testId": "FC-32",
   "evidenceFreshness": "CURRENT",

@@ -3,7 +3,7 @@
   "reason": "The candidate's host does not expose a typed host-adapter endpoint, so the frozen FC-31B vectors cannot be decided by the host itself.",
   "requiredMethodology": "Implement /host-adapter/canonize in the candidate binary: receive lossless typed fixtures, materialize the host type (int64/uint64/float64/time.Time), apply the canonical value contract, emit PASS/REJECT verdicts.",
   "nextAction": "Implement the endpoint, then rerun qualification from a clean source commit.",
-  "qualificationGenerationId": "gen-1788552139049-2fi59p",
+  "qualificationGenerationId": "gen-1788552346089-v4yuix",
   "candidate": "CUSTOM_GO_SQLITE_CONTROL",
   "testId": "FC-31B",
   "evidenceFreshness": "CURRENT",

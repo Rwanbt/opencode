@@ -2,42 +2,42 @@
   "measured": true,
   "concurrentRace": true,
   "distinctOsProcesses": 2,
-  "winnerProcessLocalOwnerId": "owner-A-1788552144096-jalafp",
-  "loserProcessLocalOwnerId": "owner-B-1788552144096-t7r7lc",
-  "currentPersistedAuthorityOwnerId": "pid-20780-A-1788552144098-znm0c5",
-  "winnerOwnerId": "pid-20780-A-1788552144098-znm0c5",
-  "loserOwnerId": "pid-20780-A-1788552144098-znm0c5",
-  "winnerPid": 20780,
-  "loserPid": 24860,
+  "winnerProcessLocalOwnerId": "owner-A-1788552351941-81a71f",
+  "loserProcessLocalOwnerId": "owner-B-1788552351941-27tp74",
+  "currentPersistedAuthorityOwnerId": "pid-24088-A-1788552351942-1n2tya",
+  "winnerOwnerId": "pid-24088-A-1788552351942-1n2tya",
+  "loserOwnerId": "pid-24088-A-1788552351942-1n2tya",
+  "winnerPid": 24088,
+  "loserPid": 12832,
   "finalGeneration": 1,
   "winnerMutate": {
     "accepted": true,
     "generation": 1,
-    "authorityOwnerId": "pid-20780-A-1788552144098-znm0c5"
+    "authorityOwnerId": "pid-24088-A-1788552351942-1n2tya"
   },
   "loserMutate": {
     "accepted": false,
     "reason": "STALE_AUTHORITY",
     "currentGeneration": 1,
-    "currentAuthorityOwnerId": "pid-20780-A-1788552144098-znm0c5"
+    "currentAuthorityOwnerId": "pid-24088-A-1788552351942-1n2tya"
   },
   "winnerDispatch": {
     "accepted": true,
-    "effectKey": "ek-fc14-1788552144412",
+    "effectKey": "ek-fc14-1788552352263",
     "generation": 1,
-    "authorityOwnerId": "pid-20780-A-1788552144098-znm0c5"
+    "authorityOwnerId": "pid-24088-A-1788552351942-1n2tya"
   },
   "loserDispatch": {
     "accepted": false,
     "reason": "STALE_AUTHORITY",
     "currentGeneration": 1,
-    "currentAuthorityOwnerId": "pid-20780-A-1788552144098-znm0c5"
+    "currentAuthorityOwnerId": "pid-24088-A-1788552351942-1n2tya"
   },
   "winnerMutateAccepted": true,
   "loserMutateRejected": true,
   "winnerDispatchAccepted": true,
   "loserDispatchRejected": true,
-  "qualificationGenerationId": "gen-1788552139049-2fi59p",
+  "qualificationGenerationId": "gen-1788552346089-v4yuix",
   "candidate": "CUSTOM_GO_SQLITE_CONTROL",
   "testId": "FC-14",
   "evidenceFreshness": "CURRENT",

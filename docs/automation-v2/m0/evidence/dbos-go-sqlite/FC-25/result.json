@@ -2,7 +2,7 @@
   "measured": false,
   "reason": "NOT_IMPLEMENTED (FC-25): DBOS real: authority fencing is still Unifia-owned",
   "fc25ZombieScenarioRequired": "Real FC-25 requires 2 live OS processes with an IPC freeze barrier between A's claim and A's stale-mutate/dispatch. The adapter must implement runZombieFC25Scenario by spawning the second process, performing the takeover WHILE A is alive but blocked on /await-resume, then RESUME A and verify stale rejection.",
-  "qualificationGenerationId": "gen-1788552139049-2fi59p",
+  "qualificationGenerationId": "gen-1788552346089-v4yuix",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-25",
   "evidenceFreshness": "CURRENT",

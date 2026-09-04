@@ -9,7 +9,7 @@
   "blindRetryCount": 0,
   "requiredMethodology": "(1) Stand up a real FakeExternalEffectProvider as an HTTP service with its own SQLite journal (separate from the candidate). (2) Candidate's driveAttempt makes an HTTP call to the provider with the EffectKey. (3) Provider durably commits the effect. (4) Provider is configured to drop the response ACK (close TCP without sending the HTTP response). (5) Candidate's driveAttempt times out / receives no response. (6) Candidate's recovery path resolves to UNKNOWN_EXTERNAL_STATE. (7) Cross-verify the provider's journal contains the effectKey.",
   "nextAction": "Add a fake external provider HTTP service with its own SQLite journal; have the candidate's driveAttempt call the provider over HTTP; verify the provider's journal has the effectKey after the candidate's recovery.",
-  "qualificationGenerationId": "gen-1788552139049-2fi59p",
+  "qualificationGenerationId": "gen-1788552346089-v4yuix",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-04",
   "evidenceFreshness": "CURRENT",
