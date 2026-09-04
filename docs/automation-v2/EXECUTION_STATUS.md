@@ -26,6 +26,10 @@ suivantes sont validées localement :
   complète : Turbo a rencontré une permission d'écriture de son cache partagé
   avant la fin de l'exécution ; les trois packages impactés sont verts en
   typecheck direct.
+- `workbench-orchestrator` a été rejoué : `28/28` assertions passent ; sa gate
+  est reclassée GREEN. Le secret-leak canary est reclassé PARTIAL : le logger
+  et son scan sont testés, mais la preuve cross-surface complète reste un
+  blocker GA.
 
 La branche locale est à cinq commits au-dessus de
 `origin/agent/automate-v2-baseline-20260901`; aucun push n'est effectué sans

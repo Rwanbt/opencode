@@ -113,9 +113,9 @@ gates:
     allowed_skips: []
     evidence:
       - "listing Get-ChildItem: test/ present"
-    status: NEEDS_RE_RUN
+    status: GREEN
     blocker: false
-    note: "Run + isolation test C-PRE1-05."
+    note: "2026-09-04: WorkbenchOrchestrator 28/28 passed; the gate is contract/unit green."
 
   unit_automate_surface:
     description: "Unit tests for automate-surface.tsx (8 gates §16.3). Phase 1+2 livrees: smoke test statique (5 assertions) + parseWorkflowDefinition round-trip (12 assertions)."
@@ -250,13 +250,15 @@ gates:
   secret_canary:
     description: "Secret-leak canary — no plaintext secret in history, logs, traces, LLM, model-visible DOM, accessibility, screenshot, artifacts, debugger, audit export."
     required_commands:
-      - "TODO: a ecrire en M1 (canary gate, plan §125)"
-    required_artifacts: []
+      - "cd packages/observability && bun test"
+    required_artifacts:
+      - "packages/observability/test/observability.test.ts"
     allowed_skips: []
-    evidence: []
-    status: NOT_BUILT
+    evidence:
+      - "packages/observability/test/observability.test.ts covers SecretLeakageError and scanSecretsInFields"
+    status: PARTIAL
     blocker: true
-    blocker_reason: "Gate de sortie plan §168. Required before any GA profile."
+    blocker_reason: "Logger canary is implemented and tested, but the full cross-surface GA proof remains outstanding."
     card_refs:
       - "IMPLEMENTATION_CARD_INDEX.md#C-PRE1-01 (suite minimale prefigure)"
       - "ADR-010"
