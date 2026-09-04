@@ -180,13 +180,13 @@ choice), R-013 phase 3.
 
 | Référence | Valeur |
 |---|---|
-| HEAD (commit) | `08310d1277 docs(cert): update gates.yaml — 3 gates upgraded RED/NEEDS_RE_RUN → GREEN` |
-| HEAD (sha) | `08310d1277` |
+| HEAD (commit) | `bca116af10 docs(cert): record orchestrator and secret canary status` |
+| HEAD (sha) | `bca116af10` |
 | HEAD (tree sha) | (généré au commit) |
 | Branche de travail | `agent/automate-v2-baseline-20260901` |
 | Branche d'origine | `integration/rev3m-20260901/design-automate` |
 | HEAD d'origine (pinned) | `24b04998e2fd861711036501ad3f6e41a63f8c32` |
-| Commits depuis la base | **121** |
+| Commits depuis la base | **128** |
 | Remote | `origin` = `https://github.com/Rwanbt/unifia.git` (**121 commits poussés** 2026-09-03, remote HEAD = local HEAD = `08310d1277`) |
 
 > Le SHA d'origine cité dans le prompt de session,
