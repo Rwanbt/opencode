@@ -52,6 +52,7 @@ export type ApprovalAuthorityState = {
 
 export type ApprovalAuthority = {
   readonly now: () => number
+  isTrustedSystemActor(actor: ApprovalActor, token: AuthorityToken): boolean
   transact<T>(token: AuthorityToken, mutation: (state: ApprovalAuthorityState) => Promise<{ state: ApprovalAuthorityState; result: T }>): Promise<T>
   read(token: AuthorityToken, id: string): Promise<ApprovalRecord | undefined>
 }
@@ -104,7 +105,7 @@ export class ApprovalBrokerV4 {
     return this.authority.transact(token, async (state) => {
       const current = requireApproval(state, id)
       if (current.state !== "PENDING") return { state, result: current }
-      if (actor.kind === "system") return this.close(state, current, "CANCELLED", actor)
+      if (actor.kind === "system" && this.authority.isTrustedSystemActor(actor, token)) return this.close(state, current, "CANCELLED", actor)
       if (current.requesterPrincipalId !== actor.id) throw new ApprovalV4Error("CANCEL_REJECTED")
       return this.close(state, current, "CANCELLED", actor)
     })

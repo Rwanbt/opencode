@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 
 import { describe, expect, test } from "bun:test"
-import { ApprovalBrokerV4, ApprovalV4Error, type ApprovalAuthority, type ApprovalAuthorityState, type ApprovalBinding, type ApprovalRecord, type AuthorityToken } from "../src/approval-v4"
+import { ApprovalBrokerV4, ApprovalV4Error, type ApprovalAuthority, type ApprovalAuthorityState, type ApprovalBinding, type AuthorityToken } from "../src/approval-v4"
 
 const scope = { organizationId: "org", workspaceId: "ws" }
 const deployment = { ownershipScope: scope, environmentId: "test" }
@@ -19,6 +19,7 @@ function authority(now = 100): { impl: ApprovalAuthority; state: ApprovalAuthori
   let state: ApprovalAuthorityState = { generation: 1, ownerId: "owner-a", approvals: {}, history: [] }
   const impl: ApprovalAuthority = {
     now: () => time.value,
+    isTrustedSystemActor: (actor, current) => actor.id === "authority-system" && current.authorityOwnerId === "owner-a",
     async transact(current, mutation) {
       if (current.workflowRunId !== "run-1" || current.generation !== state.generation || current.authorityOwnerId !== state.ownerId) throw new ApprovalV4Error("STALE_AUTHORITY")
       const next = await mutation(state)
@@ -52,6 +53,12 @@ describe("ApprovalBrokerV4", () => {
     const second = await broker.request({ ...input(), requestGeneration: 2 }, token)
     await expect(broker.cancel(second.approvalId, { id: "other", kind: "human" }, token)).rejects.toThrow("CANCEL_REJECTED")
     await expect(broker.cancel(second.approvalId, requester, token)).resolves.toMatchObject({ state: "CANCELLED" })
+  })
+
+  test("requires authority proof for system cancellation", async () => {
+    const ctx = authority(); const broker = new ApprovalBrokerV4(ctx.impl); const first = await broker.request(input(), token)
+    await expect(broker.cancel(first.approvalId, { id: "forged", kind: "system" }, token)).rejects.toThrow("CANCEL_REJECTED")
+    await expect(broker.cancel(first.approvalId, { id: "authority-system", kind: "system" }, token)).resolves.toMatchObject({ state: "CANCELLED" })
   })
 
   test("uses the equality expiry boundary", async () => {
