@@ -10,6 +10,21 @@
 
 ## Continuation checkpoint — 2026-09-04
 
+### Batch continuation — local gates
+
+- Surface Automate : les tests de source/decode ciblés passent (`17/17`) et le
+  serveur Workbench complet passe (`77/77`, dont `24` checks Bun et `53` Vitest).
+- Le parcours navigateur Automate n'est pas certifié : le harnais actuel ne
+  publie pas de route Automate stable après le bootstrap du provider ; les
+  tentatives Playwright ont fini soit sur route invalide, soit sur
+  `ERR_CONNECTION_REFUSED` du serveur Vite. Le test expérimental n'est pas
+  conservé pour éviter d'ajouter une fausse carte verte ou un test rouge.
+- Le contrôle de référence Design approval reste vert (`3/3`) ; le blocage est
+  donc circonscrit au bootstrap/route Automate du harnais, pas extrapolé à la
+  surface Design.
+- Aucun push : la branche locale reste séparée du remote et ce lot n'est pas
+  publié.
+
 Le plan autonome reste actif. Depuis le checkpoint précédent, les actions
 suivantes sont validées localement :
 
