@@ -28,6 +28,13 @@
   avec une génération courante : `16 GREEN`, `3 RED`, `1 NA` et `6 OTHER`;
   les 5 blockers restent ADR-000, e2e Automate, protection GitHub, et les
   gates physiques/externes déjà identifiés.
+- Le lot Playwright `e2e/app e2e/modes` a exécuté 30 cas : `25 passed, 5
+  failed`. Les rouges sont localisés à trois scénarios `titlebar-history`, au
+  focus clavier du switcher Design mobile, et au reload-stability qui attend
+  la surface Automate après reload. Les tests de ressources SPA passent
+  (`eventStreams=1`, `queryObservers=0`, `queryCacheEntries=15`, delta heap
+  `0 Mo`) ; les mesures de première bascule restent au-dessus de la cible
+  UX (`262 ms` Work et `366 ms` Design).
 
 Le plan autonome reste actif. Depuis le checkpoint précédent, les actions
 suivantes sont validées localement :
