@@ -5,7 +5,7 @@
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
 > Phase : **D-02 V4 OPEN + M0 QUALIFICATION OPEN**
-> HEAD local : `fc3cc9903f`; remote tracking ref : `173117f637`; branche locale en avance de 14 commits.
+> HEAD local : `6610cfec39`; remote tracking ref : `173117f637`; branche locale en avance de 16 commits.
 > ADR-000 substrate final : `NOT_RATIFIED`; finalistes : `UNIFIA_NATIVE`, `DBOS_GO_SQLITE`.
 > D-02 V4 : façade injectée et testée (`7/7` V4, `46/46` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
@@ -46,9 +46,9 @@ override this section.
 
 ### CURRENT HEAD
 
-`dab42ec48` local before this V4 source change; remote tracking ref after
-fetch remains `173117f637`. No reset and no force-push. New V4 work is not
-yet committed. Push/publication are separate and not performed.
+`6610cfec39` local after the V4 authority-proof hardening; remote tracking ref
+remains `173117f637`. No reset and no force-push. Push/publication are separate
+and not performed.
 
 ## Historical checkpoints / superseded evidence
 
