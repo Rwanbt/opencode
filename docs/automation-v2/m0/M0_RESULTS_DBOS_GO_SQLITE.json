@@ -4,7 +4,7 @@
   "candidateInfo": {
     "kind": "DBOS_GO_SQLITE",
     "version": "github.com/dbos-inc/dbos-transact-golang@v1.0.0 (real APIs on measured path)",
-    "buildHash": "qual-m0-cp6.3-1788557008820",
+    "buildHash": "qual-m0-cp6.3-1788558993997",
     "storage": {
       "engine": "DBOS SQLite system DB (modernc.org/sqlite via dbos/driver/sqlite)",
       "driver": "github.com/dbos-inc/dbos-transact-golang v1.0.0 + modernc.org/sqlite",
@@ -27,7 +27,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-31A/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "21/21 canonical values survived a candidate restart (close+reopen on same durable store). 0 mismatches.",
       "observations": {
         "pass": 21,
@@ -41,7 +41,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-31B/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "20/20 frozen FC-31B cases decided by the candidate's own host (child-process); actual host type recorded per case.",
       "observations": {
         "pass": 20,
@@ -136,8 +136,8 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-04/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
-      "note": "Real external provider process: commit confirmed by the provider journal over HTTP, real transport ACK loss (Post \"http://127.0.0.1:53829/effect?mode=drop-ack\": EOF), recovery RECONCILED, blindRetryCount 0.",
+      "commit": "qual-m0-cp6.3-1788558993997",
+      "note": "Real external provider process: commit confirmed by the provider journal over HTTP, real transport ACK loss (Post \"http://127.0.0.1:65144/effect?mode=drop-ack\": EOF), recovery RECONCILED, blindRetryCount 0.",
       "observations": {
         "measured": true,
         "realExternalProvider": true,
@@ -152,25 +152,88 @@
     {
       "testId": "FC-14",
       "candidate": "DBOS_GO_SQLITE",
-      "status": "NOT_IMPLEMENTED",
-      "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-14/error.txt",
-      "commit": "qual-m0-cp6.3-1788557008820",
-      "note": "NOT_IMPLEMENTED (FC-14): DBOS real: authority fencing is still Unifia-owned",
+      "status": "PASS",
+      "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-14/result.json",
+      "commit": "qual-m0-cp6.3-1788558993997",
+      "note": "FC-14 PASS: 2 distinct OS processes raced for authority on runId=run-fc14-1788559005946-j10olz. Winner (ownerId=owner-B-1788559005946-z0hhsl pid=26060) mutated and dispatched successfully. Loser (ownerId=owner-A-1788559005946-zzhqsu pid=12240) was REJECTED on both mutate and dispatch.",
       "observations": {
-        "exception": "QualificationNotImplemented"
+        "measured": true,
+        "concurrentRace": true,
+        "distinctOsProcesses": 2,
+        "winnerProcessLocalOwnerId": "owner-B-1788559005946-z0hhsl",
+        "loserProcessLocalOwnerId": "owner-A-1788559005946-zzhqsu",
+        "currentPersistedAuthorityOwnerId": "owner-B-1788559005946-z0hhsl",
+        "winnerOwnerId": "owner-B-1788559005946-z0hhsl",
+        "loserOwnerId": "owner-B-1788559005946-z0hhsl",
+        "winnerPid": 26060,
+        "loserPid": 12240,
+        "finalGeneration": 1,
+        "winnerMutate": {
+          "accepted": true,
+          "generation": 1,
+          "authorityOwnerId": "owner-B-1788559005946-z0hhsl"
+        },
+        "loserMutate": {
+          "accepted": false,
+          "reason": "STALE_AUTHORITY",
+          "currentGeneration": 1,
+          "currentAuthorityOwnerId": "owner-B-1788559005946-z0hhsl"
+        },
+        "winnerDispatch": {
+          "accepted": true,
+          "effectKey": "ek-fc14-1788559006199",
+          "generation": 1,
+          "authorityOwnerId": "owner-B-1788559005946-z0hhsl"
+        },
+        "loserDispatch": {
+          "accepted": false,
+          "reason": "STALE_AUTHORITY",
+          "currentGeneration": 1,
+          "currentAuthorityOwnerId": "owner-B-1788559005946-z0hhsl"
+        },
+        "winnerMutateAccepted": true,
+        "loserMutateRejected": true,
+        "winnerDispatchAccepted": true,
+        "loserDispatchRejected": true
       }
     },
     {
       "testId": "FC-25",
       "candidate": "DBOS_GO_SQLITE",
-      "status": "NOT_IMPLEMENTED",
+      "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-25/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
-      "note": "FC-25 NOT_IMPLEMENTED: NOT_IMPLEMENTED (FC-25): DBOS real: authority fencing is still Unifia-owned",
+      "commit": "qual-m0-cp6.3-1788558993997",
+      "note": "FC-25 PASS: 2 live OS processes (pid=13928 + parent adapter); A claimed gen=1, A blocked on /await-resume (frozen=true, alive=true), takeover to B at gen=2, B commit ACCEPTED, A resumed and stale mutate+dispatch REJECTED.",
       "observations": {
-        "measured": false,
-        "reason": "NOT_IMPLEMENTED (FC-25): DBOS real: authority fencing is still Unifia-owned",
-        "fc25ZombieScenarioRequired": "Real FC-25 requires 2 live OS processes with an IPC freeze barrier between A's claim and A's stale-mutate/dispatch. The adapter must implement runZombieFC25Scenario by spawning the second process, performing the takeover WHILE A is alive but blocked on /await-resume, then RESUME A and verify stale rejection."
+        "measured": true,
+        "distinctOsProcesses": 2,
+        "oldOwnerAliveDuringTakeover": true,
+        "oldOwnerDidNotReleaseBeforeTakeover": true,
+        "oldOwnerPid": 13928,
+        "newGenerationGreaterThanOld": true,
+        "newOwnerCommitAccepted": true,
+        "staleOwnerCommitRejected": true,
+        "staleOwnerDispatchRejected": true,
+        "takeover": {
+          "previousGeneration": 1,
+          "newGeneration": 2,
+          "previousAuthorityOwnerId": "zombie-A-1788559006207-so60tq",
+          "newAuthorityOwnerId": "zombie-B-1788559006207-x1f3ox"
+        },
+        "newOwnerMutate": {
+          "accepted": true
+        },
+        "staleMutate": {
+          "accepted": false,
+          "reason": "STALE_AUTHORITY"
+        },
+        "staleDispatch": {
+          "accepted": false,
+          "reason": "STALE_AUTHORITY"
+        },
+        "runId": "run-fc25-zombie-1788559006207-b4zvfx",
+        "ownerA": "zombie-A-1788559006207-so60tq",
+        "ownerB": "zombie-B-1788559006207-x1f3ox"
       }
     },
     {
@@ -178,8 +241,8 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-32/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
-      "note": "REQUIRES_DETERMINISTIC_ORCHESTRATION = YES (measured=true). All replay invariants satisfied. AttemptIds att:run-fc32-49472fa99ff020108e600da6:li-fc32-0d54d0f3de5db28f:1 -> att:run-fc32-49472fa99ff020108e600da6:li-fc32-0d54d0f3de5db28f:2, ambient reads/attempt undefined:1, external effect executions 1.",
+      "commit": "qual-m0-cp6.3-1788558993997",
+      "note": "REQUIRES_DETERMINISTIC_ORCHESTRATION = YES (measured=true). All replay invariants satisfied. AttemptIds att:run-fc32-f2c1a4330935439a8f75e5d6:li-fc32-679792c9e97191cd:1 -> att:run-fc32-f2c1a4330935439a8f75e5d6:li-fc32-679792c9e97191cd:2, ambient reads/attempt undefined:1, external effect executions 1.",
       "observations": {
         "measured": true,
         "classification": "YES",
@@ -215,7 +278,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-13-CTRL/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "BLOCKED (NO_METHODOLOGY): No power-loss / fault-injection layer available in this harness host. Validated options that are NOT available: (1) VM with virtual disk + abrupt ACPI off, (2) `scsi_debug` / `fault-inject` / `fltmc`, (3) `dm-thin` suspend/resume, (4) block-device fault layer. `kill -9` and `process.kill()` are NOT acceptable — they prove process crash, not power-loss. To unblock: provision a disposable VM with virtual disk + scripted power-cycle, or a fault-injection layer; produce scripts + docs; rerun FC-13-CTRL.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -229,7 +292,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-13/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "BLOCKED (NO_METHODOLOGY): FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -241,7 +304,7 @@
     }
   ],
   "summary": {
-    "pass": 4,
+    "pass": 6,
     "failArchitectural": 0,
     "failCorrectable": 0,
     "notApplicable": 0,
@@ -249,12 +312,12 @@
     "notValid": 0
   },
   "replayModel": "NOT_MEASURED",
-  "producedAt": "2026-09-04T21:23:42.995Z",
+  "producedAt": "2026-09-04T21:56:47.035Z",
   "provenance": {
     "candidateImplementationId": "DBOS_GO_V1@0.0.0-m0-qual-cp6.3",
-    "candidateSourceCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
-    "candidateBuildHash": "qual-m0-cp6.3-1788557008820",
-    "measurementHarnessCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
+    "candidateSourceCommit": "8afeed2c940a54afabe7f61db8a11fa0ff931af7",
+    "candidateBuildHash": "qual-m0-cp6.3-1788558993997",
+    "measurementHarnessCommit": "8afeed2c940a54afabe7f61db8a11fa0ff931af7",
     "oracleVersion": "1.1.0-cp6.3",
     "executionSubstrate": "DBOS_GO_V1",
     "storageEngine": "DBOS SQLite system DB (modernc.org/sqlite via dbos/driver/sqlite)",
@@ -262,7 +325,7 @@
     "realDbosApisUsed": true,
     "platform": "win32 x64",
     "runtime": "Bun 1.3.14 / node v24.3.0 / win32 x64",
-    "qualificationGenerationId": "gen-1788557009518-47vw69",
+    "qualificationGenerationId": "gen-1788558994599-5wgygg",
     "evidenceFreshness": "CURRENT",
     "nonCanonicalDiagnostic": false
   }

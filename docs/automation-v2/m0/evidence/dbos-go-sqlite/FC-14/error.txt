@@ -1,5 +1,0 @@
-Runner failed to execute FC-14: NOT_IMPLEMENTED (FC-14): DBOS real: authority fencing is still Unifia-owned
-QualificationNotImplemented: NOT_IMPLEMENTED (FC-14): DBOS real: authority fencing is still Unifia-owned
-    at raceAuthorities (D:\App\unifia\.worktrees\rev3m-20260901\design\packages\automate-m0-harness\src\qualification\adapters\dbos-real.ts:421:99)
-    at runFC14 (D:\App\unifia\.worktrees\rev3m-20260901\design\packages\automate-m0-harness\src\qualification\runner.ts:691:37)
-    at processTicksAndRejections (native:7:39)

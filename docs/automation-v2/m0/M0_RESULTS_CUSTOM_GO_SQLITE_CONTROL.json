@@ -4,7 +4,7 @@
   "candidateInfo": {
     "kind": "CUSTOM_GO_SQLITE_CONTROL",
     "version": "github.com/dbos-inc/dbos-transact-golang@v1.0.0 (compile-time only)",
-    "buildHash": "qual-m0-cp6.3-1788557008820",
+    "buildHash": "qual-m0-cp6.3-1788558993997",
     "storage": {
       "engine": "SQLite 3.x (via modernc.org/sqlite v1.54.0, pure-Go)",
       "driver": "modernc.org/sqlite v1.54.0",
@@ -27,7 +27,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-31A/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "21/21 canonical values survived a candidate restart (close+reopen on same durable store). 0 mismatches.",
       "observations": {
         "pass": 21,
@@ -41,7 +41,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "NOT_VALID",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-31B/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "FC-31B NOT_VALID: no host-adapter endpoint on the candidate binary. The harness must not decide FC-31B with its own TS conversion for a non-TS host.",
       "observations": {
         "measured": false,
@@ -55,7 +55,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "NOT_VALID",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-04/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "FC-04 NOT_VALID: candidate does not expose the real-provider dispatch capability.",
       "observations": {
         "measured": false,
@@ -69,42 +69,42 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-14/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
-      "note": "FC-14 PASS: 2 distinct OS processes raced for authority on runId=run-fc14-1788557015582-xamehe. Winner (ownerId=pid-8008-A-1788557015583-wdgary pid=8008) mutated and dispatched successfully. Loser (ownerId=owner-B-1788557015582-dihsla pid=20416) was REJECTED on both mutate and dispatch.",
+      "commit": "qual-m0-cp6.3-1788558993997",
+      "note": "FC-14 PASS: 2 distinct OS processes raced for authority on runId=run-fc14-1788558999395-pdxapi. Winner (ownerId=pid-25220-A-1788558999397-j40vv3 pid=25220) mutated and dispatched successfully. Loser (ownerId=owner-B-1788558999395-bpcvao pid=2672) was REJECTED on both mutate and dispatch.",
       "observations": {
         "measured": true,
         "concurrentRace": true,
         "distinctOsProcesses": 2,
-        "winnerProcessLocalOwnerId": "owner-A-1788557015582-6bzsdg",
-        "loserProcessLocalOwnerId": "owner-B-1788557015582-dihsla",
-        "currentPersistedAuthorityOwnerId": "pid-8008-A-1788557015583-wdgary",
-        "winnerOwnerId": "pid-8008-A-1788557015583-wdgary",
-        "loserOwnerId": "pid-8008-A-1788557015583-wdgary",
-        "winnerPid": 8008,
-        "loserPid": 20416,
+        "winnerProcessLocalOwnerId": "owner-A-1788558999395-0wigdc",
+        "loserProcessLocalOwnerId": "owner-B-1788558999395-bpcvao",
+        "currentPersistedAuthorityOwnerId": "pid-25220-A-1788558999397-j40vv3",
+        "winnerOwnerId": "pid-25220-A-1788558999397-j40vv3",
+        "loserOwnerId": "pid-25220-A-1788558999397-j40vv3",
+        "winnerPid": 25220,
+        "loserPid": 2672,
         "finalGeneration": 1,
         "winnerMutate": {
           "accepted": true,
           "generation": 1,
-          "authorityOwnerId": "pid-8008-A-1788557015583-wdgary"
+          "authorityOwnerId": "pid-25220-A-1788558999397-j40vv3"
         },
         "loserMutate": {
           "accepted": false,
           "reason": "STALE_AUTHORITY",
           "currentGeneration": 1,
-          "currentAuthorityOwnerId": "pid-8008-A-1788557015583-wdgary"
+          "currentAuthorityOwnerId": "pid-25220-A-1788558999397-j40vv3"
         },
         "winnerDispatch": {
           "accepted": true,
-          "effectKey": "ek-fc14-1788557015887",
+          "effectKey": "ek-fc14-1788558999715",
           "generation": 1,
-          "authorityOwnerId": "pid-8008-A-1788557015583-wdgary"
+          "authorityOwnerId": "pid-25220-A-1788558999397-j40vv3"
         },
         "loserDispatch": {
           "accepted": false,
           "reason": "STALE_AUTHORITY",
           "currentGeneration": 1,
-          "currentAuthorityOwnerId": "pid-8008-A-1788557015583-wdgary"
+          "currentAuthorityOwnerId": "pid-25220-A-1788558999397-j40vv3"
         },
         "winnerMutateAccepted": true,
         "loserMutateRejected": true,
@@ -117,7 +117,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "NOT_IMPLEMENTED",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-25/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "FC-25 NOT_IMPLEMENTED: CUSTOM_GO_SQLITE_CONTROL does not implement runZombieFC25Scenario: the freeze barrier (/await-resume, /resume) requires new endpoints on the dbos-qualify.exe binary. The real DBOS_GO_SQLITE candidate (when built) is the candidate that MUST pass the zombie-process FC-25.",
       "observations": {
         "measured": false,
@@ -130,7 +130,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "NOT_VALID",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-32/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "FC-32 NOT_VALID: candidate does not expose the replay-scenario capability.",
       "observations": {
         "measured": false,
@@ -144,7 +144,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-13-CTRL/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "BLOCKED (NO_METHODOLOGY): No power-loss / fault-injection layer available in this harness host. Validated options that are NOT available: (1) VM with virtual disk + abrupt ACPI off, (2) `scsi_debug` / `fault-inject` / `fltmc`, (3) `dm-thin` suspend/resume, (4) block-device fault layer. `kill -9` and `process.kill()` are NOT acceptable — they prove process crash, not power-loss. To unblock: provision a disposable VM with virtual disk + scripted power-cycle, or a fault-injection layer; produce scripts + docs; rerun FC-13-CTRL.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -158,7 +158,7 @@
       "candidate": "CUSTOM_GO_SQLITE_CONTROL",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/custom-go-sqlite-control/FC-13/result.json",
-      "commit": "qual-m0-cp6.3-1788557008820",
+      "commit": "qual-m0-cp6.3-1788558993997",
       "note": "BLOCKED (NO_METHODOLOGY): FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -178,12 +178,12 @@
     "notValid": 3
   },
   "replayModel": "NOT_MEASURED",
-  "producedAt": "2026-09-04T21:23:35.911Z",
+  "producedAt": "2026-09-04T21:56:39.736Z",
   "provenance": {
     "candidateImplementationId": "CUSTOM_GO_SQLITE_CONTROL@0.0.0-m0-qual-cp6.3",
-    "candidateSourceCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
-    "candidateBuildHash": "qual-m0-cp6.3-1788557008820",
-    "measurementHarnessCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
+    "candidateSourceCommit": "8afeed2c940a54afabe7f61db8a11fa0ff931af7",
+    "candidateBuildHash": "qual-m0-cp6.3-1788558993997",
+    "measurementHarnessCommit": "8afeed2c940a54afabe7f61db8a11fa0ff931af7",
     "oracleVersion": "1.1.0-cp6.3",
     "executionSubstrate": "CUSTOM_GO_SQLITE",
     "storageEngine": "SQLite 3.x via modernc.org/sqlite v1.54.0 (pure-Go)",
@@ -191,7 +191,7 @@
     "realDbosApisUsed": false,
     "platform": "win32 x64",
     "runtime": "Bun 1.3.14 / node v24.3.0 / win32 x64",
-    "qualificationGenerationId": "gen-1788557009518-47vw69",
+    "qualificationGenerationId": "gen-1788558994599-5wgygg",
     "evidenceFreshness": "CURRENT",
     "nonCanonicalDiagnostic": false
   }

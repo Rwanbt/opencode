@@ -1,8 +1,34 @@
 {
-  "measured": false,
-  "reason": "NOT_IMPLEMENTED (FC-25): DBOS real: authority fencing is still Unifia-owned",
-  "fc25ZombieScenarioRequired": "Real FC-25 requires 2 live OS processes with an IPC freeze barrier between A's claim and A's stale-mutate/dispatch. The adapter must implement runZombieFC25Scenario by spawning the second process, performing the takeover WHILE A is alive but blocked on /await-resume, then RESUME A and verify stale rejection.",
-  "qualificationGenerationId": "gen-1788557009518-47vw69",
+  "measured": true,
+  "distinctOsProcesses": 2,
+  "oldOwnerAliveDuringTakeover": true,
+  "oldOwnerDidNotReleaseBeforeTakeover": true,
+  "oldOwnerPid": 13928,
+  "newGenerationGreaterThanOld": true,
+  "newOwnerCommitAccepted": true,
+  "staleOwnerCommitRejected": true,
+  "staleOwnerDispatchRejected": true,
+  "takeover": {
+    "previousGeneration": 1,
+    "newGeneration": 2,
+    "previousAuthorityOwnerId": "zombie-A-1788559006207-so60tq",
+    "newAuthorityOwnerId": "zombie-B-1788559006207-x1f3ox"
+  },
+  "newOwnerMutate": {
+    "accepted": true
+  },
+  "staleMutate": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "staleDispatch": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "runId": "run-fc25-zombie-1788559006207-b4zvfx",
+  "ownerA": "zombie-A-1788559006207-so60tq",
+  "ownerB": "zombie-B-1788559006207-x1f3ox",
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-25",
   "evidenceFreshness": "CURRENT",

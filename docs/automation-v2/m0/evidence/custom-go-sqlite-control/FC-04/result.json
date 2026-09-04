@@ -3,7 +3,7 @@
   "reason": "The candidate does not expose the real external-effect dispatch capability, so FC-04 cannot be measured against the shared provider process.",
   "requiredMethodology": "Implement fc04Dispatch/fc04Recover/fc04Measure on the candidate: real HTTP dispatch, durable UNKNOWN_EXTERNAL_STATE on genuine transport failure, recovery by independent provider-journal read, zero blind retries.",
   "nextAction": "Implement the capability, then rerun qualification from a clean source commit.",
-  "qualificationGenerationId": "gen-1788557009518-47vw69",
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
   "candidate": "CUSTOM_GO_SQLITE_CONTROL",
   "testId": "FC-04",
   "evidenceFreshness": "CURRENT",
