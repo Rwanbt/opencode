@@ -4,7 +4,7 @@
  * are the routes the capability gate is most protective about — every
  * step-up-eligible capability is reached through here.
  */
-import type { WorkflowDefinition } from "@unifia/workflow-runtime"
+import type { WorkflowDefinitionPort } from "../workflow-port.js"
 import type { Principal } from "../auth.js"
 import { body, json } from "../http.js"
 import type { ServerContext } from "../server-context.js"
@@ -121,7 +121,7 @@ export async function workflowAction(
     if (!token) return ctx.deny(principal, "workflow.scope", 403, { resource: input.workspaceId })
     const gate = await ctx.checkCapability("workflow.run", input.workspaceId, principal)
     if (gate) return gate
-    const definition = { ...(input.definition as WorkflowDefinition), workspaceId: input.workspaceId }
+    const definition = { ...(input.definition as WorkflowDefinitionPort), workspaceId: input.workspaceId }
     const state = await ctx.workflow.start(definition)
     ctx.workflowOwners.set(state.workflowId, input.workspaceId)
     while (ctx.workflowOwners.size > 1_000) {

@@ -22,6 +22,6 @@
  *     (block), openapi (block), round-trip determinism.
  *   - Tests live in `test/mapping.test.ts`.
  */
-export * from "./v1-ir.ts"
-export * from "./v2-ir.ts"
-export * from "./mapping.ts"
+export * from "./v1-ir"
+export * from "./v2-ir"
+export * from "./mapping"

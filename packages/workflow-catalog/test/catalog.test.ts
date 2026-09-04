@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: MIT */
-import { InMemoryWorkflowStore, WorkflowRuntime } from "@unifia/workflow-runtime"
 import {
   BUILT_IN_WORKFLOWS,
   WorkflowDeclarationError,
@@ -119,20 +118,11 @@ check((exportStep?.input as { reversible: boolean }).reversible === false, "the 
 check((exportStep?.input as { sandbox: string }).sandbox === "none", "the projection dropped the sandbox declaration")
 refuses(() => toRuntimeDefinition({ ...wrap({ ...base(), reversible: false, approval: "none", retry: { attempts: 0, backoffMs: 0 } }) }, "ws-1"), "projection accepted an invalid workflow")
 
-// --- The projected workflow actually runs -------------------------------------
-const approvals: string[] = []
-const runtime = new WorkflowRuntime(
-  new InMemoryWorkflowStore(),
-  { execute: async (step) => `ran:${step.id}` },
-  { request: async (_id, step) => { approvals.push(step.id); return true } },
-)
-const state = await runtime.start(toRuntimeDefinition(findWorkflow("document-from-folder")!, "ws-1"))
-check(state.status === "completed", `projected workflow ended as ${state.status}`)
-check(state.outputs.length === 2, `projected workflow produced ${state.outputs.length} outputs instead of 2`)
-
-const gated = await runtime.start(toRuntimeDefinition(releasePrep!, "ws-1"))
-check(gated.status === "completed", `gated workflow ended as ${gated.status}`)
-check(approvals.includes("run-checks") && approvals.includes("export-bundle"), `approvals requested for ${approvals.join(",")}`)
-check(!approvals.includes("collect-changes"), "an unattended read step asked for approval")
+// --- The projection is deliberately contract-only ----------------------------
+// Execution belongs to the substrate-backed runtime after ADR-000; this test
+// must not recreate the removed V1 executor as a competing authority.
+const projected = toRuntimeDefinition(findWorkflow("document-from-folder")!, "ws-1")
+check(projected.steps.every((step) => typeof step.id === "string"), "projection produced an invalid runtime step")
+check(toRuntimeDefinition(releasePrep!, "ws-1").steps.some((step) => step.requiresApproval), "projection lost approval requirements")
 
 console.log(`WorkflowCatalog: ${checks}/${checks} passed`)

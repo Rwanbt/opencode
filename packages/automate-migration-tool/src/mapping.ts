@@ -28,7 +28,7 @@
  * confirm.
  */
 
-import { V1_GLOBAL_DEFAULTS, type V1Step, type V1WorkflowDefinition } from "./v1-ir.ts"
+import { V1_GLOBAL_DEFAULTS, type V1Step, type V1WorkflowDefinition } from "./v1-ir"
 import type {
   V2Edge,
   V2FailurePolicy,
@@ -36,7 +36,7 @@ import type {
   V2NodeFamily,
   V2OwnershipScope,
   V2WorkflowDefinition,
-} from "./v2-ir.ts"
+} from "./v2-ir"
 
 /**
  * Severity of a migration warning. `info` is acceptable to ship; `warn`

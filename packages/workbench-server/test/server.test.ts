@@ -6,11 +6,11 @@ import path from "node:path"
 import { ApprovalBroker, AuditRuntimeDouble, BrowserAutomationBroker, CapabilityRegistry, DesktopAutomationBroker, McpUiControlBroker, FakeRuntimeAdapter, P3_CAPABILITIES, WORKSPACE_MANIFEST_PATH } from "@unifia/contracts"
 import { InMemoryMemoryStore, MemoryRuntime } from "@unifia/memory-runtime"
 import { ArtifactStore } from "@unifia/artifact-runtime"
-import { InMemoryWorkflowStore, WorkflowRuntime } from "@unifia/workflow-runtime"
 import { WorkspaceRuntime } from "@unifia/workspace-runtime"
 import { InMemorySkillRegistry, type InstalledSkill, type SkillManifest, type SkillPackage, type SkillRegistry, type SkillTrust } from "@unifia/skill-hub/node"
 import { ApprovalCapabilityGate, FixedWindowRateLimiter, HmacTokenAuthenticator, UnauthenticatedPrincipal, WorkbenchServer, sseFrame } from "../src/index.js"
 import { PresentLinkSigner } from "../src/present-link.js"
+import { WorkflowRuntimeDouble } from "./workflow-double.js"
 
 /**
  * The legacy assertions below predate principal authentication and carry the
@@ -310,7 +310,7 @@ try {
   if (remembered.status !== 201) throw new Error("memory remember route failed")
   const foundMemory = await memoryServer.fetch(new Request(`http://localhost/v1/memory/search?workspaceId=${memoryHandle.id}&text=visible`, { headers: { authorization: `Bearer ${memoryHandle.token}` } }))
   if (foundMemory.status !== 200) throw new Error("memory search route failed")
-  const workflow = new WorkflowRuntime(new InMemoryWorkflowStore(), { execute: async (step) => step.id }, { request: async () => true })
+  const workflow = new WorkflowRuntimeDouble()
   const workflowServer = new WorkbenchServer({ auth: testAuth, workspace, runtime: new FakeRuntimeAdapter(() => 1_000), audit, capability: { check: async () => "allow" }, workflow })
   const workflowOpen = await workflowServer.fetch(new Request(`http://localhost/v1/workspaces/${handle.id}/open`, { method: "POST" }))
   const workflowHandle = await workflowOpen.json() as { id: string; token: string }

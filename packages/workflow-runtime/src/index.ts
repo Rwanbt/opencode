@@ -12,8 +12,8 @@
  * - `v1-migrating.ts` : `V1MigratingAuthority` (M1-11) — wraps any
  *   DurableHistoryAuthority and migrates V1 history records to V2.
  */
-export * from "./adapter.ts"
-export * from "./in-memory.ts"
-export * from "./file-backed.ts"
-export * from "./v1-migrating.ts"
-export * from "./approval-v2.ts"
+export * from "./adapter"
+export * from "./in-memory"
+export * from "./file-backed"
+export * from "./v1-migrating"
+export * from "./approval-v2"

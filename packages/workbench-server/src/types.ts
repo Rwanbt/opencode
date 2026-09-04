@@ -24,7 +24,7 @@ import type {
 } from "@unifia/contracts"
 import type { ArtifactStore } from "@unifia/artifact-runtime"
 import type { MemoryRuntime } from "@unifia/memory-runtime"
-import type { WorkflowRuntime } from "@unifia/workflow-runtime"
+import type { WorkflowRuntimePort } from "./workflow-port.js"
 import type { DesignSkillManifest, SkillRegistry } from "@unifia/skill-hub"
 import type { PrincipalAuthenticator, RateLimiter, ScopedTokenAuthority } from "./auth.js"
 import type { PresentLinkSigner } from "./present-link.js"
@@ -81,7 +81,7 @@ export type ServerDependencies = {
   artifacts?: ArtifactStore | ArtifactStoreResolver
   browser?: BrowserAutomationBroker
   desktop?: DesktopAutomationBroker
-  workflow?: WorkflowRuntime
+  workflow?: WorkflowRuntimePort
   memory?: MemoryRuntime
   capabilities?: CapabilityRegistry
   ui?: McpUiControlBroker

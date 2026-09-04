@@ -50,8 +50,8 @@ import {
   RunNotFoundError,
   type CommandEnvelope,
   type TimerEnvelope,
-} from "./in-memory.ts"
-import type { DurableHistoryAuthority } from "./adapter.ts"
+} from "./in-memory"
+import type { DurableHistoryAuthority } from "./adapter"
 
 // ============================================================================
 // Snapshot shape
