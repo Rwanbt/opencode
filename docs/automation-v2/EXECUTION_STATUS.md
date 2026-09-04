@@ -27,13 +27,15 @@ override this section.
   `OPEN` until a selected substrate supplies the authority implementation.
   The old store-backed V2 broker is quarantined behind static + runtime gates
   (`LEGACY/TEST-ONLY`, constructor-gated, no barrel re-export).
-- FC-31B measured through the real DBOS Go host; UNIFIA_NATIVE now
-  measures FC-32 replay (its own orchestration, journals) and FC-04
-  against a REAL external provider process (separate OS process, own
-  SQLite journal, real HTTP ACK loss, reconciliation by independent
-  journal read, zero blind retries).
-  Still unexecuted: DBOS-side FC-04/FC-32 capabilities (Go endpoints),
-  DBOS FC-14/FC-25 multiprocess fencing, valid FC-13 power-loss methodology.
+- FC-32 and FC-04 are now MEASURED for both finalists through the
+  shared semantic oracle: Native via its own orchestration, DBOS via a
+  real DBOS workflow recovered by recoverPendingWorkflows after a
+  SIGKILL mid-step (classification YES, measured=true), and real HTTP
+  dispatch against the shared external provider process (real EOF,
+  reconciliation by independent journal read, zero blind retries).
+  Still unexecuted: DBOS FC-14/FC-25 multiprocess fencing (native
+  already PASS via native-authority-worker), valid FC-13 power-loss
+  methodology (both BLOCKED).
 - Candidate-level finding (P1): the DBOS real candidate's post-restart
   canonical-observation readback is intermittently empty even after a
   15s bounded poll (store-guard suite) - suspected
