@@ -5,7 +5,7 @@
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
 > Phase : **D-02 V4 OPEN + M0 QUALIFICATION OPEN**
-> HEAD local : `ad08069234` (batch: D-02 V4 matrix `2573a4f773` -> FC-31B host adapter `6c5975a362` -> M0 evidence `ad08069234`); remote tracking ref : `173117f637`; avance locale : 22 commits.
+> HEAD local : `ea1ced9dca` (batches: D-02 V4 matrix + FC-31B host + evidence -> FC-32 measured `b7bb792f0a`/`e6fdfd078b` -> FC-04 real provider `ee82061e69`/`ea1ced9dca`); remote tracking ref : `173117f637`; avance locale : 28 commits.
 > ADR-000 substrate final : `NOT_RATIFIED`; finalistes : `UNIFIA_NATIVE`, `DBOS_GO_SQLITE`.
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
@@ -27,11 +27,13 @@ override this section.
   `OPEN` until a selected substrate supplies the authority implementation.
   The old store-backed V2 broker is quarantined behind static + runtime gates
   (`LEGACY/TEST-ONLY`, constructor-gated, no barrel re-export).
-- FC-31B is now measured through the real DBOS Go host (host-adapter
-  endpoint, 20/20 frozen vectors, generation gen-1788542702417-rdbsqv).
-  Still unexecuted: real FC-32 replay (both finalists), real external
-  provider process for FC-04 (both), DBOS FC-14/FC-25 multiprocess
-  fencing, and valid FC-13 power-loss methodology.
+- FC-31B measured through the real DBOS Go host; UNIFIA_NATIVE now
+  measures FC-32 replay (its own orchestration, journals) and FC-04
+  against a REAL external provider process (separate OS process, own
+  SQLite journal, real HTTP ACK loss, reconciliation by independent
+  journal read, zero blind retries).
+  Still unexecuted: DBOS-side FC-04/FC-32 capabilities (Go endpoints),
+  DBOS FC-14/FC-25 multiprocess fencing, valid FC-13 power-loss methodology.
 - Candidate-level finding (P1): the DBOS real candidate's post-restart
   canonical-observation readback is intermittently empty even after a
   15s bounded poll (store-guard suite) - suspected
@@ -48,7 +50,7 @@ override this section.
 | D-02 legacy broker | Quarantined (static + runtime gates) | TEST_DOUBLE_ONLY | `LocalApprovalBrokerV2` constructor-gated; barrel re-export removed; quarantine suite `2/2`; legacy suite `12/12` | Delete once no legacy suite needs it |
 | D-02 V4 façade | Contract green | CONTRACT_ONLY (full matrix) | local batch on `1591cd4d68`; V4 `20/20`, runtime package `61/61`, audit matrix `docs/automation-v2/D02-V4-AUDIT-MATRIX.md` | Durable WorkflowRun authority (production durable gate), ADR-000 |
 | M0 contract feasibility | Green | QUALIFICATION_ONLY | contract suite `177/177` | Does not select a substrate |
-| M0 comparative qualification | Open | QUALIFICATION_ONLY | canonical runner `ad08069234` gen `gen-1788542702417-rdbsqv` CURRENT; Native `4 PASS/2 BLOCKED/2 NOT_VALID`; DBOS real `2 PASS (FC-31A, FC-31B host-adapter)/2 BLOCKED/4 NOT_VALID_OR_NOT_IMPLEMENTED` | valid finalist proof for remaining FCs |
+| M0 comparative qualification | Open | QUALIFICATION_ONLY | canonical runner `ea1ced9dca` gen CURRENT; Native `6 PASS (FC-31A/B, FC-04 real provider, FC-14, FC-25, FC-32 measured)/2 BLOCKED`; DBOS real `2 PASS (FC-31A/B)/2 BLOCKED/2 NOT_VALID (FC-04, FC-32)/2 NOT_IMPLEMENTED` | DBOS-side FC-04/FC-32 capabilities, DBOS FC-14/FC-25 |
 | Workflow catalog / loader | Green | CONTRACT_ONLY | `63/63` and `5/5` | production publication/runtime wiring |
 | Workbench orchestrator | Green | TEST_DOUBLE_ONLY | `28/28` assertions | real authority integration |
 | Monorepo typecheck | Green | BUILD/TYPECHECK | Turbo `47/47` tasks (isolated cache, after V4 matrix batch) | rerun after subsequent source commit |
@@ -57,10 +59,12 @@ override this section.
 ### CURRENT HEAD
 
 Batch chain on top of `1591cd4d68`: `2573a4f773` (D-02 V4 contract
-matrix + legacy quarantine gates), `6c5975a362` (FC-31B through the real
-Go host), `ad08069234` (canonical M0 evidence, gen
-`gen-1788542702417-rdbsqv`, CURRENT). Remote tracking ref remains
-`173117f637` (22 commits ahead). No reset, no force-push, no remote push.
+matrix + legacy quarantine gates), `6c5975a362`/`ad08069234` (FC-31B
+through the real Go host + evidence), `b7bb792f0a`/`e6fdfd078b` (FC-32
+replay measured through the Native orchestration), `ee82061e69`/
+`ea1ced9dca` (FC-04 against a REAL external provider process).
+Remote tracking ref remains `173117f637` (28 commits ahead). No reset,
+no force-push, no remote push.
 
 The ledger HEAD line is refreshed by each batch commit (mechanically true
 via `git rev-parse HEAD`).
