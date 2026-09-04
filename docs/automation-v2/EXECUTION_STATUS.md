@@ -33,9 +33,11 @@ override this section.
   SIGKILL mid-step (classification YES, measured=true), and real HTTP
   dispatch against the shared external provider process (real EOF,
   reconciliation by independent journal read, zero blind retries).
-  Still unexecuted: DBOS FC-14/FC-25 multiprocess fencing (native
-  already PASS via native-authority-worker), valid FC-13 power-loss
-  methodology (both BLOCKED).
+  FC-14/FC-25 also measured for DBOS via REAL second OS processes of
+  the same binary (M0_AUTHORITY_ONLY) on the same SQLite system DB:
+  exactly one claim winner, loser stale token rejected, zombie
+  freeze->takeover->resume with stale rejections. Still unexecuted:
+  FC-13 power-loss methodology only (both BLOCKED).
 - Candidate-level finding (P1): the DBOS real candidate's post-restart
   canonical-observation readback is intermittently empty even after a
   15s bounded poll (store-guard suite) - suspected
