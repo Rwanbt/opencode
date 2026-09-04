@@ -23,10 +23,12 @@ import { test, expect, beforeAll, afterAll } from "bun:test"
 import { mkdtempSync, existsSync, statSync, rmSync, readFileSync, mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { setTimeout as delay } from "node:timers/promises"
 import {
   DBOSRealCandidate,
   FakeExternalEffectProvider,
 } from "../src/qualification/index.ts"
+import { M0_UNIFIAVALUE_VECTOR_V1 } from "@unifia/automate-m0-contract"
 
 const DBOS_REAL_BINARY = join(
   import.meta.dir,
@@ -100,9 +102,21 @@ test.skipIf(!DBOS_REAL_BUILT)(
         expect(recovered).toBeTruthy()
         // 6. The canonical observation must come from the
         // DBOS step output, not the process-local cache.
-        const li = recovered.logicalInvocations.find(
+        // DBOS recovery (recoverPendingWorkflows) is asynchronous: the
+        // canonical observation becomes readable only after the runtime
+        // replays durable step output. Poll with a bounded deadline instead
+        // of asserting immediately (readiness probe, not a sleep-based fix).
+        const deadline = Date.now() + 15_000
+        let li = recovered.logicalInvocations.find(
           (l) => l.logicalInvocationId === liId,
         )
+        while (!(li && li.canonicalObservation !== null) && Date.now() < deadline) {
+          await delay(250)
+          const retried = await candidate2.inspectRun(runId as never)
+          li = retried.logicalInvocations.find(
+            (l) => l.logicalInvocationId === liId,
+          )
+        }
         expect(li).toBeDefined()
         expect(li?.canonicalObservation).toBeDefined()
       } finally {
@@ -207,4 +221,49 @@ test.skipIf(!DBOS_REAL_BUILT)(
     }
   },
   { timeout: 120_000 },
+)
+
+test.skipIf(!DBOS_REAL_BUILT)(
+  "FC-31B (master plan §21-§22): frozen vectors decided by the Go host itself",
+  async () => {
+    const storeDir = join(testDir, "fc31b-host-adapter")
+    mkdirSync(storeDir, { recursive: true })
+    const candidate = new DBOSRealCandidate({ storeDir, version: "fc31b", buildHash: "fc31b-build" })
+    await candidate.initialize()
+    try {
+      const frozen = M0_UNIFIAVALUE_VECTOR_V1.filter((vectorCase) => vectorCase.test === "FC-31B")
+      expect(frozen.length).toBeGreaterThan(0)
+      for (const vectorCase of frozen) {
+        const verdict = await candidate.canonizeViaHost({
+          caseId: vectorCase.id,
+          encoding: vectorCase.encoding,
+          payload: vectorCase.payload,
+        })
+        const expected = vectorCase.expect
+        if (expected.outcome === "reject") {
+          expect(`${verdict.outcome}:${verdict.code ?? ""}`).toBe(`reject:${expected.code}`)
+        } else if (expected.outcome === "pass-normalized") {
+          expect(`${verdict.outcome}:${verdict.canonical?.bits ?? ""}`).toBe(`pass:${expected.normalizedBits}`)
+        } else {
+          expect(verdict.outcome).toBe("pass")
+          expect(verdict.canonical).toBeDefined()
+        }
+        // §22: record the actual Go type — non-empty for every vector.
+        expect(verdict.goType.length).toBeGreaterThan(0)
+      }
+      // §22 deliberate contrast: same decimal, opposite verdicts.
+      const asInteger = await candidate.canonizeViaHost({ caseId: "contrast-int", encoding: "host-integer", payload: "9007199254740992" })
+      const asFloat = await candidate.canonizeViaHost({ caseId: "contrast-float", encoding: "float64-decimal", payload: "9007199254740992" })
+      expect(`${asInteger.outcome}:${asInteger.code ?? ""}`).toBe("reject:NUMBER_OUT_OF_CANONICAL_RANGE")
+      expect(asFloat.outcome).toBe("pass")
+      expect(asFloat.canonical?.bits).toBe("4340000000000000")
+      // MaxUint64 must be rejected with its actual Go type recorded.
+      const maxUint = await candidate.canonizeViaHost({ caseId: "max-uint64", encoding: "host-bigint", payload: "18446744073709551615" })
+      expect(`${maxUint.outcome}:${maxUint.code ?? ""}`).toBe("reject:NUMBER_OUT_OF_CANONICAL_RANGE")
+      expect(maxUint.goType).toBe("uint64")
+    } finally {
+      await candidate.shutdown()
+    }
+  },
+  120_000,
 )

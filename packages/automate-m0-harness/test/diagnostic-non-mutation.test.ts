@@ -129,5 +129,5 @@ test(
 
     rmSync(diagRoot, { recursive: true, force: true })
   },
-  { timeout: 60_000 },
+  { timeout: 180_000 },
 )

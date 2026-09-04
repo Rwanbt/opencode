@@ -31,6 +31,7 @@ import {
   type DurableTimerId,
   type EffectId,
   type AuthorityGeneration,
+  M0_UNIFIAVALUE_VECTOR_V1,
 } from "@unifia/automate-m0-contract"
 import type {
   DurableWorkflowAuthorityQualificationAdapter,
@@ -43,7 +44,7 @@ import type {
   AuthorityToken,
   RaceAuthoritiesInput,
   ZombieFC25Result,
-} from "./contract.ts"
+  HostAdapterFixture,  HostAdapterVerdict,} from "./contract.ts"
 import { CandidateResultBuilder, ExpectedNABuilder, evidencePath, resultsPath, expectedNAPath, blockedNote } from "./result.ts"
 import { classifyQualificationError } from "./errors.ts"
 import { FC_31A_VALUES, FC_31B_VECTORS, bitsToFloat64 } from "./vectors/fc31-fixtures.ts"
@@ -412,20 +413,66 @@ export class QualificationRunner {
     const isChildProcess =
       info.process.topology === "child-process" || info.process.topology === "sidecar" || info.process.topology === "remote"
     if (isChildProcess) {
-      const observations = {
-        measured: false,
-        reason: "FC-31B requires the candidate's actual host (Go) to apply the host-adapter contract. The current harness uses the TS host adapter for both candidates; for DBOS_GO_SQLITE this is NOT_VALID until a real Go host adapter is implemented that receives typed fixtures (float64, int64, uint64) and applies the contract in Go itself.",
-        expectedFromUpstream: "Per pack gelé §8: float64(9007199254740992) → PASS, int64(9007199254740991) → PASS, int64(9007199254740992) → NUMBER_OUT_OF_CANONICAL_RANGE, math.MaxInt64/MinInt64 → NUMBER_OUT_OF_CANONICAL_RANGE",
-        requiredMethodology: "(1) Send typed fixtures (float64, int64, uint64, math.MaxInt64) over HTTP to a Go endpoint. (2) Go host applies the same FC-31B contract. (3) Verify accept/reject decisions. (4) Reclassify to PASS only if Go host emits the canonical decisions.",
-        nextAction: "Add /host-adapter/canonize endpoint to dbos-qualify.exe that receives {value: float64, origin: 'GO_FLOAT64'|'GO_INT64'|'GO_UINT64'} and returns PASS/REJECT(NUMBER_OUT_OF_CANONICAL_RANGE) per the contract.",
+      const canonize = this.adapter.canonizeViaHost?.bind(this.adapter)
+      if (!canonize) {
+        // Candidate host exposes no typed host-adapter endpoint (e.g. the
+        // CUSTOM_GO_SQLITE_CONTROL diagnostic binary): FC-31B stays NOT_VALID.
+        const observations = {
+          measured: false,
+          reason: "The candidate's host does not expose a typed host-adapter endpoint, so the frozen FC-31B vectors cannot be decided by the host itself.",
+          requiredMethodology: "Implement /host-adapter/canonize in the candidate binary: receive lossless typed fixtures, materialize the host type (int64/uint64/float64/time.Time), apply the canonical value contract, emit PASS/REJECT verdicts.",
+          nextAction: "Implement the endpoint, then rerun qualification from a clean source commit.",
+        }
+        const evidence = await writeEvidence(folder, "result.json", observations)
+        this.builder.record({
+          testId: "FC-31B",
+          status: "NOT_VALID",
+          evidencePath: evidence,
+          note: "FC-31B NOT_VALID: no host-adapter endpoint on the candidate binary. The harness must not decide FC-31B with its own TS conversion for a non-TS host.",
+          observations,
+        })
+        return
       }
+      // Measured: every frozen FC-31B case (M0_UNIFIAVALUE_VECTOR_V1, test
+      // == "FC-31B") is driven through the candidate's own host, which
+      // materializes the exact typed value and applies the contract itself.
+      const frozenCases = M0_UNIFIAVALUE_VECTOR_V1.filter((vectorCase) => vectorCase.test === "FC-31B")
+      const observations: Record<string, unknown> = { measured: true, host: "candidate host-adapter endpoint" }
+      let pass = 0
+      let fail = 0
+      for (const vectorCase of frozenCases) {
+        const fixture: HostAdapterFixture = { caseId: vectorCase.id, encoding: vectorCase.encoding, payload: vectorCase.payload }
+        try {
+          const verdict: HostAdapterVerdict = await canonize(fixture)
+          const expected = vectorCase.expect
+          let ok: boolean
+          if (expected.outcome === "reject") {
+            ok = verdict.outcome === "reject" && verdict.code === expected.code
+          } else if (expected.outcome === "pass-normalized") {
+            ok = verdict.outcome === "pass" && verdict.canonical?.bits === expected.normalizedBits
+          } else {
+            ok = verdict.outcome === "pass"
+          }
+          if (ok) {
+            pass++
+            observations[vectorCase.id] = { ok: true, goType: verdict.goType }
+          } else {
+            fail++
+            observations[vectorCase.id] = { ok: false, expected, verdict }
+          }
+        } catch (error) {
+          fail++
+          observations[vectorCase.id] = { ok: false, expected: vectorCase.expect, error: String(error) }
+        }
+      }
+      const status: QualificationStatus = fail === 0 ? "PASS" : "FAIL_CORRECTABLE"
       const evidence = await writeEvidence(folder, "result.json", observations)
       this.builder.record({
         testId: "FC-31B",
-        status: "NOT_VALID",
+        status,
         evidencePath: evidence,
-        note: "FC-31B NOT_VALID for DBOS Go: harness uses TS host adapter, not the Go host. The Go binary must receive typed fixtures (float64/int64/uint64/MaxInt64) and apply the FC-31B contract itself. See observations.requiredMethodology for the unblock path.",
-        observations,
+        note: `${pass}/${frozenCases.length} frozen FC-31B cases decided by the candidate's own host (${info.process.topology}); actual host type recorded per case.`,
+        observations: { pass, fail, total: frozenCases.length, ...observations },
       })
       return
     }

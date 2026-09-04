@@ -294,6 +294,31 @@ export interface CandidateDiagnostics {
 /* THE candidate interface (substrate-neutral)                         */
 /* ------------------------------------------------------------------ */
 
+/** Lossless typed-fixture descriptor for the FC-31B host-adapter endpoint.
+ *
+ * The payload travels as its exact JSON literal text (decimal string or
+ * number literal) so no host float parsing happens before the candidate's
+ * host materializes the value.
+ */
+export interface HostAdapterFixture {
+  readonly caseId: string
+  readonly encoding: string
+  readonly payload: unknown
+}
+
+/** Verdict emitted by the candidate's own host for one FC-31B fixture. */
+export interface HostAdapterVerdict {
+  readonly outcome: "pass" | "reject"
+  readonly code?: string
+  /** The actual host type that materialized the value (e.g. int64, uint64, float64, time.Time). */
+  readonly goType: string
+  readonly canonical?: {
+    readonly kind: string
+    readonly bits?: string
+    readonly decimal?: string
+    readonly epochMs?: string
+  }
+}
 /**
  * What every candidate MUST implement to be scored. The common oracle
  * drives this. No candidate-specific logic lives here.
@@ -404,6 +429,19 @@ export interface DurableWorkflowAuthorityQualificationAdapter {
 
   /** Lightweight diagnostics. */
   diagnostics(): Promise<CandidateDiagnostics>
+  /* -------------------------------------------------------------- */
+  /* FC-31B host-adapter canonization (optional capability)          */
+  /* -------------------------------------------------------------- */
+
+  /**
+   * FC-31B through the candidate's REAL host. A child-process candidate
+   * whose binary exposes a typed host-adapter endpoint implements this to
+   * let the harness drive the frozen FC-31B vectors through the host's
+   * own conversion (the Go process materializes int64/uint64/float64/
+   * time.Time itself). Absent => the FC-31B child-process branch stays
+   * NOT_VALID for that candidate.
+   */
+  canonizeViaHost?(fixture: HostAdapterFixture): Promise<HostAdapterVerdict>
 
   /* -------------------------------------------------------------- */
   /* FC-14 / FC-25 substrate-neutral authority capabilities         */

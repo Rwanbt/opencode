@@ -25,10 +25,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -378,6 +380,7 @@ func (s *server) start() error {
 	mux.HandleFunc("/runs", s.handleStartRun)
 	mux.HandleFunc("/runs/", s.handleRunSubpath)
 	mux.HandleFunc("/attempts/next", s.handleNextAttempt)
+	mux.HandleFunc("/host-adapter/canonize", s.handleCanonize)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -769,4 +772,190 @@ func (s *server) handleNextAttempt(w http.ResponseWriter, r *http.Request) {
 		AttemptID: formatAttemptId(in.RunID, in.LogicalInvocationID, seq),
 		Sequence:  seq,
 	})
+}
+
+// ----------------------------------------------------------------------------
+// FC-31B host-adapter canonization (ADR-000 §57-§58)
+//
+// The Go host itself materializes the exact typed value described by the
+// fixture (int64, uint64, float64, time.Time) and applies the canonical
+// value contract. The harness must not pre-convert: the verdict emitted
+// here is the candidate's own host decision.
+//
+// Contract mirrored from packages/automate-m0-contract/src/value.ts:
+//   - fromHostInteger:  host integers convertible only within
+//     ±(2^53-1); outside → NUMBER_OUT_OF_CANONICAL_RANGE.
+//   - fromHostFloat64:  any finite binary64; NaN/±Inf →
+//     NON_FINITE_NUMBER; -0 normalizes to +0.
+//   - canonicalTimestampFromEpochMs: exact integer ms within
+//     ±(2^53-1); non-integer → NON_CANONICAL_TIME.
+//   - A host type with no canonical form → UNSUPPORTED_HOST_TYPE.
+// ----------------------------------------------------------------------------
+
+type canonizeRequest struct {
+	CaseID   string          `json:"caseId"`
+	Encoding string          `json:"encoding"`
+	Payload  json.RawMessage `json:"payload"`
+}
+
+type canonicalMaterialization struct {
+	Kind    string `json:"kind"`              // "number" | "timestamp"
+	Bits    string `json:"bits"`              // hex16 big-endian binary64 (numbers)
+	Decimal string `json:"decimal"`           // exact decimal form (numbers)
+	EpochMs string `json:"epochMs,omitempty"` // exact epoch ms (timestamps)
+}
+
+type canonizeVerdict struct {
+	Outcome   string                    `json:"outcome"` // "pass" | "reject"
+	Code      string                    `json:"code,omitempty"`
+	GoType    string                    `json:"goType"` // int64 | uint64 | float64 | time.Time | unsupported
+	Canonical *canonicalMaterialization `json:"canonical,omitempty"`
+}
+
+const (
+	maxSafeCanonicalInteger = int64(9007199254740991) // 2^53 - 1
+)
+
+func rejectVerdict(goType, code string) canonizeVerdict {
+	return canonizeVerdict{Outcome: "reject", Code: code, GoType: goType}
+}
+
+// float64Materialization renders the canonical binary64 losslessly.
+func float64Materialization(v float64) *canonicalMaterialization {
+	return &canonicalMaterialization{
+		Kind:    "number",
+		Bits:    fmt.Sprintf("%016x", math.Float64bits(v)),
+		Decimal: strconv.FormatFloat(v, 'f', -1, 64),
+	}
+}
+
+// canonizeNumberFromInteger applies fromHostInteger semantics to an exact
+// integer the host already materialized.
+func canonizeNumberFromInteger(goType string, exact int64, negativeOverflow bool) canonizeVerdict {
+	if negativeOverflow || exact > maxSafeCanonicalInteger || exact < -maxSafeCanonicalInteger {
+		return rejectVerdict(goType, "NUMBER_OUT_OF_CANONICAL_RANGE")
+	}
+	return canonizeVerdict{Outcome: "pass", GoType: goType, Canonical: float64Materialization(float64(exact))}
+}
+
+// canonizeFloat64 applies fromHostFloat64 semantics to a materialized
+// binary64. When integerEntry is true the caller declared the integer
+// exactness promise (fromHostInteger on a host float64): a non-integral
+// value is UNSUPPORTED_CANONICAL_VALUE and the safe-range check still
+// applies (2^53 itself is out of range for an integer promise).
+func canonizeFloat64(v float64, integerEntry bool) canonizeVerdict {
+	if math.IsNaN(v) {
+		return rejectVerdict("float64", "NON_FINITE_NUMBER")
+	}
+	if math.IsInf(v, 0) {
+		return rejectVerdict("float64", "NON_FINITE_NUMBER")
+	}
+	if integerEntry {
+		if v != math.Trunc(v) {
+			return rejectVerdict("float64", "UNSUPPORTED_CANONICAL_VALUE")
+		}
+		if v > float64(maxSafeCanonicalInteger) || v < float64(-maxSafeCanonicalInteger) {
+			return rejectVerdict("float64", "NUMBER_OUT_OF_CANONICAL_RANGE")
+		}
+		return canonizeVerdict{Outcome: "pass", GoType: "float64", Canonical: float64Materialization(v)}
+	}
+	if v == 0 {
+		v = 0 // §26: -0 normalizes to +0
+	}
+	return canonizeVerdict{Outcome: "pass", GoType: "float64", Canonical: float64Materialization(v)}
+}
+
+// canonizeTimestamp applies canonicalTimestampFromEpochMs semantics; the
+// host materializes time.UnixMilli so the recorded Go type is time.Time.
+func canonizeTimestamp(ms int64) canonizeVerdict {
+	if ms > maxSafeCanonicalInteger || ms < -maxSafeCanonicalInteger {
+		return rejectVerdict("time.Time", "NUMBER_OUT_OF_CANONICAL_RANGE")
+	}
+	_ = time.UnixMilli(ms) // host materialization of the instant
+	return canonizeVerdict{
+		Outcome: "pass",
+		GoType:  "time.Time",
+		Canonical: &canonicalMaterialization{
+			Kind:    "timestamp",
+			EpochMs: strconv.FormatInt(ms, 10),
+		},
+	}
+}
+
+// canonize applies the canonical value contract for one fixture. The
+// payload string is the lossless decimal/raw descriptor from the harness.
+func canonize(encoding, payload string) canonizeVerdict {
+	switch encoding {
+	case "host-integer":
+		v, err := strconv.ParseInt(payload, 10, 64)
+		if err != nil {
+			return rejectVerdict("int64", "NUMBER_OUT_OF_CANONICAL_RANGE")
+		}
+		return canonizeNumberFromInteger("int64", v, false)
+	case "host-bigint":
+		if v, err := strconv.ParseInt(payload, 10, 64); err == nil {
+			return canonizeNumberFromInteger("int64", v, false)
+		}
+		if v, err := strconv.ParseUint(payload, 10, 64); err == nil {
+			if v > uint64(maxSafeCanonicalInteger) {
+				return rejectVerdict("uint64", "NUMBER_OUT_OF_CANONICAL_RANGE")
+			}
+			return canonizeVerdict{Outcome: "pass", GoType: "uint64", Canonical: float64Materialization(float64(v))}
+		}
+		return rejectVerdict("uint64", "NUMBER_OUT_OF_CANONICAL_RANGE")
+	case "float64-decimal":
+		v, err := strconv.ParseFloat(payload, 64)
+		if err != nil {
+			if errors.Is(err, strconv.ErrRange) {
+				return rejectVerdict("float64", "NON_FINITE_NUMBER")
+			}
+			return rejectVerdict("float64", "UNSUPPORTED_HOST_TYPE")
+		}
+		return canonizeFloat64(v, false)
+	case "canonical-timestamp", "host-date":
+		v, err := strconv.ParseInt(payload, 10, 64)
+		if err != nil {
+			if errors.Is(err, strconv.ErrRange) {
+				return rejectVerdict("time.Time", "NUMBER_OUT_OF_CANONICAL_RANGE")
+			}
+			return rejectVerdict("time.Time", "NON_CANONICAL_TIME")
+		}
+		return canonizeTimestamp(v)
+	case "host-sentinel":
+		return rejectVerdict("unsupported", "UNSUPPORTED_HOST_TYPE")
+	default:
+		return rejectVerdict("unsupported", "UNSUPPORTED_HOST_TYPE")
+	}
+}
+
+func (s *server) handleCanonize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	var req canonizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	payload := ""
+	if len(req.Payload) > 0 {
+		var raw any
+		if err := json.Unmarshal(req.Payload, &raw); err != nil {
+			http.Error(w, "bad payload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		switch v := raw.(type) {
+		case string:
+			payload = v
+		case float64:
+			// Lossless: keep the exact JSON literal text for numeric payloads.
+			payload = string(req.Payload)
+		default:
+			http.Error(w, "payload must be a string or number", http.StatusBadRequest)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(canonize(req.Encoding, payload))
 }

@@ -52,6 +52,8 @@ import {
   type ClaimAuthorityInput,
   type ClaimAuthorityResult,
   type ZombieFC25Result,
+  type HostAdapterFixture,
+  type HostAdapterVerdict,
 } from "../contract.ts"
 import { type WorkflowRunId, type AttemptId } from "@unifia/automate-m0-contract"
 import { FakeExternalEffectProvider } from "../providers/fake-external.ts"
@@ -194,6 +196,12 @@ export class DBOSRealCandidate implements DurableWorkflowAuthorityQualificationA
   private requireBase(): string {
     if (!this.baseUrl) throw new Error("DBOS real candidate not initialized")
     return this.baseUrl
+  }
+
+  /** FC-31B: the Go host materializes the typed fixture and applies the
+   *  canonical contract itself (ADR-000 §57-§58, master plan §21-§22). */
+  async canonizeViaHost(fixture: HostAdapterFixture): Promise<HostAdapterVerdict> {
+    return jsonCall(this.requireBase(), "/host-adapter/canonize", { method: "POST", body: fixture, timeoutMs: 5_000 })
   }
 
   async startRun(input: StartRunInput): Promise<WorkflowRunId> {
