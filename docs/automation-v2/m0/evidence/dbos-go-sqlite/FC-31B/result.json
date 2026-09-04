@@ -4,7 +4,7 @@
   "expectedFromUpstream": "Per pack gelé §8: float64(9007199254740992) → PASS, int64(9007199254740991) → PASS, int64(9007199254740992) → NUMBER_OUT_OF_CANONICAL_RANGE, math.MaxInt64/MinInt64 → NUMBER_OUT_OF_CANONICAL_RANGE",
   "requiredMethodology": "(1) Send typed fixtures (float64, int64, uint64, math.MaxInt64) over HTTP to a Go endpoint. (2) Go host applies the same FC-31B contract. (3) Verify accept/reject decisions. (4) Reclassify to PASS only if Go host emits the canonical decisions.",
   "nextAction": "Add /host-adapter/canonize endpoint to dbos-qualify.exe that receives {value: float64, origin: 'GO_FLOAT64'|'GO_INT64'|'GO_UINT64'} and returns PASS/REJECT(NUMBER_OUT_OF_CANONICAL_RANGE) per the contract.",
-  "qualificationGenerationId": "gen-1788525674619-n5vm9g",
+  "qualificationGenerationId": "gen-1788531878141-uszz4f",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-31B",
   "evidenceFreshness": "CURRENT",

@@ -11,7 +11,7 @@
   "candidateRestartedOrRecoveryPathExercised": false,
   "blindRetryCount": 0,
   "note": "FC-04 requires real transport-level ACK loss from an INDEPENDENT external provider. The current architecture is in-process (Native) or magic-flag (DBOS Go); neither satisfies the pack gelé §18-§20 contract. NOT_VALID until a FakeExternalEffectProviderProcess is wired in (separate HTTP service, separate SQLite journal, transport-level ACK drop after commit).",
-  "qualificationGenerationId": "gen-1788525674619-n5vm9g",
+  "qualificationGenerationId": "gen-1788531878141-uszz4f",
   "candidate": "UNIFIA_NATIVE",
   "testId": "FC-04",
   "evidenceFreshness": "CURRENT",
