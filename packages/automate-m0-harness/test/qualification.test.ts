@@ -112,17 +112,19 @@ describe("M0 qualification — UNIFIA_NATIVE", () => {
     }
     expect(fc31b?.status).toBe("PASS")
 
-    // FC-04 must be NOT_VALID for Native per CP6.1 §18: the
-    // `ackLost: true` flag is a configuration signal, not real
-    // transport-level ACK loss from an independent external
-    // provider. There is no in-process exception.
+// FC-04 must be PASS for Native: the candidate dispatches against the
+    // shared REAL external provider process (separate OS process, own
+    // durable journal, real HTTP transport). The ACK loss is a genuine
+    // transport failure and recovery reads the provider journal - the
+    // old CP6.1 NOT_VALID (magic flag, in-process provider) no longer
+    // applies.
     const fc04 = result.results.find((r) => r.testId === "FC-04")
     expect(fc04).toBeDefined()
-    if (fc04?.status !== "NOT_VALID") {
+    if (fc04?.status !== "PASS") {
       // eslint-disable-next-line no-console
       console.log("FC-04 status:", fc04?.status, "note:", fc04?.note)
     }
-    expect(fc04?.status).toBe("NOT_VALID")
+    expect(fc04?.status).toBe("PASS")
 
     // FC-14 must be PASS for Native (substrate-neutral race via
     // `native-authority-worker.ts` Bun subprocess; 2 real OS
@@ -339,7 +341,7 @@ describe("M0 qualification — common harness invariants", () => {
     // Optional measurement capabilities (canonizeViaHost for FC-31B,
     // fc32* for FC-32) are declared optional on the qualification contract;
     // surface parity applies to the mandatory oracle surface.
-    const isOptionalCapability = (n: string) => n === "canonizeViaHost" || n.startsWith("fc32")
+    const isOptionalCapability = (n: string) => n === "canonizeViaHost" || n.startsWith("fc32") || n.startsWith("fc04")
     const nativeMethods = Object.getOwnPropertyNames(NativeSqliteCandidate.prototype)
       .filter((n) => n !== "constructor" && !n.startsWith("_") && n !== "requireDb" && n !== "destroy" && n !== "appendApprovalHistory" && !isOptionalCapability(n))
     const dbosMethods = Object.getOwnPropertyNames(DBOSGoCandidate.prototype)

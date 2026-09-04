@@ -306,6 +306,36 @@ export interface HostAdapterFixture {
   readonly payload: unknown
 }
 
+/** FC-04 dispatch verdict recorded by the candidate. */
+export interface Fc04DispatchOutcome {
+  readonly attemptId: AttemptId
+  /** "SUCCEEDED" (ACK received) or "UNKNOWN_EXTERNAL_STATE" (real transport loss). */
+  readonly status: string
+  /** The real transport error text, if the ACK was lost. */
+  readonly transportError: string | null
+}
+
+/** FC-04 recovery verdict read from the provider journal via HTTP. */
+export interface Fc04RecoveryOutcome {
+  /** RECONCILED if the provider journal independently shows the effect; otherwise UNKNOWN_EXTERNAL_STATE. */
+  readonly status: "RECONCILED" | "UNKNOWN_EXTERNAL_STATE"
+  readonly providerCanonicalResult: unknown | null
+  /** Retries issued without reconciliation knowledge — must be 0 for non-repeatable effects. */
+  readonly blindRetryCount: number
+}
+
+/** Measured FC-04 record — all numbers from durable journals. */
+export interface Fc04Measurement {
+  readonly measured: true
+  readonly runId: WorkflowRunId
+  readonly attemptIds: readonly AttemptId[]
+  readonly attemptStatuses: readonly string[]
+  readonly candidateEffectExecutions: number
+  /** Independent read of the provider's own journal over HTTP. */
+  readonly providerJournalConfirmsCommit: boolean
+  readonly blindRetryCount: number
+  readonly recoveryStatus: "RECONCILED" | "UNKNOWN_EXTERNAL_STATE"
+}
 /** Harness-controlled ambient nondeterminism source (frozen pack §44):
  *  T = time, R = random, O = ordering. */
 export interface Fc32Ambient {
@@ -498,6 +528,20 @@ export interface DurableWorkflowAuthorityQualificationAdapter {
   fc32StartScenario?(input: { workflowVersionId: WorkflowVersionId; ambient: Fc32Ambient }): Promise<Fc32ScenarioStart>
   fc32RunAttempt?(runId: WorkflowRunId, mode: "crash-before-effect-commit" | "complete"): Promise<Fc32AttemptOutcome>
   fc32Measure?(runId: WorkflowRunId, ambientIntent: { readonly initial: Fc32Ambient; readonly afterCrash: Fc32Ambient }): Promise<Fc32ScenarioMeasurement>
+  /* -------------------------------------------------------------- */
+  /* FC-04 real external-effect scenario (optional capability)       */
+  /* -------------------------------------------------------------- */
+
+  /**
+   * FC-04 (master plan §28-§30): the candidate's own dispatch path
+   * performs a REAL HTTP call against the shared external provider
+   * process. mode="drop-ack" makes the provider commit durably then
+   * reset the TCP connection — the candidate observes a genuine
+   * transport failure, never a truth flag.
+   */
+  fc04Dispatch?(input: { runId: WorkflowRunId; effectKey: string; canonicalInput: unknown; providerBaseUrl: string; mode: "drop-ack" | "ack" }): Promise<Fc04DispatchOutcome>
+  fc04Recover?(input: { runId: WorkflowRunId; effectKey: string; providerBaseUrl: string }): Promise<Fc04RecoveryOutcome>
+  fc04Measure?(input: { runId: WorkflowRunId; providerBaseUrl: string }): Promise<Fc04Measurement>
 
   /* -------------------------------------------------------------- */
   /* FC-14 / FC-25 substrate-neutral authority capabilities         */

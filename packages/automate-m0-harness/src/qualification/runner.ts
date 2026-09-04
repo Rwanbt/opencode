@@ -49,6 +49,7 @@ import { CandidateResultBuilder, ExpectedNABuilder, evidencePath, resultsPath, e
 import { classifyQualificationError } from "./errors.ts"
 import { FC_31A_VALUES, FC_31B_VECTORS, bitsToFloat64 } from "./vectors/fc31-fixtures.ts"
 import { FakeExternalEffectProvider } from "./providers/fake-external.ts"
+import { startRealProviderProcess } from "./providers/real-provider-process.ts"
 
 /* ------------------------------------------------------------------ */
 /* Public entry point                                                  */
@@ -573,117 +574,80 @@ export class QualificationRunner {
   /* FC-04 : provider success + local ACK lost                          */
   /* ------------------------------------------------------------------ */
 
-  private async runFC04(info: CandidateInfo): Promise<void> {
+private async runFC04(info: CandidateInfo): Promise<void> {
+    // Frozen pack + master plan §28-§30: the candidate dispatches a REAL
+    // HTTP effect against the shared external provider process (separate
+    // OS process, own durable SQLite journal). mode=drop-ack makes the
+    // provider commit durably then reset the TCP connection, so the loss
+    // is a genuine transport failure surfaced by the candidate's HTTP
+    // client — there is no `ackLost` truth flag on this path. Recovery
+    // reads the provider journal independently. PASS = measured +
+    // provider commit confirmed + reconciliation + zero blind retries.
     const folder = evidencePath(this.opts.outputRoot, info.kind, "FC-04")
-    // Per pack gelé review 2026-09-03 v1.1 §10-§12: FC-04
-    // requires REAL transport-level ACK loss, not a magic flag.
-    // The harness must observe that:
-    //
-    //   1. The candidate actually called a real external provider
-    //      (NOT just received a flag from the harness).
-    //   2. The provider durably committed the effect to its own
-    //      journal.
-    //   3. The transport ACK was dropped after the commit.
-    //   4. The candidate's recovery resolved to UNKNOWN_EXTERNAL_STATE.
-    //
-    // The current implementation uses `providerResponse.ackLost: true`
-    // as a flag the harness passes to the candidate. For
-    // UNIFIA_NATIVE, the candidate consults this flag and
-    // short-circuits to UNKNOWN_EXTERNAL_STATE without calling the
-    // provider — so we observe a UNKNOWN_EXTERNAL_STATE but the
-    // provider was never called. For DBOS_GO_SQLITE, the candidate
-    // is process-isolated and has no provider at all — the
-    // `ackLost` flag is a magic value that the Go binary maps to
-    // UNKNOWN_EXTERNAL_STATE in its custom SQLite, with no
-    // provider involvement.
-    //
-    // Per §12, the current FC-04 PASS for DBOS Go is NOT_VALID.
-    // We reclassify it here. The unblock path is documented in
-    // observations.requiredMethodology.
-    const isChildProcess =
-      info.process.topology === "child-process" || info.process.topology === "sidecar" || info.process.topology === "remote"
-    if (isChildProcess) {
+    const fc04Dispatch = this.adapter.fc04Dispatch?.bind(this.adapter)
+    if (!fc04Dispatch || !this.adapter.fc04Recover || !this.adapter.fc04Measure) {
       const observations = {
         measured: false,
-        reason: "FC-04 requires real transport-level ACK loss, not a magic flag. The current DBOS Go candidate has no wired-in external provider; the harness passes `ackLost: true` to the Go binary's HTTP body, which the Go binary maps to UNKNOWN_EXTERNAL_STATE in its custom SQLite — but no provider was actually called, no provider commitment occurred, and no transport ACK was dropped. Per pack gelé §12 this is NOT_VALID until a real external provider architecture is wired in.",
-        providerCalled: 0,
-        providerCommitted: false,
-        providerJournalContainsEffectKey: false,
-        candidateDidNotReceiveSuccessAck: "by configuration, not by transport loss",
-        candidateRestartedOrRecoveryPathExercised: false,
-        blindRetryCount: 0,
-        requiredMethodology: "(1) Stand up a real FakeExternalEffectProvider as an HTTP service with its own SQLite journal (separate from the candidate). (2) Candidate's driveAttempt makes an HTTP call to the provider with the EffectKey. (3) Provider durably commits the effect. (4) Provider is configured to drop the response ACK (close TCP without sending the HTTP response). (5) Candidate's driveAttempt times out / receives no response. (6) Candidate's recovery path resolves to UNKNOWN_EXTERNAL_STATE. (7) Cross-verify the provider's journal contains the effectKey.",
-        nextAction: "Add a fake external provider HTTP service with its own SQLite journal; have the candidate's driveAttempt call the provider over HTTP; verify the provider's journal has the effectKey after the candidate's recovery.",
+        reason: "The candidate does not expose the real external-effect dispatch capability, so FC-04 cannot be measured against the shared provider process.",
+        requiredMethodology: "Implement fc04Dispatch/fc04Recover/fc04Measure on the candidate: real HTTP dispatch, durable UNKNOWN_EXTERNAL_STATE on genuine transport failure, recovery by independent provider-journal read, zero blind retries.",
+        nextAction: "Implement the capability, then rerun qualification from a clean source commit.",
       }
       const evidence = await writeEvidence(folder, "result.json", observations)
       this.builder.record({
         testId: "FC-04",
         status: "NOT_VALID",
         evidencePath: evidence,
-        note: "FC-04 NOT_VALID for DBOS Go: `ackLost: true` is a magic flag from the harness, not real transport-level ACK loss. The candidate has no wired-in provider; the Go binary maps the flag to UNKNOWN_EXTERNAL_STATE without any provider involvement. See observations.requiredMethodology for the unblock path.",
+        note: "FC-04 NOT_VALID: candidate does not expose the real-provider dispatch capability.",
         observations,
       })
       return
     }
-    // Adapter is initialized once in run() (single-init lifecycle).
-    try {
-      // Per pack gelé §10-§12 + CP6.1 §18-§20: FC-04 requires
-      // real transport-level ACK loss, not a magic flag from
-      // the harness. For UNIFIA_NATIVE the evidence records
-      // `transportLevelAckLoss: false` because the candidate and
-      // the provider are both in-process; the `ackLost: true`
-      // flag is a configuration signal, not a real transport
-      // loss. Per pack gelé §18, FC-04 for UNIFIA_NATIVE is
-      // NOT_VALID — there is no exception for in-process.
-      //
-      // We still drive the test (to record what the candidate
-      // does in response to the flag) and document the
-      // evidence, but the status is NOT_VALID.
-      const runId = await this.adapter.startRun({
-        workflowVersionId: "wf-fc04" as WorkflowVersionId,
-        ownerScope: { organizationId: "o1", workspaceId: "ws-fc04" },
-        initialLogicalInvocation: {
-          logicalInvocationId: "li-fc04" as LogicalInvocationId,
-          effectKey: "ek-fc04",
-          canonicalInput: fromHostFloat64(42),
-        },
-        seedCanonicalValue: fromHostFloat64(42),
-      } satisfies StartRunInput)
-      const attempt = await this.adapter.driveAttempt(runId, "li-fc04" as LogicalInvocationId, {
-        effectKey: "ek-fc04",
-        outcome: "SUCCEEDED",
-        canonicalResult: fromHostFloat64(99),
-        ackLost: true,
-        idempotencyKey: "ik-fc04-1",
-        providerCommittedAtEpochMs: Date.now(),
-      } satisfies ProviderResolution)
 
-      // Per pack gelé §18, FC-04 is NOT_VALID for both candidates
-      // until a real external provider transport is wired in.
-      const observations = {
-        attemptStatus: attempt.status,
-        ackLostSignal: true,
-        adapterTopology: info.process.topology,
-        transportLevelAckLoss: false,
-        providerReceivedEffect: false,
-        providerCommittedEffect: false,
-        providerJournalContainsEffectKey: false,
-        transportAckActuallyLost: false,
-        candidateDidNotObserveSuccess: "by configuration, not by transport loss",
-        candidateRestartedOrRecoveryPathExercised: false,
-        blindRetryCount: 0,
-        note: "FC-04 requires real transport-level ACK loss from an INDEPENDENT external provider. The current architecture is in-process (Native) or magic-flag (DBOS Go); neither satisfies the pack gelé §18-§20 contract. NOT_VALID until a FakeExternalEffectProviderProcess is wired in (separate HTTP service, separate SQLite journal, transport-level ACK drop after commit).",
-      }
-      const evidence = await writeEvidence(folder, "result.json", observations)
+    const provider = await startRealProviderProcess(join(this.opts.outputRoot, "fc04-provider-journal", `${info.kind}-${Date.now()}`))
+    try {
+      const effectKey = `ek-fc04-${info.kind}-${Date.now()}`
+      const started = await this.adapter.fc32StartScenario!({ workflowVersionId: "wf-fc04" as WorkflowVersionId, ambient: { t: "fc04-t1", r: "fc04-r1", o: "fc04-o1" } })
+      // Attempt 1: real dispatch whose ACK is genuinely lost.
+      const dispatch = await fc04Dispatch({ runId: started.runId, effectKey, canonicalInput: { op: "external-write" }, providerBaseUrl: provider.baseUrl, mode: "drop-ack" })
+      // Crash + reopen on the same durable store before recovery.
+      await this.adapter.forceProcessCrash()
+      await this.adapter.reopen()
+      const recovery = await this.adapter.fc04Recover!({ runId: started.runId, effectKey, providerBaseUrl: provider.baseUrl })
+      const measurement = await this.adapter.fc04Measure!({ runId: started.runId, providerBaseUrl: provider.baseUrl })
+
+      // Publication-gate fields (result.ts assertFCPassGate), derived from
+      // measured journals and the real transport outcome.
+      const realExternalProvider = true
+      const providerCommitted = measurement.providerJournalConfirmsCommit
+      const transportAckLost = dispatch.status === "UNKNOWN_EXTERNAL_STATE" && dispatch.transportError !== null
+      const recoveryExecuted = recovery.status === "RECONCILED" || recovery.status === "UNKNOWN_EXTERNAL_STATE"
+      const blindRetryCount = recovery.blindRetryCount
+      const invariants = { realExternalProvider, providerCommitted, transportAckLost, recoveryExecuted, blindRetryZero: blindRetryCount === 0 }
+      const failed = Object.entries(invariants).filter(([, ok]) => !ok).map(([name]) => name)
+      const status: QualificationStatus = failed.length === 0 ? "PASS" : "FAIL_CORRECTABLE"
+      const evidence = await writeEvidence(folder, "result.json", {
+        measured: true,
+        realExternalProvider,
+        providerCommitted,
+        transportAckLost,
+        recoveryExecuted,
+        blindRetryCount,
+        transportError: dispatch.transportError,
+        recoveryStatus: recovery.status,
+        attemptStatuses: measurement.attemptStatuses,
+        failedInvariants: failed,
+      })
       this.builder.record({
         testId: "FC-04",
-        status: "NOT_VALID",
+        status,
         evidencePath: evidence,
-        note: "FC-04 NOT_VALID: the harness uses `ackLost: true` as a magic flag, not a real transport-level ACK loss from an independent external provider. UNIFIA_NATIVE has no in-process exception per pack gelé §18. Reclassified from CP4 PASS.",
-        observations,
+        note: failed.length === 0
+          ? `Real external provider process: commit confirmed by the provider journal over HTTP, real transport ACK loss (${dispatch.transportError?.slice(0, 60)}), recovery ${recovery.status}, blindRetryCount 0.`
+          : `FC-04 FAIL_CORRECTABLE: failed ${failed.join(", ")}.`,
+        observations: { measured: true, realExternalProvider, providerCommitted, transportAckLost, recoveryExecuted, blindRetryCount, recoveryStatus: recovery.status, attemptStatuses: measurement.attemptStatuses },
       })
-    } catch (e) {
-      throw e
+    } finally {
+      provider.stop()
     }
   }
 

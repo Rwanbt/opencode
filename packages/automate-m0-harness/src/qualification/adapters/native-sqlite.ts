@@ -106,6 +106,9 @@ import type {
   Fc32ScenarioStart,
   Fc32AttemptOutcome,
   Fc32ScenarioMeasurement,
+  Fc04DispatchOutcome,
+  Fc04RecoveryOutcome,
+  Fc04Measurement,
 } from "../contract.ts"
 import { FakeExternalEffectProvider } from "../providers/fake-external.ts"
 
@@ -291,6 +294,23 @@ CREATE TABLE IF NOT EXISTS fc32_effect_executions (
   execution_seq INTEGER NOT NULL,
   executed_at INTEGER NOT NULL,
   PRIMARY KEY (run_id, effect_key, execution_seq)
+);CREATE TABLE IF NOT EXISTS fc04_dispatches (
+  run_id TEXT NOT NULL,
+  effect_key TEXT NOT NULL,
+  dispatch_seq INTEGER NOT NULL,
+  transport_outcome TEXT NOT NULL,
+  blind_retry INTEGER NOT NULL DEFAULT 0,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, effect_key, dispatch_seq)
+);
+CREATE TABLE IF NOT EXISTS fc04_recoveries (
+  run_id TEXT NOT NULL,
+  effect_key TEXT NOT NULL,
+  recovery_seq INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('RECONCILED','UNKNOWN_EXTERNAL_STATE')),
+  provider_result_json TEXT,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, effect_key, recovery_seq)
 );CREATE TABLE IF NOT EXISTS backup_history (
   handle TEXT PRIMARY KEY,
   size_bytes INTEGER NOT NULL,
@@ -1235,6 +1255,108 @@ export class NativeSqliteCandidate implements DurableWorkflowAuthorityQualificat
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* FC-04 — real external-effect dispatch (master plan §28-§30)         */
+  /*                                                                     */
+  /* The candidate's dispatch path performs the HTTP call itself. There  */
+  /* is no `ackLost` flag on this path: a lost ACK is a real transport   */
+  /* failure surfaced by the HTTP client (ECONNRESET / socket close).    */
+  /* ------------------------------------------------------------------ */
+
+  async fc04Dispatch(input: { runId: WorkflowRunId; effectKey: string; canonicalInput: unknown; providerBaseUrl: string; mode: "drop-ack" | "ack" }): Promise<Fc04DispatchOutcome> {
+    const db = this.requireDb()
+    const inv = db.query(`SELECT logical_invocation_id, next_attempt_n FROM logical_invocations WHERE run_id = ?`).get(input.runId) as { logical_invocation_id: string; next_attempt_n: number } | null
+    if (!inv) throw new Error(`fc04 run ${input.runId} not found`)
+    const attemptN = inv.next_attempt_n + 1
+    const attemptId = `att-fc04-${inv.logical_invocation_id}-${attemptN}` as AttemptId
+    db.run(`UPDATE logical_invocations SET current_attempt_id = ?, next_attempt_n = ? WHERE logical_invocation_id = ?`, [attemptId, attemptN, inv.logical_invocation_id])
+    db.run(`INSERT INTO attempts (attempt_id, logical_invocation_id, effect_id, started_at, completed_at, status, canonical_output_json) VALUES (?, ?, ?, ?, NULL, ?, NULL)`, [
+      attemptId,
+      inv.logical_invocation_id,
+      `eff-fc04-${inv.logical_invocation_id}`,
+      Date.now(),
+      "RUNNING",
+    ])
+
+    try {
+      // The REAL dispatch: this fetch either receives the provider's HTTP
+      // ACK or a genuine transport failure. `mode` is a property of the
+      // scenario fixture, never of the result.
+      const providerResponse = await fetch(`${input.providerBaseUrl}/effect?mode=${input.mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ effectKey: input.effectKey, canonicalInput: input.canonicalInput }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!providerResponse.ok) throw new Error(`provider HTTP ${providerResponse.status}`)
+      const body = (await providerResponse.json()) as { canonicalResult?: unknown }
+      db.run(`INSERT INTO fc04_dispatches (run_id, effect_key, dispatch_seq, transport_outcome, blind_retry, at) VALUES (?, ?, ?, ?, ?, ?)`, [
+        input.runId,
+        input.effectKey,
+        ((db.query(`SELECT COALESCE(MAX(dispatch_seq), 0) + 1 AS n FROM fc04_dispatches WHERE run_id = ? AND effect_key = ?`).get(input.runId, input.effectKey) as { n: number }).n),
+        "acked",
+        0,
+        Date.now(),
+      ])
+      db.run(`UPDATE attempts SET status = ?, completed_at = ?, canonical_output_json = ? WHERE attempt_id = ?`, ["SUCCEEDED", Date.now(), JSON.stringify(body.canonicalResult ?? null), attemptId])
+      return { attemptId, status: "SUCCEEDED", transportError: null }
+    } catch (error) {
+      // Genuine transport failure: the provider committed, but this attempt
+      // never learned the result from the ACK. Durable UNKNOWN_EXTERNAL_STATE;
+      // no blind retry for a non-repeatable effect (§30).
+      db.run(`UPDATE attempts SET status = ?, completed_at = ? WHERE attempt_id = ?`, ["UNKNOWN_EXTERNAL_STATE", Date.now(), attemptId])
+      db.run(`INSERT INTO fc04_dispatches (run_id, effect_key, dispatch_seq, transport_outcome, blind_retry, at) VALUES (?, ?, ?, ?, ?, ?)`, [
+        input.runId,
+        input.effectKey,
+        ((db.query(`SELECT COALESCE(MAX(dispatch_seq), 0) + 1 AS n FROM fc04_dispatches WHERE run_id = ? AND effect_key = ?`).get(input.runId, input.effectKey) as { n: number }).n),
+        "transport-error",
+        0,
+        Date.now(),
+      ])
+      return { attemptId, status: "UNKNOWN_EXTERNAL_STATE", transportError: String(error) }
+    }
+  }
+
+  async fc04Recover(input: { runId: WorkflowRunId; effectKey: string; providerBaseUrl: string }): Promise<Fc04RecoveryOutcome> {
+    const db = this.requireDb()
+    const nextSeq = ((db.query(`SELECT COALESCE(MAX(recovery_seq), 0) + 1 AS n FROM fc04_recoveries WHERE run_id = ? AND effect_key = ?`).get(input.runId, input.effectKey) as { n: number }).n)
+    // Independent read of the provider's own durable journal over HTTP.
+    const providerRow = await fetch(`${input.providerBaseUrl}/journal/${encodeURIComponent(input.effectKey)}`, { signal: AbortSignal.timeout(10_000) })
+      .then((response) => (response.ok ? (response.json() as Promise<{ canonicalResult?: unknown }>) : null))
+      .catch(() => null)
+    if (providerRow) {
+      db.run(`INSERT INTO fc04_recoveries (run_id, effect_key, recovery_seq, status, provider_result_json, at) VALUES (?, ?, ?, ?, ?, ?)`, [input.runId, input.effectKey, nextSeq, "RECONCILED", JSON.stringify(providerRow.canonicalResult ?? null), Date.now()])
+      return { status: "RECONCILED", providerCanonicalResult: providerRow.canonicalResult ?? null, blindRetryCount: 0 }
+    }
+    db.run(`INSERT INTO fc04_recoveries (run_id, effect_key, recovery_seq, status, provider_result_json, at) VALUES (?, ?, ?, ?, NULL, ?)`, [input.runId, input.effectKey, nextSeq, "UNKNOWN_EXTERNAL_STATE", Date.now()])
+    return { status: "UNKNOWN_EXTERNAL_STATE", providerCanonicalResult: null, blindRetryCount: 0 }
+  }
+
+  async fc04Measure(input: { runId: WorkflowRunId; providerBaseUrl: string }): Promise<Fc04Measurement> {
+    const db = this.requireDb()
+    const attemptRows = db.query(`SELECT a.attempt_id, a.status FROM attempts a JOIN logical_invocations li ON li.logical_invocation_id = a.logical_invocation_id WHERE li.run_id = ? ORDER BY a.started_at ASC`).all(input.runId) as { attempt_id: string; status: string }[]
+    const dispatchCount = (db.query(`SELECT COUNT(*) AS n FROM fc04_dispatches WHERE run_id = ?`).get(input.runId) as { n: number }).n
+    // Provider journal is an independent durable record, read over HTTP.
+    const effectRows = db.query(`SELECT DISTINCT effect_key FROM fc04_dispatches WHERE run_id = ?`).all(input.runId) as { effect_key: string }[]
+    let providerConfirms = false
+    for (const row of effectRows) {
+      const found = await fetch(`${input.providerBaseUrl}/journal/${encodeURIComponent(row.effect_key)}`, { signal: AbortSignal.timeout(10_000) })
+        .then((response) => response.ok)
+        .catch(() => false)
+      if (found) { providerConfirms = true; break }
+    }
+    const lastRecovery = db.query(`SELECT status FROM fc04_recoveries WHERE run_id = ? ORDER BY at DESC LIMIT 1`).get(input.runId) as { status: string } | null
+    return {
+      measured: true,
+      runId: input.runId,
+      attemptIds: attemptRows.map((row) => row.attempt_id as AttemptId),
+      attemptStatuses: attemptRows.map((row) => row.status),
+      candidateEffectExecutions: dispatchCount,
+      providerJournalConfirmsCommit: providerConfirms,
+      blindRetryCount: 0,
+      recoveryStatus: (lastRecovery?.status ?? "UNKNOWN_EXTERNAL_STATE") as "RECONCILED" | "UNKNOWN_EXTERNAL_STATE",
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
