@@ -16,6 +16,8 @@
 
 import { P3_CAPABILITIES, type P3Capability } from "@unifia/contracts"
 import type { WorkflowDefinition, WorkflowStep } from "@unifia/workflow-runtime"
+export * from "./loader.ts"
+export * from "./validator.ts"
 
 export type SandboxRequirement = "none" | "native-restricted" | "docker" | "wsl2" | "lima"
 export type ApprovalRequirement = "none" | "required"
