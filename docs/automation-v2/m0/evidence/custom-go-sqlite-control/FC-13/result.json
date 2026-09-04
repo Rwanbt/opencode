@@ -9,7 +9,7 @@
     "nextActionOwner": "Erwan (env admin) OR a future VM-equipped agent session"
   },
   "note": "BLOCKED (NO_METHODOLOGY): FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env.",
-  "qualificationGenerationId": "gen-1788531878141-uszz4f",
+  "qualificationGenerationId": "gen-1788533689509-pmbqbb",
   "candidate": "CUSTOM_GO_SQLITE_CONTROL",
   "testId": "FC-13",
   "evidenceFreshness": "CURRENT",

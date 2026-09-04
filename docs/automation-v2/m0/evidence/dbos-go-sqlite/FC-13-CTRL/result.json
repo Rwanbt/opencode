@@ -8,7 +8,7 @@
     "nextActionOwner": "Erwan (env admin) OR a future VM-equipped agent session"
   },
   "note": "BLOCKED (NO_METHODOLOGY): No power-loss / fault-injection layer available in this harness host. Validated options that are NOT available: (1) VM with virtual disk + abrupt ACPI off, (2) `scsi_debug` / `fault-inject` / `fltmc`, (3) `dm-thin` suspend/resume, (4) block-device fault layer. `kill -9` and `process.kill()` are NOT acceptable — they prove process crash, not power-loss. To unblock: provision a disposable VM with virtual disk + scripted power-cycle, or a fault-injection layer; produce scripts + docs; rerun FC-13-CTRL.",
-  "qualificationGenerationId": "gen-1788531878141-uszz4f",
+  "qualificationGenerationId": "gen-1788533689509-pmbqbb",
   "candidate": "DBOS_GO_SQLITE",
   "testId": "FC-13-CTRL",
   "evidenceFreshness": "CURRENT",

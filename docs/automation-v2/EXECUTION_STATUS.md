@@ -24,6 +24,10 @@
   surface Design.
 - Aucun push : la branche locale reste séparée du remote et ce lot n'est pas
   publié.
+- Le runner de certification du 2026-09-04 a régénéré les 29 artefacts M0
+  avec une génération courante : `16 GREEN`, `3 RED`, `1 NA` et `6 OTHER`;
+  les 5 blockers restent ADR-000, e2e Automate, protection GitHub, et les
+  gates physiques/externes déjà identifiés.
 
 Le plan autonome reste actif. Depuis le checkpoint précédent, les actions
 suivantes sont validées localement :
