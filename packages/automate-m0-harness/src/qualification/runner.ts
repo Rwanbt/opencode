@@ -1030,6 +1030,10 @@ private async runFC32(info: CandidateInfo): Promise<void> {
         finalStateCanonical,
         completedEffectNotReexecuted,
       }
+      // Publication gate fields (result.ts assertFCPassGate): derived
+      // from the measured journals, not asserted as flags.
+      const controlledNondeterminism = observedInitialMatches
+      const crashRecovery = distinctAttempts && replayedCapture
       const failed = Object.entries(invariants).filter(([, ok]) => !ok).map(([name]) => name)
       const status: QualificationStatus = measurement.measured && failed.length === 0 ? "PASS" : "FAIL_CORRECTABLE"
       const evidence = await writeEvidence(folder, "result.json", {
@@ -1045,7 +1049,7 @@ private async runFC32(info: CandidateInfo): Promise<void> {
         status,
         evidencePath: evidence,
         note: `REQUIRES_DETERMINISTIC_ORCHESTRATION = ${classification} (measured=true). ${failed.length === 0 ? "All replay invariants satisfied" : `failed: ${failed.join(", ")}`}. AttemptIds ${measurement.attemptIds.join(" -> ")}, ambient reads/attempt ${measurement.ambientReadsPerAttempt.map((r) => `${r.attemptId}:${r.reads}`).join(", ")}, external effect executions ${measurement.externalEffectExecutions}.`,
-        observations: { measured: true, classification, invariants, failedInvariants: failed, rootWorkflowInvocations: measurement.rootWorkflowInvocations, stepBodyInvocations: measurement.stepBodyInvocations, stepReplays: measurement.stepReplays },
+        observations: { measured: true, classification, controlledNondeterminism, crashRecovery, invariants, failedInvariants: failed, rootWorkflowInvocations: measurement.rootWorkflowInvocations, stepBodyInvocations: measurement.stepBodyInvocations, stepReplays: measurement.stepReplays },
       })
     } catch (error) {
       const observations = {
