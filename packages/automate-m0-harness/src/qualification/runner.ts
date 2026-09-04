@@ -962,34 +962,103 @@ export class QualificationRunner {
   /* FC-32 : replay model declaration                                    */
   /* ------------------------------------------------------------------ */
 
-  private async runFC32(info: CandidateInfo): Promise<void> {
-    // Per pack gelé review 2026-09-03 v1.1 §13-§16: declaring a
-    // `replayModel` value is NOT a proof of FC-32. PASS requires a
-    // real T1/R1/O1 → crash → T2/R2/O2 controlled-recovery
-    // scenario where the harness observes what the candidate
-    // actually does. The M0 surface (startRun / driveAttempt)
-    // does not exercise a workflow function, so the replay model
-    // cannot be MEASURED here.
-    //
-    // The result is therefore NOT_VALID for both candidates until
-    // a real replay-scenario FC-32 is implemented (out of M0
-    // scope per the pack gelé).
+private async runFC32(info: CandidateInfo): Promise<void> {
+    // Frozen pack §44: drive the candidate's own orchestration through
+    // T1/R1/O1 -> partial checkpoint -> crash -> T2/R2/O2 recovery and
+    // MEASURE which observations re-run, which values replay, which
+    // control-flow decisions recompute, EffectKey stability, completed
+    // effect replay behavior, and the final canonical state. The
+    // classification REQUIRES_DETERMINISTIC_ORCHESTRATION = YES | NO |
+    // PARTIAL is computed from the journals (measured = true), never
+    // declared. PASS = measured + scenario completed with a canonical
+    // final state; the classification itself is an ADR-000 decision input
+    // and PASS criteria are identical for every candidate (§26).
     const folder = evidencePath(this.opts.outputRoot, info.kind, "FC-32")
-    {
-      const isChildProcess =
-        info.process.topology === "child-process" || info.process.topology === "sidecar" || info.process.topology === "remote"
+    const fc32 = this.adapter.fc32StartScenario?.bind(this.adapter)
+    if (!fc32 || !this.adapter.fc32RunAttempt || !this.adapter.fc32Measure || !this.adapter.fc32SetAmbient) {
       const observations = {
         measured: false,
-        reason: "FC-32 is NOT_VALID until a real T1/R1/O1 → crash → T2/R2/O2 replay scenario is implemented. The M0 surface (startRun + driveAttempt) does not exercise a workflow function through the candidate, so the harness cannot measure replay behavior. Declaring a replayModel value (NO / PARTIAL) is not admissible as PASS — see pack gelé §13: 'measured = false => status != PASS'.",
-        expectedFromUpstream: isChildProcess ? "YES (DBOS Conductor requires deterministic orchestration)" : "N/A",
-        requiredMethodology: "(1) Drive a workflow function in the candidate's host language/runtime that records T1, R1, O1 observations. (2) Crash the candidate's authority mid-workflow. (3) Reopen on the same durable store. (4) Observe which orchestration code re-runs, which observations are replayed, which EffectKeys remain identical, and which effects are re-issued. (5) Declare REQUIRES_DETERMINISTIC_ORCHESTRATION = YES | NO | PARTIAL with measured=true.",
+        reason: "The candidate does not expose the FC-32 replay-scenario capability, so its orchestration cannot be measured.",
+        requiredMethodology: "Implement fc32SetAmbient/fc32StartScenario/fc32RunAttempt/fc32Measure on the candidate: a step workflow whose bodies journal invocations, whose completed outputs replay, whose only ambient read is journaled, and whose external effect executes under a stable EffectKey.",
+        nextAction: "Implement the capability, then rerun qualification from a clean source commit.",
       }
       const evidence = await writeEvidence(folder, "result.json", observations)
       this.builder.record({
         testId: "FC-32",
         status: "NOT_VALID",
         evidencePath: evidence,
-        note: "FC-32 NOT_VALID: replay model is declared, not measured. The M0 surface does not drive a workflow function; the harness cannot observe what the candidate replays. To unblock: implement a controlled recovery scenario (T1/R1/O1 → crash → T2/R2/O2) that exercises the candidate's actual orchestration code. See observations.requiredMethodology.",
+        note: "FC-32 NOT_VALID: candidate does not expose the replay-scenario capability.",
+        observations,
+      })
+      return
+    }
+
+    // Harness-controlled ambient values (frozen pack §44): T = time,
+    // R = random, O = ordering. Recovery ambient values all differ.
+    const ambientInitial = { t: "2026-09-04T10:00:00.000Z", r: "alpha-4711", o: "ord-001" }
+    const ambientAfterCrash = { t: "2026-09-04T10:05:00.000Z", r: "beta-8263", o: "ord-002" }
+    try {
+      const started = await fc32({ workflowVersionId: "wf-fc32" as WorkflowVersionId, ambient: ambientInitial })
+      const attempt1 = await this.adapter.fc32RunAttempt!(started.runId, "crash-before-effect-commit")
+      await this.adapter.forceProcessCrash()
+      await this.adapter.reopen()
+      await this.adapter.fc32SetAmbient!(started.runId, ambientAfterCrash)
+      const attempt2 = await this.adapter.fc32RunAttempt!(started.runId, "complete")
+      const measurement = await this.adapter.fc32Measure!(started.runId, { initial: ambientInitial, afterCrash: ambientAfterCrash })
+
+      // Shared semantic oracle over the measured journals.
+      const replayedCapture = (measurement.stepReplays["capture-ambient"] ?? 0) >= 1
+      const replayedDerive = (measurement.stepReplays["derive-effect-key"] ?? 0) >= 1
+      const neverReReadAmbient = measurement.ambientObservedAfterCrash === null
+      const observedInitialMatches = measurement.ambientObservedInitial.t === ambientInitial.t && measurement.ambientObservedInitial.r === ambientInitial.r && measurement.ambientObservedInitial.o === ambientInitial.o
+      const stableKey = measurement.effectKeysObserved.length === 1 && measurement.effectKeysObserved[0]!.includes(ambientInitial.r) && !measurement.effectKeysObserved[0]!.includes(ambientAfterCrash.r)
+      const distinctAttempts = new Set(measurement.attemptIds).size >= 2 && attempt1.attemptId !== attempt2.attemptId
+      const finalState = (measurement.finalMaterializedState ?? {}) as { t?: string; r?: string; o?: string; effectKey?: string }
+      const finalStateCanonical = finalState.t === ambientInitial.t && finalState.r === ambientInitial.r && finalState.o === ambientInitial.o && finalState.effectKey === measurement.effectKeysObserved[0]
+      const completedEffectNotReexecuted = measurement.externalEffectExecutions === 1
+
+      const replaySignals = [replayedCapture, replayedDerive, stableKey].filter(Boolean).length
+      const deterministic = neverReReadAmbient && replayedCapture && replayedDerive && stableKey && finalStateCanonical
+      const classification: "YES" | "NO" | "PARTIAL" = deterministic ? "YES" : replaySignals === 0 ? "NO" : "PARTIAL"
+      const invariants = {
+        replayedCapture,
+        replayedDerive,
+        neverReReadAmbient,
+        observedInitialMatches,
+        stableKey,
+        distinctAttempts,
+        finalStateCanonical,
+        completedEffectNotReexecuted,
+      }
+      const failed = Object.entries(invariants).filter(([, ok]) => !ok).map(([name]) => name)
+      const status: QualificationStatus = measurement.measured && failed.length === 0 ? "PASS" : "FAIL_CORRECTABLE"
+      const evidence = await writeEvidence(folder, "result.json", {
+        measured: true,
+        classification,
+        invariants,
+        failedInvariants: failed,
+        ambientIntent: { initial: ambientInitial, afterCrash: ambientAfterCrash },
+        measurement,
+      })
+      this.builder.record({
+        testId: "FC-32",
+        status,
+        evidencePath: evidence,
+        note: `REQUIRES_DETERMINISTIC_ORCHESTRATION = ${classification} (measured=true). ${failed.length === 0 ? "All replay invariants satisfied" : `failed: ${failed.join(", ")}`}. AttemptIds ${measurement.attemptIds.join(" -> ")}, ambient reads/attempt ${measurement.ambientReadsPerAttempt.map((r) => `${r.attemptId}:${r.reads}`).join(", ")}, external effect executions ${measurement.externalEffectExecutions}.`,
+        observations: { measured: true, classification, invariants, failedInvariants: failed, rootWorkflowInvocations: measurement.rootWorkflowInvocations, stepBodyInvocations: measurement.stepBodyInvocations, stepReplays: measurement.stepReplays },
+      })
+    } catch (error) {
+      const observations = {
+        measured: false,
+        reason: `FC-32 scenario execution failed: ${String(error)}`,
+        requiredMethodology: "See frozen pack §44; the scenario must complete a full crash-recovery cycle before classification.",
+      }
+      const evidence = await writeEvidence(folder, "result.json", observations)
+      this.builder.record({
+        testId: "FC-32",
+        status: "FAIL_CORRECTABLE",
+        evidencePath: evidence,
+        note: "FC-32 FAIL_CORRECTABLE: the replay scenario could not complete; see observations.",
         observations,
       })
     }

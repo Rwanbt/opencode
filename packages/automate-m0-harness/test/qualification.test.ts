@@ -336,10 +336,14 @@ describe("M0 qualification — CUSTOM_GO_SQLITE_CONTROL (real binary)", () => {
 
 describe("M0 qualification — common harness invariants", () => {
   test("both candidates expose the same contract surface", () => {
+    // Optional measurement capabilities (canonizeViaHost for FC-31B,
+    // fc32* for FC-32) are declared optional on the qualification contract;
+    // surface parity applies to the mandatory oracle surface.
+    const isOptionalCapability = (n: string) => n === "canonizeViaHost" || n.startsWith("fc32")
     const nativeMethods = Object.getOwnPropertyNames(NativeSqliteCandidate.prototype)
-      .filter((n) => n !== "constructor" && !n.startsWith("_") && n !== "requireDb" && n !== "destroy" && n !== "appendApprovalHistory")
+      .filter((n) => n !== "constructor" && !n.startsWith("_") && n !== "requireDb" && n !== "destroy" && n !== "appendApprovalHistory" && !isOptionalCapability(n))
     const dbosMethods = Object.getOwnPropertyNames(DBOSGoCandidate.prototype)
-      .filter((n) => n !== "constructor" && !n.startsWith("_") && n !== "requireBase" && n !== "appendApprovalHistory")
+      .filter((n) => n !== "constructor" && !n.startsWith("_") && n !== "requireBase" && n !== "appendApprovalHistory" && !isOptionalCapability(n))
     expect(nativeMethods.sort()).toEqual(dbosMethods.sort())
   })
 

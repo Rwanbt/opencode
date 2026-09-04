@@ -102,6 +102,10 @@ import type {
   ClaimAuthorityInput,
   ClaimAuthorityResult,
   ZombieFC25Result,
+  Fc32Ambient,
+  Fc32ScenarioStart,
+  Fc32AttemptOutcome,
+  Fc32ScenarioMeasurement,
 } from "../contract.ts"
 import { FakeExternalEffectProvider } from "../providers/fake-external.ts"
 
@@ -240,7 +244,54 @@ CREATE TABLE IF NOT EXISTS timers (
   state TEXT NOT NULL,
   fired_at INTEGER
 );
-CREATE TABLE IF NOT EXISTS backup_history (
+CREATE TABLE IF NOT EXISTS fc32_ambient (
+  run_id TEXT PRIMARY KEY,
+  t_value TEXT NOT NULL,
+  r_value TEXT NOT NULL,
+  o_value TEXT NOT NULL,
+  set_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fc32_ambient_reads (
+  run_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  read_seq INTEGER NOT NULL,
+  t_value TEXT NOT NULL,
+  r_value TEXT NOT NULL,
+  o_value TEXT NOT NULL,
+  read_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, read_seq)
+);
+CREATE TABLE IF NOT EXISTS fc32_root_invocations (
+  run_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  invocation_seq INTEGER NOT NULL,
+  invoked_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, invocation_seq)
+);
+CREATE TABLE IF NOT EXISTS fc32_step_events (
+  run_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  step_name TEXT NOT NULL,
+  event_seq INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('BODY','REPLAY')),
+  invoked_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, step_name, event_seq)
+);
+CREATE TABLE IF NOT EXISTS fc32_step_outputs (
+  run_id TEXT NOT NULL,
+  step_name TEXT NOT NULL,
+  output_json TEXT NOT NULL,
+  completed_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, step_name)
+);
+CREATE TABLE IF NOT EXISTS fc32_effect_executions (
+  run_id TEXT NOT NULL,
+  effect_key TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  execution_seq INTEGER NOT NULL,
+  executed_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, effect_key, execution_seq)
+);CREATE TABLE IF NOT EXISTS backup_history (
   handle TEXT PRIMARY KEY,
   size_bytes INTEGER NOT NULL,
   taken_at INTEGER NOT NULL,
@@ -1021,6 +1072,169 @@ export class NativeSqliteCandidate implements DurableWorkflowAuthorityQualificat
   async runZombieFC25Scenario(): Promise<ZombieFC25Result> {
     return await runZombieFC25Native(this.storeDir)
   }
+
+/* ------------------------------------------------------------------ */
+  /* FC-32 — deterministic-replay orchestration (frozen pack §44)        */
+  /*                                                                     */
+  /* The candidate's own orchestration code: a step runner whose         */
+  /* completed outputs replay from durable state and whose step bodies   */
+  /* only execute when no durable output exists. Ambient values (T/R/O)  */
+  /* are read exclusively through the capture step — after that they are */
+  /* recorded facts, not re-sampled inputs.                              */
+  /* ------------------------------------------------------------------ */
+
+  async fc32SetAmbient(runId: WorkflowRunId, ambient: Fc32Ambient): Promise<void> {
+    const db = this.requireDb()
+    db.run(
+      `INSERT INTO fc32_ambient (run_id, t_value, r_value, o_value, set_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET t_value = excluded.t_value, r_value = excluded.r_value, o_value = excluded.o_value, set_at = excluded.set_at`,
+      [runId, ambient.t, ambient.r, ambient.o, Date.now()],
+    )
+  }
+
+  async fc32StartScenario(input: { workflowVersionId: WorkflowVersionId; ambient: Fc32Ambient }): Promise<Fc32ScenarioStart> {
+    const runId = await this.startRun({
+      workflowVersionId: input.workflowVersionId,
+      ownerScope: { organizationId: "o1", workspaceId: "ws-fc32" },
+      initialLogicalInvocation: {
+        logicalInvocationId: `li-fc32-${Date.now()}` as LogicalInvocationId,
+        effectKey: "ek-fc32-root",
+        canonicalInput: { scenario: "fc32-replay" },
+      },
+      seedCanonicalValue: { scenario: "fc32-replay" },
+    })
+    await this.fc32SetAmbient(runId, input.ambient)
+    const db = this.requireDb()
+    const li = db.query(`SELECT logical_invocation_id FROM logical_invocations WHERE run_id = ?`).get(runId) as { logical_invocation_id: string }
+    return { runId, logicalInvocationId: li.logical_invocation_id as LogicalInvocationId, attemptId: "pending" as AttemptId }
+  }
+
+  async fc32RunAttempt(runId: WorkflowRunId, mode: "crash-before-effect-commit" | "complete"): Promise<Fc32AttemptOutcome> {
+    const db = this.requireDb()
+    const li = db.query(`SELECT logical_invocation_id FROM logical_invocations WHERE run_id = ?`).get(runId) as { logical_invocation_id: string } | null
+    if (!li) throw new Error(`fc32 run ${runId} not found`)
+    const logicalInvocationId = li.logical_invocation_id as LogicalInvocationId
+    // Durable attempt identity through the same allocator the M0 surface uses.
+    const inv = db.query(`SELECT next_attempt_n, current_attempt_id FROM logical_invocations WHERE logical_invocation_id = ?`).get(logicalInvocationId) as { next_attempt_n: number; current_attempt_id: string | null }
+    const attemptN = inv.next_attempt_n + 1
+    const attemptId = `att-fc32-${runId}-${attemptN}` as AttemptId
+    db.run(`UPDATE logical_invocations SET current_attempt_id = ?, next_attempt_n = ? WHERE logical_invocation_id = ?`, [attemptId, attemptN, logicalInvocationId])
+    db.run(`INSERT INTO attempts (attempt_id, logical_invocation_id, effect_id, started_at, completed_at, status, canonical_output_json) VALUES (?, ?, ?, ?, NULL, ?, NULL)`, [
+      attemptId,
+      logicalInvocationId,
+      `eff-fc32-${attemptN}`,
+      Date.now(),
+      "RUNNING",
+    ])
+
+    // Root workflow function invoked (journaled, not declared).
+    const rootSeq = ((db.query(`SELECT COUNT(*) AS n FROM fc32_root_invocations WHERE run_id = ?`).get(runId) as { n: number }).n) + 1
+    db.run(`INSERT INTO fc32_root_invocations (run_id, attempt_id, invocation_seq, invoked_at) VALUES (?, ?, ?, ?)`, [runId, attemptId, rootSeq, Date.now()])
+
+    // Step 1 — capture ambient T/R/O. The ONLY ambient read in the workflow.
+    const captured = this.fc32Step(db, runId, attemptId, "capture-ambient", () => {
+      const ambient = db.query(`SELECT t_value, r_value, o_value FROM fc32_ambient WHERE run_id = ?`).get(runId) as { t_value: string; r_value: string; o_value: string }
+      const readSeq = ((db.query(`SELECT COUNT(*) AS n FROM fc32_ambient_reads WHERE run_id = ?`).get(runId) as { n: number }).n) + 1
+      db.run(`INSERT INTO fc32_ambient_reads (run_id, attempt_id, read_seq, t_value, r_value, o_value, read_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, [runId, attemptId, readSeq, ambient.t_value, ambient.r_value, ambient.o_value, Date.now()])
+      return { t: ambient.t_value, r: ambient.r_value, o: ambient.o_value }
+    })
+
+    // Step 2 — derive the external EffectKey deterministically from the
+    // RECORDED capture output (never from ambient).
+    const derived = this.fc32Step(db, runId, attemptId, "derive-effect-key", () => {
+      return { effectKey: `ek-fc32-${captured.t}-${captured.r}-${captured.o}` }
+    })
+
+    // Step 3 — execute the external effect. In crash mode the effect hits
+    // the (journaled) external world but the step output is never committed:
+    // the attempt dies with the effect durably observed and the step incomplete.
+    let effectExecuted = false
+    let committedThrough = "derive-effect-key"
+    const effectAlreadyDone = ((db.query(`SELECT COUNT(*) AS n FROM fc32_effect_executions WHERE run_id = ? AND effect_key = ?`).get(runId, derived.effectKey) as { n: number }).n) > 0
+    this.fc32Step(db, runId, attemptId, "execute-effect", () => {
+      if (!effectAlreadyDone) {
+        const execSeq = ((db.query(`SELECT COUNT(*) AS n FROM fc32_effect_executions WHERE run_id = ?`).get(runId) as { n: number }).n) + 1
+        db.run(`INSERT INTO fc32_effect_executions (run_id, effect_key, attempt_id, execution_seq, executed_at) VALUES (?, ?, ?, ?, ?)`, [runId, derived.effectKey, attemptId, execSeq, Date.now()])
+      }
+      effectExecuted = true
+      return { executed: true, deduped: effectAlreadyDone }
+    }, mode === "crash-before-effect-commit" ? { executeBodyButDoNotCommit: true } : undefined)
+    if (mode === "crash-before-effect-commit") {
+      return { attemptId, committedThroughStep: committedThrough, effectExecuted }
+    }
+    committedThrough = "execute-effect"
+
+    // Step 4 — control-flow decision recomputed from RECORDED values only.
+    this.fc32Step(db, runId, attemptId, "decide-branch", () => {
+      return { branch: captured.r < "m" ? "LOW" : "HIGH" }
+    })
+
+    // Step 5 — materialize the final canonical state.
+    const final = this.fc32Step(db, runId, attemptId, "materialize", () => {
+      return { t: captured.t, r: captured.r, o: captured.o, effectKey: derived.effectKey, lineage: "attempt-1-capture" }
+    })
+    db.run(`UPDATE attempts SET status = ?, completed_at = ?, canonical_output_json = ? WHERE attempt_id = ?`, ["SUCCEEDED", Date.now(), JSON.stringify(final), attemptId])
+    db.run(`UPDATE logical_invocations SET terminal = 1 WHERE logical_invocation_id = ?`, [logicalInvocationId])
+    return { attemptId, committedThroughStep: committedThrough, effectExecuted }
+  }
+
+  /**
+   * One orchestration step. If a durable output exists the step REPLAYS
+   * (REPLAY event journaled, body not invoked). Otherwise the body runs
+   * (BODY event) and its output commits — unless the caller overrides the
+   * commit for the crash-mode boundary.
+   */
+  private fc32Step<T>(db: Database, runId: WorkflowRunId, attemptId: AttemptId, stepName: string, body: () => T, override?: { executeBodyButDoNotCommit: boolean }): T {
+    const existing = db.query(`SELECT output_json FROM fc32_step_outputs WHERE run_id = ? AND step_name = ?`).get(runId, stepName) as { output_json: string } | null
+    const eventSeq = ((db.query(`SELECT COUNT(*) AS n FROM fc32_step_events WHERE run_id = ? AND step_name = ?`).get(runId, stepName) as { n: number }).n) + 1
+    if (existing) {
+      db.run(`INSERT INTO fc32_step_events (run_id, attempt_id, step_name, event_seq, kind, invoked_at) VALUES (?, ?, ?, ?, ?, ?)`, [runId, attemptId, stepName, eventSeq, "REPLAY", Date.now()])
+      return JSON.parse(existing.output_json) as T
+    }
+    db.run(`INSERT INTO fc32_step_events (run_id, attempt_id, step_name, event_seq, kind, invoked_at) VALUES (?, ?, ?, ?, ?, ?)`, [runId, attemptId, stepName, eventSeq, "BODY", Date.now()])
+    const output = body()
+    if (!(override && override.executeBodyButDoNotCommit)) {
+      db.run(`INSERT INTO fc32_step_outputs (run_id, step_name, output_json, completed_at) VALUES (?, ?, ?, ?)`, [runId, stepName, JSON.stringify(output), Date.now()])
+    }
+    return output
+  }
+
+  async fc32Measure(runId: WorkflowRunId, ambientIntent: { readonly initial: Fc32Ambient; readonly afterCrash: Fc32Ambient }): Promise<Fc32ScenarioMeasurement> {
+    const db = this.requireDb()
+    const li = db.query(`SELECT logical_invocation_id FROM logical_invocations WHERE run_id = ?`).get(runId) as { logical_invocation_id: string }
+    const attempts = (db.query(`SELECT attempt_id FROM attempts WHERE logical_invocation_id = ? ORDER BY started_at ASC`).all(li.logical_invocation_id) as { attempt_id: string }[]).map((row) => row.attempt_id as AttemptId)
+    const roots = (db.query(`SELECT COUNT(*) AS n FROM fc32_root_invocations WHERE run_id = ?`).get(runId) as { n: number }).n
+    const stepEvents = db.query(`SELECT attempt_id, step_name, kind FROM fc32_step_events WHERE run_id = ? ORDER BY invoked_at ASC`).all(runId) as { attempt_id: string; step_name: string; kind: string }[]
+    const stepBodyInvocations: Record<string, number> = {}
+    const stepReplays: Record<string, number> = {}
+    for (const event of stepEvents) {
+      if (event.kind === "BODY") stepBodyInvocations[event.step_name] = (stepBodyInvocations[event.step_name] ?? 0) + 1
+      else stepReplays[event.step_name] = (stepReplays[event.step_name] ?? 0) + 1
+    }
+    const reads = db.query(`SELECT attempt_id, t_value, r_value, o_value FROM fc32_ambient_reads WHERE run_id = ? ORDER BY read_seq ASC`).all(runId) as { attempt_id: string; t_value: string; r_value: string; o_value: string }[]
+    const readsPerAttempt = new Map<string, number>()
+    for (const read of reads) readsPerAttempt.set(read.attempt_id, (readsPerAttempt.get(read.attempt_id) ?? 0) + 1)
+    const postCrashReads = reads.filter((read) => read.attempt_id !== attempts[0])
+    const effects = db.query(`SELECT effect_key FROM fc32_effect_executions WHERE run_id = ? ORDER BY execution_seq ASC`).all(runId) as { effect_key: string }[]
+    const materialize = db.query(`SELECT output_json FROM fc32_step_outputs WHERE run_id = ? AND step_name = ?`).get(runId, "materialize") as { output_json: string } | null
+    const capture = db.query(`SELECT output_json FROM fc32_step_outputs WHERE run_id = ? AND step_name = ?`).get(runId, "capture-ambient") as { output_json: string } | null
+    return {
+      measured: true,
+      runId,
+      logicalInvocationId: li.logical_invocation_id as LogicalInvocationId,
+      attemptIds: attempts,
+      ambientObservedInitial: capture ? (JSON.parse(capture.output_json) as Fc32Ambient) : ambientIntent.initial,
+      ambientObservedAfterCrash: postCrashReads.length > 0 ? { t: postCrashReads[0].t_value, r: postCrashReads[0].r_value, o: postCrashReads[0].o_value } : null,
+      ambientReadsPerAttempt: [...readsPerAttempt.entries()].map(([attemptId, count]) => ({ attemptId, reads: count })),
+      rootWorkflowInvocations: roots,
+      stepBodyInvocations,
+      stepReplays,
+      effectKeysObserved: [...new Set(effects.map((row) => row.effect_key))],
+      externalEffectExecutions: effects.length,
+      finalMaterializedState: materialize ? JSON.parse(materialize.output_json) : null,
+    }
+  }
+
 }
 
 /* ------------------------------------------------------------------ */
@@ -1299,6 +1513,7 @@ async function runZombieFC25Native(storeDir: string): Promise<ZombieFC25Result> 
       }
     }
   }
+
 }
 
 /** Convenience: re-export so adapter callers don't need a deep import. */

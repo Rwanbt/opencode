@@ -306,6 +306,47 @@ export interface HostAdapterFixture {
   readonly payload: unknown
 }
 
+/** Harness-controlled ambient nondeterminism source (frozen pack §44):
+ *  T = time, R = random, O = ordering. */
+export interface Fc32Ambient {
+  readonly t: string
+  readonly r: string
+  readonly o: string
+}
+
+/** Identity of the first (pre-crash) scenario attempt. */
+export interface Fc32ScenarioStart {
+  readonly runId: WorkflowRunId
+  readonly logicalInvocationId: LogicalInvocationId
+  readonly attemptId: AttemptId
+}
+
+/** Outcome of one orchestration attempt. */
+export interface Fc32AttemptOutcome {
+  readonly attemptId: AttemptId
+  readonly committedThroughStep: string
+  readonly effectExecuted: boolean
+}
+
+/** Measured FC-32 replay record — every number is read from the
+ *  candidate's durable journals, never declared (master plan §24). */
+export interface Fc32ScenarioMeasurement {
+  readonly measured: true
+  readonly runId: WorkflowRunId
+  readonly logicalInvocationId: LogicalInvocationId
+  readonly attemptIds: readonly AttemptId[]
+  /** What the capture step actually read on the first attempt. */
+  readonly ambientObservedInitial: Fc32Ambient
+  /** Non-null only if ANY ambient read happened after the crash. */
+  readonly ambientObservedAfterCrash: Fc32Ambient | null
+  readonly ambientReadsPerAttempt: readonly { readonly attemptId: string; readonly reads: number }[]
+  readonly rootWorkflowInvocations: number
+  readonly stepBodyInvocations: Readonly<Record<string, number>>
+  readonly stepReplays: Readonly<Record<string, number>>
+  readonly effectKeysObserved: readonly string[]
+  readonly externalEffectExecutions: number
+  readonly finalMaterializedState: unknown
+}
 /** Verdict emitted by the candidate's own host for one FC-31B fixture. */
 export interface HostAdapterVerdict {
   readonly outcome: "pass" | "reject"
@@ -442,6 +483,21 @@ export interface DurableWorkflowAuthorityQualificationAdapter {
    * NOT_VALID for that candidate.
    */
   canonizeViaHost?(fixture: HostAdapterFixture): Promise<HostAdapterVerdict>
+  /* -------------------------------------------------------------- */
+  /* FC-32 replay conformance scenario (optional capability)         */
+  /* -------------------------------------------------------------- */
+
+  /**
+   * FC-32 (frozen pack §44): the candidate's own orchestration executes a
+   * deterministic-replay step workflow against harness-controlled ambient
+   * values (T = time, R = random, O = ordering). The crash between
+   * attempts is the adapter's existing forceProcessCrash()/reopen()
+   * boundary. Absent => FC-32 stays NOT_VALID for that candidate.
+   */
+  fc32SetAmbient?(runId: WorkflowRunId, ambient: Fc32Ambient): Promise<void>
+  fc32StartScenario?(input: { workflowVersionId: WorkflowVersionId; ambient: Fc32Ambient }): Promise<Fc32ScenarioStart>
+  fc32RunAttempt?(runId: WorkflowRunId, mode: "crash-before-effect-commit" | "complete"): Promise<Fc32AttemptOutcome>
+  fc32Measure?(runId: WorkflowRunId, ambientIntent: { readonly initial: Fc32Ambient; readonly afterCrash: Fc32Ambient }): Promise<Fc32ScenarioMeasurement>
 
   /* -------------------------------------------------------------- */
   /* FC-14 / FC-25 substrate-neutral authority capabilities         */
