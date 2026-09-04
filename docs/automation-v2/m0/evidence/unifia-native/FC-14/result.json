@@ -2,42 +2,42 @@
   "measured": true,
   "concurrentRace": true,
   "distinctOsProcesses": 2,
-  "winnerProcessLocalOwnerId": "owner-B-1788536626371-zif9c9",
-  "loserProcessLocalOwnerId": "owner-A-1788536626371-g64l2f",
-  "currentPersistedAuthorityOwnerId": "owner-B-1788536626371-zif9c9",
-  "winnerOwnerId": "owner-B-1788536626371-zif9c9",
-  "loserOwnerId": "owner-B-1788536626371-zif9c9",
-  "winnerPid": 22960,
-  "loserPid": 23236,
+  "winnerProcessLocalOwnerId": "owner-B-1788542703308-chet8x",
+  "loserProcessLocalOwnerId": "owner-A-1788542703308-9tfjkk",
+  "currentPersistedAuthorityOwnerId": "owner-B-1788542703308-chet8x",
+  "winnerOwnerId": "owner-B-1788542703308-chet8x",
+  "loserOwnerId": "owner-B-1788542703308-chet8x",
+  "winnerPid": 27384,
+  "loserPid": 25760,
   "finalGeneration": 1,
   "winnerMutate": {
     "accepted": true,
     "generation": 1,
-    "authorityOwnerId": "owner-B-1788536626371-zif9c9"
+    "authorityOwnerId": "owner-B-1788542703308-chet8x"
   },
   "loserMutate": {
     "accepted": false,
     "reason": "STALE_AUTHORITY",
     "currentGeneration": 1,
-    "currentAuthorityOwnerId": "owner-B-1788536626371-zif9c9"
+    "currentAuthorityOwnerId": "owner-B-1788542703308-chet8x"
   },
   "winnerDispatch": {
     "accepted": true,
-    "effectKey": "ek-fc14-1788536626747",
+    "effectKey": "ek-fc14-1788542703669",
     "generation": 1,
-    "authorityOwnerId": "owner-B-1788536626371-zif9c9"
+    "authorityOwnerId": "owner-B-1788542703308-chet8x"
   },
   "loserDispatch": {
     "accepted": false,
     "reason": "STALE_AUTHORITY",
     "currentGeneration": 1,
-    "currentAuthorityOwnerId": "owner-B-1788536626371-zif9c9"
+    "currentAuthorityOwnerId": "owner-B-1788542703308-chet8x"
   },
   "winnerMutateAccepted": true,
   "loserMutateRejected": true,
   "winnerDispatchAccepted": true,
   "loserDispatchRejected": true,
-  "qualificationGenerationId": "gen-1788536625477-zmpn7p",
+  "qualificationGenerationId": "gen-1788542702417-rdbsqv",
   "candidate": "UNIFIA_NATIVE",
   "testId": "FC-14",
   "evidenceFreshness": "CURRENT",
