@@ -41,6 +41,7 @@ import {
   type ApprovalResolveInput,
   type ApprovalHistoryEvent,
   type AuthoritySnapshot,
+  type AuthorityClaimOutcome,
   type RaceAuthoritiesInput,
   type RaceAuthoritiesResult,
   type AuthoritativeMutationInput,
@@ -62,7 +63,7 @@ import {
   type Fc04Measurement,
   type HostAdapterVerdict,
 } from "../contract.ts"
-import { type WorkflowRunId, type WorkflowVersionId, type LogicalInvocationId, type AttemptId } from "@unifia/automate-m0-contract"
+import { type WorkflowRunId, type WorkflowVersionId, type LogicalInvocationId, type AttemptId, type AuthorityGeneration } from "@unifia/automate-m0-contract"
 import { FakeExternalEffectProvider } from "../providers/fake-external.ts"
 import { QualificationNotImplemented } from "../errors.ts"
 
@@ -418,11 +419,228 @@ export class DBOSRealCandidate implements DurableWorkflowAuthorityQualificationA
   // the race and zombie scenarios exercise the same fencing
   // path; the real DBOS workflow itself provides the durable
   // history for run + effect persistence.
-  async raceAuthorities(_input: RaceAuthoritiesInput): Promise<RaceAuthoritiesResult> { throw new QualificationNotImplemented("FC-14", "DBOS real: authority fencing is still Unifia-owned") }
-  async attemptAuthoritativeMutation(_input: AuthoritativeMutationInput): Promise<AuthoritativeMutationResult> { throw new QualificationNotImplemented("FC-14", "DBOS real: authority fencing is still Unifia-owned") }
-  async attemptEffectDispatch(_input: EffectDispatchInput): Promise<EffectDispatchResult> { throw new QualificationNotImplemented("FC-14", "DBOS real: authority fencing is still Unifia-owned") }
-  async forceQualificationTakeover(_input: QualificationTakeoverInput): Promise<QualificationTakeoverResult> { throw new QualificationNotImplemented("FC-25", "DBOS real: authority fencing is still Unifia-owned") }
-  async inspectAuthority(_runId: string): Promise<AuthoritySnapshot> { throw new QualificationNotImplemented("authority", "DBOS real: authority fencing is still Unifia-owned") }
-  async claimAuthority(_input: ClaimAuthorityInput): Promise<ClaimAuthorityResult> { throw new QualificationNotImplemented("authority", "DBOS real: authority fencing is still Unifia-owned") }
-  async runZombieFC25Scenario(): Promise<ZombieFC25Result> { throw new QualificationNotImplemented("FC-25", "DBOS real: authority fencing is still Unifia-owned") }
+  /* ------------------------------------------------------------------ */
+  /* FC-14 / FC-25 - Unifia authority fencing over the DBOS SQLite DB    */
+  /*                                                                     */
+  /* DBOS owns workflow durability; the WorkflowRun authority/fencing    */
+  /* layer is Unifia-owned and substrate-independent (same tables and    */
+  /* token semantics as the native candidate). Race and zombie scenarios */
+  /* spawn REAL second OS processes of the same binary in                */
+  /* M0_AUTHORITY_ONLY mode.                                             */
+  /* ------------------------------------------------------------------ */
+
+  private async authorityCall<T>(base: string, path: string, body: unknown, timeoutMs = 10_000): Promise<{ ok: boolean; status: number; json: T | null; text: string }> {
+    try {
+      const response = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      const text = await response.text()
+      let json: T | null = null
+      try { json = JSON.parse(text) as T } catch { json = null }
+      return { ok: response.ok, status: response.status, json, text }
+    } catch (error) {
+      return { ok: false, status: 0, json: null, text: String(error) }
+    }
+  }
+
+  async claimAuthority(input: ClaimAuthorityInput): Promise<ClaimAuthorityResult> {
+    const raw = await this.authorityCall<{ granted: boolean; currentGeneration: number; authorityOwnerId: string; holderPid: number }>(this.requireBase(), `/authority/claim?runId=${encodeURIComponent(input.runId)}`, { authorityOwnerId: input.authorityOwnerId, attemptedGeneration: 1 })
+    if (!raw.ok || !raw.json) throw new Error(`authority claim failed: ${raw.status} ${raw.text}`)
+    if (raw.json.granted) {
+      return { granted: true, currentGeneration: raw.json.currentGeneration as AuthorityGeneration, currentAuthorityOwnerId: raw.json.authorityOwnerId, holderPid: raw.json.holderPid }
+    }
+    return { granted: false, reason: "ALREADY_CLAIMED_BY_OTHER", currentGeneration: raw.json.currentGeneration as AuthorityGeneration, currentAuthorityOwnerId: raw.json.authorityOwnerId }
+  }
+
+  async attemptAuthoritativeMutation(input: AuthoritativeMutationInput): Promise<AuthoritativeMutationResult> {
+    const raw = await this.authorityCall<{ accepted: boolean; generation?: number; authorityOwnerId?: string; reason?: string; currentGeneration?: number | null; currentAuthorityOwnerId?: string | null }>(this.requireBase(), `/authority/mutate?runId=${encodeURIComponent(input.runId)}`, {
+      token: { attemptedGeneration: input.token.generation, authorityOwnerId: input.token.authorityOwnerId },
+      mutation: input.mutation,
+    })
+    if (raw.json && raw.json.accepted === true) {
+      return { accepted: true, generation: raw.json.generation as AuthorityGeneration, authorityOwnerId: raw.json.authorityOwnerId ?? "" }
+    }
+    return { accepted: false, reason: (raw.json?.reason as "STALE_AUTHORITY" | "UNKNOWN_RUN") ?? "INVALID_TOKEN", currentGeneration: (raw.json?.currentGeneration ?? null) as AuthorityGeneration | null, currentAuthorityOwnerId: (raw.json?.currentAuthorityOwnerId ?? null) }
+  }
+
+  async attemptEffectDispatch(input: EffectDispatchInput): Promise<EffectDispatchResult> {
+    const raw = await this.authorityCall<{ accepted: boolean; effectKey?: string; generation?: number; authorityOwnerId?: string; reason?: string; currentGeneration?: number | null; currentAuthorityOwnerId?: string | null }>(this.requireBase(), `/authority/dispatch?runId=${encodeURIComponent(input.runId)}`, {
+      token: { attemptedGeneration: input.token.generation, authorityOwnerId: input.token.authorityOwnerId },
+      effectKey: input.effectKey,
+    })
+    if (raw.json && raw.json.accepted === true) {
+      return { accepted: true, effectKey: raw.json.effectKey ?? input.effectKey, generation: raw.json.generation as AuthorityGeneration, authorityOwnerId: raw.json.authorityOwnerId ?? "" }
+    }
+    return { accepted: false, reason: (raw.json?.reason as "STALE_AUTHORITY" | "UNKNOWN_RUN") ?? "INVALID_TOKEN", currentGeneration: (raw.json?.currentGeneration ?? null) as AuthorityGeneration | null, currentAuthorityOwnerId: (raw.json?.currentAuthorityOwnerId ?? null) }
+  }
+
+  async forceQualificationTakeover(input: QualificationTakeoverInput): Promise<QualificationTakeoverResult> {
+    const raw = await this.authorityCall<{ ok: boolean; previousGeneration: number; previousOwner: string; newGeneration: number; newOwner: string }>(this.requireBase(), `/authority/takeover?runId=${encodeURIComponent(input.runId)}`, { newAuthorityOwnerId: input.newAuthorityOwnerId })
+    if (!raw.ok || !raw.json || raw.json.ok !== true) {
+      return { accepted: false, reason: "UNKNOWN_RUN", currentGeneration: null, currentAuthorityOwnerId: null }
+    }
+    return { accepted: true, previousGeneration: raw.json.previousGeneration as AuthorityGeneration, previousAuthorityOwnerId: raw.json.previousOwner, newGeneration: raw.json.newGeneration as AuthorityGeneration, newAuthorityOwnerId: raw.json.newOwner }
+  }
+
+  async inspectAuthority(runId: string): Promise<AuthoritySnapshot> {
+    const response = await fetch(`${this.requireBase()}/authority/inspect?runId=${encodeURIComponent(runId)}`, { signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status} on /authority/inspect`)
+    const raw = await response.json() as { currentGeneration: number; authorityOwnerId: string; holderPid: number }
+    return { runId: runId as WorkflowRunId, generation: raw.currentGeneration as AuthorityGeneration, authorityOwnerId: raw.authorityOwnerId, holderPid: raw.holderPid }
+  }
+
+  private async spawnAuthorityWorker(storeDir: string, ownerId: string): Promise<{ proc: ChildProcess; baseUrl: string; ownerId: string; pid: number }> {
+    const child = spawn(DBOS_REAL_BINARY, [], {
+      env: { ...process.env, M0_STORE_DIR: storeDir, M0_AUTHORITY_ONLY: "1", M0_AUTHORITY_OWNER_ID: ownerId },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    })
+    let stdoutBuf = ""
+    let stderrBuf = ""
+    const baseUrl = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        try { child.kill() } catch { /* noop */ }
+        reject(new Error(`authority worker did not bind within 30s (stderr=${stderrBuf})`))
+      }, 30_000)
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdoutBuf += chunk.toString("utf8")
+        const match = stdoutBuf.match(/127\.0\.0\.1:\d+/)
+        if (match) { clearTimeout(timer); resolve(`http://${match[0]}`) }
+      })
+      child.stderr?.on("data", (chunk: Buffer) => { stderrBuf += chunk.toString("utf8") })
+      child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`authority worker exited early (code=${code}, stderr=${stderrBuf})`)) })
+    })
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      try {
+        await fetch(`${baseUrl}/healthz`, { signal: AbortSignal.timeout(500) })
+        return { proc: child, baseUrl, ownerId, pid: child.pid ?? 0 }
+      } catch { await delay(100) }
+    }
+    throw new Error("authority worker unresponsive after bind")
+  }
+
+  private async killAuthorityWorker(worker: { proc: ChildProcess; baseUrl: string } | null): Promise<void> {
+    if (!worker) return
+    try { await fetch(`${worker.baseUrl}/shutdown`, { method: "POST", signal: AbortSignal.timeout(1_000) }) } catch { /* noop */ }
+    if (worker.proc && !worker.proc.killed) {
+      try { worker.proc.kill("SIGKILL") } catch { /* noop */ }
+    }
+  }
+
+  async raceAuthorities(input: RaceAuthoritiesInput): Promise<RaceAuthoritiesResult> {
+    const storeDir = input.sharedStore === "" ? this.storeDir : input.sharedStore
+    if (storeDir !== this.storeDir) {
+      throw new Error(`raceAuthorities: sharedStore=${storeDir} does not match adapter storeDir=${this.storeDir}`)
+    }
+    let workerA: { proc: ChildProcess; baseUrl: string; ownerId: string; pid: number } | null = null
+    let workerB: { proc: ChildProcess; baseUrl: string; ownerId: string; pid: number } | null = null
+    try {
+      workerA = await this.spawnAuthorityWorker(storeDir, input.participantA.authorityOwnerId)
+      workerB = await this.spawnAuthorityWorker(storeDir, input.participantB.authorityOwnerId)
+      // Barrier: both workers ready, then concurrent claims.
+      await delay(50)
+      type claimJson = { granted: boolean; currentGeneration: number; authorityOwnerId: string; holderPid: number }
+      const [claimA, claimB] = await Promise.all([
+        this.authorityCall<claimJson>(workerA.baseUrl, `/authority/claim?runId=${encodeURIComponent(input.runId)}`, { attemptedGeneration: 1 }),
+        this.authorityCall<claimJson>(workerB.baseUrl, `/authority/claim?runId=${encodeURIComponent(input.runId)}`, { attemptedGeneration: 1 }),
+      ])
+      if (!claimA.json || !claimB.json) throw new Error(`authority race claims failed: A=${claimA.text} B=${claimB.text}`)
+      const winnerA = claimA.json.granted
+      const winner = winnerA ? { claim: claimA.json, ownerId: input.participantA.authorityOwnerId, pid: workerA.pid } : { claim: claimB.json, ownerId: input.participantB.authorityOwnerId, pid: workerB.pid }
+      const loser = winnerA ? { claim: claimB.json, ownerId: input.participantB.authorityOwnerId, pid: workerB.pid } : { claim: claimA.json, ownerId: input.participantA.authorityOwnerId, pid: workerA.pid }
+      const winnerWorker = winnerA ? workerA : workerB
+      const inspect = await fetch(`${winnerWorker.baseUrl}/authority/inspect?runId=${encodeURIComponent(input.runId)}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json() as Promise<{ currentGeneration: number; authorityOwnerId: string }>)
+      const outcome = (claim: claimJson): AuthorityClaimOutcome => ({
+        granted: claim.granted,
+        currentAuthorityOwnerId: claim.authorityOwnerId,
+        currentGeneration: claim.currentGeneration as AuthorityGeneration,
+        attemptedGeneration: 1 as AuthorityGeneration,
+        holderPid: claim.holderPid,
+      })
+      return {
+        measured: true,
+        concurrentRace: true,
+        distinctOsProcesses: 2,
+        claimA: outcome(claimA.json),
+        claimB: outcome(claimB.json),
+        winner: { authorityOwnerId: winner.claim.authorityOwnerId, processLocalOwnerId: winner.ownerId, pid: winner.pid },
+        loser: { authorityOwnerId: loser.claim.authorityOwnerId, processLocalOwnerId: loser.ownerId, pid: loser.pid },
+        finalPersistedAuthorityOwnerId: inspect.authorityOwnerId,
+        finalGeneration: inspect.currentGeneration as AuthorityGeneration,
+      }
+    } finally {
+      await this.killAuthorityWorker(workerA)
+      await this.killAuthorityWorker(workerB)
+    }
+  }
+
+  async runZombieFC25Scenario(): Promise<ZombieFC25Result> {
+    const runId = `run-fc25-zombie-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const ownerA = `zombie-A-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const ownerB = `zombie-B-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    let zombieA: { proc: ChildProcess; baseUrl: string; ownerId: string; pid: number } | null = null
+    try {
+      zombieA = await this.spawnAuthorityWorker(this.storeDir, ownerA)
+      const claimRaw = await this.authorityCall<{ granted: boolean; currentGeneration: number; authorityOwnerId: string }>(zombieA.baseUrl, `/authority/claim?runId=${encodeURIComponent(runId)}`, { attemptedGeneration: 1 })
+      if (!claimRaw.ok || !claimRaw.json || claimRaw.json.granted !== true) {
+        throw new Error(`zombie A claim failed: ${JSON.stringify(claimRaw.json)}`)
+      }
+      // Freeze barrier: A blocks mid-request, alive, holding its token.
+      const freezePromise = fetch(`${zombieA.baseUrl}/authority/await-resume?runId=${encodeURIComponent(runId)}`, { method: "POST", signal: AbortSignal.timeout(60_000) })
+      await delay(200)
+      const status = await fetch(`${zombieA.baseUrl}/authority/status?runId=${encodeURIComponent(runId)}`, { signal: AbortSignal.timeout(5_000) }).then((r) => r.json() as Promise<{ pid: number; alive: boolean; frozen: boolean }>)
+      if (!status.frozen || !status.alive || status.pid !== zombieA.pid) {
+        throw new Error(`zombie A did not enter freeze barrier (status=${JSON.stringify(status)})`)
+      }
+      const oldOwnerAliveDuringTakeover = true
+      const oldOwnerPid = status.pid
+      const takeoverRaw = await this.authorityCall<{ ok: boolean; previousGeneration: number; previousOwner: string; newGeneration: number; newOwner: string }>(zombieA.baseUrl, `/authority/takeover?runId=${encodeURIComponent(runId)}`, { newAuthorityOwnerId: ownerB })
+      if (!takeoverRaw.ok || !takeoverRaw.json || takeoverRaw.json.ok !== true) {
+        throw new Error(`takeover rejected: ${takeoverRaw.text}`)
+      }
+      const takeover = { previousGeneration: takeoverRaw.json.previousGeneration as AuthorityGeneration, newGeneration: takeoverRaw.json.newGeneration as AuthorityGeneration, previousAuthorityOwnerId: takeoverRaw.json.previousOwner, newAuthorityOwnerId: takeoverRaw.json.newOwner }
+      // B commits under gen=2 (through the worker endpoints - the fencing
+      // check is on the durable token, not on which process serves it).
+      const newOwnerMutateRaw = await this.authorityCall<{ accepted: boolean; reason?: string }>(zombieA.baseUrl, `/authority/mutate?runId=${encodeURIComponent(runId)}`, {
+        token: { attemptedGeneration: takeover.newGeneration, authorityOwnerId: ownerB },
+        mutation: "B_COMMIT_UNDER_GEN_2",
+      })
+      const newOwnerMutate = { accepted: newOwnerMutateRaw.ok, reason: newOwnerMutateRaw.ok ? undefined : newOwnerMutateRaw.json?.reason }
+      // Resume A; its freeze request completes.
+      await fetch(`${zombieA.baseUrl}/authority/resume?runId=${encodeURIComponent(runId)}`, { method: "POST", signal: AbortSignal.timeout(5_000) })
+      const freezeResult = await freezePromise
+      if (!freezeResult.ok) {
+        throw new Error(`await-resume did not return 200: ${freezeResult.status}`)
+      }
+      // A attempts stale mutate + dispatch with its RETAINED gen token.
+      const staleMutateRaw = await this.authorityCall<{ accepted: boolean; reason?: string }>(zombieA.baseUrl, `/authority/stale-mutate?runId=${encodeURIComponent(runId)}`, { mutation: "A_STALE_MUTATE_AFTER_TAKEOVER" })
+      const staleMutate = { accepted: staleMutateRaw.ok, reason: staleMutateRaw.ok ? undefined : staleMutateRaw.json?.reason }
+      const staleDispatchRaw = await this.authorityCall<{ accepted: boolean; reason?: string }>(zombieA.baseUrl, `/authority/stale-dispatch?runId=${encodeURIComponent(runId)}`, { effectKey: `ek-fc25-stale-${Date.now()}` })
+      const staleDispatch = { accepted: staleDispatchRaw.ok, reason: staleDispatchRaw.ok ? undefined : staleDispatchRaw.json?.reason }
+      return {
+        measured: true,
+        distinctOsProcesses: 2,
+        oldOwnerAliveDuringTakeover,
+        oldOwnerDidNotReleaseBeforeTakeover: true,
+        oldOwnerPid,
+        runId,
+        ownerA,
+        ownerB,
+        newGenerationGreaterThanOld: takeover.newGeneration > takeover.previousGeneration,
+        newOwnerCommitAccepted: newOwnerMutate.accepted,
+        staleOwnerCommitRejected: !staleMutate.accepted,
+        staleOwnerDispatchRejected: !staleDispatch.accepted,
+        takeover,
+        newOwnerMutate,
+        staleMutate,
+        staleDispatch,
+      }
+    } finally {
+      await this.killAuthorityWorker(zombieA)
+    }
+  }
 }

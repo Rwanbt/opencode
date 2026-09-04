@@ -312,6 +312,34 @@ func main() {
 		appName = APPNAME
 	}
 
+	// M0_AUTHORITY_ONLY=1: the second race/zombie participant is a real
+	// OS process of the same binary exercising the SAME SQLite authority
+	// tables. The DBOS workflow runtime is not needed for the fencing
+	// layer (Unifia owns authority; DBOS owns workflow durability).
+	if os.Getenv("M0_AUTHORITY_ONLY") == "1" {
+		db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=busy_timeout(5000)&_txlock=immediate")
+		if err != nil {
+			log.Fatalf("authority-only open: %v", err)
+		}
+		if err := db.Ping(); err != nil {
+			log.Fatalf("authority-only ping: %v", err)
+		}
+		authSrv := &server{sqlDBPath: dbPath, appName: appName + "-authority", liCache: map[string]liCacheEntry{}, rawSQL: db}
+		mux := http.NewServeMux()
+		if err := authSrv.registerAuthority(mux); err != nil {
+			log.Fatalf("authority register: %v", err)
+		}
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, _ *http.Request) { go func() { time.Sleep(100 * time.Millisecond); os.Exit(0) }(); w.WriteHeader(http.StatusOK) })
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			log.Fatalf("authority listen: %v", err)
+		}
+		fmt.Println(ln.Addr().String())
+		log.Printf("authority-only listening on http://%s", ln.Addr().String())
+		_ = http.Serve(ln, mux)
+		return
+	}
 	srv := &server{sqlDBPath: dbPath, appName: appName, liCache: make(map[string]liCacheEntry)}
 	if err := srv.start(); err != nil {
 		log.Fatalf("start: %v", err)
@@ -382,6 +410,9 @@ func (s *server) start() error {
 	mux.HandleFunc("/runs", s.handleStartRun)
 	mux.HandleFunc("/runs/", s.handleRunSubpath)
 	mux.HandleFunc("/attempts/next", s.handleNextAttempt)
+	if err := s.registerAuthority(mux); err != nil {
+		return fmt.Errorf("register authority: %w", err)
+	}
 	if err := s.registerFc32Fc04(mux); err != nil {
 		return fmt.Errorf("register fc32/fc04: %w", err)
 	}
