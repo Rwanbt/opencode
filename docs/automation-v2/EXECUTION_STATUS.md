@@ -3,9 +3,13 @@
 
 # EXECUTION STATUS — UNIFIA AUTOMATE
 
-> Statut : **PUSHED**
-> Phase : **M0-QUALIFICATION-PARTIAL-2026-09-03** (D-01 + D-02 + D-04 + D-05 workstreams ; M0 harness substrate-neutral implemente + UNIFIA_NATIVE P0 PASS ; DBOS_GO_SQLITE STUB execution ; M0 outputs obligatoires produits ; ADR-000 reconciliation + 51/51 reclassification ; D-02 V2 draft ; aucune regression). **UNIFIA_NATIVE M0 P0 results** : FC-31A PASS 21/21, FC-31B PASS 13/13, FC-04 PASS (UNKNOWN_EXTERNAL_STATE), FC-14 PASS (in-process), FC-25 BLOCKED, FC-32 PASS (replay=NO), FC-13/FC-13-CTRL NOT_VALID (no power-loss methodology). **DBOS_GO_SQLITE** : STUB execution, Go toolchain absent sur la machine hote. **M0 verdict** : NON CONCLUANT — full matrix FC-01..FC-30 non executee, DBOS Go NOT EXECUTED. ADR-000 reste `NOT_RATIFIED` (per pack gele). **32/32 ADR V2.3.1 ecrits** (30 DECIDED, 1 INFORMATIONAL, 1 CHANGES_REQUIRED ; 0007-approval-broker V2 = `READY_FOR_REVIEW` post 2026-09-03). **Tests V2 cumul** : 871 PASS (632 contracts + 39 workflow-runtime + 177 m0-contract + 20 m0-harness + 32 migration tool, 0 fail, +20 vs 851 = qualification 5 + scaffold 12 + ...). **Cert runner** : 15 GREEN, 3 RED, 1 NA, 7 OTHER, 5 BLOCKER (sur 25 gates). **125 commits sur origin/agent/automate-v2-baseline-20260901** le 2026-09-03. **M0 comparatif harness implemente** (FC-31A/B, FC-04, FC-14, FC-25 BLOCKED, FC-32). **M0 outputs** : BASELINE.md, NATIVE_TOPOLOGY.md, DBOS_ADAPTER.md, WINDOWS_PREFLIGHT.md, PACKAGING_RESULTS.md, EXIT_NATIVE.md, EXIT_DBOS_GO.md, DURABLE-SUBSTRATE-BENCHMARK.md, M0_BLOCKED.md, M0_RESULTS_UNIFIA_NATIVE.json, M0_EXPECTED_NA_UNIFIA_NATIVE.json, M0_EXPECTED_NA_DBOS_GO.json, evidence/{unifia-native,dbos-go}/. **D-02 Approval Broker V2** : 0007-approval-broker.md V2 draft READY_FOR_REVIEW (12 invariants obligatoires, 12 negative contract tests SCAFFOLD_READY). **D-04 Git topology** : Topologie A recommandee (`dev` comme integration, deja protegee), no remote mutation. **D-05 DK-01** : DEFER + 3 corrections ADR-032 documentees. **No regression** : 871 tests verts. **No false PASS** : FC-13 NOT_VALID documente. **M0 comparatif verdict = NON CONCLUANT**, A/B/C decision deferred jusqu'a full matrix + DBOS Go sur environnement Go-equipe.
-> Date : 2026-09-03
+> Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
+> Phase : **D-02 V4 OPEN + M0 QUALIFICATION OPEN**
+> HEAD local : `fc3cc9903f`; remote tracking ref : `173117f637`; branche locale en avance de 14 commits.
+> ADR-000 substrate final : `NOT_RATIFIED`; finalistes : `UNIFIA_NATIVE`, `DBOS_GO_SQLITE`.
+> D-02 V4 : façade injectée et testée (`7/7` V4, `46/46` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
+> Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
+> Date : 2026-09-04
 > Format imposé par le plan §246 lignes 6140-6170.
 
 ## CURRENT STATE — reconciled 2026-09-04
