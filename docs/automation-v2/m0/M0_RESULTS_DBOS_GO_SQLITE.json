@@ -4,7 +4,7 @@
   "candidateInfo": {
     "kind": "DBOS_GO_SQLITE",
     "version": "github.com/dbos-inc/dbos-transact-golang@v1.0.0 (real APIs on measured path)",
-    "buildHash": "qual-m0-cp6.3-1788554966393",
+    "buildHash": "qual-m0-cp6.3-1788557008820",
     "storage": {
       "engine": "DBOS SQLite system DB (modernc.org/sqlite via dbos/driver/sqlite)",
       "driver": "github.com/dbos-inc/dbos-transact-golang v1.0.0 + modernc.org/sqlite",
@@ -27,7 +27,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-31A/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "21/21 canonical values survived a candidate restart (close+reopen on same durable store). 0 mismatches.",
       "observations": {
         "pass": 21,
@@ -41,7 +41,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-31B/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "20/20 frozen FC-31B cases decided by the candidate's own host (child-process); actual host type recorded per case.",
       "observations": {
         "pass": 20,
@@ -134,15 +134,19 @@
     {
       "testId": "FC-04",
       "candidate": "DBOS_GO_SQLITE",
-      "status": "NOT_VALID",
+      "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-04/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
-      "note": "FC-04 NOT_VALID: candidate does not expose the real-provider dispatch capability.",
+      "commit": "qual-m0-cp6.3-1788557008820",
+      "note": "Real external provider process: commit confirmed by the provider journal over HTTP, real transport ACK loss (Post \"http://127.0.0.1:53829/effect?mode=drop-ack\": EOF), recovery RECONCILED, blindRetryCount 0.",
       "observations": {
-        "measured": false,
-        "reason": "The candidate does not expose the real external-effect dispatch capability, so FC-04 cannot be measured against the shared provider process.",
-        "requiredMethodology": "Implement fc04Dispatch/fc04Recover/fc04Measure on the candidate: real HTTP dispatch, durable UNKNOWN_EXTERNAL_STATE on genuine transport failure, recovery by independent provider-journal read, zero blind retries.",
-        "nextAction": "Implement the capability, then rerun qualification from a clean source commit."
+        "measured": true,
+        "realExternalProvider": true,
+        "providerCommitted": true,
+        "transportAckLost": true,
+        "recoveryExecuted": true,
+        "blindRetryCount": 0,
+        "recoveryStatus": "RECONCILED",
+        "attemptStatuses": []
       }
     },
     {
@@ -150,7 +154,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "NOT_IMPLEMENTED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-14/error.txt",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "NOT_IMPLEMENTED (FC-14): DBOS real: authority fencing is still Unifia-owned",
       "observations": {
         "exception": "QualificationNotImplemented"
@@ -161,7 +165,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "NOT_IMPLEMENTED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-25/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "FC-25 NOT_IMPLEMENTED: NOT_IMPLEMENTED (FC-25): DBOS real: authority fencing is still Unifia-owned",
       "observations": {
         "measured": false,
@@ -172,15 +176,38 @@
     {
       "testId": "FC-32",
       "candidate": "DBOS_GO_SQLITE",
-      "status": "NOT_VALID",
+      "status": "PASS",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-32/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
-      "note": "FC-32 NOT_VALID: candidate does not expose the replay-scenario capability.",
+      "commit": "qual-m0-cp6.3-1788557008820",
+      "note": "REQUIRES_DETERMINISTIC_ORCHESTRATION = YES (measured=true). All replay invariants satisfied. AttemptIds att:run-fc32-49472fa99ff020108e600da6:li-fc32-0d54d0f3de5db28f:1 -> att:run-fc32-49472fa99ff020108e600da6:li-fc32-0d54d0f3de5db28f:2, ambient reads/attempt undefined:1, external effect executions 1.",
       "observations": {
-        "measured": false,
-        "reason": "The candidate does not expose the FC-32 replay-scenario capability, so its orchestration cannot be measured.",
-        "requiredMethodology": "Implement fc32SetAmbient/fc32StartScenario/fc32RunAttempt/fc32Measure on the candidate: a step workflow whose bodies journal invocations, whose completed outputs replay, whose only ambient read is journaled, and whose external effect executes under a stable EffectKey.",
-        "nextAction": "Implement the capability, then rerun qualification from a clean source commit."
+        "measured": true,
+        "classification": "YES",
+        "controlledNondeterminism": true,
+        "crashRecovery": true,
+        "invariants": {
+          "replayedCapture": true,
+          "replayedDerive": true,
+          "neverReReadAmbient": true,
+          "observedInitialMatches": true,
+          "stableKey": true,
+          "distinctAttempts": true,
+          "finalStateCanonical": true,
+          "completedEffectNotReexecuted": true
+        },
+        "failedInvariants": [],
+        "rootWorkflowInvocations": 2,
+        "stepBodyInvocations": {
+          "capture-ambient": 1,
+          "decide-branch": 1,
+          "derive-effect-key": 1,
+          "execute-effect": 2,
+          "materialize": 1
+        },
+        "stepReplays": {
+          "capture-ambient": 1,
+          "derive-effect-key": 1
+        }
       }
     },
     {
@@ -188,7 +215,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-13-CTRL/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "BLOCKED (NO_METHODOLOGY): No power-loss / fault-injection layer available in this harness host. Validated options that are NOT available: (1) VM with virtual disk + abrupt ACPI off, (2) `scsi_debug` / `fault-inject` / `fltmc`, (3) `dm-thin` suspend/resume, (4) block-device fault layer. `kill -9` and `process.kill()` are NOT acceptable — they prove process crash, not power-loss. To unblock: provision a disposable VM with virtual disk + scripted power-cycle, or a fault-injection layer; produce scripts + docs; rerun FC-13-CTRL.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -202,7 +229,7 @@
       "candidate": "DBOS_GO_SQLITE",
       "status": "BLOCKED",
       "evidencePath": "docs/automation-v2/m0/evidence/dbos-go-sqlite/FC-13/result.json",
-      "commit": "qual-m0-cp6.3-1788554966393",
+      "commit": "qual-m0-cp6.3-1788557008820",
       "note": "BLOCKED (NO_METHODOLOGY): FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env.",
       "observations": {
         "blockedReason": "NO_METHODOLOGY",
@@ -214,20 +241,20 @@
     }
   ],
   "summary": {
-    "pass": 2,
+    "pass": 4,
     "failArchitectural": 0,
     "failCorrectable": 0,
     "notApplicable": 0,
     "blocked": 2,
-    "notValid": 2
+    "notValid": 0
   },
   "replayModel": "NOT_MEASURED",
-  "producedAt": "2026-09-04T20:49:34.678Z",
+  "producedAt": "2026-09-04T21:23:42.995Z",
   "provenance": {
     "candidateImplementationId": "DBOS_GO_V1@0.0.0-m0-qual-cp6.3",
-    "candidateSourceCommit": "ee82061e695815a0f2024a86779f14b1b47f76e9",
-    "candidateBuildHash": "qual-m0-cp6.3-1788554966393",
-    "measurementHarnessCommit": "ee82061e695815a0f2024a86779f14b1b47f76e9",
+    "candidateSourceCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
+    "candidateBuildHash": "qual-m0-cp6.3-1788557008820",
+    "measurementHarnessCommit": "344fd9815f71b4c4491cf793ccf5fb2f4e81f478",
     "oracleVersion": "1.1.0-cp6.3",
     "executionSubstrate": "DBOS_GO_V1",
     "storageEngine": "DBOS SQLite system DB (modernc.org/sqlite via dbos/driver/sqlite)",
@@ -235,7 +262,7 @@
     "realDbosApisUsed": true,
     "platform": "win32 x64",
     "runtime": "Bun 1.3.14 / node v24.3.0 / win32 x64",
-    "qualificationGenerationId": "gen-1788554966880-2d7ty6",
+    "qualificationGenerationId": "gen-1788557009518-47vw69",
     "evidenceFreshness": "CURRENT",
     "nonCanonicalDiagnostic": false
   }
