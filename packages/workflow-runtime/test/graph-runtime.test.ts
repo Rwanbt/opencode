@@ -25,7 +25,7 @@ function engine(defn: WorkflowDefinition): { engine: GraphRuntimeEngine; dir: st
   return { engine, dir }
 }
 
-const node = (id: string, family: string, config: Record<string, unknown> = {}) => ({ id, family, config })
+const node = (id: string, family: any, config: Record<string, unknown> = {}): any => ({ id, family, config })
 
 const ifDef = () => def(
   [node("gate", "control.if", { condition: "input.go", trueBranch: "yes", falseBranch: "no" }), node("yes", "tool.http", {}), node("no", "tool.http", {})],

@@ -84,7 +84,7 @@ export class GraphRuntimeEngine {
     const parsed = WorkflowDefinitionSchema.parse(options.definition)
     const validation = validateWorkflowGraph(parsed)
     if (!validation.ok) {
-      throw new GraphRuntimeError("GRAPH_INVALID", validation.errors.map((e) => `${e.code}: ${e.message}`).join("; "))
+      throw new GraphRuntimeError("GRAPH_INVALID", validation.errors.map((e) => String(e.code)).join("; "))
     }
     this.options = { ...options, definition: parsed }
     this.nodes = new Map(parsed.nodes.map((node) => [node.id, node]))
@@ -375,7 +375,7 @@ export class GraphRuntimeEngine {
         outcome = { iteration: previous.iteration, done: true, bodyNodeId: null }
         return
       }
-      const condition = isRepeat ? config.untilCondition : config.whileCondition
+      const condition = isRepeat ? (config as { untilCondition?: string }).untilCondition : (config as { whileCondition: string }).whileCondition
       const stop = condition ? (isRepeat ? evaluate(condition, env) === true : evaluate(condition, env) !== true) : false
       if (stop) {
         const decision = { iteration: previous.iteration, done: true }

@@ -120,7 +120,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       const nodeState = this.engine!.nodeState(runId, stepNodeId(i))
       if (!nodeState || nodeState.status === "RUNNING") return i
     }
-    throw new Error(`no active step to complete: ${workflowId}`)
+    throw new Error(`no active step to complete: ${definition.id}`)
   }
 
   async cancel(workflowId: string): Promise<WorkflowStatePort> {

@@ -19,7 +19,7 @@ export async function start(ctx: ServerContext, request: Request): Promise<Respo
   // fail-closed: a workflow with no steps is meaningless (no entry node)
   if (!input?.id || !Array.isArray(input?.steps) || input.steps.length === 0) return ctx.deny(principal, "workflow.definition", 400)
   const state = await ctx.workflow.start(input)
-  userAudit(ctx, principal, "workflow.start", "allow", { workflowId: input.id, status: state.status })
+  userAudit(ctx, principal, "workflow.start", "allow", { resource: input.id, reason: state.status })
   return json(201, state)
 }
 
@@ -28,7 +28,7 @@ export async function resume(ctx: ServerContext, request: Request, id: string): 
   if (!principal) return ctx.deny(null, "workflow.principal", 401)
   if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
   const state = await ctx.workflow.resume(id)
-  userAudit(ctx, principal, "workflow.resume", "allow", { workflowId: id, status: state.status })
+  userAudit(ctx, principal, "workflow.resume", "allow", { resource: id, reason: state.status })
   return json(200, state)
 }
 
@@ -37,7 +37,7 @@ export async function cancel(ctx: ServerContext, request: Request, id: string): 
   if (!principal) return ctx.deny(null, "workflow.principal", 401)
   if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
   const state = await ctx.workflow.cancel(id)
-  userAudit(ctx, principal, "workflow.cancel", "deny", { workflowId: id, status: state.status })
+  userAudit(ctx, principal, "workflow.cancel", "deny", { resource: id, reason: state.status })
   return json(200, state)
 }
 

@@ -14,16 +14,17 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { WorkbenchServer } from "../src/index.js"
 import { NativeWorkflowRuntimePort } from "../src/native-workflow-port.js"
+import type { WorkflowDefinitionPort } from "../src/workflow-port.js"
 import { NativeApprovalAuthority } from "@unifia/workflow-runtime"
 import { NativeAttemptAuthority } from "@unifia/workflow-runtime"
 import { ApprovalBrokerV4, type AuthorityToken, type ApprovalBinding } from "@unifia/workflow-runtime"
 
 const principal = { id: "u1", kind: "human" as const }
 
-const def = (id: string, label: string): object => ({ id, version: 1, workspaceId: "ws", label, steps: [
-  { id: "s0", capability: "fs.read", input: { path: "/tmp/in" } },
-  { id: "s1", capability: "fs.read", input: {}, requiresApproval: true },
-  { id: "s2", capability: "fs.read", input: {} },
+const def = (id: string, _label: string): WorkflowDefinitionPort => ({ id, version: 1, workspaceId: "ws", steps: [
+  { id: "s0", capability: "workspace.read", input: { path: "/tmp/in" } },
+  { id: "s1", capability: "workspace.read", input: {}, requiresApproval: true },
+  { id: "s2", capability: "workspace.read", input: {} },
 ] })
 
 const scope = { organizationId: "org", workspaceId: "ws" }
@@ -36,7 +37,7 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
       // ---- JOURNEY A: manual authoring through the REAL HTTP surface ----
       const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
       const server = new WorkbenchServer({
-        auth: { authenticate: async () => principal },
+        auth: { authenticate: async () => principal as never },
         workspace: {} as never, runtime: {} as never, workflow: port,
         audit: { record: () => undefined }, capability: { check: async () => "allow" },
       })
@@ -57,7 +58,7 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
       // ---- directive 12: RESTART - a NEW server+port rediscovers from durable facts ----
       const port2 = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
       const server2 = new WorkbenchServer({
-        auth: { authenticate: async () => principal },
+        auth: { authenticate: async () => principal as never },
         workspace: {} as never, runtime: {} as never, workflow: port2,
         audit: { record: () => undefined }, capability: { check: async () => "allow" },
       })
@@ -135,10 +136,10 @@ describe("Directive 35 - AI authoring through the SAME pipeline (journey B)", ()
       // AI proposals enter the pipeline as plain definitions - the pipeline
       // is source-agnostic: same validation, same pin, same runtime, no
       // privileged path, no direct durable-state writes from the AI.
-      const aiProposed = { id: "wf-ai", version: 1, workspaceId: "ws", steps: [ { id: "s0", capability: "fs.read", input: {} } ] }
+      const aiProposed = { id: "wf-ai", version: 1, workspaceId: "ws", steps: [ { id: "s0", capability: "workspace.read", input: {} } ] }
       const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
       const server = new WorkbenchServer({
-        auth: { authenticate: async () => principal },
+        auth: { authenticate: async () => principal as never },
         workspace: {} as never, runtime: {} as never, workflow: port,
         audit: { record: () => undefined }, capability: { check: async () => "allow" },
       })

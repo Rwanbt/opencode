@@ -11,9 +11,9 @@ import type { WorkflowDefinitionPort } from "../src/workflow-port.js"
 const def = (id: string): WorkflowDefinitionPort => ({
   id, version: 1, workspaceId: "ws-1",
   steps: [
-    { id: "s0", capability: "fs.read", input: { path: "/tmp/a" } },
-    { id: "s1", capability: "fs.read", input: {}, requiresApproval: true },
-    { id: "s2", capability: "fs.read", input: {} },
+    { id: "s0", capability: "workspace.read", input: { path: "/tmp/a" } },
+    { id: "s1", capability: "workspace.read", input: {}, requiresApproval: true },
+    { id: "s2", capability: "workspace.read", input: {} },
   ],
 })
 
