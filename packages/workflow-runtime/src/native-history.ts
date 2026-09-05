@@ -29,6 +29,7 @@ import {
   AtomicTransitionBoundarySchema,
   WorkflowRunSchema,
 } from "@unifia/contracts"
+import { CURRENT_DURABLE_SCHEMA_VERSION, ensureSchemaVersion, RETENTION_SCHEMA } from "./retention.ts"
 import type { Database } from "bun:sqlite"
 import type { DurableHistoryAuthority } from "./adapter.ts"
 import {
@@ -110,6 +111,9 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     this.db.exec("PRAGMA synchronous = FULL")
     this.db.exec("PRAGMA foreign_keys = ON")
     this.db.exec(SCHEMA_V1)
+    this.db.exec(RETENTION_SCHEMA)
+    // ADR-018: fail closed on an incompatible durable store version.
+    ensureSchemaVersion(this.db, "history_schema_version", CURRENT_DURABLE_SCHEMA_VERSION)
   }
 
   close(): void {
