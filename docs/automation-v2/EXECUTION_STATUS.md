@@ -55,7 +55,7 @@ ecoverPendingWorkflows not replaying completed-workflow step output.
 | D-02 V4 façade | Contract green | CONTRACT_ONLY (full matrix) | local batch on `1591cd4d68`; V4 `20/20`, runtime package `61/61`, audit matrix `docs/automation-v2/D02-V4-AUDIT-MATRIX.md` | Durable WorkflowRun authority (production durable gate), ADR-000 |
 | M0 contract feasibility | Green | QUALIFICATION_ONLY | contract suite `177/177` | Does not select a substrate |
 | M0 comparative qualification | Open (P0 complete) | QUALIFICATION_ONLY | canonical runner `a1c3de202d` gen CURRENT; Native `6 PASS/2 BLOCKED`; DBOS real `6 PASS/2 BLOCKED`; benchmark refreshed `8c263d5bf0` (decision A vs B underdetermined 6-6, ratification gated on power-loss proof per frozen §92) | FC-13 external provisioning (VM/fault-injection) -> then ADR-000 rubric |
-| Workflow catalog / loader | Green | CONTRACT_ONLY | `63/63` and `5/5` | production publication/runtime wiring |
+| M2 graph engine | CONTRACT: GREEN (9 cartes, M2 plan COMPLETE) | RUNTIME: GREEN per family on UNIFIA_NATIVE (GraphRuntimeEngine: if/switch/parallel/merge/repeat/while/map/child durables + advance() walk; 21 tests; 106/106 package) | E2E: OPEN (production host wiring pending) || Workflow catalog / loader | Green | CONTRACT_ONLY | `63/63` and `5/5` | production publication/runtime wiring |
 | Workbench orchestrator | Green | TEST_DOUBLE_ONLY | `28/28` assertions | real authority integration |
 | Monorepo typecheck | Green | BUILD/TYPECHECK | Turbo `47/47` tasks (isolated cache, after V4 matrix batch) | rerun after subsequent source commit |
 | App/modes browser gate | Partial | E2E_CERTIFIED partial | Playwright `25 passed, 5 failed` | fix/reclassify five failures |
