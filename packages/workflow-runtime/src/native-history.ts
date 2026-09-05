@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS commands (
   enqueued_at INTEGER NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS timers_fired (
+  run_id TEXT NOT NULL,
+  timer_id TEXT NOT NULL,
+  fired_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, timer_id)
+);
 CREATE TABLE IF NOT EXISTS timers (
   run_id TEXT NOT NULL,
   timer_id TEXT NOT NULL,
@@ -234,6 +240,37 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     const db = this.requireDb()
     const rows = db.query("SELECT timer_id, fire_at, overlap_policy, scheduled_at FROM timers WHERE run_id = ? ORDER BY fire_at").all(runId) as TimerRow[]
     return rows.map((row) => ({ timerId: row.timer_id, fireAt: row.fire_at, overlapPolicy: row.overlap_policy as OverlapPolicy, scheduledAt: row.scheduled_at }))
+  }
+
+  /**
+   * Directive 17: durable timer firing. dueTimers lists timers whose
+   * fireAt is at-or-before nowMs (no early fire); markTimerFired moves
+   * the timer to timers_fired in ONE transaction (at-most-once per
+   * timerId — no duplicate logical fire). Facts are rows: a restart
+   * fires missed timers exactly per this same catch-up path.
+   */
+  dueTimers(nowMs: number): readonly { runId: string; timerId: string; fireAt: number }[] {
+    const db = this.requireDb()
+    const rows = db.query("SELECT t.run_id AS run_id, t.timer_id AS timer_id, t.fire_at AS fire_at FROM timers t WHERE t.fire_at <= ? AND NOT EXISTS (SELECT 1 FROM timers_fired f WHERE f.run_id = t.run_id AND f.timer_id = t.timer_id) ORDER BY t.fire_at").all(nowMs) as { run_id: string; timer_id: string; fire_at: number }[]
+    return rows.map((row) => ({ runId: row.run_id, timerId: row.timer_id, fireAt: row.fire_at }))
+  }
+
+  markTimerFired(runId: string, timerId: string, nowMs: number): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      const existing = db.query("SELECT timer_id FROM timers_fired WHERE run_id = ? AND timer_id = ?").get(runId, timerId)
+      if (existing) throw new HistoryAuthorityError(`timer already fired: ${timerId}`)
+      db.query("INSERT INTO timers_fired (run_id, timer_id, fired_at) VALUES (?, ?, ?)").run(runId, timerId, nowMs)
+      db.query("DELETE FROM timers WHERE run_id = ? AND timer_id = ?").run(runId, timerId)
+    })()
+  }
+
+  firedTimers(runId?: string): readonly { runId: string; timerId: string; firedAt: number }[] {
+    const db = this.requireDb()
+    const rows = (runId
+      ? db.query("SELECT run_id, timer_id, fired_at FROM timers_fired WHERE run_id = ? ORDER BY fired_at").all(runId)
+      : db.query("SELECT run_id, timer_id, fired_at FROM timers_fired ORDER BY fired_at").all()) as { run_id: string; timer_id: string; fired_at: number }[]
+    return rows.map((row) => ({ runId: row.run_id, timerId: row.timer_id, firedAt: row.fired_at }))
   }
 }
 

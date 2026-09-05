@@ -405,3 +405,41 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("NativeDurableHistoryAuthority — durable timers (directives 16-17)", () => {
+  test("no early fire; due exactly at fireAt; markTimerFired removes from due (at-most-once)", () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      ctx.authority.scheduleTimer("t-1", "run-1", 5000, "allow")
+      expect(ctx.authority.dueTimers(4999)).toHaveLength(0)
+      expect(ctx.authority.dueTimers(5000)).toEqual([{ runId: "run-1", timerId: "t-1", fireAt: 5000 }])
+      ctx.authority.markTimerFired("run-1", "t-1", 5000)
+      expect(ctx.authority.dueTimers(99999)).toHaveLength(0)
+      expect(ctx.authority.firedTimers("run-1")).toEqual([{ runId: "run-1", timerId: "t-1", firedAt: 5000 }])
+      try { ctx.authority.markTimerFired("run-1", "t-1", 5001); expect.unreachable() } catch { /* at-most-once */ }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: a timer scheduled before shutdown fires after restart (durable catch-up), no duplicate", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-timer-restart-"))
+    try {
+      const first = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      first.initialize()
+      first.register(makeRun("run-1"))
+      first.scheduleTimer("t-9", "run-1", 7000, "allow")
+      first.close()
+      const second = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      second.initialize()
+      const due = second.dueTimers(8000)
+      expect(due).toEqual([{ runId: "run-1", timerId: "t-9", fireAt: 7000 }])
+      second.markTimerFired("run-1", "t-9", 8000)
+      // a THIRD process sees the fired fact (no duplicate logical fire)
+      const third = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      third.initialize()
+      expect(third.dueTimers(99999)).toHaveLength(0)
+      expect(third.firedTimers("run-1")).toHaveLength(1)
+      third.close()
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
