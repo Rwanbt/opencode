@@ -1,16 +1,33 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2026 Unifia contributors
-
-// FC-13 UNIFIA_NATIVE writer: the candidate REAL durable commit path
-// (NativeSqliteCandidate startRun + driveAttempt - the attempt row is
-// a durable transition acknowledged by the candidate). The
-// acknowledged transition must survive the hard power cut.
-import { NativeSqliteCandidate } from "@unifia/automate-m0-harness/qualification/adapters/native-sqlite.ts"
+// FC-13 UNIFIA_NATIVE writer + post-cut inspector.
+//
+// WRITE mode: the candidate REAL durable commit path
+// (NativeSqliteCandidate startRun + driveAttempt). The acknowledged
+// attempt transition must survive the hard power cut.
+//
+// INSPECT mode: read ONLY durable state, emit the oracle verdict.
+import { Database } from "bun:sqlite"
+import { NativeSqliteCandidate } from "../../packages/automate-m0-harness/src/qualification/adapters/native-sqlite.ts"
 
 const storePath = process.env.FC13_STORE_PATH ?? "/mnt/store"
-const readyUrl = process.env.FC13_READY_URL ?? "http://10.0.2.2:8099/ready"
 const iteration = process.env.FC13_ITERATION ?? "0"
+const mode = process.env.FC13_MODE ?? "write"
 
+if (mode === "inspect") {
+  let result = "ABSENT"
+  try {
+    const db = new Database(`${storePath}/native.sqlite`, { readonly: true })
+    const rows = db.query("SELECT status FROM attempts ORDER BY started_at ASC").all() as { status: string }[]
+    const succeeded = rows.filter((row) => row.status === "SUCCEEDED").length
+    result = rows.length === 0 ? "ABSENT" : succeeded > 0 ? `PRESENT:${succeeded}` : `PENDING_ONLY:${rows.length}`
+    db.close()
+  } catch (error) {
+    result = `CORRUPT:${String(error).slice(0, 80)}`
+  }
+  console.log(`FC13-RESULT native iter=${iteration} ${result}`)
+  process.exit(0)
+}
+
+// WRITE mode.
 const candidate = new NativeSqliteCandidate({
   storeDir: storePath,
   provider: null as never,
@@ -36,7 +53,6 @@ const attempt = await candidate.driveAttempt(runId, `li-fc13-${iteration}` as ne
   idempotencyKey: `ik-fc13-${iteration}`,
   providerCommittedAtEpochMs: Date.now(),
 })
-console.log(`FC13-ACK ${attempt.attemptId} ${attempt.status}`)
-const ready = await fetch(`${readyUrl}?iter=${iteration}&who=native&ack=${attempt.status}`, { signal: AbortSignal.timeout(10_000) }).catch(() => null)
-if (!ready) console.log("READY-SIGNAL-FAILED")
+// The candidate acknowledged the durable attempt transition.
+console.log(`FC13-READY native iter=${iteration} attemptId=${attempt.attemptId} status=${attempt.status}`)
 await new Promise(() => {})
