@@ -4,12 +4,12 @@
 # EXECUTION STATUS — UNIFIA AUTOMATE
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
-> Phase : **D-02 V4 OPEN + M0 QUALIFICATION OPEN**
-> HEAD local : `8c263d5bf0` (batches: ... -> FC-14/FC-25 DBOS real `8afeed2c94`/`a1c3de202d` -> benchmark refresh `8c263d5bf0`); remote tracking ref : `173117f637`; avance locale : 38 commits.
-> ADR-000 substrate final : `NOT_RATIFIED`; finalistes : `UNIFIA_NATIVE`, `DBOS_GO_SQLITE`.
+> Phase : **M0 QUALIFICATION COMPLETE - ADR-000 OWNER DECISION REQUIRED**
+> HEAD local : `c9f27f83da` (FC-13 matrix complete `c9f27f83da`); 44 commits ahead of origin; NOT PUSHED.
+> ADR-000 substrate final : `OWNER_DECISION_REQUIRED`; finalistes tous deux QUALIFIES (FC-13 PASS x20 chacun, controld nËgatif 20/20 perdu - methodology VALID).
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
-> Date : 2026-09-04
+> Date : 2026-09-05
 > Format imposé par le plan §246 lignes 6140-6170.
 
 ## CURRENT STATE — reconciled 2026-09-04
@@ -36,12 +36,12 @@ override this section.
   FC-14/FC-25 also measured for DBOS via REAL second OS processes of
   the same binary (M0_AUTHORITY_ONLY) on the same SQLite system DB:
   exactly one claim winner, loser stale token rejected, zombie
-  freeze->takeover->resume with stale rejections. Still unexecuted:
-  FC-13 power-loss methodology only (both BLOCKED).
+  freeze->takeover->resume with stale rejections. FC-13 real power-loss now MEASURED: methodology VALID (control 20/20 lost), both finalists PASS x20. Remaining: owner decision only (frozen Gate D).
 - Candidate-level finding (P1): the DBOS real candidate's post-restart
   canonical-observation readback is intermittently empty even after a
   15s bounded poll (store-guard suite) - suspected
-  ecoverPendingWorkflows not replaying completed-workflow step output.
+  
+ecoverPendingWorkflows not replaying completed-workflow step output.
   Feeds FC-31A/FC-32 restart work; test keeps its strict assertion.
 - Automate browser certification remains `RED`; app/modes e2e measured
   `25/30` with five localized failures. GitHub effective protection remains

@@ -14,8 +14,8 @@
 **Date de gel pré-M0 :** 2026-09-02  
 **Statut architecture :** `FROZEN`  
 **Statut contrat M0 :** `FROZEN`  
-**Statut M0 :** `READY`  
-**Statut substrate final :** `NOT_RATIFIED`  
+**Statut M0 :** `MEASURED-COMPLETE`
+**Statut substrate final :** `OWNER_DECISION_REQUIRED`
 **Statut M1 :** `NO-GO`  
 **Stratégie :** `S2 — LOCAL AUTHORITY + PROFILE-SPECIFIC CERTIFIED ADAPTERS`  
 **Finalistes Local :**
@@ -3193,3 +3193,54 @@ et non sur la préférence d’un reviewer ou d’un agent.
 ---
 
 # END ADR-000 IMPLEMENTATION PACK
+
+---
+
+# 84. Addendum - 2026-09-05 - M0 measured complete (FC-13 real power-loss)
+
+M0 P0 matrix measured to completion. Mechanical application of the
+frozen gates (sections Gate A-D, section 80). NO rubric text above is
+modified - this addendum only records measured state.
+
+## Measured results (local evidence - docs/automation-v2/m0/)
+
+```text
+M0 P0 symmetric matrix (both finalists):
+  UNIFIA_NATIVE   : 8 measured PASS (incl. FC-13, FC-13-CTRL) - 0 FAIL
+  DBOS_GO_SQLITE  : 8 measured PASS (incl. FC-13, FC-13-CTRL) - 0 FAIL
+
+FC-13 real power-loss (60 iterations, one frozen environment):
+  FC-13-CTRL      : 20/20 CONTROL_LOST_WRITE   -> methodology VALID
+  UNIFIA_NATIVE   : 20/20 DURABLE_SURVIVED     -> PASS
+  DBOS_GO_SQLITE  : 20/20 DURABLE_SURVIVED     -> PASS
+  evidence: docs/automation-v2/m0/FC13-METHODOLOGY.md + evidence-fc13/*.json
+```
+
+## Gate state (frozen rubric)
+
+```text
+Gate A validity        : PASS (harness tests valid, FC-13-CTRL valid,
+                         shared fixtures identical)
+Gate B architecture    : no FAIL_ARCHITECTURAL - no elimination
+Gate C correctable     : no outstanding FAIL_CORRECTABLE
+Gate D comparison      : TWO surviving candidates - the frozen
+                         dimensions do not produce a mechanical winner
+                         (benchmark link 6-6 + FC-13 symmetric PASS)
+```
+
+## Outcome (frozen section 80)
+
+```text
+Outcome A or B : PENDING - TRUE OWNER DECISION REQUIRED
+Outcome C       : excluded (both finalists pass all gates)
+```
+
+Per frozen section 16 of the implementation plan: with both finalists
+fully qualified and the decision still linked, the choice between
+UNIFIA_NATIVE and DBOS_GO_SQLITE belongs to the owner alone, using
+ONLY the frozen Gate D dimensions. The AI must not break this link.
+
+```text
+ADR-000 substrate final : OWNER_DECISION_REQUIRED
+M1                      : NO-GO (frozen section 81 - unchanged)
+```
