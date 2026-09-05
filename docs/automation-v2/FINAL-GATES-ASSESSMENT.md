@@ -80,3 +80,35 @@ the durable kernel, the approval authority and the security baseline
 are production-ready and locally committed (66+ commits, no push).
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
+## Update 2026-09-05 (batch: HTTP layer + publication + diagnosis)
+
+```text
+CLOSED since the pre-check:
+  E2E layer (core)     : GREEN - durable workflow HTTP surface through
+                         the substrate-backed port (start 201 / inspect
+                         200 / cancel 200, principal-gated, audited,
+                         501 fail-closed; workbench 87/87)
+  Directive 36         : GREEN - immutable pin at the canonical
+                         publication path (versionId = JCS digest),
+                         persisted with the run, survives restart
+  Directive 37         : GREEN - read-only durable journal exposed at
+                         GET /v1/workflows/:id (diagnosis surface);
+                         repair = NEW version through the SAME start
+                         pipeline (active run never mutated)
+
+STILL OPEN (unchanged, exact actions):
+  1. Directive 32-34 quality track: reproduce the 4 historical browser
+     issues via the browser harness BEFORE fixing (repro-first rule)
+  2. Directive 41/42: retention ADR-016 + rolling ADR-018 RUNTIME
+     enforcement (contract surfaces exist: enterprise.ts audit
+     retention, identity compatibility)
+  3. Directive 43: platform certification matrix
+  4. Directive 35: full product E2E journey (manual + AI authoring
+     through the SAME HTTP pipeline - now available)
+```
+
+Suites at this update: workflow-runtime 112/112, workbench-server
+87/87, expression 8/8, catalog 5/5, migration 6/6, durable 29/29.
+
+LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
