@@ -6,6 +6,17 @@
 Target profile: **Local GA** (frozen). Reduced surface, every advertised
 capability fully certified. Evidence-based, no contract-only certification.
 
+## Platform Profiles
+
+| Platform profile | Bridge | Automate contract | Current evidence | Status |
+|---|---|---|---|---|
+| `WEB_BROWSER_WITHOUT_BRIDGE` | Absent | Hidden/fail-closed; Workbench operations unavailable | `mode-navigation.spec.ts` | **SUPPORTED restriction** |
+| `E2E_BROWSER_WITH_MOCK_BRIDGE` | Injected mock + explicit grants | Reachable when `workflow.run` is granted; cold deep links bootstrap the bridge | `15/15` mode suite; long reload gate open | **PARTIAL** |
+| `DESKTOP_WITH_NATIVE_BRIDGE` | Native Tauri bridge | Intended supported profile | TypeScript adapter/build pass; native Rust build blocked by host OOM/pagefile | **BLOCKED_ENVIRONMENT** |
+
+These profiles are not interchangeable: a successful Workbench HTTP transport
+test does not prove that the web runtime owns a platform bridge.
+
 | Capability (Local GA) | Contract | Runtime | E2E | Verdict |
 |---|---|---|---|---|
 | Durable WorkflowRun authority | PASS (contracts) | PASS (NativeDurableHistoryAuthority) | PASS (e2e-full-journey) | **SUPPORTED** |
@@ -26,8 +37,8 @@ capability fully certified. Evidence-based, no contract-only certification.
 | Connector/MCP | CONTRACT_ONLY | ISOLATED (mcp-transport) | NOT_RUN | **NOT_CERTIFIED - OPEN** |
 | Distributed server / cluster | FUTURE_COMPATIBILITY_REQUIRED | - | - | **NOT_APPLICABLE (Local GA)** |
 | Mobile control/local-execution | FUTURE_COMPATIBILITY_REQUIRED | - | - | **NOT_APPLICABLE (Local GA)** |
-| Desktop host | CONTRACT_ONLY | ISOLATED (desktop-electron) | NOT_RUN | **NOT_CERTIFIED - OPEN** |
-| UX/Design system | PASS (design contracts) | ISOLATED | NOT_RUN (browser harness) | **NOT_CERTIFIED - OPEN** |
+| Desktop host | CONTRACT_ONLY | ISOLATED (desktop-electron) | TypeScript adapter/build PASS; native executable blocked by host memory | **BLOCKED_ENVIRONMENT - OPEN** |
+| UX/Design system | PASS (design contracts) | ISOLATED | Mode/design browser E2E PASS; full accessibility/profile coverage remains open | **PARTIAL - OPEN** |
 | Enterprise (audit retention config) | PASS (enterprise.ts) | PARTIAL (retention on durable core) | PARTIAL | **PARTIAL - OPEN** |
 
 Certified Local GA core: durable workflow product (authoring -> publication

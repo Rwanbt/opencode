@@ -5,12 +5,26 @@
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
 > Phase : **PRODUCTION WIRING (UNIFIA_NATIVE) - D-02 durable gate CLOSED, M1/M3 native authorities landed**
-> HEAD local : `20f5b67465` (durable attempt/effect identity `20f5b67465`); 49 commits ahead of origin; NOT PUSHED.
+> HEAD local : `8197fd6ac2`; 78 commits ahead of origin; NOT PUSHED.
 > ADR-000 substrate final : `OWNER_DECISION_REQUIRED`; finalistes tous deux QUALIFIES (FC-13 PASS x20 chacun, controld nËgatif 20/20 perdu - methodology VALID).
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
-> Date : 2026-09-05
+> Date : 2026-09-06
 > Format imposé par le plan §246 lignes 6140-6170.
+
+### UPDATE — 2026-09-06 — platform/E2E certification
+
+- Automate accessibility is mechanically capability-gated by `workflow.run`
+  (ADR-1041); pure web without `Platform.workbench` remains unsupported and
+  fail-closed.
+- `AutomateGrantBridge` now primes the existing Workbench connection at the
+  directory boundary, preventing a valid Automate deep link from deadlocking
+  before grant discovery. No accessibility rule was weakened.
+- Browser E2E mode/design/navigation/resource/latency gates: `15/15 PASS`.
+- Automate reload long-run: `OPEN`; it reaches Automate, but the unchanged
+  `10 x 100` prompt workload exceeded 20 minutes.
+- Native desktop: `BLOCKED_ENVIRONMENT` due to LLVM OOM / Windows error 1455;
+  TypeScript adapter and Vite build remain green.
 
 ## CURRENT STATE — reconciled 2026-09-04
 

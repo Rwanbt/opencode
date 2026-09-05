@@ -81,6 +81,38 @@ are production-ready and locally committed (66+ commits, no push).
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
 
+## Update 2026-09-06 (Automate platform contract and mode gates)
+
+```text
+CONTRACT:
+  Automate is gated exclusively by workflow.run (ADR-1041).
+  WEB_BROWSER_WITHOUT_BRIDGE remains unsupported/fail-closed.
+  E2E_BROWSER_WITH_MOCK_BRIDGE is the supported browser certification profile.
+
+IMPLEMENTATION:
+  AutomateGrantBridge now primes ensureConnected() so a valid Automate
+  deep link can discover grants before AutomateSurface mounts. No capability
+  rule was bypassed and no web bridge was added to production.
+
+E2E:
+  mode/design/navigation + resource + latency suites: 15/15 PASS.
+  mode-reload-stability reaches Automate after the fix, but the 10 x 100
+  prompt long-run exceeded 20 minutes and remains OPEN; workload/assertions
+  were not reduced.
+
+HARNESS:
+  mode-reload-stability now installs the canonical mock with workflow.run.
+  Its queued response is attached to the first prompt of each cycle, avoiding
+  an orphan response at teardown.
+
+NATIVE:
+  TypeScript adapter/typecheck/Vite build PASS.
+  Rust/Tauri executable remains BLOCKED_ENVIRONMENT: LLVM OOM and Windows
+  error 1455 (paging file too small).
+```
+
+LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
 ## Update 2026-09-05 (batch: HTTP layer + publication + diagnosis)
 
 ```text

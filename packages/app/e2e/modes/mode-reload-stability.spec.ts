@@ -3,6 +3,7 @@
 import { test, expect } from "../fixtures"
 import { waitSessionIdle } from "../actions"
 import { dirPath } from "../utils"
+import { installWorkbenchMock } from "../fixtures/workbench-mock"
 
 /**
  * Stability across full reloads, under session load.
@@ -38,9 +39,16 @@ import { dirPath } from "../utils"
  */
 
 test("10 reload cycles under session load do not grow event streams, query observers or cache entries", async ({ page, project, assistant }) => {
-  test.setTimeout(600_000)
+  // Ten reload cycles with 100 real backend prompts each can exceed ten
+  // minutes on the isolated E2E server; keep the workload and gates intact.
+  test.setTimeout(1_200_000)
 
-  await project.open()
+  await project.open({
+    // Automate is capability-gated. This spec certifies reload behaviour in
+    // the supported browser-E2E profile, so provide only the platform bridge
+    // boundary and the grant required to reach the real surface.
+    beforeGoto: () => installWorkbenchMock(page, { grants: ["workflow.run"] }),
+  })
   const sessionID = await project.user("Create the temporary E2E session and do not modify files.")
   const route = `${dirPath(project.directory)}/work`
   await page.goto(route)
@@ -69,12 +77,12 @@ test("10 reload cycles under session load do not grow event streams, query obser
     // each prompt actually completed (a stuck cycle would
     // not advance the counter).
     const token = `PERF_CYCLE_${cycle}_${Date.now()}`
-    await assistant.reply(token)
     for (const mode of ["design", "automate", "work"] as const) {
       await page.goto(`${dirPath(project.directory)}/${mode}`)
       await expect(page.locator(`[data-workbench-mode="${mode}"]`).first()).toBeVisible()
     }
     for (let message = 1; message <= 100; message += 1) {
+      if (message === 1) await assistant.reply(token)
       const callsBefore = await assistant.calls()
       await project.sdk.session.prompt({
         sessionID,

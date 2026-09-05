@@ -40,7 +40,13 @@ import { useMode } from "@/context/mode"
 function AutomateGrantBridge(props: ParentProps) {
   const workbench = useWorkspaceWorkbench()
   const mode = useMode()
-  createEffect(() => mode.setAutomateAccessible(isAutomateAccessible(workbench.grants())))
+  createEffect(() => {
+    // A direct Automate deep link cannot mount AutomateSurface until the grant
+    // is known, so connect here at the provider boundary to avoid a cold-load
+    // deadlock. Unsupported web runtimes remain fail-closed in the provider.
+    void workbench.ensureConnected().catch(() => undefined)
+    mode.setAutomateAccessible(isAutomateAccessible(workbench.grants()))
+  })
   onCleanup(() => mode.setAutomateAccessible(false))
   return <>{props.children}</>
 }
