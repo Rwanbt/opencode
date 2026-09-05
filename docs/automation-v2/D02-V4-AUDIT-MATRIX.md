@@ -78,3 +78,40 @@ Status legend: `PASS` = implemented + mechanically tested at contract level ·
   restart, real multiprocess fencing — blocked on ADR-000.
 - One observed flake in `workbench-server` suite (single failure on first run,
   84/84 on two consecutive re-runs) — P2, root cause not yet identified.
+## Durable gate CLOSE (2026-09-05, post-ADR-000 ratification)
+
+ADR-000 ratified 2026-09-05: **UNIFIA_NATIVE** (owner decision, frozen
+Gate D; DBOS_GO_SQLITE = qualified finalist not selected, evidence
+preserved). The production durable gate required by sections 18/20 and
+req.22 is now measured on the real durable authority
+(`NativeApprovalAuthority` + `NativeDurableHistoryAuthority`,
+`packages/workflow-runtime`, SQLite WAL + synchronous=FULL — the
+FC-13-proven durable configuration, 20/20 real power-loss iterations).
+
+Directive-8 proofs measured (`test/native-durable.test.ts`, 19 tests,
+all PASS):
+
+```text
+pending approval restart          PASS (PENDING survives, resolved after reopen)
+stale authority rejection         PASS (stale generation/owner -> STALE_AUTHORITY)
+authority takeover                PASS (generation bump; old token dies, exactly one winner)
+derived ApprovalId                PASS (identical duplicate -> same record, ordinal 1)
+binding TOCTOU rejection          PASS (STALE_PLAN_CHANGED / STALE_DIGEST_MISMATCH journalled)
+policy binding                    PASS (drift -> STALE, journalled)
+scope binding                     PASS (list reorder tolerated)
+expiry boundary                   PASS (fail-closed EXPIRED after restart on late clock)
+requester cancellation            PASS
+forged system cancellation        PASS (untrusted system actor -> CANCEL_REJECTED)
+resolution idempotency            PASS (REPLAYED_RESOLVE)
+conflicting resolution rejection  PASS (APPROVAL_ALREADY_RESOLVED)
+atomic state + history            PASS (approvals + journal + authority row in ONE transaction)
+durable eventSequence             PASS (monotonic across restart: [1,2] preserved)
+```
+
+Package suite after the durable wiring: **80/80** (incl. the 20-test
+V4 contract matrix unchanged). The durable gate of D-02 V4 is CLOSED
+for the ratified substrate; multiprocess fencing at scale remains
+covered by the M0 FC-14/FC-25 real-multiprocess evidence
+(`M0_RESULTS_UNIFIA_NATIVE.json`).
+
+LOCAL COMMITS ONLY — NOT REMOTELY PUBLISHED.
