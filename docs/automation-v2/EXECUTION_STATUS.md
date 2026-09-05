@@ -4,8 +4,8 @@
 # EXECUTION STATUS — UNIFIA AUTOMATE
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
-> Phase : **ADR-000 RATIFIED (UNIFIA_NATIVE) - PRODUCTION WIRING**
-> HEAD local : `c9f27f83da` (FC-13 matrix complete `c9f27f83da`); 44 commits ahead of origin; NOT PUSHED.
+> Phase : **PRODUCTION WIRING (UNIFIA_NATIVE) - D-02 durable gate CLOSED, M1/M3 native authorities landed**
+> HEAD local : `20f5b67465` (durable attempt/effect identity `20f5b67465`); 49 commits ahead of origin; NOT PUSHED.
 > ADR-000 substrate final : `OWNER_DECISION_REQUIRED`; finalistes tous deux QUALIFIES (FC-13 PASS x20 chacun, controld nËgatif 20/20 perdu - methodology VALID).
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
 > Certification courante : `16 GREEN`, `3 RED`, `1 NA`, `6 OTHER`; e2e app/modes : `25/30`.
