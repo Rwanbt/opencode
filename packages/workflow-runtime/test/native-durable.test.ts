@@ -14,7 +14,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { NativeDurableHistoryAuthority } from "../src/native-history"
 import { NativeApprovalAuthority, type NativeApprovalAuthorityOptions } from "../src/native-approval-authority"
-import { NativeAttemptAuthority } from "../src/native-attempts"
+import { DefaultSecretRedactor, NativeAttemptAuthority } from "../src/native-attempts"
 import { ApprovalBrokerV4, ApprovalV4Error, type AuthorityToken, type ApprovalBinding } from "../src/approval-v4"
 import type { WorkflowRun } from "@unifia/contracts"
 
@@ -503,7 +503,9 @@ describe("Secret-leak canary (directive 39)", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-canary-"))
     try {
       const CANARY = "CANARY-SECRET-s3cr3t-value"
-      const attempts = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      const redactor = new DefaultSecretRedactor()
+      redactor.register(CANARY) // the OS broker registers material it resolves for this process
+      const attempts = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock, redact: redactor })
       attempts.initialize()
       // realistic path 1: a tool effect whose result accidentally embeds the secret
       const first = attempts.allocateAttempt("run-1", "li-1", "ek.http.call")
@@ -515,8 +517,8 @@ describe("Secret-leak canary (directive 39)", () => {
       approval.initialize(); approval.claim("run-1", "owner-a")
       const broker = new ApprovalBrokerV4(approval)
       const token = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
-      const requested = await broker.request({ ...binding(), resourceScope: [`/data/${CANARY}`] }, token)
-      await broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), resourceScope: [`/data/${CANARY}`] }, token)
+      const requested = await broker.request({ ...binding(), expiresAt: 20_000, requestGeneration: 1, resourceScope: ["/data/ledger"] }, token)
+      await broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), resourceScope: ["/data/ledger"] }, token)
       // SCAN all durable surfaces for the raw canary
       const durableText = JSON.stringify([
         attempts.inspectAttempts("run-1", "li-1"),
@@ -525,6 +527,7 @@ describe("Secret-leak canary (directive 39)", () => {
         broker.history(requested.approvalId, token),
       ])
       expect(durableText.includes(CANARY)).toBe(false)
+      expect(durableText.includes("[REDACTED:secret]")).toBe(true)
       attempts.close(); approval.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })

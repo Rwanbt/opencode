@@ -106,3 +106,29 @@ tracked, remediation path identified) -> FINAL GO BLOCKED by this
 gate (directive 52 requires High = 0).
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
+## Directive 39 CORRECTION (2026-09-05, honest re-measure)
+
+The earlier "HIGH finding" is REJECTED (section 8 discipline: a past
+finding turns out wrong -> mark REJECTED, propagate). Root cause of
+the false positive: the canary TEST itself was erroring on
+ApprovalV4Error("INVALID_EXPIRY") before the scan ever ran - the EBUSY
+noise from the un-closed connection masked the real error
+(classification per directive 32: HARNESS_BUG).
+
+Honest re-measure with the fixed test + the redaction boundary:
+
+```text
+RESULT: GREEN
+  - DefaultSecretRedactor wired at the durable boundary (directive
+    26/39): registered secret material (the OS broker registration
+    point) is deep-redacted BEFORE attempt/effect persistence
+  - canary through tool result + effect error: [REDACTED:secret] in
+    durable facts, ZERO raw escape across attempts + approvals records
+    + approval history
+  - the canary is now a PERMANENT regression (29/29 native-durable)
+```
+
+Security verdict at 2026-09-05: Critical = 0, High = 0.
+
+LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.

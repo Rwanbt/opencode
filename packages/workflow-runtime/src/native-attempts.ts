@@ -25,9 +25,45 @@ import type { Database } from "bun:sqlite"
 export type AttemptOutcome = "SUCCEEDED" | "FAILED" | "UNKNOWN_EXTERNAL_STATE"
 export type EffectStatus = AttemptOutcome | "PENDING"
 
+export interface SecretRedactor {
+  /** Register secret material resolved from the OS broker (this process). */
+  register(material: string): void
+  /** Deep-redact every registered occurrence before durable persistence. */
+  redact(value: unknown): unknown
+}
+
+export class DefaultSecretRedactor implements SecretRedactor {
+  private readonly materials = new Set<string>()
+
+  register(material: string): void {
+    if (material) this.materials.add(material)
+  }
+
+  redact(value: unknown): unknown {
+    if (typeof value === "string") {
+      let out = value
+      for (const material of this.materials) {
+        if (material && out.includes(material)) out = out.split(material).join("[REDACTED:secret]")
+      }
+      return out
+    }
+    if (Array.isArray(value)) return value.map((item) => this.redact(item))
+    if (value !== null && typeof value === "object") {
+      const out: { [key: string]: unknown } = {}
+      for (const [key, item] of Object.entries(value as { [key: string]: unknown })) out[key] = this.redact(item)
+      return out
+    }
+    return value
+  }
+}
+
 export interface NativeAttemptAuthorityOptions {
   readonly databasePath: string
   readonly now?: () => number
+  /** Directive 26/39: the executor boundary MUST redact registered
+   *  secret material BEFORE durable persistence. Defaults to the
+   *  DefaultSecretRedactor (broker registration point). */
+  readonly redact?: SecretRedactor
 }
 
 export interface DurableAttempt {
@@ -97,9 +133,11 @@ CREATE TABLE IF NOT EXISTS effect_journal (
 export class NativeAttemptAuthority {
   private db: Database | null = null
   private readonly options: NativeAttemptAuthorityOptions
+  private readonly redactor: SecretRedactor
 
   constructor(options: NativeAttemptAuthorityOptions) {
     this.options = options
+    this.redactor = options.redact ?? new DefaultSecretRedactor()
   }
 
   initialize(): void {
@@ -174,9 +212,11 @@ export class NativeAttemptAuthority {
       if (!row) throw new Error(`attempt not found: ${attemptId}`)
       if (row.outcome !== null) throw new Error(`attempt already terminal: ${attemptId} (${row.outcome})`)
       const now = this.now()
+      // Directive 26/39: redact REGISTERED secret material BEFORE durable persistence.
+      const safeResult = input.result === undefined ? null : JSON.stringify(this.redactor.redact(input.result))
       db.query("UPDATE attempts SET outcome = ?, result_json = ?, ack_lost = ?, updated_at = ? WHERE run_id = ? AND li_id = ? AND attempt_id = ?")
-        .run(outcome, input.result === undefined ? null : JSON.stringify(input.result), input.ackLost ? 1 : 0, now, runId, liId, attemptId)
-      this.transitionEffect(db, runId, row.effect_key, outcome, input.result === undefined ? null : JSON.stringify(input.result), now)
+        .run(outcome, safeResult, input.ackLost ? 1 : 0, now, runId, liId, attemptId)
+      this.transitionEffect(db, runId, row.effect_key, outcome, safeResult, now)
     })()
   }
 
