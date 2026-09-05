@@ -226,3 +226,70 @@ describe("GraphRuntimeEngine — control.parallel / control.merge (directives 8-
     } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("GraphRuntimeEngine — control.repeat / control.while (directive 11)", () => {
+  const loopDef = (family: string, config: Record<string, unknown>) => def(
+    [node("loop", family, { ...config, body: "body" }), node("body", "tool.http", {}), node("after", "tool.http", {})],
+    [ { from: "loop", to: "body", kind: "flow" }, { from: "loop", to: "after", kind: "flow" } ],
+  )
+
+  test("repeat: bounded iterations, untilCondition exit, successors scheduled", () => {
+    const ctx = engine(loopDef("control.repeat", { maxIterations: 10, untilCondition: "input.count >= 3" })); try {
+      ctx.engine.startRun("r1")
+      let step = ctx.engine.enterLoop("r1", "loop", { input: { count: 0 } })
+      expect(step.done).toBe(false); expect(step.iteration).toBe(1); expect(step.bodyNodeId).toBe("body")
+      ctx.engine.completeNode("r1", "body", { iteration: 1 })
+      step = ctx.engine.enterLoop("r1", "loop", { input: { count: 1 } })
+      expect(step.iteration).toBe(2)
+      ctx.engine.completeNode("r1", "body", { iteration: 2 })
+      step = ctx.engine.enterLoop("r1", "loop", { input: { count: 2 } })
+      expect(step.iteration).toBe(3)
+      ctx.engine.completeNode("r1", "body", { iteration: 3 })
+      step = ctx.engine.enterLoop("r1", "loop", { input: { count: 3 } })
+      expect(step.done).toBe(true); expect(step.bodyNodeId).toBeNull()
+      expect(ctx.engine.nodeState("r1", "after")!.status).toBe("PENDING")
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART mid-loop: iteration counter survives, completed iterations are durable facts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-loop-restart-"))
+    try {
+      const loopConf = { maxIterations: 10, untilCondition: "input.count >= 3" }
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: loopDef("control.repeat", loopConf), now })
+      first.initialize(); first.startRun("r1")
+      first.enterLoop("r1", "loop", { input: { count: 0 } })
+      first.completeNode("r1", "body", { iteration: 1 })
+      first.enterLoop("r1", "loop", { input: { count: 1 } })
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: loopDef("control.repeat", loopConf), now })
+      second.initialize()
+      const step = second.enterLoop("r1", "loop", { input: { count: 2 } })
+      expect(step.iteration).toBe(3); expect(step.done).toBe(false)
+      const events = second.inspectEvents("r1").map((e) => e.kind)
+      expect(events.filter((k) => k === "LOOP_ITERATE")).toHaveLength(3)
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("while: condition flip exits; maxIterations is a hard guard (no infinite execution)", () => {
+    const ctx = engine(loopDef("control.while", { maxIterations: 2, whileCondition: "input.keep" })); try {
+      ctx.engine.startRun("r1")
+      let step = ctx.engine.enterLoop("r1", "loop", { input: { keep: true } })
+      expect(step.iteration).toBe(1)
+      ctx.engine.completeNode("r1", "body", {})
+      step = ctx.engine.enterLoop("r1", "loop", { input: { keep: false } })
+      expect(step.done).toBe(true)
+      // guard: a loop whose condition never stops is terminated by maxIterations
+      const ctx2 = engine(loopDef("control.while", { maxIterations: 2, whileCondition: "input.keep" })); try {
+        ctx2.engine.startRun("r2")
+        let s = ctx2.engine.enterLoop("r2", "loop", { input: { keep: true } })
+        ctx2.engine.completeNode("r2", "body", {})
+        s = ctx2.engine.enterLoop("r2", "loop", { input: { keep: true } })
+        expect(s.iteration).toBe(2)
+        ctx2.engine.completeNode("r2", "body", {})
+        s = ctx2.engine.enterLoop("r2", "loop", { input: { keep: true } })
+        expect(s.done).toBe(true)
+      } finally { ctx2.engine.close(); rmSync(ctx2.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})

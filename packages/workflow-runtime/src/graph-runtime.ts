@@ -19,7 +19,7 @@
  * decision at all (directive 13).
  */
 import type { Edge, Node, WorkflowDefinition } from "@unifia/contracts"
-import { parseControlIfConfig, parseControlMergeConfig, parseControlParallelConfig, parseControlSwitchConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
+import { parseControlIfConfig, parseControlMergeConfig, parseControlParallelConfig, parseControlRepeatConfig, parseControlSwitchConfig, parseControlWhileConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
 import { validateWorkflowGraph } from "@unifia/contracts"
 import { evaluate } from "@unifia/expression-runtime"
 import type { Database } from "bun:sqlite"
@@ -331,6 +331,77 @@ export class GraphRuntimeEngine {
       outcome = { fired: true, firedNow: result.committedNow, outputs: result.decision.outputs, failedBranch: null }
     })()
     return outcome
+  }
+
+  /**
+   * control.repeat / control.while (directive 11): the loop counter and
+   * exit state are DURABLE rows, never process-local. Each iteration is
+   * one atomic durable transition (decision update + journal event); a
+   * restart resumes at the persisted iteration number; maxIterations is
+   * a hard guard (no infinite execution); the body target gets PENDING
+   * for the current iteration only (completed iteration side effects are
+   * facts — they are never replayed blindly).
+   */
+  enterLoop(runId: string, nodeId: string, env: Record<string, unknown>): { iteration: number; done: boolean; bodyNodeId: string | null } {
+    const node = this.nodes.get(nodeId)
+    if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
+    const isRepeat = node.family === "control.repeat"
+    if (!isRepeat && node.family !== "control.while") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not a loop family`)
+    const config = isRepeat ? parseControlRepeatConfig(node.config) : parseControlWhileConfig(node.config)
+    const db = this.requireDb()
+    let outcome!: { iteration: number; done: boolean; bodyNodeId: string | null }
+    db.transaction(() => {
+      // auto-seed (loops are reached as branch/flow targets)
+      const seeded = this.rawState(db, runId, nodeId)
+      if (!seeded) this.setStatus(db, runId, nodeId, "PENDING")
+      const existing = this.existingDecision(db, runId, nodeId)
+      const previous = existing ? (JSON.parse(existing) as { iteration: number; done: boolean }) : { iteration: 0, done: false }
+      if (previous.done) { outcome = { iteration: previous.iteration, done: true, bodyNodeId: null }; return }
+      const nextIteration = previous.iteration + 1
+      if (nextIteration > config.maxIterations) {
+        // Guard: hard ceiling - exit without evaluating the condition again.
+        const decision = { iteration: previous.iteration, done: true }
+        db.query("UPDATE graph_nodes SET decision_json = ?, status = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+          .run(JSON.stringify(decision), "COMPLETED", this.now(), runId, nodeId)
+        this.journal(db, runId, nodeId, "LOOP_EXIT", { reason: "maxIterations guard", iterations: previous.iteration })
+        this.scheduleFlowSuccessors(db, runId, nodeId)
+        outcome = { iteration: previous.iteration, done: true, bodyNodeId: null }
+        return
+      }
+      const condition = isRepeat ? config.untilCondition : config.whileCondition
+      const stop = condition ? (isRepeat ? evaluate(condition, env) === true : evaluate(condition, env) !== true) : false
+      if (stop) {
+        const decision = { iteration: previous.iteration, done: true }
+        db.query("UPDATE graph_nodes SET decision_json = ?, status = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+          .run(JSON.stringify(decision), "COMPLETED", this.now(), runId, nodeId)
+        this.journal(db, runId, nodeId, "LOOP_EXIT", { reason: isRepeat ? "untilCondition met" : "whileCondition false", iterations: previous.iteration })
+        this.scheduleFlowSuccessors(db, runId, nodeId)
+        outcome = { iteration: previous.iteration, done: true, bodyNodeId: null }
+        return
+      }
+      const decision = { iteration: nextIteration, done: false }
+      db.query("UPDATE graph_nodes SET decision_json = ?, status = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+        .run(JSON.stringify(decision), "RUNNING", this.now(), runId, nodeId)
+      this.journal(db, runId, nodeId, "LOOP_ITERATE", { iteration: nextIteration })
+      // The canonical body reference is config.body (the graph layer
+      // validates it; back-edges are forbidden by the validator).
+      const body = config.body
+      if (!body || !this.nodes.has(body)) throw new GraphRuntimeError("LOOP_BODY_UNRESOLVED", `${nodeId} body target invalid: ${String(body)}`)
+      this.setStatus(db, runId, body, "PENDING")
+      this.journal(db, runId, body, "BRANCH_TAKEN", { by: nodeId, iteration: nextIteration })
+      outcome = { iteration: nextIteration, done: false, bodyNodeId: body }
+    })()
+    return outcome
+  }
+
+  /** Flow successors of a completed node become PENDING (single authority walk). */
+  private scheduleFlowSuccessors(db: Database, runId: string, nodeId: string): void {
+    for (const edge of this.outEdges.get(nodeId) ?? []) {
+      if (edge.kind === "flow") {
+        this.setStatus(db, runId, edge.to, "PENDING")
+        this.journal(db, runId, edge.to, "BRANCH_TAKEN", { by: nodeId })
+      }
+    }
   }
 
   private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {
