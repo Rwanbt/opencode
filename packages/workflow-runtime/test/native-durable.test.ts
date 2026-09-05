@@ -14,6 +14,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { NativeDurableHistoryAuthority } from "../src/native-history"
 import { NativeApprovalAuthority, type NativeApprovalAuthorityOptions } from "../src/native-approval-authority"
+import { NativeAttemptAuthority } from "../src/native-attempts"
 import { ApprovalBrokerV4, ApprovalV4Error, type AuthorityToken, type ApprovalBinding } from "../src/approval-v4"
 import type { WorkflowRun } from "@unifia/contracts"
 
@@ -45,7 +46,7 @@ describe("NativeDurableHistoryAuthority", () => {
       expect(run).not.toBeNull(); expect(run!.status).toBe("running")
       run!.status = "completed"
       expect((await ctx.authority.getRun("run-1"))!.status).toBe("running")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("applies a legal transition atomically and journals it", async () => {
@@ -57,7 +58,7 @@ describe("NativeDurableHistoryAuthority", () => {
       const history = ctx.authority.inspectTransitions("run-1")
       expect(history).toHaveLength(1)
       expect(history[0]).toMatchObject({ from: "running", to: "waiting", effectSlotId: "slot-1" })
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("rejects illegal transitions and from-mismatches", async () => {
@@ -67,14 +68,14 @@ describe("NativeDurableHistoryAuthority", () => {
       await expect(ctx.authority.transition("run-1", { from: "completed", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })).rejects.toThrow("Illegal transition")
       await expect(ctx.authority.transition("run-1", { from: "waiting", to: "completed", effectSlotId: "slot-3", occurredAt: 1200, isCompensating: false })).rejects.toThrow("does not match current status")
       expect((await ctx.authority.getRun("run-1"))!.status).toBe("completed")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("rejects a future occurredAt (substrate obligation)", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
       await expect(ctx.authority.transition("run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 20_000, isCompensating: false })).rejects.toThrow("future")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("enqueues commands and applies timer overlap policies", async () => {
@@ -87,7 +88,7 @@ describe("NativeDurableHistoryAuthority", () => {
       const timers = ctx.authority.inspectTimers("run-1")
       expect(timers).toHaveLength(1); expect(timers[0]!.fireAt).toBe(3000)
       expect(ctx.authority.inspectCommands("run-1")).toHaveLength(1)
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("derives the materialized projection from persisted facts", async () => {
@@ -100,7 +101,7 @@ describe("NativeDurableHistoryAuthority", () => {
       expect(projection).toMatchObject({ runId: "run-1", status: "waiting", lastTransitionAt: 1100 })
       expect(projection.pendingEffects).toEqual(["tool.http:run-1"])
       expect(projection.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("RESTART: every fact survives close + reopen (no replay ambiguity)", async () => {
@@ -126,7 +127,7 @@ describe("NativeDurableHistoryAuthority", () => {
       await second.transition("run-1", { from: "waiting", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })
       expect((await second.getRun("run-1"))!.status).toBe("running")
       second.close()
-    } finally { rmSync(dir, { recursive: true, force: true }) }
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
 
@@ -153,7 +154,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       await expect(ctx.authority.transact(stale, async (state) => ({ state, result: 1 }))).rejects.toThrow("STALE_AUTHORITY")
       const forged: AuthorityToken = { ...ctx.token, authorityOwnerId: "owner-b" }
       await expect(ctx.authority.read(forged, "x")).rejects.toThrow("STALE_AUTHORITY")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("takeover bumps generation: old token dies, new token rules (exactly one winner)", async () => {
@@ -163,7 +164,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       const fresh: AuthorityToken = { workflowRunId: "run-1", generation: 2, authorityOwnerId: "owner-b" }
       const out = await ctx.authority.transact(fresh, async (state) => ({ state, result: state.generation }))
       expect(out).toBe(2)
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("broker V4 on the durable authority: request -> resolve -> idempotent replay, journal monotonic", async () => {
@@ -177,7 +178,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       const events = await ctx.broker.history(requested.approvalId, ctx.token)
       expect(events.map((e) => e.kind)).toEqual(["REQUESTED", "APPROVED", "REPLAYED_RESOLVE"])
       expect(events.map((e) => e.eventSequence)).toEqual([1, 2, 3])
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("RESTART: approvals, journal and generation survive close + reopen", async () => {
@@ -204,7 +205,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       const events2 = await brokerB.history(requested.approvalId, tokenA)
       expect(events2[events2.length - 1]!.kind).toBe("REPLAYED_RESOLVE")
       second.close()
-    } finally { rmSync(dir, { recursive: true, force: true }) }
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("concurrent transact on the same run: fencing rejects the loser", async () => {
@@ -217,7 +218,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       // simulate a lost authority (generation bump by another claim)
       ctx.authority.takeover("run-1", "owner-b")
       await expect(ctx.authority.transact(ctx.token, async (state) => ({ state, result: 2 }))).rejects.toThrow("STALE_AUTHORITY")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
 
@@ -237,7 +238,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const resolved = await brokerB.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), tokenA)
       expect(resolved.state).toBe("APPROVED")
       second.close()
-    } finally { rmSync(dir, { recursive: true, force: true }) }
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("derived ApprovalId: identical duplicate request returns the same record", async () => {
@@ -245,7 +246,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const first = await ctx.broker.request(approvalInput(), ctx.token)
       const second = await ctx.broker.request(approvalInput(), ctx.token)
       expect(second.approvalId).toBe(first.approvalId); expect(second.ordinal).toBe(1)
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("binding TOCTOU + policy drift are journalled as distinct STALE kinds", async () => {
@@ -256,7 +257,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       await expect(ctx.broker.resolve(b.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), policyDecisionRef: "policy-b" }, ctx.token)).resolves.toMatchObject({ state: "STALE" })
       const events = await ctx.broker.history(b.approvalId, ctx.token)
       expect(events.map((e) => e.kind)).toEqual(["REQUESTED", "STALE_DIGEST_MISMATCH"])
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("scope list reordering does not invalidate a binding", async () => {
@@ -264,7 +265,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const created = await ctx.broker.request({ ...approvalInput(), capabilityRefs: ["fs.read", "fs.write"], resourceScope: ["/tmp/a", "/tmp/b"] }, ctx.token)
       const reordered = { ...binding(), capabilityRefs: ["fs.write", "fs.read"], resourceScope: ["/tmp/b", "/tmp/a"] }
       await expect(ctx.broker.resolve(created.approvalId, "APPROVED", { id: "human-1", kind: "human" }, reordered, ctx.token)).resolves.toMatchObject({ state: "APPROVED" })
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("expiry boundary: past-expiry resolve is EXPIRED (fail-closed)", async () => {
@@ -278,7 +279,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const lateBroker = new ApprovalBrokerV4(lateAuthority)
       await expect(lateBroker.resolve(created.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), ctx.token)).resolves.toMatchObject({ state: "EXPIRED" })
       lateAuthority.close()
-    } finally { rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("requester cancellation allowed; forged system cancellation rejected", async () => {
@@ -290,7 +291,7 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const second = await ctx.broker.request({ ...approvalInput(), requestGeneration: 2 }, ctx.token)
       const byTrusted = await ctx.broker.cancel(second.approvalId, { id: "authority-system", kind: "system" }, ctx.token)
       expect(byTrusted.state).toBe("CANCELLED")
-    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true }) }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("conflicting resolution rejected; journal sequence stays durable and monotonic across restart", async () => {
@@ -310,6 +311,97 @@ describe("D-02 V4 directive-8 proofs on the durable authority", () => {
       const events = await brokerB.history(created.approvalId, tokenA)
       expect(events.map((e) => e.eventSequence)).toEqual([1, 2])
       second.close()
-    } finally { rmSync(dir, { recursive: true, force: true }) }
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
+  test("retry semantics: same LI + same EffectKey -> NEW AttemptId, monotonic seq", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.mail.send")
+      const second = a.allocateAttempt("run-1", "li-1", "ek.mail.send")
+      expect(first.attemptId).not.toBe(second.attemptId)
+      expect(first.seq).toBe(1); expect(second.seq).toBe(2)
+      const effectId = NativeAttemptAuthority.effectId("run-1", "ek.mail.send")
+      expect(first.effectKey).toBe("ek.mail.send")
+      expect(a.inspectEffect("run-1", "ek.mail.send")!.effectId).toBe(effectId)
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("outcome recording: attempt becomes terminal, effect follows; double-record rejected", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att2-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.http.call")
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+      expect(() => a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "FAILED", {})).toThrow("already terminal")
+      expect(a.inspectEffect("run-1", "ek.http.call")!.status).toBe("SUCCEEDED")
+      // a NEW attempt on the same LI still works (retry after success is allowed to allocate, outcome re-records a new attempt row)
+      const retry = a.allocateAttempt("run-1", "li-1", "ek.http.call")
+      expect(retry.seq).toBe(2)
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("UNKNOWN_EXTERNAL_STATE: first-class outcome; terminal states are never overwritten; reconciliation journals", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att3-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // a late SUCCEEDED attempt outcome must NOT silently overwrite UNKNOWN
+      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // only explicit reconciliation moves it, and it is journalled + flagged
+      a.reconcileEffect("run-1", "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+      const effect = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(effect!.status).toBe("SUCCEEDED"); expect(effect!.reconciled).toBe(true)
+      expect(() => a.reconcileEffect("run-1", "ek.pay.charge", "FAILED", {})).toThrow("already terminal")
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("idempotency: terminal effect is never overwritten by a late attempt outcome", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att4-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.fs.write")
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
+      const retry = a.allocateAttempt("run-1", "li-1", "ek.fs.write")
+      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "FAILED", { result: { n: 2 } })
+      const effect = a.inspectEffect("run-1", "ek.fs.write")
+      expect(effect!.status).toBe("SUCCEEDED")
+      const attempts = a.inspectAttempts("run-1", "li-1")
+      expect(attempts).toHaveLength(2)
+      expect(attempts[0]!.outcome).toBe("SUCCEEDED"); expect(attempts[1]!.outcome).toBe("FAILED")
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: attempts, effects and journal survive close + reopen", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att5-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.x")
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
+      a.close()
+      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      b.initialize()
+      expect(b.inspectAttempts("run-1", "li-1")).toHaveLength(1)
+      expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      b.reconcileEffect("run-1", "ek.x", "FAILED", {})
+      expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("FAILED")
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
