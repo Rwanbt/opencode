@@ -443,3 +443,30 @@ describe("NativeDurableHistoryAuthority — durable timers (directives 16-17)", 
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("ACK-loss production regression (directive 23, FC-04 principle)", () => {
+  test("provider commits, candidate loses ack: UNKNOWN first-class, NO blind retry path, reconcile-only exit, restart-proof", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-ackloss-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      // the provider committed but the transport ACK was lost:
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      const effect = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(effect!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // NO blind retry: a retry attempt outcome CANNOT move the effect out of UNKNOWN
+      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "SUCCEEDED", { result: { done: true } })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      a.close()
+      // RESTART: UNKNOWN survives; only the explicit reconciliation exits
+      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      b.initialize()
+      expect(b.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      b.reconcileEffect("run-1", "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+      expect(b.inspectEffect("run-1", "ek.pay.charge")!.reconciled).toBe(true)
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
