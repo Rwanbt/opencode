@@ -24,6 +24,7 @@ import * as approvals from "./handlers/approvals.js"
 import * as artifacts from "./handlers/artifacts.js"
 import * as artifactsPresent from "./handlers/artifacts-present.js"
 import * as documents from "./handlers/documents.js"
+import * as workflows from "./handlers/workflows.js"
 import type { ServerContext } from "./server-context.js"
 
 /**
@@ -96,6 +97,19 @@ export async function dispatch(ctx: ServerContext, request: Request): Promise<Re
   }
   if (segments[1] === "approvals" && (request.method === "POST" || request.method === "DELETE")) {
     return approvals.approval(ctx, request, segments[2])
+  }
+  // Durable workflow surface (directive 35): start/resume/cancel/inspect
+  if (segments[1] === "workflows" && request.method === "POST" && segments.length === 2) {
+    return workflows.start(ctx, request)
+  }
+  if (segments[1] === "workflows" && segments[3] === "resume" && request.method === "POST") {
+    return workflows.resume(ctx, request, segments[2])
+  }
+  if (segments[1] === "workflows" && segments[3] === "cancel" && request.method === "POST") {
+    return workflows.cancel(ctx, request, segments[2])
+  }
+  if (segments[1] === "workflows" && request.method === "GET" && segments.length === 3) {
+    return workflows.inspect(ctx, request, segments[2])
   }
   if (segments[1] === "trace" && request.method === "GET") {
     return approvals.auditPage(ctx, request, "trace")
