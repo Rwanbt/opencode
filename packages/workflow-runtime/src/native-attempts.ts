@@ -215,6 +215,32 @@ export class NativeAttemptAuthority {
       .run(runId, seq.seq, effectKey, from, to, now)
   }
 
+  /**
+   * Directive 22: the recovery/reconciliation loop. At restart the
+   * runtime scans the durable effects (facts are rows) and surfaces:
+   *   - nonTerminalEffects: still PENDING (in-flight at crash -> the
+   *     executor re-drives them; attempts are NOT replayed blindly -
+   *     a re-drive allocates a NEW AttemptId),
+   *   - uncertainEffects: UNKNOWN_EXTERNAL_STATE -> the ONLY legal
+   *     exit is reconcileEffect (explicit reconciliation, never a
+   *     blind retry).
+   */
+  pendingEffects(runId?: string): readonly DurableEffect[] {
+    const db = this.requireDb()
+    const rows = (runId
+      ? db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE status = ? AND (? IS NULL OR run_id = ?) ORDER BY updated_at").all("PENDING", runId, runId)
+      : db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE status = ? ORDER BY updated_at").all("PENDING")) as { run_id: string; effect_key: string; effect_id: string; status: string; result_json: string | null; reconciled: number; updated_at: number }[]
+    return rows.map(toEffect)
+  }
+
+  uncertainEffects(runId?: string): readonly DurableEffect[] {
+    const db = this.requireDb()
+    const rows = (runId
+      ? db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE status = ? AND (? IS NULL OR run_id = ?) ORDER BY updated_at").all("UNKNOWN_EXTERNAL_STATE", runId, runId)
+      : db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE status = ? ORDER BY updated_at").all("UNKNOWN_EXTERNAL_STATE")) as { run_id: string; effect_key: string; effect_id: string; status: string; result_json: string | null; reconciled: number; updated_at: number }[]
+    return rows.map(toEffect)
+  }
+
   inspectEffect(runId: string, effectKey: string): DurableEffect | null {
     const db = this.requireDb()
     const row = db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE run_id = ? AND effect_key = ?").get(runId, effectKey) as { run_id: string; effect_key: string; effect_id: string; status: EffectStatus; result_json: string | null; reconciled: number; updated_at: number } | null
@@ -227,4 +253,8 @@ export class NativeAttemptAuthority {
     const rows = db.query("SELECT run_id, li_id, seq, attempt_id, effect_key, outcome, result_json, ack_lost, created_at FROM attempts WHERE run_id = ? AND li_id = ? ORDER BY seq").all(runId, liId) as { run_id: string; li_id: string; seq: number; attempt_id: string; effect_key: string; outcome: string | null; result_json: string | null; ack_lost: number; created_at: number }[]
     return rows.map((row) => ({ runId: row.run_id, logicalInvocationId: row.li_id, attemptId: row.attempt_id, seq: row.seq, effectKey: row.effect_key, outcome: (row.outcome ?? null) as AttemptOutcome | null, resultJson: row.result_json, ackLost: row.ack_lost === 1, createdAt: row.created_at }))
   }
+}
+
+function toEffect(row: { run_id: string; effect_key: string; effect_id: string; status: string; result_json: string | null; reconciled: number; updated_at: number }): DurableEffect {
+  return { runId: row.run_id, effectKey: row.effect_key, effectId: row.effect_id, status: row.status as EffectStatus, resultJson: row.result_json, reconciled: row.reconciled === 1, updatedAt: row.updated_at }
 }

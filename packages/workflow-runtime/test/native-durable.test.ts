@@ -470,3 +470,30 @@ describe("ACK-loss production regression (directive 23, FC-04 principle)", () =>
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("Recovery / reconciliation loop (directive 22)", () => {
+  test("restart scan: non-terminal PENDING surfaced for re-drive (new attempts), UNKNOWN surfaced for reconcile-only", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-recovery-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      a.allocateAttempt("run-1", "li-1", "ek.inflight")
+      const first = a.allocateAttempt("run-1", "li-2", "ek.pay")
+      a.recordAttemptOutcome("run-1", "li-2", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.close()
+      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      b.initialize()
+      const pending = b.pendingEffects("run-1")
+      expect(pending.map((e) => e.effectKey)).toEqual(["ek.inflight"])
+      const uncertain = b.uncertainEffects("run-1")
+      expect(uncertain.map((e) => e.effectKey)).toEqual(["ek.pay"])
+      // re-drive of the PENDING effect = NEW attempt (no blind replay of attempt 1)
+      const reDrive = b.allocateAttempt("run-1", "li-1", "ek.inflight")
+      expect(reDrive.seq).toBe(2)
+      // reconciliation is the only exit for the UNKNOWN effect
+      b.reconcileEffect("run-1", "ek.pay", "SUCCEEDED", { ok: true })
+      expect(b.uncertainEffects("run-1")).toHaveLength(0)
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
