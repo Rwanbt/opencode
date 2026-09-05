@@ -33,10 +33,9 @@ export function DesignSurfaceSwitcher(props: {
     event.preventDefault()
     const next = options[nextIndex]
     props.onChange(next.id)
-    const currentTab = event.currentTarget as HTMLButtonElement
-    currentTab.parentElement
-      ?.querySelector<HTMLButtonElement>(`[data-design-surface-tab="${next.id}"]`)
-      ?.focus()
+    queueMicrotask(() => {
+      document.querySelector<HTMLButtonElement>(`[data-design-surface-tab="${next.id}"]`)?.focus()
+    })
   }
   return (
     <div
