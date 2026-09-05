@@ -357,3 +357,51 @@ describe("GraphRuntimeEngine — control.map / control.child (directives 10+12)"
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("GraphRuntimeEngine — advance() walk (directives 13-14)", () => {
+  const pipelineDef = () => def(
+    [node("start", "tool.http", {}), node("gate", "control.if", { condition: "input.go", trueBranch: "yes", falseBranch: "no" }), node("yes", "tool.http", {}), node("no", "tool.http", {}), node("join2", "control.merge", { strategy: "any", branches: ["yes", "no"] }), node("after", "tool.http", {})],
+    [ { from: "start", to: "gate", kind: "flow" }, { from: "gate", to: "yes", kind: "branch-true" }, { from: "gate", to: "no", kind: "branch-false" }, { from: "yes", to: "join2", kind: "flow" }, { from: "no", to: "join2", kind: "flow" }, { from: "join2", to: "after", kind: "flow" } ],
+  )
+
+  test("walk end-to-end: effects surfaced for dispatch, decisions applied, merge fires, successor scheduled", () => {
+    const ctx = engine(pipelineDef()); try {
+      ctx.engine.startRun("r1")
+      let pass = ctx.engine.advance("r1", { input: { go: true } })
+      expect(pass.readyForDispatch).toEqual(["start"]); expect(pass.entered).toEqual([])
+      ctx.engine.completeNode("r1", "start", { started: true })
+      pass = ctx.engine.advance("r1", { input: { go: true } })
+      expect(pass.entered).toEqual(["gate"]); expect(pass.readyForDispatch).toEqual(["yes"])
+      expect(ctx.engine.nodeState("r1", "no")!.status).toBe("SKIPPED")
+      ctx.engine.completeNode("r1", "yes", { done: true })
+      pass = ctx.engine.advance("r1", { input: { go: true } })
+      // the merge fires and the successor is surfaced in the SAME pass (single-pass convergence)
+      expect(pass.entered).toContain("join2")
+      expect(pass.readyForDispatch).toEqual(["after"])
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART mid-pipeline: the walk resumes from durable facts (no duplicate decisions/events)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-walk-restart-"))
+    try {
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: pipelineDef(), now })
+      first.initialize(); first.startRun("r1")
+      first.advance("r1", { input: { go: true } })
+      first.completeNode("r1", "start", { started: true })
+      first.advance("r1", { input: { go: true } })
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: pipelineDef(), now })
+      second.initialize()
+      // pre-restart walk already surfaced "yes" (same-pass convergence); the
+      // restart resumes from durable facts: complete it and the merge fires.
+      const pass = second.advance("r1", { input: { go: true } })
+      expect(pass.readyForDispatch).toEqual([])
+      second.completeNode("r1", "yes", { done: true })
+      const pass2 = second.advance("r1", { input: { go: true } })
+      expect(pass2.entered).toContain("join2"); expect(pass2.readyForDispatch).toEqual(["after"])
+      const events = second.inspectEvents("r1").map((e) => e.kind)
+      expect(events.filter((k) => k === "DECIDED_IF")).toHaveLength(1)
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})

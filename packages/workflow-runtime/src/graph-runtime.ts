@@ -478,6 +478,68 @@ export class GraphRuntimeEngine {
     return outcome
   }
 
+  /**
+   * advance (directives 13/14): the durable walk driver. One pass scans
+   * PENDING/RUNNING nodes, decides which are READY (all incoming flow
+   * predecessors terminal), applies the family handler for control
+   * nodes, and surfaces effect-family nodes for EXTERNAL dispatch
+   * (completion via completeNode/failNode). Restart-safe by
+   * construction: every handler is idempotent on committed decisions.
+   */
+  advance(runId: string, env: Record<string, unknown>): { entered: string[]; readyForDispatch: string[] } {
+    const db = this.requireDb()
+    const entered: string[] = []
+    const readyForDispatch: string[] = []
+    // Iterate the DEFINITION (not just existing rows): non-entry nodes are
+    // invisible until a predecessor scheduled them, yet the walk must reach
+    // them the moment their predecessors are terminal.
+    for (const node of this.nodes.values()) {
+      const state = this.rawState(db, runId, node.id)
+      const status = state?.status
+      const isLoop = node.family === "control.repeat" || node.family === "control.while"
+      const active = status === undefined || status === "PENDING" || (isLoop && status === "RUNNING")
+      if (!active && node.family !== "control.merge") continue
+      if (!this.predecessorsTerminal(db, runId, node.id)) continue
+      switch (node.family) {
+        case "control.if": this.decideIf(runId, node.id, env); entered.push(node.id); break
+        case "control.switch": this.decideSwitch(runId, node.id, env); entered.push(node.id); break
+        case "control.parallel": this.fanOutParallel(runId, node.id); entered.push(node.id); break
+        case "control.map": this.fanOutMap(runId, node.id, env); entered.push(node.id); break
+        case "control.repeat":
+        case "control.while": this.enterLoop(runId, node.id, env); entered.push(node.id); break
+        case "control.child": this.dispatchChild(runId, node.id); entered.push(node.id); break
+        case "control.merge": {
+          const join = this.tryJoinMerge(runId, node.id)
+          if (join.firedNow) entered.push(node.id)
+          break
+        }
+        case "tool.http":
+        case "human.approval":
+        case "wait":
+        case "trigger.manual":
+        case "trigger.schedule": {
+          if (status === undefined || status === "PENDING") {
+            this.setStatus(db, runId, node.id, "RUNNING")
+            this.journal(db, runId, node.id, "NODE_READY", null)
+            readyForDispatch.push(node.id)
+          }
+          break
+        }
+      }
+    }
+    return { entered, readyForDispatch }
+  }
+
+  /** A node is READY when every incoming non-on-failure edge starts from a terminal node. */
+  private predecessorsTerminal(db: Database, runId: string, nodeId: string): boolean {
+    const incoming = (this.inEdges.get(nodeId) ?? []).filter((edge) => edge.kind !== "on-failure")
+    if (incoming.length === 0) return true
+    return incoming.every((edge) => {
+      const source = this.rawState(db, runId, edge.from)
+      return source !== null && (source.status === "COMPLETED" || source.status === "SKIPPED")
+    })
+  }
+
   private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {
     const row = db.query("SELECT status, output_json, decision_json FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { status: string; output_json: string | null; decision_json: string | null } | null
     return row
