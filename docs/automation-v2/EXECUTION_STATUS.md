@@ -4,7 +4,7 @@
 # EXECUTION STATUS — UNIFIA AUTOMATE
 
 > Statut courant : **LOCAL COMMITTED / NOT PUBLISHED**
-> Phase : **M0 QUALIFICATION COMPLETE - ADR-000 OWNER DECISION REQUIRED**
+> Phase : **ADR-000 RATIFIED (UNIFIA_NATIVE) - PRODUCTION WIRING**
 > HEAD local : `c9f27f83da` (FC-13 matrix complete `c9f27f83da`); 44 commits ahead of origin; NOT PUSHED.
 > ADR-000 substrate final : `OWNER_DECISION_REQUIRED`; finalistes tous deux QUALIFIES (FC-13 PASS x20 chacun, controld nËgatif 20/20 perdu - methodology VALID).
 > D-02 V4 : façade injectée et testée (`8/8` V4, `47/47` workflow-runtime), mais aucune implémentation durable de substrate ni certification V4 complète.
@@ -36,7 +36,7 @@ override this section.
   FC-14/FC-25 also measured for DBOS via REAL second OS processes of
   the same binary (M0_AUTHORITY_ONLY) on the same SQLite system DB:
   exactly one claim winner, loser stale token rejected, zombie
-  freeze->takeover->resume with stale rejections. FC-13 real power-loss now MEASURED: methodology VALID (control 20/20 lost), both finalists PASS x20. Remaining: owner decision only (frozen Gate D).
+  freeze->takeover->resume with stale rejections. FC-13 real power-loss now MEASURED: methodology VALID (control 20/20 lost), both finalists PASS x20. Remaining: production wiring of the selected UNIFIA_NATIVE authority (owner directives 2-4: substrate-neutral contracts, single authority, no dual runtime).
 - Candidate-level finding (P1): the DBOS real candidate's post-restart
   canonical-observation readback is intermittently empty even after a
   15s bounded poll (store-guard suite) - suspected

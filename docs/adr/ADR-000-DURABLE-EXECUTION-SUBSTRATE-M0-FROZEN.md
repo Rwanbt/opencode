@@ -15,8 +15,8 @@
 **Statut architecture :** `FROZEN`  
 **Statut contrat M0 :** `FROZEN`  
 **Statut M0 :** `MEASURED-COMPLETE`
-**Statut substrate final :** `OWNER_DECISION_REQUIRED`
-**Statut M1 :** `NO-GO`  
+**Statut substrate final :** `RATIFIED — UNIFIA_NATIVE (2026-09-05)`
+**Statut M1 :** `UNBLOCKED - FINAL GATE 81 REQUIRED`
 **Stratégie :** `S2 — LOCAL AUTHORITY + PROFILE-SPECIFIC CERTIFIED ADAPTERS`  
 **Finalistes Local :**
 1. `UNIFIA_NATIVE`
@@ -3231,7 +3231,7 @@ Gate D comparison      : TWO surviving candidates - the frozen
 ## Outcome (frozen section 80)
 
 ```text
-Outcome A or B : PENDING - TRUE OWNER DECISION REQUIRED
+Outcome A or B : DECIDED - owner selected A (UNIFIA_NATIVE), recorded in section 85
 Outcome C       : excluded (both finalists pass all gates)
 ```
 
@@ -3243,4 +3243,77 @@ ONLY the frozen Gate D dimensions. The AI must not break this link.
 ```text
 ADR-000 substrate final : OWNER_DECISION_REQUIRED
 M1                      : NO-GO (frozen section 81 - unchanged)
+```
+
+---
+
+# 85. Addendum - 2026-09-05 - OWNER DECISION RECORDED - RATIFICATION
+
+Explicit owner input at the frozen Gate D / section 80 decision
+boundary. The frozen rubric text is NOT modified; this addendum
+records the decision and its basis.
+
+## Decision
+
+```text
+Outcome A (frozen section 80)
+Local DurableWorkflowAuthority = UNIFIA_NATIVE
+```
+
+## Owner Gate D assessment (frozen dimensions only)
+
+```text
+correctness confidence : TIE (no owner-level discriminator)
+operational simplicity : UNIFIA_NATIVE
+packaging              : UNIFIA_NATIVE
+resource footprint     : UNIFIA_NATIVE (absent decisive measured
+                         DBOS advantage)
+cross-platform fit     : UNIFIA_NATIVE
+determinism burden     : DBOS_GO_SQLITE (acknowledged, outweighed)
+future mobile path     : UNIFIA_NATIVE
+maintenance ownership  : UNIFIA_NATIVE (slight)
+dependency burden      : UNIFIA_NATIVE
+exit strategy          : UNIFIA_NATIVE
+```
+
+The DBOS determinism/replay advantage is acknowledged and does not
+outweigh the operational, packaging, mobile, dependency, ownership
+and exit-strategy advantages of the native kernel.
+
+## DBOS record (accurate framing)
+
+```text
+DBOS_GO_SQLITE: qualified finalist, not selected at Gate D.
+```
+
+The complete DBOS qualification evidence is PRESERVED (M0 P0 matrix,
+FC-13 real power-loss 20/20 DURABLE_SURVIVED, benchmark). The M0
+comparison remains valuable architecture evidence. DBOS is NOT
+recorded as a failed experiment. DBOS status: qualification/reference
+evidence only, unless a future explicit ADR reopens the substrate
+decision. NOT authorized: two production substrates.
+
+## Production substrate commitments (owner directives 2-4)
+
+```text
+production substrate   : UNIFIA_NATIVE - exactly ONE WorkflowRun
+                         authority in production
+substrate-neutral      : WorkflowRun authority, history, attempts,
+contracts required      timers, effects, recovery, inspection remain
+                         exposed substrate-neutral (facade level);
+                         higher layers must not couple to Native
+                         implementation details
+forbidden in prod      : DBOS_GO_SQLITE, CUSTOM_GO_SQLITE_CONTROL,
+                         legacy workflow runtime as alternative
+                         WorkflowRun authority
+qualification code     : may remain isolated for regression/
+                         reference purposes
+```
+
+## Ratification state
+
+```text
+ADR-000 substrate final : RATIFIED - UNIFIA_NATIVE
+M1                      : UNBLOCKED (frozen section 81: final M1
+                          gate rerun still required at M1 close)
 ```
