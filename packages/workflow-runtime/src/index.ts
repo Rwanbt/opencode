@@ -22,3 +22,6 @@ export * from "./in-memory"
 export * from "./file-backed"
 export * from "./v1-migrating"
 export * from "./approval-v4"
+// UNIFIA_NATIVE production durable authority (ADR-000 ratified 2026-09-05).
+export * from "./native-history"
+export * from "./native-approval-authority"
