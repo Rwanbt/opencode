@@ -16,7 +16,8 @@ export async function start(ctx: ServerContext, request: Request): Promise<Respo
   if (!principal) return ctx.deny(null, "workflow.principal", 401)
   if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
   const input = (await body(request)) as WorkflowDefinitionPort
-  if (!input?.id || !Array.isArray(input?.steps)) return ctx.deny(principal, "workflow.definition", 400)
+  // fail-closed: a workflow with no steps is meaningless (no entry node)
+  if (!input?.id || !Array.isArray(input?.steps) || input.steps.length === 0) return ctx.deny(principal, "workflow.definition", 400)
   const state = await ctx.workflow.start(input)
   userAudit(ctx, principal, "workflow.start", "allow", { workflowId: input.id, status: state.status })
   return json(201, state)

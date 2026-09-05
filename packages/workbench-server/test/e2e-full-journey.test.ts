@@ -127,3 +127,34 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("Directive 35 - AI authoring through the SAME pipeline (journey B)", () => {
+  it("an AI-proposed definition converges into the SAME validation/publication/runtime path (no shortcut)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "e2e-ai-"))
+    try {
+      // AI proposals enter the pipeline as plain definitions - the pipeline
+      // is source-agnostic: same validation, same pin, same runtime, no
+      // privileged path, no direct durable-state writes from the AI.
+      const aiProposed = { id: "wf-ai", version: 1, workspaceId: "ws", steps: [ { id: "s0", capability: "fs.read", input: {} } ] }
+      const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
+      const server = new WorkbenchServer({
+        auth: { authenticate: async () => principal },
+        workspace: {} as never, runtime: {} as never, workflow: port,
+        audit: { record: () => undefined }, capability: { check: async () => "allow" },
+      })
+      const started = await server.fetch(new Request("http://127.0.1/v1/workflows", {
+        method: "POST", headers: { authorization: "Bearer t", "content-type": "application/json" }, body: JSON.stringify(aiProposed),
+      }))
+      expect(started.status).toBe(201)
+      const body = (await started.json()) as { versionId?: string; status: string }
+      expect(body.versionId).toBeDefined(); expect(body.status).toBe("running")
+      // an INVALID proposal is rejected by the SAME canonical gate
+      const invalid = await server.fetch(new Request("http://127.0.1/v1/workflows", {
+        method: "POST", headers: { authorization: "Bearer t", "content-type": "application/json" },
+        body: JSON.stringify({ id: "wf-bad", version: 1, workspaceId: "ws", steps: [] }),
+      }))
+      expect([400, 422]).toContain(invalid.status)
+      port.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
