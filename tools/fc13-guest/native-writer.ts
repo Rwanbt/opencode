@@ -1,36 +1,34 @@
 // FC-13 UNIFIA_NATIVE writer + post-cut inspector.
-//
 // WRITE mode: the candidate REAL durable commit path
-// (NativeSqliteCandidate startRun + driveAttempt). The acknowledged
-// attempt transition must survive the hard power cut.
-//
-// INSPECT mode: read ONLY durable state, emit the oracle verdict.
+// (NativeSqliteCandidate startRun + driveAttempt with a real in-process
+// provider). The acknowledged attempt transition must survive the cut.
+// INSPECT mode reads ONLY the durable attempts table.
 import { Database } from "bun:sqlite"
 import { NativeSqliteCandidate } from "../../packages/automate-m0-harness/src/qualification/adapters/native-sqlite.ts"
+import { FakeExternalEffectProvider } from "../../packages/automate-m0-harness/src/qualification/providers/fake-external.ts"
 
-const storePath = process.env.FC13_STORE_PATH ?? "/mnt/store"
+const storeDir = process.env.FC13_STORE_DIR ?? "/mnt/store"
 const iteration = process.env.FC13_ITERATION ?? "0"
 const mode = process.env.FC13_MODE ?? "write"
 
 if (mode === "inspect") {
   let result = "ABSENT"
   try {
-    const db = new Database(`${storePath}/native.sqlite`, { readonly: true })
+    const db = new Database(`${storeDir}/native.sqlite`, { readonly: true })
     const rows = db.query("SELECT status FROM attempts ORDER BY started_at ASC").all() as { status: string }[]
     const succeeded = rows.filter((row) => row.status === "SUCCEEDED").length
     result = rows.length === 0 ? "ABSENT" : succeeded > 0 ? `PRESENT:${succeeded}` : `PENDING_ONLY:${rows.length}`
     db.close()
   } catch (error) {
-    result = `CORRUPT:${String(error).slice(0, 80)}`
+    result = `CORRUPT:${String(error).slice(0, 60)}`
   }
   console.log(`FC13-RESULT native iter=${iteration} ${result}`)
   process.exit(0)
 }
 
-// WRITE mode.
 const candidate = new NativeSqliteCandidate({
-  storeDir: storePath,
-  provider: null as never,
+  storeDir,
+  provider: new FakeExternalEffectProvider({ storeDir: "/tmp/fake-provider", dropAckToCandidate: false }),
   version: "fc13",
   buildHash: "fc13-build",
 })
@@ -53,6 +51,5 @@ const attempt = await candidate.driveAttempt(runId, `li-fc13-${iteration}` as ne
   idempotencyKey: `ik-fc13-${iteration}`,
   providerCommittedAtEpochMs: Date.now(),
 })
-// The candidate acknowledged the durable attempt transition.
-console.log(`FC13-READY native iter=${iteration} attemptId=${attempt.attemptId} status=${attempt.status}`)
+console.log(`FC13-READY native iter=${iteration} attemptId=${attempt.attemptId} status=${attempt.status} runId=${runId}`)
 await new Promise(() => {})
