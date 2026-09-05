@@ -19,7 +19,8 @@
  * decision at all (directive 13).
  */
 import type { Edge, Node, WorkflowDefinition } from "@unifia/contracts"
-import { parseControlIfConfig, parseControlMergeConfig, parseControlParallelConfig, parseControlRepeatConfig, parseControlSwitchConfig, parseControlWhileConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
+import { DYNAMIC_NODE_ID_PATTERN, parseControlChildConfig, parseControlIfConfig, parseControlMapConfig, parseControlMergeConfig, parseControlParallelConfig, parseControlRepeatConfig, parseControlSwitchConfig, parseControlWhileConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
+import { extractMapKeyMaterial } from "@unifia/contracts"
 import { validateWorkflowGraph } from "@unifia/contracts"
 import { evaluate } from "@unifia/expression-runtime"
 import type { Database } from "bun:sqlite"
@@ -402,6 +403,79 @@ export class GraphRuntimeEngine {
         this.journal(db, runId, edge.to, "BRANCH_TAKEN", { by: nodeId })
       }
     }
+  }
+
+  /**
+   * control.map (directive 10): stable element identity via the canonical
+   * map-key machinery; per-element instance nodes are durable facts; the
+   * LogicalInvocationId is derived deterministically (stable across
+   * restart, retries get fresh AttemptIds at the attempt layer).
+   */
+  fanOutMap(runId: string, nodeId: string, env: Record<string, unknown>): { elementIds: string[]; instanceIds: string[]; committedNow: boolean } {
+    const node = this.nodes.get(nodeId)
+    if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
+    if (node.family !== "control.map") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.map`)
+    const config = parseControlMapConfig(node.config)
+    const db = this.requireDb()
+    let outcome!: { elementIds: string[]; instanceIds: string[]; committedNow: boolean }
+    db.transaction(() => {
+      const result = this.committedDecision<{ elementIds: string[]; instanceIds: string[] }>(db, runId, nodeId, () => {
+        const collection = evaluate(config.input, env)
+        if (!Array.isArray(collection)) throw new GraphRuntimeError("MAP_INPUT_NOT_LIST", `control.map input did not evaluate to a list: ${nodeId}`)
+        const elementIds: string[] = []
+        for (const item of collection) {
+          const material = extractMapKeyMaterial(config.key, item)
+          const elementId = String(material)
+          if (elementIds.includes(elementId)) throw new GraphRuntimeError("MAP_DUPLICATE_KEY", `control.map duplicate element key ${JSON.stringify(elementId)}: ${nodeId}`)
+          elementIds.push(elementId)
+        }
+        const instanceIds = elementIds.map((elementId) => DYNAMIC_NODE_ID_PATTERN.test(config.body) ? config.body.replace(/\{[^}]*\}/, elementId) : `${config.body}#${elementId}`)
+        return { elementIds, instanceIds }
+      })
+      if (result.committedNow) {
+        this.journal(db, runId, nodeId, "DECIDED_MAP", result.decision)
+        for (let i = 0; i < result.decision.instanceIds.length; i++) {
+          const instanceId = result.decision.instanceIds[i]!
+          const elementId = result.decision.elementIds[i]!
+          // Dynamic instance ids are not definition nodes - insert directly.
+          db.query("INSERT OR IGNORE INTO graph_nodes (run_id, node_id, status, decision_json, output_json, updated_at) VALUES (?, ?, ?, NULL, NULL, ?)")
+            .run(runId, instanceId, "PENDING", this.now())
+          this.journal(db, runId, instanceId, "MAP_ELEMENT", { elementId, logicalInvocationId: `li:${runId}:${config.body}:${elementId}` })
+        }
+      }
+      outcome = { ...result.decision, committedNow: result.committedNow }
+    })()
+    return outcome
+  }
+
+  /**
+   * control.child (directive 12): the child binding is pinned at dispatch
+   * and persisted ONCE (definitionId, version, parent/child linkage) —
+   * never resolved "latest" afterwards; restart returns the pinned
+   * binding (TOCTOU-proof by durable decision).
+   */
+  dispatchChild(runId: string, nodeId: string): { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean } {
+    const node = this.nodes.get(nodeId)
+    if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
+    if (node.family !== "control.child") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.child`)
+    const config = parseControlChildConfig(node.config)
+    const db = this.requireDb()
+    let outcome!: { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean }
+    db.transaction(() => {
+      const result = this.committedDecision<{ childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string }>(db, runId, nodeId, () => ({
+        childDefinitionId: config.definitionId ?? null,
+        childDeploymentId: config.deploymentId ?? null,
+        childVersion: config.deploymentId ? (config.version ?? null) : null,
+        childRunId: `child:${runId}:${nodeId}`,
+      }))
+      if (result.committedNow) {
+        this.journal(db, runId, nodeId, "CHILD_DISPATCHED", { ...result.decision, awaitCompletion: config.awaitCompletion })
+        db.query("UPDATE graph_nodes SET status = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+          .run("RUNNING", this.now(), runId, nodeId)
+      }
+      outcome = { ...result.decision, committedNow: result.committedNow }
+    })()
+    return outcome
   }
 
   private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {

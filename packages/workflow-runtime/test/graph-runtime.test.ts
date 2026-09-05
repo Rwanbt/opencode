@@ -293,3 +293,67 @@ describe("GraphRuntimeEngine — control.repeat / control.while (directive 11)",
     } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("GraphRuntimeEngine — control.map / control.child (directives 10+12)", () => {
+  const mapDef = () => def(
+    [node("scan", "control.map", { input: "input.items", body: "process-{id}", key: { strategy: "field", field: "id" }, maxConcurrency: 4 }), node("process-{id}", "tool.http", {}), node("done", "tool.http", {})],
+    [ { from: "scan", to: "process-{id}", kind: "flow" }, { from: "scan", to: "done", kind: "flow" } ],
+  )
+
+  test("map: stable element identity, dynamic instance ids, duplicates fail-closed, empty list completes", () => {
+    const ctx = engine(mapDef()); try {
+      ctx.engine.startRun("r1")
+      const out = ctx.engine.fanOutMap("r1", "scan", { input: { items: [ { id: "a" }, { id: "b" } ] } })
+      expect(out.elementIds).toEqual(["a", "b"]); expect(out.instanceIds).toEqual(["process-a", "process-b"])
+      expect(ctx.engine.nodeState("r1", "process-a")!.status).toBe("PENDING")
+      ctx.engine.startRun("r3")
+      try { ctx.engine.fanOutMap("r3", "scan", { input: { items: [ { id: "x" }, { id: "x" } ] } }); expect.unreachable() } catch (e) { expect((e as GraphRuntimeError).code).toBe("MAP_DUPLICATE_KEY") }
+      ctx.engine.completeNode("r1", "process-a", { ok: 1 })
+      // empty collection decision is separately committed (fresh run)
+      ctx.engine.startRun("r2")
+      const empty = ctx.engine.fanOutMap("r2", "scan", { input: { items: [] } })
+      expect(empty.elementIds).toEqual([])
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("map RESTART: completed elements preserved; re-order does not re-execute", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-map-restart-"))
+    try {
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: mapDef(), now })
+      first.initialize(); first.startRun("r1")
+      first.fanOutMap("r1", "scan", { input: { items: [ { id: "a" }, { id: "b" } ] } })
+      first.completeNode("r1", "process-a", { done: true })
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: mapDef(), now })
+      second.initialize()
+      const again = second.fanOutMap("r1", "scan", { input: { items: [ { id: "b" }, { id: "a" } ] } })
+      expect(again.committedNow).toBe(false); expect(again.elementIds).toEqual(["a", "b"])
+      expect(second.nodeState("r1", "process-a")!.status).toBe("COMPLETED")
+      expect(second.nodeState("r1", "process-b")!.status).toBe("PENDING")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("child: binding pinned + persisted once; RESTART returns the pinned binding (TOCTOU-proof)", () => {
+    const childDef = () => def(
+      [node("spawn", "control.child", { deploymentId: "child-dep", version: "v1", awaitCompletion: true }), node("after", "tool.http", {})],
+      [ { from: "spawn", to: "after", kind: "flow" } ],
+    )
+    const dir = mkdtempSync(join(tmpdir(), "unifia-child-"))
+    try {
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: childDef(), now })
+      first.initialize(); first.startRun("r1")
+      const out = first.dispatchChild("r1", "spawn")
+      expect(out.childDeploymentId).toBe("child-dep"); expect(out.childVersion).toBe("v1"); expect(out.committedNow).toBe(true)
+      expect(first.nodeState("r1", "spawn")!.status).toBe("RUNNING")
+      const linked = first.inspectEvents("r1").find((e) => e.kind === "CHILD_DISPATCHED")
+      expect(linked).toBeDefined()
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: childDef(), now })
+      second.initialize()
+      const again = second.dispatchChild("r1", "spawn")
+      expect(again.committedNow).toBe(false); expect(again.childVersion).toBe("v1")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
