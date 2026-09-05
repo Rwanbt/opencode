@@ -112,3 +112,36 @@ Suites at this update: workflow-runtime 112/112, workbench-server
 87/87, expression 8/8, catalog 5/5, migration 6/6, durable 29/29.
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
+## Update 2026-09-05 (batch 2: E2E journey + retention + version skew)
+
+```text
+CLOSED:
+  Directive 35 (core E2E journey) : GREEN - one E2E through the REAL
+    HTTP pipeline + production durable kernel (20 assertions): manual
+    authoring 201, immutable pin no-latest (V2 published after, run
+    stays V1), restart/rediscovery, durable approval across restart
+    with stale fencing, durable timer across restart (fire once),
+    ACK-loss UNKNOWN + reconcile-only, retry (same LI, new AttemptId),
+    durable cancellation across restart, read-only diagnosis journal.
+    test: packages/workbench-server/test/e2e-full-journey.test.ts
+  Directive 41 (retention)        : GREEN - applyHistoryRetention
+    (ADR-016): terminal runs -> cold archive one transaction per run,
+    ACTIVE runs NEVER archived + fully recoverable, provenance
+    inspectable. test: retention.test.ts
+  Directive 42 (version skew)     : GREEN - schema version gate with
+    the ADR-018 window (min = N-1): unknown future version fails
+    CLOSED at open. test: retention.test.ts
+  Migration around restart        : PASS (v1-migrating 6/6 + version
+    gate fail-closed)
+
+STILL OPEN:
+  1. Directives 32-34: quality track repro-first (browser harness
+     required - interactive session)
+  2. Directive 43: platform certification matrix
+  3. Directive 35 (residual): AI-authoring proof through the same
+     HTTP pipeline (the pipeline is family-agnostic - the compiler
+     integration is the remaining wire)
+```
+
+Suites: workflow-runtime 115/115, workbench-server 88/88.
