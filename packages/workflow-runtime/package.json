@@ -7,7 +7,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@unifia/contracts": "workspace:*",
-    "@unifia/digest-runtime": "workspace:*",
+    "@unifia/digest-runtime": "workspace:*", "@unifia/expression-runtime": "workspace:*",
     "@unifia/automate-migration-tool": "workspace:*"
   },
   "devDependencies": { "@tsconfig/node22": "22.0.2", "typescript": "catalog:" }
