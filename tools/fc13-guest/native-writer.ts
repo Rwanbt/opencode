@@ -26,9 +26,10 @@ if (mode === "inspect") {
   process.exit(0)
 }
 
+const provider = new FakeExternalEffectProvider({ storeDir: "/tmp/fake-provider", dropAckToCandidate: false })
+await provider.initialize()
 const candidate = new NativeSqliteCandidate({
   storeDir,
-  provider: new FakeExternalEffectProvider({ storeDir: "/tmp/fake-provider", dropAckToCandidate: false }),
   version: "fc13",
   buildHash: "fc13-build",
 })
