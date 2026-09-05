@@ -77,3 +77,32 @@ require their runtime packages to be production-wired first (same
 host-wiring gate).
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
+## Directive 39 - secret-leak canary (2026-09-05, MEASURED: HIGH FINDING)
+
+The canary test (native-durable.test.ts "Secret-leak canary") injects
+a known canary through realistic paths (tool result, effect error,
+approval resourceScope) and scans ALL durable surfaces.
+
+```text
+RESULT: DETECTED - HIGH finding, NOT WAIVED
+Raw canary ESCAPES into NativeAttemptAuthority result_json (attempt
+outcome persistence stores the executor-provided result verbatim).
+Approval surfaces (records + history) are clean.
+```
+
+Root cause: the durable attempt/effect layer persists whatever the
+EXECUTOR hands it; secret redaction belongs at the executor boundary
+(directive 26 - taint/data classification via C-M1-07 SecretBroker
+envelope), which is not yet production-wired (same host-wiring gate as
+the network/sandbox surfaces).
+
+Required remediation before FINAL GO: the production effect executor
+must redact classified values BEFORE recording attempt outcomes; the
+canary test then turns GREEN and becomes a permanent regression.
+
+Security verdict at 2026-09-05: Critical = 0, High = 1 (unwaived,
+tracked, remediation path identified) -> FINAL GO BLOCKED by this
+gate (directive 52 requires High = 0).
+
+LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.

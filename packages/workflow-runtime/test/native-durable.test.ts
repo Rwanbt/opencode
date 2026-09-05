@@ -497,3 +497,35 @@ describe("Recovery / reconciliation loop (directive 22)", () => {
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("Secret-leak canary (directive 39)", () => {
+  test("canary through tool input + error + approval: NO raw secret in any durable surface", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-canary-"))
+    try {
+      const CANARY = "CANARY-SECRET-s3cr3t-value"
+      const attempts = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      attempts.initialize()
+      // realistic path 1: a tool effect whose result accidentally embeds the secret
+      const first = attempts.allocateAttempt("run-1", "li-1", "ek.http.call")
+      attempts.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { body: `ok ${CANARY}` } })
+      // realistic path 2: an effect error carrying the secret
+      const second = attempts.allocateAttempt("run-1", "li-2", "ek.http.fail")
+      attempts.recordAttemptOutcome("run-1", "li-2", second.attemptId, "FAILED", { result: { error: `conn refused at ${CANARY}` } })
+      const approval = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      approval.initialize(); approval.claim("run-1", "owner-a")
+      const broker = new ApprovalBrokerV4(approval)
+      const token = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
+      const requested = await broker.request({ ...binding(), resourceScope: [`/data/${CANARY}`] }, token)
+      await broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), resourceScope: [`/data/${CANARY}`] }, token)
+      // SCAN all durable surfaces for the raw canary
+      const durableText = JSON.stringify([
+        attempts.inspectAttempts("run-1", "li-1"),
+        attempts.inspectAttempts("run-1", "li-2"),
+        broker.inspect(requested.approvalId, token),
+        broker.history(requested.approvalId, token),
+      ])
+      expect(durableText.includes(CANARY)).toBe(false)
+      attempts.close(); approval.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
