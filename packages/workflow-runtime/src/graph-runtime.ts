@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
   run_id TEXT NOT NULL,
   node_id TEXT NOT NULL,
   status TEXT NOT NULL,
+  deadline_at INTEGER,
   decision_json TEXT,
   output_json TEXT,
   updated_at INTEGER NOT NULL,
@@ -64,6 +65,11 @@ CREATE TABLE IF NOT EXISTS graph_events (
   detail_json TEXT,
   occurred_at INTEGER NOT NULL,
   PRIMARY KEY (run_id, seq)
+);
+CREATE TABLE IF NOT EXISTS cancel_requests (
+  run_id TEXT PRIMARY KEY,
+  reason TEXT,
+  requested_at INTEGER NOT NULL
 );
 `
 
@@ -538,6 +544,64 @@ export class GraphRuntimeEngine {
       const source = this.rawState(db, runId, edge.from)
       return source !== null && (source.status === "COMPLETED" || source.status === "SKIPPED")
     })
+  }
+
+  /**
+   * Directive 20: cancellation is DURABLE INTENT - it is persisted
+   * BEFORE any worker reaction. PENDING nodes are SKIPPED immediately
+   * (they never dispatch); RUNNING effect nodes keep running until the
+   * worker observes isCancelRequested() and fails itself - a stale
+   * worker that completes afterwards hits the terminal-state fencing
+   * (NODE_ALREADY_TERMINAL).
+   */
+  requestCancel(runId: string, reason: string): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      const existing = db.query("SELECT run_id FROM cancel_requests WHERE run_id = ?").get(runId)
+      if (existing) return
+      db.query("INSERT INTO cancel_requests (run_id, reason, requested_at) VALUES (?, ?, ?)").run(runId, reason, this.now())
+      this.journal(db, runId, null, "CANCEL_REQUESTED", { reason })
+      const pending = db.query("SELECT node_id FROM graph_nodes WHERE run_id = ? AND status = ?").all(runId, "PENDING") as { node_id: string }[]
+      for (const row of pending) {
+        db.query("UPDATE graph_nodes SET status = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+          .run("SKIPPED", JSON.stringify({ reason: "cancelled" }), this.now(), runId, row.node_id)
+        this.journal(db, runId, row.node_id, "CANCELLED", { reason })
+      }
+    })()
+  }
+
+  isCancelRequested(runId: string): boolean {
+    const db = this.requireDb()
+    return db.query("SELECT run_id FROM cancel_requests WHERE run_id = ?").get(runId) !== null
+  }
+
+  /**
+   * Directive 19: durable timeout. expireDue(nowMs) fails every RUNNING
+   * node past its persisted deadline in ONE atomic pass. Races are
+   * settled by the terminal-state fencing: whichever terminal write
+   * (completion, failure, expiry) commits first WINS - the loser gets
+   * NODE_ALREADY_TERMINAL. Exactly one terminal result per node.
+   */
+  expireDue(nowMs: number): readonly { runId: string; nodeId: string }[] {
+    const db = this.requireDb()
+    const expired: { runId: string; nodeId: string }[] = []
+    db.transaction(() => {
+      const rows = db.query("SELECT run_id, node_id FROM graph_nodes WHERE status = ? AND deadline_at IS NOT NULL AND deadline_at <= ?").all("RUNNING", nowMs) as { run_id: string; node_id: string }[]
+      for (const row of rows) {
+        db.query("UPDATE graph_nodes SET status = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ? AND status = ?")
+          .run("FAILED", JSON.stringify({ reason: "timeout" }), this.now(), row.run_id, row.node_id, "RUNNING")
+        this.journal(db, row.run_id, row.node_id, "NODE_TIMED_OUT", null)
+        expired.push({ runId: row.run_id, nodeId: row.node_id })
+      }
+    })()
+    return expired
+  }
+
+  /** Persist a deadline when work starts (setDeadline at dispatch). */
+  setDeadline(runId: string, nodeId: string, deadlineAt: number | null): void {
+    const db = this.requireDb()
+    db.query("UPDATE graph_nodes SET deadline_at = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+      .run(deadlineAt, this.now(), runId, nodeId)
   }
 
   private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {

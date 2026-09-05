@@ -405,3 +405,50 @@ describe("GraphRuntimeEngine — advance() walk (directives 13-14)", () => {
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
+
+describe("GraphRuntimeEngine — cancellation + timeout (directives 19-20)", () => {
+  const pipeDef = () => def(
+    [node("start", "tool.http", {}), node("after", "tool.http", {})],
+    [ { from: "start", to: "after", kind: "flow" } ],
+  )
+
+  test("cancel before dispatch: PENDING skipped, durable intent persisted, stale completion fenced", () => {
+    const ctx = engine(pipeDef()); try {
+      ctx.engine.startRun("r1")
+      // cancel BEFORE any dispatch (start is still PENDING)
+      ctx.engine.requestCancel("r1", "owner request")
+      expect(ctx.engine.isCancelRequested("r1")).toBe(true)
+      expect(ctx.engine.nodeState("r1", "start")!.status).toBe("SKIPPED")
+      try { ctx.engine.completeNode("r1", "start", { late: true }); expect.unreachable() } catch (e) { expect((e as GraphRuntimeError).code).toBe("NODE_ALREADY_TERMINAL") }
+      // restart: the durable intent survives
+      const dir = ctx.dir
+      ctx.engine.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: pipeDef(), now })
+      second.initialize()
+      expect(second.isCancelRequested("r1")).toBe(true)
+      second.close()
+    } finally { rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("cancel during attempt: RUNNING node keeps working; worker observes and fails; timeout race: one terminal wins", () => {
+    const ctx = engine(pipeDef()); try {
+      ctx.engine.startRun("r1"); ctx.engine.advance("r1", {})
+      ctx.engine.requestCancel("r1", "during attempt")
+      expect(ctx.engine.nodeState("r1", "start")!.status).toBe("RUNNING")
+      // the worker observes the durable flag and reacts (fail = cancelled shape)
+      ctx.engine.failNode("r1", "start", "cancelled by worker")
+      expect(ctx.engine.nodeState("r1", "start")!.status).toBe("FAILED")
+      try { ctx.engine.completeNode("r1", "start", { late: true }); expect.unreachable() } catch (e) { expect((e as GraphRuntimeError).code).toBe("NODE_ALREADY_TERMINAL") }
+      // timeout race: completion first wins; expiry of a RUNNING node later
+      ctx.engine.startRun("r2"); ctx.engine.advance("r2", {})
+      ctx.engine.setDeadline("r2", "start", 5000)
+      ctx.engine.completeNode("r2", "start", { fast: true })
+      expect(ctx.engine.expireDue(9000)).toEqual([])
+      ctx.engine.startRun("r3"); ctx.engine.advance("r3", {})
+      ctx.engine.setDeadline("r3", "start", 5000)
+      const expired = ctx.engine.expireDue(9000)
+      expect(expired).toEqual([ { runId: "r3", nodeId: "start" } ])
+      try { ctx.engine.completeNode("r3", "start", { late: true }); expect.unreachable() } catch (e) { expect((e as GraphRuntimeError).code).toBe("NODE_ALREADY_TERMINAL") }
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
