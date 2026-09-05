@@ -140,3 +140,89 @@ describe("GraphRuntimeEngine — canonical contract consumption (directive 5)", 
     } catch (e) { expect((e as GraphRuntimeError).code).toBe("GRAPH_INVALID") }
   })
 })
+
+describe("GraphRuntimeEngine — control.parallel / control.merge (directives 8-9)", () => {
+  const parDef = () => def(
+    [node("fan", "control.parallel", { branches: [ { branchId: "b1", target: "w1" }, { branchId: "b2", target: "w2" }, { branchId: "b3", target: "w3" } ] }),
+     node("w1", "tool.http", {}), node("w2", "tool.http", {}), node("w3", "tool.http", {}),
+     node("join", "control.merge", { strategy: "all", branches: ["w1", "w2", "w3"] }), node("after", "tool.http", {})],
+    [ { from: "fan", to: "w1", kind: "branch-N" }, { from: "fan", to: "w2", kind: "branch-N" }, { from: "fan", to: "w3", kind: "branch-N" }, { from: "w1", to: "join", kind: "flow" }, { from: "w2", to: "join", kind: "flow" }, { from: "w3", to: "join", kind: "flow" }, { from: "join", to: "after", kind: "flow" } ],
+  )
+
+  test("fan-out is durable + restart-safe; branches under the SAME run authority", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-par-"))
+    try {
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: parDef(), now })
+      first.initialize(); first.startRun("r1")
+      const out = first.fanOutParallel("r1", "fan")
+      expect(out.targets).toEqual(["w1", "w2", "w3"]); expect(out.committedNow).toBe(true)
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: parDef(), now })
+      second.initialize()
+      const again = second.fanOutParallel("r1", "fan")
+      expect(again.committedNow).toBe(false)
+      expect(second.nodeState("r1", "w2")!.status).toBe("PENDING")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("merge all: fires once with deterministic config-order outputs after every branch completes", () => {
+    const ctx = engine(parDef()); try {
+      ctx.engine.startRun("r1"); ctx.engine.fanOutParallel("r1", "fan")
+      ctx.engine.completeNode("r1", "w1", { which: 1 })
+      let join = ctx.engine.tryJoinMerge("r1", "join")
+      expect(join.fired).toBe(false)
+      ctx.engine.completeNode("r1", "w3", { which: 3 })
+      join = ctx.engine.tryJoinMerge("r1", "join")
+      expect(join.fired).toBe(false)
+      ctx.engine.completeNode("r1", "w2", { which: 2 })
+      join = ctx.engine.tryJoinMerge("r1", "join")
+      expect(join.fired).toBe(true); expect(join.firedNow).toBe(true)
+      expect(join.outputs).toEqual([ { which: 1 }, { which: 2 }, { which: 3 } ])
+      expect(ctx.engine.nodeState("r1", "after")!.status).toBe("PENDING")
+      const again = ctx.engine.tryJoinMerge("r1", "join")
+      expect(again.fired).toBe(true); expect(again.firedNow).toBe(false)
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("merge all: one branch failure fails the join, exactly once (no duplicate logical transition)", () => {
+    const ctx = engine(parDef()); try {
+      ctx.engine.startRun("r1"); ctx.engine.fanOutParallel("r1", "fan")
+      ctx.engine.completeNode("r1", "w1", { ok: true })
+      ctx.engine.failNode("r1", "w2", "provider 500")
+      const join = ctx.engine.tryJoinMerge("r1", "join")
+      expect(join.fired).toBe(false); expect(join.failedBranch).toBe("w2")
+      expect(ctx.engine.nodeState("r1", "join")!.status).toBe("FAILED")
+      const again = ctx.engine.tryJoinMerge("r1", "join")
+      expect(again.firedNow).toBe(false); expect(again.failedBranch).toBe("w2")
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+  test("RESTART between branch completion and merge: outputs preserved from durable facts, no recomputation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-par-restart-"))
+    try {
+      const first = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: parDef(), now })
+      first.initialize(); first.startRun("r1"); first.fanOutParallel("r1", "fan")
+      first.completeNode("r1", "w1", { which: 1 }); first.completeNode("r1", "w2", { which: 2 }); first.completeNode("r1", "w3", { which: 3 })
+      first.close()
+      const second = new GraphRuntimeEngine({ databasePath: join(dir, "g.sqlite"), definition: parDef(), now })
+      second.initialize()
+      const merged = second.tryJoinMerge("r1", "join")
+      expect(merged.fired).toBe(true); expect(merged.outputs).toEqual([ { which: 1 }, { which: 2 }, { which: 3 } ])
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("merge any: fires on first completed branch", () => {
+    const anyDef = def(
+      [node("fan", "control.parallel", { branches: [ { branchId: "b1", target: "w1" }, { branchId: "b2", target: "w2" } ] }), node("w1", "tool.http", {}), node("w2", "tool.http", {}), node("join", "control.merge", { strategy: "any", branches: ["w1", "w2"] })],
+      [ { from: "fan", to: "w1", kind: "branch-N" }, { from: "fan", to: "w2", kind: "branch-N" }, { from: "w1", to: "join", kind: "flow" }, { from: "w2", to: "join", kind: "flow" } ],
+    )
+    const ctx = engine(anyDef); try {
+      ctx.engine.startRun("r1"); ctx.engine.fanOutParallel("r1", "fan")
+      ctx.engine.completeNode("r1", "w2", { late: true })
+      const join = ctx.engine.tryJoinMerge("r1", "join")
+      expect(join.fired).toBe(true)
+      expect(join.outputs).toEqual([ null, { late: true } ])
+    } finally { ctx.engine.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})

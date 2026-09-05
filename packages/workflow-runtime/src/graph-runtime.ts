@@ -19,7 +19,7 @@
  * decision at all (directive 13).
  */
 import type { Edge, Node, WorkflowDefinition } from "@unifia/contracts"
-import { parseControlIfConfig, parseControlSwitchConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
+import { parseControlIfConfig, parseControlMergeConfig, parseControlParallelConfig, parseControlSwitchConfig, WorkflowDefinitionSchema } from "@unifia/contracts"
 import { validateWorkflowGraph } from "@unifia/contracts"
 import { evaluate } from "@unifia/expression-runtime"
 import type { Database } from "bun:sqlite"
@@ -128,8 +128,14 @@ export class GraphRuntimeEngine {
 
   /** Restart-stable decision: an existing decision is returned UNCHANGED (never re-evaluated). */
   private committedDecision<T>(db: Database, runId: string, nodeId: string, compute: () => T): { decision: T; committedNow: boolean } {
-    const row = db.query("SELECT decision_json FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { decision_json: string | null } | null
-    if (!row) throw new GraphRuntimeError("NODE_NOT_STARTED", nodeId)
+    // Nodes reached as branch targets (merge, successors) may not be seeded
+    // by startRun (only entry nodes are); auto-seed is restart-safe.
+    let row = db.query("SELECT decision_json FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { decision_json: string | null } | null
+    if (!row) {
+      db.query("INSERT INTO graph_nodes (run_id, node_id, status, decision_json, output_json, updated_at) VALUES (?, ?, ?, NULL, NULL, ?)")
+        .run(runId, nodeId, "PENDING", this.now())
+      row = { decision_json: null }
+    }
     if (row.decision_json !== null) return { decision: JSON.parse(row.decision_json) as T, committedNow: false }
     const decision = compute()
     db.query("UPDATE graph_nodes SET decision_json = ?, status = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
@@ -217,6 +223,125 @@ export class GraphRuntimeEngine {
     return outcome
   }
 
+  /**
+   * control.parallel (directive 8): fan-out is durable and restart-safe.
+   * Branches are execution units under the SAME run authority — no child
+   * run, no second authority. Branch targets become PENDING.
+   */
+  fanOutParallel(runId: string, nodeId: string): { branchIds: string[]; targets: string[]; committedNow: boolean } {
+    const node = this.requireNode(nodeId, "control.parallel")
+    const config = parseControlParallelConfig(node.config)
+    const db = this.requireDb()
+    let outcome!: { branchIds: string[]; targets: string[]; committedNow: boolean }
+    db.transaction(() => {
+      const result = this.committedDecision<{ branchIds: string[]; targets: string[] }>(db, runId, nodeId, () => ({
+        branchIds: config.branches.map((branch) => branch.branchId),
+        targets: config.branches.map((branch) => {
+          if (!this.nodes.has(branch.target)) throw new GraphRuntimeError("BRANCH_TARGET_UNKNOWN", `${nodeId} branch target not in definition: ${branch.target}`)
+          return branch.target
+        }),
+      }))
+      if (result.committedNow) {
+        this.journal(db, runId, nodeId, "DECIDED_PARALLEL", result.decision)
+        for (const target of result.decision.targets) {
+          this.setStatus(db, runId, target, "PENDING")
+          this.journal(db, runId, target, "BRANCH_TAKEN", { by: nodeId })
+        }
+      }
+      outcome = { ...result.decision, committedNow: result.committedNow }
+    })()
+    return outcome
+  }
+
+  /** Mark a node COMPLETED with its durable output (branch/effect completion). */
+  completeNode(runId: string, nodeId: string, output: unknown): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      const state = this.rawState(db, runId, nodeId)
+      if (!state) throw new GraphRuntimeError("NODE_NOT_STARTED", nodeId)
+      if (state.status === "COMPLETED" || state.status === "FAILED" || state.status === "SKIPPED") throw new GraphRuntimeError("NODE_ALREADY_TERMINAL", `${nodeId} is ${state.status}`)
+      db.query("UPDATE graph_nodes SET status = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+        .run("COMPLETED", JSON.stringify(output ?? null), this.now(), runId, nodeId)
+      this.journal(db, runId, nodeId, "NODE_COMPLETED", null)
+    })()
+  }
+
+  /** Mark a node FAILED with a durable reason (branch failure, effect failure). */
+  failNode(runId: string, nodeId: string, reason: string): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      const state = this.rawState(db, runId, nodeId)
+      if (!state) throw new GraphRuntimeError("NODE_NOT_STARTED", nodeId)
+      if (state.status === "COMPLETED" || state.status === "FAILED" || state.status === "SKIPPED") throw new GraphRuntimeError("NODE_ALREADY_TERMINAL", `${nodeId} is ${state.status}`)
+      db.query("UPDATE graph_nodes SET status = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+        .run("FAILED", JSON.stringify({ reason }), this.now(), runId, nodeId)
+      this.journal(db, runId, nodeId, "NODE_FAILED", { reason })
+    })()
+  }
+
+  /**
+   * control.merge (directive 9): frozen join semantics. The join fires
+   * ONCE (restart-stable via the committed decision); the merged output
+   * materializes branch outputs in CONFIG order (deterministic, never
+   * completion order). No branch re-computation ever happens.
+   */
+  tryJoinMerge(runId: string, nodeId: string): { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null } {
+    const node = this.requireNode(nodeId, "control.merge")
+    const config = parseControlMergeConfig(node.config)
+    const db = this.requireDb()
+    let outcome!: { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null }
+    db.transaction(() => {
+      const statuses = new Map<string, GraphNodeStatus>()
+      for (const branch of config.branches) {
+        const state = this.rawState(db, runId, branch)
+        if (state) statuses.set(branch, state.status as GraphNodeStatus)
+      }
+      const failed = config.branches.find((branch) => statuses.get(branch) === "FAILED") ?? null
+      const completed = config.branches.filter((branch) => statuses.get(branch) === "COMPLETED")
+      const ready = config.strategy === "all" ? failed === null && completed.length === config.branches.length : config.strategy === "any" ? completed.length >= 1 : completed.length >= (config.n ?? 1)
+      if (failed !== null && config.strategy === "all") {
+        const decision = { fired: false, failedBranch: failed }
+        const existing = this.existingDecision(db, runId, nodeId)
+        if (existing) { outcome = { ...JSON.parse(existing), firedNow: false, outputs: null }; return }
+        // The merge row may not exist yet (auto-seed mirrors committedDecision).
+        this.setStatus(db, runId, nodeId, "FAILED")
+        db.query("UPDATE graph_nodes SET decision_json = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+          .run(JSON.stringify(decision), JSON.stringify({ reason: `branch ${failed} failed` }), this.now(), runId, nodeId)
+        this.journal(db, runId, nodeId, "MERGE_FAILED", decision)
+        outcome = { fired: false, firedNow: true, outputs: null, failedBranch: failed }
+        return
+      }
+      if (!ready) { outcome = { fired: false, firedNow: false, outputs: null, failedBranch: null }; return }
+      const result = this.committedDecision<{ fired: boolean; outputs: unknown[] }>(db, runId, nodeId, () => ({
+        fired: true,
+        outputs: config.branches.map((branch) => {
+          const state = this.rawState(db, runId, branch)
+          return state?.output_json ? (JSON.parse(state.output_json) as unknown) : null
+        }),
+      }))
+      if (result.committedNow) {
+        this.journal(db, runId, nodeId, "MERGE_FIRED", { strategy: config.strategy })
+        for (const edge of this.outEdges.get(nodeId) ?? []) {
+          if (edge.kind === "flow") {
+            this.setStatus(db, runId, edge.to, "PENDING")
+            this.journal(db, runId, edge.to, "BRANCH_TAKEN", { by: nodeId })
+          }
+        }
+      }
+      outcome = { fired: true, firedNow: result.committedNow, outputs: result.decision.outputs, failedBranch: null }
+    })()
+    return outcome
+  }
+
+  private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {
+    const row = db.query("SELECT status, output_json, decision_json FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { status: string; output_json: string | null; decision_json: string | null } | null
+    return row
+  }
+
+  private existingDecision(db: Database, runId: string, nodeId: string): string | null {
+    const row = db.query("SELECT decision_json FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { decision_json: string | null } | null
+    return row?.decision_json ?? null
+  }
   nodeState(runId: string, nodeId: string): GraphNodeState | null {
     const db = this.requireDb()
     const row = db.query("SELECT run_id, node_id, status, decision_json, output_json, updated_at FROM graph_nodes WHERE run_id = ? AND node_id = ?").get(runId, nodeId) as { run_id: string; node_id: string; status: GraphNodeStatus; decision_json: string | null; output_json: string | null; updated_at: number } | null
