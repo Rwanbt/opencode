@@ -45,5 +45,7 @@ export async function inspect(ctx: ServerContext, request: Request, id: string):
   if (!principal) return ctx.deny(null, "workflow.principal", 401)
   if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
   const state = await ctx.workflow.resume(id)
-  return json(200, state)
+  // Directive 37: the diagnosis surface is the READ-ONLY durable journal.
+  const events = (await ctx.workflow.history?.(id)) ?? []
+  return json(200, { ...state, events })
 }

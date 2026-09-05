@@ -14,6 +14,7 @@ import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } f
 import type { Database } from "bun:sqlite"
 import { GraphRuntimeEngine } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition } from "@unifia/contracts"
+import { promoteToVersion } from "@unifia/workflow-catalog"
 
 export interface NativeWorkflowRuntimePortOptions {
   readonly databasePath: string
@@ -24,6 +25,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   private engine: GraphRuntimeEngine | null = null
   private db: Database | null = null
   private readonly loaded = new Map<string, WorkflowDefinitionPort>()
+  private readonly pins = new Map<string, { versionId: string; versionDigest: string }>()
   private readonly options: NativeWorkflowRuntimePortOptions
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
@@ -47,7 +49,8 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const db = this.ensureDb()
     const row = db.query("SELECT definition_json FROM wf_definitions WHERE workflow_id = ?").get(workflowId) as { definition_json: string } | null
     if (!row) throw new Error(`workflow definition not found: ${workflowId}`)
-    const restored = JSON.parse(row.definition_json) as WorkflowDefinitionPort
+    const restored = JSON.parse(row.definition_json) as WorkflowDefinitionPort & { versionId?: string; versionDigest?: string }
+    if (restored.versionId) this.pins.set(workflowId, { versionId: restored.versionId, versionDigest: restored.versionDigest ?? "" })
     this.loaded.set(workflowId, restored)
     return restored
   }
@@ -62,9 +65,14 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   }
 
   async start(definition: WorkflowDefinitionPort): Promise<WorkflowStatePort> {
-    this.loaded.set(definition.id, definition)
+    // Directive 36: the immutable publication pin is computed at start
+    // (versionId = JCS content digest) and persisted with the run.
+    const ir = toIr(definition)
+    const version = promoteToVersion(ir, 1, "workbench")
+    this.pins.set(definition.id, { versionId: version.versionId, versionDigest: version.versionDigest.value })
     const db = this.ensureDb()
-    db.query("INSERT OR REPLACE INTO wf_definitions (workflow_id, definition_json) VALUES (?, ?)").run(definition.id, JSON.stringify(definition))
+    const pins = this.pins.get(definition.id) ?? { versionId: "", versionDigest: "" }
+    db.query("INSERT OR REPLACE INTO wf_definitions (workflow_id, definition_json) VALUES (?, ?)").run(definition.id, JSON.stringify({ ...definition, versionId: pins.versionId, versionDigest: pins.versionDigest }))
     const engine = this.ensureEngine(definition)
     const runId = runIdFor(definition.id)
     engine.startRun(runId)
@@ -78,6 +86,13 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const engine = this.ensureEngine(definition)
     engine.advance(runId, { input: {} })
     return this.state(runId, definition)
+  }
+
+  /** Directive 37: read-only durable journal (diagnosis surface). */
+  async history(workflowId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]> {
+    const definition = this.ensureLoaded(workflowId)
+    const engine = this.ensureEngine(definition)
+    return engine.inspectEvents(runIdFor(workflowId)).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
   }
 
   /** Release the durable connection (workbench shutdown / test teardown). */
@@ -143,7 +158,8 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       break
     }
     if (nextStep >= steps.length && status === "running") status = "completed"
-    return { workflowId: definition.id, definition, status, nextStep, outputs }
+    const pins = this.pins.get(definition.id)
+    return { workflowId: definition.id, definition, status, nextStep, outputs, versionId: pins?.versionId, versionDigest: pins?.versionDigest }
   }
 }
 

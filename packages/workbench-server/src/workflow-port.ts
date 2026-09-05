@@ -30,6 +30,9 @@ export type WorkflowStatePort = {
   readonly status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled"
   readonly nextStep: number
   readonly outputs: readonly unknown[]
+  /** Immutable publication pins (directive 36) - set at start. */
+  readonly versionId?: string
+  readonly versionDigest?: string
   readonly error?: string
 }
 
@@ -37,4 +40,6 @@ export type WorkflowRuntimePort = {
   start(definition: WorkflowDefinitionPort): Promise<WorkflowStatePort>
   resume(workflowId: string): Promise<WorkflowStatePort>
   cancel(workflowId: string): Promise<WorkflowStatePort>
+  /** Directive 37: read-only durable journal for diagnosis. */
+  history?(workflowId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]>
 }

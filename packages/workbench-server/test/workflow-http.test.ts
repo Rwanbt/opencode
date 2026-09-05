@@ -26,6 +26,9 @@ describe("durable workflow HTTP surface (directive 35)", () => {
       expect(started.status).toBe(201)
       const inspected = await server.fetch(new Request("http://127.0.1/v1/workflows/wf-http-1", { headers: { authorization: "Bearer t" } }))
       expect(inspected.status).toBe(200)
+      const inspectedBody = await inspected.json()
+      expect(inspectedBody.versionId).toBeDefined(); expect(inspectedBody.versionDigest).toBeDefined()
+      expect(Array.isArray(inspectedBody.events)).toBe(true)
       const cancelled = await server.fetch(new Request("http://127.0.1/v1/workflows/wf-http-1/cancel", {
         method: "POST", headers: { authorization: "Bearer t" }
       }))
