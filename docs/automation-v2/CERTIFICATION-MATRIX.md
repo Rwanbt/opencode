@@ -31,10 +31,10 @@ test does not prove that the web runtime owns a platform bridge.
 | Expression evaluation (CEL) | PASS (ADR-003) | PASS (expression-runtime) | PASS (8 tests + graph use) | **SUPPORTED** |
 | Secret protection at durable boundary | PASS | PASS (DefaultSecretRedactor) | PASS (canary regression) | **SUPPORTED** |
 | AI authoring | CONTRACT_ONLY (ai-compiler contract) | NOT_WIRED (compiler runtime integration) | PARTIAL (same-pipeline proof) | **NOT_CERTIFIED - OPEN** |
-| Browser/computer-use | CONTRACT_ONLY | ISOLATED (browser-runtime pkg) | NOT_RUN (browser harness required) | **NOT_CERTIFIED - OPEN** |
-| Network/SSRF guard (ADR-023) | CONTRACT_ONLY | ISOLATED | NOT_RUN | **NOT_CERTIFIED - OPEN** |
-| Code/Shell sandbox (ADR-019/024) | CONTRACT_ONLY | ISOLATED (sandbox-drivers) | NOT_RUN | **NOT_CERTIFIED - OPEN** |
-| Connector/MCP | CONTRACT_ONLY | ISOLATED (mcp-transport) | NOT_RUN | **NOT_CERTIFIED - OPEN** |
+| Browser/computer-use | CONTRACT_ONLY | ISOLATED (browser-runtime) | browser-runtime driver `4/4`; app integration not run | **NOT_CERTIFIED - OPEN** |
+| Network/SSRF guard (ADR-023) | PASS (contracts) | **NOT_WIRED** (no network-runtime package located) | contract tests `31/31`; production boundary not run | **NOT_CERTIFIED - OPEN** |
+| Code/Shell sandbox (ADR-019/024) | CONTRACT_ONLY | ISOLATED (sandbox-drivers `29/29`) | Docker path unavailable; production integration not run | **NOT_CERTIFIED - OPEN** |
+| Connector/MCP | CONTRACT_ONLY | ISOLATED (mcp-transport, `63` expectations) | production connector integration not run | **NOT_CERTIFIED - OPEN** |
 | Distributed server / cluster | FUTURE_COMPATIBILITY_REQUIRED | - | - | **NOT_APPLICABLE (Local GA)** |
 | Mobile control/local-execution | FUTURE_COMPATIBILITY_REQUIRED | - | - | **NOT_APPLICABLE (Local GA)** |
 | Desktop host | CONTRACT_ONLY | ISOLATED (desktop-electron) | TypeScript adapter/build PASS; native executable blocked by host memory | **BLOCKED_ENVIRONMENT - OPEN** |

@@ -81,6 +81,25 @@ are production-ready and locally committed (66+ commits, no push).
 
 LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
 
+## Update 2026-09-06 (isolated capability evidence)
+
+```text
+GREEN isolated evidence:
+  browser-runtime driver       : 4/4
+  computer-use safety          : 36/36
+  sandbox-drivers              : 29/29 (Docker absent; refusal verified)
+  MCP transport/authorization  : 63 expectations
+  network/SSRF contracts       : 31/31
+
+CERTIFICATION CLASSIFICATION:
+  These results do not close production E2E cells. No network-runtime package
+  was located; network/SSRF remains CONTRACT_ONLY/NOT_WIRED. Browser, sandbox,
+  and MCP remain ISOLATED until their real application boundaries are wired
+  and exercised. The matrix now records those distinctions explicitly.
+```
+
+LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+
 ## Update 2026-09-06 (Automate platform contract and mode gates)
 
 ```text
