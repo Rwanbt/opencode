@@ -1,0 +1,23 @@
+{
+  "candidate": "dbos",
+  "iteration": 20,
+  "iterationId": "dbos-iter-20",
+  "sourceCommit": "134968545a",
+  "payloadDigest": {
+    "bun": "5275293a96fc58610d593fca875ec92a7aa9b517535f40f7a645c56eb6261afb",
+    "fc13-ctrl.js": "863a8b072e52fc768e1bbd3e7b1d87a6ef068793ce5617aab9b53c03823c6cbd",
+    "fc13-native.js": "73fd5f0264c2484e5e5450e36b89d3ff3e32854c15977060473f89aa3e8c360a",
+    "fc13-dbos": "54b9b3e30bb7de73bbd10196f54605b0b1ff710cef7b44876c5a9e2689d2f2e2",
+    "fc13-dbos-post.js": "1e6475afdfd3b96de54fed47160b656ebc9b6ba788907a7854e6b96dde3e9950",
+    "dbos-writer.sh": "cf90cc1907da77227087dd3970279ee457ec4d8441e7155955462632ccfa6f36",
+    "sbin/mke2fs": "89055abe8284858094b0573ee349fad3babbea10e1d95ff708697eb587fbb1ec"
+  },
+  "readyObserved": true,
+  "readyAt": 1788621887208,
+  "killAt": 1788621887209,
+  "readyKillLatencyMs": 1,
+  "bootDurationMs": 20691,
+  "readyLine": "FC13-READY dbos iter=20 runId=run-9411b55000f2dc91197eff40ced7cd8f",
+  "resultLine": "FC13-RESULT dbos iter=20 PRESENT",
+  "verdict": "DURABLE_SURVIVED"
+}

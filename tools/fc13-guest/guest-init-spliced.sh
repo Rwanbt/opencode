@@ -5,6 +5,7 @@
 # Kernel cmdline selects: fc13_mode=write|inspect  fc13_scenario=ctrl|native|dbos
 #   fc13_iteration=N  fc13_runid=<id> (inspect mode for dbos only)
 B=/bin/busybox
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 $B mount -t proc proc /proc 2>/dev/null || true
 $B mount -t sysfs sysfs /sys 2>/dev/null || true
 $B mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
@@ -13,6 +14,7 @@ for module in virtio virtio_ring virtio_pci virtio_blk ext4 jbd2 mbcache crc32c_
   $B modprobe "$module" 2>/dev/null || true
 done
 $B sleep 1 2>/dev/null || true
+$B ifconfig lo 127.0.0.1 up 2>/dev/null || $B ip link set lo up 2>/dev/null || true
 FC13_MODE="write"
 FC13_SCENARIO="ctrl"
 FC13_ITERATION="0"
@@ -27,8 +29,13 @@ for param in $($B cat /proc/cmdline); do
 done
 echo "FC13-GUEST mode=$FC13_MODE scenario=$FC13_SCENARIO iter=$FC13_ITERATION"
 echo "FC13-BLKDEVS: $($B ls /dev/vd* /dev/sd* 2>/dev/null | $B tr "\n" " ")"
-$B mkdir -p /mnt/store /mnt/payload
+$B mkdir -p /mnt/store /mnt/payload /tmp
+for applet in grep head sleep wget; do
+  [ -x "/bin/$applet" ] || $B ln -s /bin/busybox "/bin/$applet"
+done
 $B mount -t vfat /dev/vdb1 /mnt/payload 2>/dev/null || $B mount -t vfat /dev/vdb /mnt/payload 2>/dev/null || echo "FC13-PAYLOAD-MOUNT-FAILED"
+echo "BB-APPLETS: $(/bin/busybox --list 2>&1 | /bin/busybox tr "\n" " ")"
+echo "FC13-PAYLOAD-LS: $($B ls /mnt/payload 2>&1 | $B tr "\n" " ")"
 if [ "$FC13_MODE" = "write" ]; then
   LD_LIBRARY_PATH=/mnt/payload/lib /mnt/payload/sbin/mke2fs -t ext4 -F /dev/vda >/dev/null 2>&1
 fi
@@ -43,6 +50,7 @@ if [ "$FC13_MODE" = "inspect" ]; then
   if [ "$FC13_SCENARIO" = "dbos" ]; then
     # shellcheck disable=SC2086
     sh /mnt/payload/dbos-writer.sh 2>&1 | $B grep -a FC13-RESULT
+  else
     # shellcheck disable=SC2086
     /mnt/payload/bun /mnt/payload/fc13-$FC13_SCENARIO.js 2>&1 | $B grep -a FC13-RESULT
   fi
@@ -53,6 +61,7 @@ fi
 if [ "$FC13_SCENARIO" = "dbos" ]; then
   # shellcheck disable=SC2086
   sh /mnt/payload/dbos-writer.sh &
+else
   # shellcheck disable=SC2086
   /mnt/payload/bun /mnt/payload/fc13-$FC13_SCENARIO.js 2>&1 &
 fi

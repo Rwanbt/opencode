@@ -30,6 +30,7 @@ const provider = new FakeExternalEffectProvider({ storeDir: "/tmp/fake-provider"
 await provider.initialize()
 const candidate = new NativeSqliteCandidate({
   storeDir,
+  provider,
   version: "fc13",
   buildHash: "fc13-build",
 })
