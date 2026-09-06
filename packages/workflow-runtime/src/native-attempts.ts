@@ -35,7 +35,7 @@ import { assertAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from 
 export type AttemptOutcome = "SUCCEEDED" | "FAILED" | "UNKNOWN_EXTERNAL_STATE"
 export type EffectStatus = AttemptOutcome | "PENDING"
 
-export type AttemptAuthorityErrorCode = "RECONCILIATION_REQUIRED" | "RETRY_NOT_AUTHORIZED" | "EFFECT_ALREADY_TERMINAL"
+export type AttemptAuthorityErrorCode = "RECONCILIATION_REQUIRED" | "RETRY_NOT_AUTHORIZED" | "EFFECT_ALREADY_TERMINAL" | "RECONCILIATION_CONFLICT"
 
 export class AttemptAuthorityError extends Error {
   readonly code: AttemptAuthorityErrorCode
@@ -297,11 +297,27 @@ export class NativeAttemptAuthority {
       assertAuthority(db, token)
       const current = readEffect(db, runId, effectKey)
       if (!current) throw new Error(`effect not found: ${effectKey}`)
-      if (current.status === "SUCCEEDED" || current.status === "FAILED") throw new Error(`effect already terminal: ${effectKey} (${current.status})`)
-      const now = this.now()
-      db.query("UPDATE effects SET status = ?, result_json = ?, reconciled = 1, updated_at = ? WHERE run_id = ? AND effect_key = ?")
-        .run(outcome, result === undefined ? null : JSON.stringify(result), now, runId, effectKey)
-      this.journal(db, runId, effectKey, current.status, outcome, now)
+      if (current.status === "UNKNOWN_EXTERNAL_STATE") {
+        const now = this.now()
+        db.query("UPDATE effects SET status = ?, result_json = ?, reconciled = 1, updated_at = ? WHERE run_id = ? AND effect_key = ?")
+          .run(outcome, result === undefined ? null : JSON.stringify(result), now, runId, effectKey)
+        this.journal(db, runId, effectKey, current.status, outcome, now)
+        return
+      }
+      // Idempotent redelivery: repeating the SAME reconciled outcome is a
+      // no-op with zero mutation (reconcile commands may be redelivered
+      // after crash/ACK loss). A conflicting outcome on an already-reconciled
+      // effect is a typed conflict, never a silent overwrite. A normally
+      // succeeded effect (reconciled=0) is not a legal reconcile target.
+      if (current.reconciled === 1 &&
+        ((current.status === "SUCCEEDED" && outcome === "SUCCEEDED") ||
+          (current.status === "FAILED" && outcome === "FAILED"))) {
+        return
+      }
+      if (current.reconciled === 1) {
+        throw new AttemptAuthorityError("RECONCILIATION_CONFLICT", `reconcile ${outcome} conflicts with reconciled ${current.status}: ${effectKey}`)
+      }
+      throw new Error(`effect already terminal: ${effectKey} (${current.status})`)
     })()
   }
 
