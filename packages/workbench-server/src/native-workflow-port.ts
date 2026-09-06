@@ -12,8 +12,8 @@
  */
 import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { AuthorityError, GraphRuntimeEngine, type AuthorityToken } from "@unifia/workflow-runtime"
-import type { Node, Edge, WorkflowDefinition } from "@unifia/contracts"
+import { AuthorityError, GraphRuntimeEngine, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, takeoverAuthority, type AuthorityToken } from "@unifia/workflow-runtime"
+import type { Node, Edge, WorkflowDefinition, WorkflowRun } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
 export interface NativeWorkflowRuntimePortOptions {
@@ -24,11 +24,58 @@ export interface NativeWorkflowRuntimePortOptions {
 export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   private readonly engines = new Map<string, GraphRuntimeEngine>()
   private db: Database | null = null
+  private historySvc: NativeDurableHistoryAuthority | null = null
+  private attemptsSvc: NativeAttemptAuthority | null = null
+  private approvalsSvc: NativeApprovalAuthority | null = null
   private readonly loaded = new Map<string, { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string }>()
   private readonly options: NativeWorkflowRuntimePortOptions
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
     this.options = options
+  }
+
+  private now(): number { return this.options.now?.() ?? Date.now() }
+
+  /**
+   * Production subsystem assembly (#47): history, attempts and
+   * approvals live on the same SQLite file as the graph engines.
+   * Every mutation downstream therefore flows through the port's
+   * own handles under the single canonical AuthorityToken — no
+   * laterally-constructed authority is needed on the same file.
+   */
+  private ensureServices(): void {
+    if (this.historySvc) return
+    const history = new NativeDurableHistoryAuthority({ databasePath: this.options.databasePath, now: this.options.now })
+    history.initialize()
+    const attempts = new NativeAttemptAuthority({ databasePath: this.options.databasePath, now: this.options.now })
+    attempts.initialize()
+    const approvals = new NativeApprovalAuthority({ databasePath: this.options.databasePath, now: this.options.now })
+    approvals.initialize()
+    this.historySvc = history
+    this.attemptsSvc = attempts
+    this.approvalsSvc = approvals
+  }
+
+  get historyAuthority(): NativeDurableHistoryAuthority { this.ensureServices(); return this.historySvc! }
+
+  get attemptAuthority(): NativeAttemptAuthority { this.ensureServices(); return this.attemptsSvc! }
+
+  get approvalAuthority(): NativeApprovalAuthority { this.ensureServices(); return this.approvalsSvc! }
+
+  /** The run's graph engine through the production assembly (authority asserted). */
+  graphEngineFor(token: AuthorityToken): GraphRuntimeEngine {
+    requireToken(token)
+    const runId = token.workflowRunId
+    const loaded = this.ensureLoaded(runId)
+    const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    engine.assertAuthority(runId, token)
+    return engine
+  }
+
+  /** Ownership takeover through the shared authority table (generation bump). */
+  takeover(token: AuthorityToken, newOwnerId: string): AuthorityToken {
+    requireToken(token)
+    return takeoverAuthority(this.ensureDb(), token, newOwnerId, this.now())
   }
 
   private ensureDb(): Database {
@@ -75,8 +122,28 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const runId = crypto.randomUUID()
     db.query("INSERT INTO workflow_runs (run_id, definition_id, version_id, version_digest) VALUES (?, ?, ?, ?)").run(runId, definition.id, version.versionId, version.versionDigest.value)
     this.loaded.set(runId, { definition, versionId: version.versionId, versionDigest: version.versionDigest.value })
+    // #47 production assembly: the WorkflowRun fact lives in the durable
+    // history authority, and generation-1 ownership is claimed in history,
+    // approvals and graph against the single shared authority row.
+    this.ensureServices()
+    const record: WorkflowRun = {
+      runId,
+      deploymentId: "workbench-" + definition.id,
+      workflowVersionId: version.versionId,
+      deploymentScope: { ownershipScope: { organizationId: "workbench", workspaceId: definition.workspaceId }, environmentId: "workbench" },
+      triggerId: runId + ":trigger",
+      triggerEventId: runId + ":trigger-event",
+      durableAuthorityId: runId,
+      durableAuthorityKind: "native",
+      status: "running",
+      createdAt: this.now(),
+      updatedAt: this.now(),
+    }
+    this.historySvc!.register(record)
+    const token = this.historySvc!.claim(runId, authorityOwnerId)
+    this.approvalsSvc!.claim(runId, authorityOwnerId)
     const engine = this.ensureEngine(definition, version.versionId)
-    const token = engine.claimAuthority(runId, authorityOwnerId)
+    engine.claimAuthority(runId, authorityOwnerId)
     engine.startRun(runId, token)
     engine.advance(runId, token, { input: {} })
     return this.state(runId, definition, version.versionId, version.versionDigest.value, token)
@@ -114,6 +181,12 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   close(): void {
     for (const engine of this.engines.values()) engine.close()
     this.engines.clear()
+    this.historySvc?.close()
+    this.attemptsSvc?.close()
+    this.approvalsSvc?.close()
+    this.historySvc = null
+    this.attemptsSvc = null
+    this.approvalsSvc = null
     try { this.db?.exec("PRAGMA wal_checkpoint(TRUNCATE)") } catch { /* engine teardown may already hold the checkpoint lock */ }
     this.db?.close()
     this.db = null
