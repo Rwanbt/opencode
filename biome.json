@@ -26,6 +26,7 @@
 			"packages/browser-runtime/**/*.ts",
 			"packages/capability-runtime/**/*.ts",
 			"packages/computer-use-safety/**/*.ts",
+			"packages/automate-m0-contract/**/*.ts",
 			"packages/contracts/**/*.ts",
 			"packages/desktop-runtime/**/*.ts",
 			"packages/document-packs/**/*.ts",

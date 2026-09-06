@@ -1,0 +1,25 @@
+{
+  "name": "@unifia/artifact-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "ArtifactStore — caller-cannot-fix classification/taint/ownership/environment per plan §71 (M1-06 spike, ADR-005).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*",
+    "@unifia/digest-runtime": "workspace:*",
+    "@unifia/secret-broker": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

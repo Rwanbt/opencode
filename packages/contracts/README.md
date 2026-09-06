@@ -10,6 +10,11 @@ Unifia Workbench contracts — 6 ports TypeScript du Plan V3 §7.
 - **ArtifactPort** (ADR-0004) — abstraction sur les artefacts
 - **SandboxPort** (ADR-0005) — abstraction sur les backends d'isolation
 - **RemoteTransportPort** (Plan V3 §7.6) — abstraction sur les transports distants
+- **Secret brands** (ADR-1042) — `DesktopKeychainToken`,
+  `MobileEncryptionKey`, `WorkbenchIpcBearer` — three brand types
+  that prevent a value being used in the wrong role at compile
+  time, with `tryDecode*` runtime guards at the env-var /
+  request-header boundary.
 
 ## Usage
 
