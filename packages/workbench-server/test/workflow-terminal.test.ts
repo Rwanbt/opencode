@@ -1,4 +1,4 @@
-﻿/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: MIT */
 /* Copyright (c) 2026 Unifia contributors */
 
 /**
@@ -144,8 +144,7 @@ describe("terminal run boundary (P0-A)", () => {
   test("cross-authority rollback: a failing canonical transition reverts graph writes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-terminal-rollback-"))
     const path = join(dir, "w.sqlite")
-    const { Database: DatabaseCtor } = await import("bun:sqlite")
-    const db = new DatabaseCtor(path)
+    const db = new Database(path)
     db.exec("PRAGMA journal_mode = WAL")
     const engine = new GraphRuntimeEngine({ databasePath: path, definition: graphDefinition, now, database: db })
     engine.initialize()
