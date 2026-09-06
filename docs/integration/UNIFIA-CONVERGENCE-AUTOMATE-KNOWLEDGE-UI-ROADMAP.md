@@ -62,6 +62,18 @@ Final merge/issue closure remains pending review and normal CI.
 3. Open the review PR with complete Automate evidence and current issue AC.
 4. Close #43/#44/#45 only after merge and final acceptance re-read.
 
+## Promotion Assessment
+
+Measured 2026-09-06 after fetching current refs:
+
+- The Automate branch is a fast-forward descendant of `origin/work-design`:
+  `0` commits behind and `315` commits ahead.
+- Against `origin/dev`, it is `3` commits behind and `551` commits ahead.
+- The direct `dev` delta is approximately `977` files and `149k` added lines;
+  this is not a reviewable single promotion PR under the repository size gate.
+- No merge, rebase, or branch mutation was performed. Promotion must be split
+  into independently buildable/reviewable increments.
+
 ## Tests Baseline
 
 - Existing prior evidence: workflow-runtime 115/115, workbench-server 88/88, expression-runtime 8/8, native durable 29/29.
