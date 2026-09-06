@@ -1,0 +1,23 @@
+{
+  "id": "wf-fixture-approval-gate",
+  "version": 1,
+  "workspaceId": "ws-fixture",
+  "steps": [
+    {
+      "id": "fetch-pending-order",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://shop.example.com/orders/pending" }
+    },
+    {
+      "id": "process-payment",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://shop.example.com/payments", "body": { "amount": "{step.fetch-pending-order.body.total}" } },
+      "requiresApproval": true
+    },
+    {
+      "id": "send-confirmation",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://shop.example.com/emails/order-confirmed" }
+    }
+  ]
+}

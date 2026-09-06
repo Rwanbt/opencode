@@ -1132,6 +1132,10 @@ export function parseControlChildConfig(
   return parsed
 }
 
+export * from "./workflow-effect.js"
+export * from "./workflow-recovery.js"
+
+
 /* ------------------------------------------------------------------ */
 /* Triggers                                                            */
 /* ------------------------------------------------------------------ */
@@ -1270,6 +1274,3 @@ export const WorkflowIRSchema = z.object({
 })
 
 export type WorkflowIR = z.infer<typeof WorkflowIRSchema>
-
-export * from "./workflow-effect.js"
-export * from "./workflow-recovery.js"

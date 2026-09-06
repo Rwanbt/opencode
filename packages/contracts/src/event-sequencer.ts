@@ -60,7 +60,7 @@ export class SessionEventHub {
 
   /** Sequence of the oldest event still replayable, or 0 when nothing was dropped. */
   get oldestRetained(): number {
-    return this.#history.length > 0 ? (this.#history[0].sequence ?? 0) - 1 : 0
+    return this.#history.length > 0 ? (this.#history[0]!.sequence ?? 0) - 1 : 0
   }
 
   /** Assigns the next sequence, retains the event, and wakes live readers. */
