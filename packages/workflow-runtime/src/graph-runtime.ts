@@ -36,6 +36,15 @@ export interface GraphRuntimeOptions {
   readonly databasePath: string
   readonly definition: WorkflowDefinition
   readonly now?: () => number
+  /**
+   * Shared SQLite connection for atomic cross-authority boundaries
+   * (P0-A): when provided, the engine uses it instead of opening its
+   * own connection, so a caller can wrap engine + history mutations
+   * in ONE durable transaction (bun:sqlite nests transactions safely
+   * — see advance(), which already nests decide* transactions). The
+   * caller owns the lifecycle: close() never closes an injected handle.
+   */
+  readonly database?: Database
 }
 
 export interface GraphNodeState {
@@ -76,6 +85,7 @@ CREATE TABLE IF NOT EXISTS cancel_requests (
 
 export class GraphRuntimeEngine {
   private db: Database | null = null
+  private readonly ownsDb: boolean
   private readonly nodes: ReadonlyMap<string, Node>
   private readonly outEdges: ReadonlyMap<string, Edge[]>
   private readonly inEdges: ReadonlyMap<string, Edge[]>
@@ -88,24 +98,32 @@ export class GraphRuntimeEngine {
       throw new GraphRuntimeError("GRAPH_INVALID", validation.errors.map((e) => String(e.code)).join("; "))
     }
     this.options = { ...options, definition: parsed }
+    this.ownsDb = options.database === undefined
+    if (options.database) this.db = options.database
     this.nodes = new Map(parsed.nodes.map((node) => [node.id, node]))
     this.outEdges = indexBy(parsed.edges, (edge) => edge.from)
     this.inEdges = indexBy(parsed.edges, (edge) => edge.to)
   }
 
   initialize(): void {
-    const { Database } = require("bun:sqlite") as { Database: new (path: string) => Database }
-    this.db = new Database(this.options.databasePath)
-    this.db.exec("PRAGMA journal_mode = WAL")
-    this.db.exec("PRAGMA synchronous = FULL")
+    if (!this.db) {
+      const { Database } = require("bun:sqlite") as { Database: new (path: string) => Database }
+      this.db = new Database(this.options.databasePath)
+      this.db.exec("PRAGMA journal_mode = WAL")
+      this.db.exec("PRAGMA synchronous = FULL")
+    }
     this.db.exec(SCHEMA_V1)
   }
 
   close(): void {
     if (this.db) {
       try { this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)") } catch { /* best-effort release before close */ }
-      this.db.close()
-      this.db = null
+      // An injected shared connection belongs to the caller (P0-A atomic
+      // boundary owner): checkpoint it, but never close it here.
+      if (this.ownsDb) {
+        this.db.close()
+        this.db = null
+      }
     }
   }
 
@@ -167,9 +185,13 @@ export class GraphRuntimeEngine {
    * commits atomically with the branch journal.
    */
   decideIf(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { result: boolean; takenNodeId: string; skippedNodeId: string; committedNow: boolean } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.requireNode(nodeId, "control.if")
     const config = parseControlIfConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { result: boolean; takenNodeId: string; skippedNodeId: string; committedNow: boolean }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -213,9 +235,13 @@ export class GraphRuntimeEngine {
    * default; decision is committed once — restart keeps it.
    */
   decideSwitch(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { caseValue: string | null; takenNodeId: string; skippedNodeIds: string[]; committedNow: boolean } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.requireNode(nodeId, "control.switch")
     const config = parseControlSwitchConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { caseValue: string | null; takenNodeId: string; skippedNodeIds: string[]; committedNow: boolean }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -248,9 +274,13 @@ export class GraphRuntimeEngine {
    * run, no second authority. Branch targets become PENDING.
    */
   fanOutParallel(runId: string, token: AuthorityToken, nodeId: string): { branchIds: string[]; targets: string[]; committedNow: boolean } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.requireNode(nodeId, "control.parallel")
     const config = parseControlParallelConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { branchIds: string[]; targets: string[]; committedNow: boolean }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -302,15 +332,39 @@ export class GraphRuntimeEngine {
   }
 
   /**
+   * P0-A run-level terminal marker: journals the graph-side terminal
+   * consequence for a run. Idempotent (an existing RUN_TERMINAL event
+   * short-circuits) so resume-heal and retries converge. Designed to
+   * compose inside a caller-owned shared transaction together with the
+   * canonical history transition: both commit atomically or neither
+   * does (no split-brain between graph and run authority).
+   */
+  markRunTerminal(runId: string, token: AuthorityToken, status: "completed" | "failed" | "cancelled"): { alreadyTerminal: boolean } {
+    const db = this.requireDb()
+    let already = false
+    db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
+      const existing = db.query("SELECT seq FROM graph_events WHERE run_id = ? AND kind = ?").get(runId, "RUN_TERMINAL") as { seq: number } | null
+      if (existing) { already = true; return }
+      this.journal(db, runId, null, "RUN_TERMINAL", { status })
+    })()
+    return { alreadyTerminal: already }
+  }
+
+  /**
    * control.merge (directive 9): frozen join semantics. The join fires
    * ONCE (restart-stable via the committed decision); the merged output
    * materializes branch outputs in CONFIG order (deterministic, never
    * completion order). No branch re-computation ever happens.
    */
   tryJoinMerge(runId: string, token: AuthorityToken, nodeId: string): { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.requireNode(nodeId, "control.merge")
     const config = parseControlMergeConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -366,12 +420,16 @@ export class GraphRuntimeEngine {
    * facts — they are never replayed blindly).
    */
   enterLoop(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { iteration: number; done: boolean; bodyNodeId: string | null } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     const isRepeat = node.family === "control.repeat"
     if (!isRepeat && node.family !== "control.while") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not a loop family`)
     const config = isRepeat ? parseControlRepeatConfig(node.config) : parseControlWhileConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { iteration: number; done: boolean; bodyNodeId: string | null }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -435,11 +493,15 @@ export class GraphRuntimeEngine {
    * restart, retries get fresh AttemptIds at the attempt layer).
    */
   fanOutMap(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { elementIds: string[]; instanceIds: string[]; committedNow: boolean } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     if (node.family !== "control.map") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.map`)
     const config = parseControlMapConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { elementIds: string[]; instanceIds: string[]; committedNow: boolean }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
@@ -479,11 +541,15 @@ export class GraphRuntimeEngine {
    * binding (TOCTOU-proof by durable decision).
    */
   dispatchChild(runId: string, token: AuthorityToken, nodeId: string): { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean } {
+    const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     if (node.family !== "control.child") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.child`)
     const config = parseControlChildConfig(node.config)
-    const db = this.requireDb()
     let outcome!: { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean }
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)

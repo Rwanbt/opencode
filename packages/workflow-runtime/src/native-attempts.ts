@@ -5,10 +5,19 @@
  * NativeAttemptAuthority — production durable attempt/effect identity on
  * the ratified UNIFIA_NATIVE substrate (master plan directive 7, M3).
  *
- * Frozen semantics (owner directive 7):
+ * Frozen semantics (owner directive 7, r2 terminal machine):
  *   - NO GENERIC EXACTLY-ONCE CLAIM.
- *   - Retry = same LogicalInvocationId + same logical EffectKey -> NEW
- *     AttemptId (allocateAttempt always mints a fresh attempt).
+ *   - PENDING effects accept a NEW AttemptId per allocation (same
+ *     LogicalInvocationId + same logical EffectKey -> monotonic seq).
+ *   - SUCCEEDED is terminal: allocateAttempt throws
+ *     EFFECT_ALREADY_TERMINAL regardless of reconciled — a second
+ *     attempt would risk redispatching an already-realized effect.
+ *   - UNKNOWN_EXTERNAL_STATE allocates nothing: RECONCILIATION_REQUIRED.
+ *   - FAILED allocates nothing without an explicit retry authorization
+ *     (RETRY_NOT_AUTHORIZED); consuming the authorization reopens the
+ *     logical effect FAILED -> PENDING (journalled) and mints the new
+ *     attempt atomically — the new outcome may then become
+ *     SUCCEEDED, FAILED or UNKNOWN.
  *   - Effect identity is DERIVED from the EffectKey (one durable row per
  *     (runId, effectKey)); idempotency = a terminal effect is never
  *     blindly overwritten (resolveEffect is a no-op on terminal states).
@@ -203,17 +212,29 @@ export class NativeAttemptAuthority {
   allocateAttempt(token: AuthorityToken, liId: string, effectKey: string): DurableAttempt {
     const db = this.requireDb()
     const runId = token.workflowRunId
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before any semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthority(db, token)
     if (!runId || !liId || !effectKey) throw new Error("allocateAttempt: runId, liId and effectKey are required")
     let created!: DurableAttempt
     db.transaction(() => {
       assertAuthority(db, token)
       const effect = readEffect(db, runId, effectKey)
       if (effect?.status === "UNKNOWN_EXTERNAL_STATE") throw new AttemptAuthorityError("RECONCILIATION_REQUIRED", `effect requires reconciliation before allocation: ${effectKey}`)
-      if (effect?.reconciled === 1 && effect.status === "SUCCEEDED") throw new AttemptAuthorityError("EFFECT_ALREADY_TERMINAL", `reconciled effect is terminal: ${effectKey}`)
-      const authorized = effect?.reconciled === 1 && effect.status === "FAILED"
-      if (authorized && !readRetryAuthorization(db, runId, effectKey)) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `retry authorization required: ${effectKey}`)
+      // SUCCEEDED is terminal unconditionally: minting another attempt
+      // would risk redispatching an already-realized external effect.
+      if (effect?.status === "SUCCEEDED") throw new AttemptAuthorityError("EFFECT_ALREADY_TERMINAL", `effect is terminal: ${effectKey}`)
       const now = this.now()
-      if (authorized) db.query("DELETE FROM retry_authorizations WHERE run_id = ? AND effect_key = ?").run(runId, effectKey)
+      if (effect?.status === "FAILED") {
+        // Consume the explicit retry authorization and reopen the logical
+        // effect atomically: FAILED -> PENDING is journalled so the new
+        // attempt cycle is explicit in the durable journal.
+        if (!readRetryAuthorization(db, runId, effectKey)) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `retry authorization required: ${effectKey}`)
+        db.query("DELETE FROM retry_authorizations WHERE run_id = ? AND effect_key = ?").run(runId, effectKey)
+        db.query("UPDATE effects SET status = ?, reconciled = 0, updated_at = ? WHERE run_id = ? AND effect_key = ?").run("PENDING", now, runId, effectKey)
+        this.journal(db, runId, effectKey, "FAILED", "PENDING", now)
+      }
       db.query("INSERT OR IGNORE INTO logical_invocations (run_id, li_id, created_at) VALUES (?, ?, ?)").run(runId, liId, now)
       const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM attempts WHERE run_id = ? AND li_id = ?").get(runId, liId) as { seq: number }
       const attemptId = `att:${runId}:${liId}:${seq.seq}`
@@ -234,7 +255,10 @@ export class NativeAttemptAuthority {
       const runId = token.workflowRunId
       const effect = readEffect(db, runId, effectKey)
       if (!effect) throw new Error(`effect not found: ${effectKey}`)
-      if (effect.status !== "FAILED" || effect.reconciled !== 1) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `only reconciled failures may be authorized: ${effectKey}`)
+      // Any FAILED logical effect may be authorized (direct failures carry
+      // reconciled=0, reconciled failures carry reconciled=1); only FAILED
+      // effects are authorizable — authorizing a live cycle is rejected.
+      if (effect.status !== "FAILED") throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `only failed effects may be authorized: ${effectKey}`)
       db.query("INSERT OR REPLACE INTO retry_authorizations (run_id, effect_key, authorized_at) VALUES (?, ?, ?)").run(runId, effectKey, this.now())
     })()
   }
@@ -330,6 +354,12 @@ export class NativeAttemptAuthority {
     const row = db.query("SELECT run_id, effect_key, effect_id, status, result_json, reconciled, updated_at FROM effects WHERE run_id = ? AND effect_key = ?").get(runId, effectKey) as { run_id: string; effect_key: string; effect_id: string; status: EffectStatus; result_json: string | null; reconciled: number; updated_at: number } | null
     if (!row) return null
     return { runId: row.run_id, effectKey: row.effect_key, effectId: row.effect_id, status: row.status, resultJson: row.result_json, reconciled: row.reconciled === 1, updatedAt: row.updated_at }
+  }
+
+  inspectJournal(runId: string, effectKey: string): readonly { from: EffectStatus | null; to: EffectStatus; occurredAt: number }[] {
+    const db = this.requireDb()
+    const rows = db.query("SELECT from_status, to_status, occurred_at FROM effect_journal WHERE run_id = ? AND effect_key = ? ORDER BY seq").all(runId, effectKey) as { from_status: EffectStatus | null; to_status: EffectStatus; occurred_at: number }[]
+    return rows.map((row) => ({ from: row.from_status, to: row.to_status, occurredAt: row.occurred_at }))
   }
 
   inspectAttempts(runId: string, liId: string): readonly DurableAttempt[] {

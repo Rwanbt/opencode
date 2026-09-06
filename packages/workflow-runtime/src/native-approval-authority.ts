@@ -209,6 +209,11 @@ export class NativeApprovalAuthority implements ApprovalAuthority {
     return this.readHistoryRows(token.workflowRunId).filter((event) => event.approvalId === approvalId)
   }
 
+  /** P1 fence precedence entry point for the broker facade (see ApprovalAuthority). */
+  fence(token: AuthorityToken): void {
+    this.fenceRead(token)
+  }
+
   private fenceRead(token: AuthorityToken): void {
     const db = this.requireDb()
     const auth = db.query("SELECT run_id, generation, owner_id FROM workflow_authority WHERE run_id = ?").get(token.workflowRunId) as AuthorityRow | null

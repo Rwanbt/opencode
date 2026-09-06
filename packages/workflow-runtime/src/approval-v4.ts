@@ -67,6 +67,10 @@ export type ApprovalAuthorityState = {
 
 export type ApprovalAuthority = {
   readonly now: () => number
+  /** P1 fence precedence: report a stale owner/generation before any
+   * domain validation can mask the fence. The transact() re-fence keeps
+   * the check atomic with the commit. */
+  fence(token: AuthorityToken): void
   isTrustedSystemActor(actor: ApprovalActor, token: AuthorityToken): boolean
   transact<T>(token: AuthorityToken, mutation: (state: ApprovalAuthorityState) => Promise<{ state: ApprovalAuthorityState; result: T }>): Promise<T>
   read(token: AuthorityToken, id: string): Promise<ApprovalRecord | undefined>
@@ -88,6 +92,7 @@ export class ApprovalBrokerV4 {
 
   async request(input: ApprovalRequest, token: AuthorityToken): Promise<ApprovalRecord> {
     assertToken(token)
+    this.authority.fence(token)
     // ADR-0007 "facade, pas une seconde authority": a request for run X must
     // never ride a token fencing a different run — the facade is the domain
     // guard, the injected authority stays the only durable owner.
@@ -112,6 +117,7 @@ export class ApprovalBrokerV4 {
 
   async resolve(id: string, decision: ApprovalDecision, actor: ApprovalActor, binding: ApprovalBinding, token: AuthorityToken): Promise<ApprovalRecord> {
     assertToken(token)
+    this.authority.fence(token)
     assertHuman(actor)
     return this.authority.transact(token, async (state) => {
       const current = requireApproval(state, id)
@@ -135,6 +141,7 @@ export class ApprovalBrokerV4 {
 
   async cancel(id: string, actor: ApprovalActor, token: AuthorityToken): Promise<ApprovalRecord> {
     assertToken(token)
+    this.authority.fence(token)
     if (!actor || !actor.id) throw new ApprovalV4Error("ACTOR_REQUIRED")
     return this.authority.transact(token, async (state) => {
       const current = requireApproval(state, id)
