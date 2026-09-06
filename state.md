@@ -10,6 +10,7 @@
 - Keep the `workflow-ir.ts` split (`1193 + 128 + 363` lines) in every slice | source monolith is 1794 lines, over the 1500 mandatory ceiling; 77 public exports verified identical | promote the monolith | active
 - Repair promotion as new -r1 branches, never force-push published slices | A3-r1 `64b92bb946`, A4-r1 `3cccb53e12`, A5a-r1 `94ce9fd176`, A5b-r1 `f1b259eb8f`; old A3/A4/A5a/A5b kept as immutable checkpoints | rewrite remote history | active
 - Repair r2 as new -r2 branches, never force-push published slices | A3-r2 `a2e50d63ce`, A4-r2 `c09e01c8ac`, A5a-r2 `9934660b7a`, A5b-r2 `9334312783`; r1 branches kept as immutable checkpoints | rewrite remote history | active
+- Ship r2-final topology: A5a-r2-final from A4-r2 tip, A5b-r2-final from A5a-final tip; reconcile fix rides A5a-final as a documented second commit to preserve published A3-r2/A4-r2 | no force-push anywhere | rebuild r1 branches instead | active
 ### UNCERTAINTIES
 - What resource previously reached Chromium's `ERR_INSUFFICIENT_RESOURCES` during repeated full reloads | no longer blocks certification because the bootstrap gate passes the full workload, but the underlying browser-resource mechanism was not isolated | reproduce without the bootstrap gate and inspect browser resource accounting | P2
 - Whether `page.goto()` full documents are the intended certification model rather than a harness artifact | the test contract explicitly describes reloads but its resource metric is document-local | inspect original certification intent and compare a fresh-page reproduction | P1
@@ -55,3 +56,6 @@
 - P1s closed: stale precedence fenced-first on history/attempts/graph/broker with zero-mutation proofs; #44 HTTP versions test R1/R2-V1 R3-V2 cancel-isolation restart-persistence | A4-r2 workflow 15/15, server 24+53, catalog 63+5, typecheck clean | confirmed
 - r2 parity is 8 code files + 4 review-metadata paths, zero undocumented | two-dot diff with exclusions in AUTOMATE-PROMOTION-PARITY.md; baseline synced to r2 code | confirmed
 - r2 stack pushed linear A1->A5b-r2, no PRs opened, dev untouched | ls-remote matches local SHAs on all r2 refs | confirmed
+- A5a-final `6e08a9b32f` = foundations port + idempotent reconcile (RECONCILIATION_CONFLICT, no-op replays, misuse still illegal) | runtime 130/130, contracts 644/644 in its worktree | confirmed
+- A5b-final `59260459dc` = A5a-final + app port; server tree byte-identical to verified state | contracts 648/648, runtime 130/130, app 49/49, server workflow 15/15 + typechecks in its worktree | confirmed
+- Final chain is linear A1->A5b-final and parity is 8 code files, verified below | merge-base gate x5 + two-dot diff | confirmed

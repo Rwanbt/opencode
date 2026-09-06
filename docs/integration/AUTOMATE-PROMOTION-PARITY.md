@@ -3,7 +3,7 @@ SPDX-License-Identifier: MIT
 Copyright (c) 2026 Unifia contributors
 -->
 
-# Automate Promotion Parity (A5b-r2 vs Source)
+# Automate Promotion Parity (A5b-r2-final vs Source)
 
 Reproducible tree-parity proof for the repaired promotion stack.
 Three-dot diffs are FORBIDDEN here: with deliberately divergent
@@ -14,7 +14,7 @@ histories, `A...B` measures merge-base to tip, not tip to tip.
 - Source: `origin/agent/automate-v2-baseline-20260901` at
   `e7ef3042270476a414f43994144ee55bdf3d3655` (includes the r2 atomic
   boundary, effect machine, precedence and HTTP-proof code)
-- Tip: `origin/integration/automate-a5b-app-r2` at
+- Tip: `origin/integration/automate-a5b-app-r2-final` at
   `4a4c73eec2a1e394c1e81b742d8429e6c196f365`
 
 > Pin note: the source SHA above is a CODE-state pin. Later docs-only
@@ -29,13 +29,13 @@ comparison excludes those paths:
 
 ```bash
 git diff \
-  origin/integration/automate-a5b-app-r2 \
+  origin/integration/automate-a5b-app-r2-final \
   origin/agent/automate-v2-baseline-20260901 \
   --stat -- . `:!docs/integration` `:!state.md`
 
 git diff \
   --name-status \
-  origin/integration/automate-a5b-app-r2 \
+  origin/integration/automate-a5b-app-r2-final \
   origin/agent/automate-v2-baseline-20260901 \
   -- . `:!docs/integration` `:!state.md`
 ```

@@ -15,7 +15,7 @@ is green.
 
 - Base: `origin/work-design` at `1bbbe6a614d90f1208e834767a2e28184cf0253c`.
 - Source: `origin/agent/automate-v2-baseline-20260901` at
-  `e7ef3042270476a414f43994144ee55bdf3d3655` (includes the r2 atomic
+  `cf5c12ab53f4df22ab09b8f0c552441d3128cd73` (includes the r2 atomic
   boundary, effect machine, precedence and HTTP-proof code; pushed
   2026-09-06).
 - The source is a fast-forward descendant of the base. All slice branches
@@ -46,7 +46,24 @@ is green.
 6. `origin/dev` is outside this promotion plan. It must not be mutated or used
    as a base by any slice.
 
-## Repaired Stack (r2, current)
+## Repaired Stack (r2-final, current)
+
+The r2 stack below restores true linearity: each `-final` branch descends
+directly from the previous verified tip. The non-final r2 branches
+(A5a-r2, A5b-r2) are preserved as checkpoints and SUPERSEDED.
+
+| Slice | Branch | Commit | Verification (2026-09-06) |
+|---|---|---|---|
+| A1 | `integration/automate-a1-contracts` | `ff9fa1bfd1` | contracts `145/145`, typecheck clean |
+| A2 | `integration/automate-a2-m0` | `0208882bfd` | m0-contract `177/177`, harness `39 pass 13 skip`, typechecks clean |
+| A3-r2 | `integration/automate-a3-runtime-r2` | `a2e50d63ce` | runtime `127/127`, typecheck clean |
+| A4-r2 | `integration/automate-a4-workbench-r2` | `9bced21548` | server suite `24 + 53`, workflow `15/15`, catalog `63 + 5`, typecheck clean |
+| A5a-r2-final | `integration/automate-a5-foundations-r2-final` | `6e08a9b32f` | foundations ported + idempotent reconcile (`130/130` runtime), contracts `644/644` |
+| A5b-r2-final | `integration/automate-a5b-app-r2-final` | `59260459dc` | contracts `648/648`, runtime `130/130`, app `49/49`, server `15/15` workflow + typechecks |
+
+Superseded (kept, never force-pushed): A3/A4/A5a/A5b, A3-r1/A4-r1/A5a-r1/A5b-r1.
+
+## Repaired Stack (r2, superseded)
 
 The r1 stack (A3-r1/A4-r1/A5a-r1/A5b-r1) is preserved as immutable review
 checkpoints and is SUPERSEDED by the r2 stack below. Old branches were
@@ -60,7 +77,7 @@ to rebuild them.
 | A3-r2 | `integration/automate-a3-runtime-r2` | `a2e50d63ce` | runtime `127/127`, typecheck clean |
 | A4-r2 | `integration/automate-a4-workbench-r2` | `9bced21548` | server suite `24 + 53`, workflow `15/15` (terminal + versions + canonical), catalog `63 + 5`, typecheck clean |
 | A5a-r2 | `integration/automate-a5-foundations-r2` | `9934660b7a` | contracts `644/644`, foundations `49 + 33 + 5 + 16 + 17`, runtime + server spot green |
-| A5b-r2 | `integration/automate-a5b-app-r2` | `4a4c73eec2` | contracts `648/648`, runtime `120/120`, app typecheck + targeted `49/49`, server typecheck + canonical E2E `50` expects, full foundations + m0 gates green |
+| A5b-r2 | `integration/automate-a5b-app-r2` | `4a4c73eec2` | contracts `648/648`, runtime `127/127`, app typecheck + targeted `49/49`, server typecheck + canonical E2E `50` expects, full foundations + m0 gates green |
 
 Each `-r2` branch descends directly from the previous verified tip:
 A2 -> A3-r2 -> A4-r2 -> A5a-r2 -> A5b-r2. Linearity is checkable with
