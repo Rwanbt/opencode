@@ -12,10 +12,10 @@ histories, `A...B` measures merge-base to tip, not tip to tip.
 ## Endpoints
 
 - Source: `origin/agent/automate-v2-baseline-20260901` at
-  `6bb7f153d6a6e53a2c22da0d3d5af683625a364b` (includes the r2 atomic
+  `e7ef3042270476a414f43994144ee55bdf3d3655` (includes the r2 atomic
   boundary, effect machine, precedence and HTTP-proof code)
 - Tip: `origin/integration/automate-a5b-app-r2` at
-  `93343127838d008568b3143d8e24773da4ca9c9a`
+  `4a4c73eec2a1e394c1e81b742d8429e6c196f365`
 
 ## Commands (exact, two-dot, review-metadata excluded)
 
