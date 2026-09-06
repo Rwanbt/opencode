@@ -1,0 +1,11 @@
+{
+  "name": "@unifia/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "bun test" },
+  "dependencies": { "@unifia/contracts": "workspace:*" },
+  "devDependencies": { "@types/bun": "catalog:", "@types/node": "catalog:", "typescript": "catalog:" }
+}

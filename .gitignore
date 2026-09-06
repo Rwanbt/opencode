@@ -27,6 +27,18 @@ a.out
 target
 .scripts
 .direnv/
+# M0 qualification scratch / debug artefacts (never canonical)
+packages/automate-m0-harness/test/dbos-real-debug.test.ts
+.tools/go/
+# M0 atomic-publication staging dir (transient, replaced each run)
+docs/automation-v2/m0/.publish-staging/
+# M0 diagnostic runs (NON_CANONICAL_DIAGNOSTIC_MODE=1)
+.tmp/m0-diagnostic/
+# M0 candidate Go binaries (build artefacts, mandate §71 — do not commit)
+tools/dbos-qualify/dbos-qualify.exe
+tools/dbos-real-qualify/dbos-real-qualify.exe
+tools/dbos-real-qualify/dbos-qualify.exe
+tools/dbos-qualify/dbos-real-qualify.exe
 
 # Local dev files
 unifia-dev
@@ -151,4 +163,5 @@ debug-flaky.mjs
 # promoted to the proper test entrypoint. Both stay local until a
 # dedicated test contract lands.
 packages/desktop/sidecar-test.err
-packages/workbench-server/test/real-transport-browser.mjs
+
+.tools/
