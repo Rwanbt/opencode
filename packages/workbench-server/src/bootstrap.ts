@@ -13,11 +13,11 @@
  * Consumers import "@unifia/workbench-server/bootstrap".
  */
 
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { ArtifactStore } from "@unifia/artifact-runtime"
-import { ApprovalBroker, AuditRuntimeDouble, FakeRuntimeAdapter, OpenCodeRuntimeAdapter, type AuditEvent, type McpUiControlBroker, type OpenCodeRuntimeBackend, type P3Capability, type RuntimeAdapter } from "@unifia/contracts"
+import { ApprovalBroker, AuditRuntimeDouble, FakeRuntimeAdapter, OpenCodeRuntimeAdapter, P3_CAPABILITIES, verifyAuditChain, type AuditChainVerification, type AuditContext, type AuditEvent, type McpUiControlBroker, type OpenCodeRuntimeBackend, type P3Capability, type PersistedAuditRow, type RuntimeAdapter, type RuntimeDecision } from "@unifia/contracts"
 import type { DesignSkillManifest } from "@unifia/skill-hub"
 import { WorkspaceRuntime } from "@unifia/workspace-runtime"
 import { FixedWindowRateLimiter, HmacTokenAuthenticator, ScopedTokenIssuer } from "./auth.js"
@@ -91,9 +91,12 @@ export class FileAuditSink {
     }
   }
 
-  record(actor: string, capability: string, decision: "allow" | "deny" | "approval_required"): unknown {
-    const entry = this.#chain.record(actor, capability, decision) as Record<string, unknown>
-    appendFileSync(this.#logPath, `${JSON.stringify({ ...entry, actor, capability, decision })}\n`, "utf8")
+  record(context: AuditContext, decision: RuntimeDecision): unknown {
+    const entry = this.#chain.record(context, decision) as Record<string, unknown>
+    // WHY we re-serialise the full event (not just actor/capability/decision):
+    // the on-disk row must carry every attribution field so a downstream
+    // reader can reconstruct the chain without joining the live process.
+    appendFileSync(this.#logPath, `${JSON.stringify(entry)}\n`, "utf8")
     return entry
   }
 
@@ -104,6 +107,61 @@ export class FileAuditSink {
   page(afterSequence = 0, limit = 50): { events: readonly AuditEvent[]; nextCursor: number | null } {
     return this.#chain.page(afterSequence, limit)
   }
+
+  /**
+   * Verify the whole persisted trail, including rows this process did not
+   * write.
+   *
+   * The chain was written and never checked, which is why nobody noticed
+   * that DA-AUD-01's extra attribution fields changed the hash preimage:
+   * every row predating it stops matching the current rule. `verifyAuditChain`
+   * checks each row against the version stamped on it, so an operator gets
+   * "this trail is intact" rather than a tamper report for a schema change.
+   */
+  verifyPersistedChain(): AuditChainVerification {
+    if (!existsSync(this.#logPath)) return { ok: true, rows: 0, versions: [] }
+    const rows: PersistedAuditRow[] = []
+    const text = readFileSync(this.#logPath, "utf8")
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim()
+      if (trimmed.length === 0) continue
+      try {
+        rows.push(JSON.parse(trimmed) as PersistedAuditRow)
+      } catch {
+        // A torn final append is the one line a crash can leave behind.
+        // Report it as the failure it is rather than skipping it.
+        return { ok: false, rows: rows.length + 1, failedAt: rows.length + 1, reason: "row is not valid JSON" }
+      }
+    }
+    return verifyAuditChain(rows)
+  }
+}
+
+/**
+ * DA-CAP-02: parses UNIFIA_WORKBENCH_ALLOWLISTED_CAPABILITIES into a closed
+ * set of P3 capability names.
+ *
+ * Fail-closed contract:
+ * - An empty / unset env var yields an empty Set (the default).
+ * - Whitespace around each entry is trimmed.
+ * - Unknown names (anything not in P3_CAPABILITIES) are silently dropped,
+ *   NOT raised as a hard error. The intent of the env var is policy input,
+ *   not a strict register — a typo must not stop the server from starting,
+ *   it just does not widen the allowlist.
+ * - Names already in the union are deduplicated.
+ *
+ * Exported so the test suite can exercise the parser without going through
+ * loadConfigFromEnv (which requires a signing key).
+ */
+export function parseAllowlistedCapabilities(value: string | undefined): ReadonlySet<P3Capability> {
+  if (!value) return new Set()
+  const known: ReadonlySet<string> = new Set(P3_CAPABILITIES)
+  const result = new Set<P3Capability>()
+  for (const entry of value.split(",")) {
+    const trimmed = entry.trim()
+    if (known.has(trimmed)) result.add(trimmed as P3Capability)
+  }
+  return result
 }
 
 /**
@@ -139,7 +197,7 @@ export function loadConfigFromEnv(env: Record<string, string | undefined> = proc
     auditLogPath: env.UNIFIA_WORKBENCH_AUDIT_LOG ?? path.join(process.cwd(), ".unifia", "audit.jsonl"),
     rateBudget: Number(env.UNIFIA_WORKBENCH_RATE_BUDGET ?? DEFAULT_RATE_BUDGET),
     rateWindowMs: Number(env.UNIFIA_WORKBENCH_RATE_WINDOW_MS ?? DEFAULT_RATE_WINDOW_MS),
-    allowlistedCapabilities: new Set(),
+    allowlistedCapabilities: parseAllowlistedCapabilities(env.UNIFIA_WORKBENCH_ALLOWLISTED_CAPABILITIES),
     artifactRoot: env.UNIFIA_WORKBENCH_ARTIFACT_ROOT ?? process.cwd(),
     presentLinkTtlMs: Number(env.UNIFIA_WORKBENCH_PRESENT_LINK_TTL_MS ?? DEFAULT_PRESENT_LINK_TTL_MS),
   }

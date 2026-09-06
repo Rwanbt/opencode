@@ -12,6 +12,7 @@
     "test": "bun test/catalog.test.ts"
   },
   "dependencies": {
+    "@unifia/digest-runtime": "workspace:*",
     "@unifia/contracts": "workspace:*",
     "@unifia/workflow-runtime": "workspace:*"
   },
