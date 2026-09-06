@@ -17,6 +17,10 @@ histories, `A...B` measures merge-base to tip, not tip to tip.
 - Tip: `origin/integration/automate-a5b-app-r2` at
   `4a4c73eec2a1e394c1e81b742d8429e6c196f365`
 
+> Pin note: the source SHA above is a CODE-state pin. Later docs-only
+> commits on the baseline move the tip without touching code; they cannot
+> alter the excluded comparison below. Re-pin only when code changes.
+
 ## Commands (exact, two-dot, review-metadata excluded)
 
 Review metadata (`docs/integration`, `state.md`) lives on the baseline
