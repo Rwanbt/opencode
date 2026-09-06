@@ -1,4 +1,5 @@
 @import "@unifia/ui/styles/tailwind";
+@import "@/styles/unifia-brand.css";
 
 @layer components {
   [data-component="getting-started"] {

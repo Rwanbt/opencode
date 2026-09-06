@@ -1,4 +1,5 @@
 import { Flag } from "../flag/flag"
+import { readMobileEncryptionKeyFromEnv, tryDecodeDesktopKeychainToken } from "@unifia/contracts"
 import path from "node:path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
@@ -142,7 +143,14 @@ export class KeychainStorage implements AuthStorage {
   constructor(service: string = KeychainStorage.SERVICE) {
     this.service = service
     this.baseUrl = Flag.UNIFIA_KEYCHAIN_URL
-    this.token = Flag.UNIFIA_KEYCHAIN_TOKEN
+    // D12 (§9.4 Lane D4) — typed decode of the desktop keychain IPC
+    // bearer. The legacy `UNIFIA_KEYCHAIN_TOKEN` env var (still set
+    // by the Tauri shell on boot, see auth_storage.rs:282) is read
+    // here, but only after `tryDecodeDesktopKeychainToken` confirms
+    // the 64-hex-char format. A 32-byte base64 MobileEncryptionKey
+    // — the bug shape on the mobile path — is rejected at the
+    // boundary; see ADR-1042.
+    this.token = tryDecodeDesktopKeychainToken(Flag.UNIFIA_KEYCHAIN_TOKEN) ?? undefined
   }
 
   /** True when the Tauri shell injected a reachable endpoint. */
@@ -293,7 +301,13 @@ async function readEncryptedAuth(): Promise<Record<string, unknown>> {
   try {
     const envelope = JSON.parse(await fs.readFile(encryptedFile, "utf8")) as { v: number; iv: string; tag: string; ciphertext: string }
     if (envelope.v !== 1) throw new Error("Unsupported encrypted auth version")
-    const key = Buffer.from(process.env.UNIFIA_AUTH_ENCRYPTION_KEY ?? "", "base64")
+    // D12 (§9.4 Lane D4) — typed decode of the mobile encryption key.
+    // The brand `MobileEncryptionKey` rejects 64-hex-char DesktopKeychainToken
+    // values at this boundary, so a Workbench IPC bearer cannot be
+    // substituted for the AES key here (see ADR-1042).
+    const keyB64 = readMobileEncryptionKeyFromEnv(process.env as Record<string, string | undefined>)
+    if (!keyB64) throw new Error("UNIFIA_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
+    const key = Buffer.from(keyB64, "base64")
     if (key.length !== 32) throw new Error("UNIFIA_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"))
     decipher.setAuthTag(Buffer.from(envelope.tag, "base64"))
@@ -307,7 +321,11 @@ async function readEncryptedAuth(): Promise<Record<string, unknown>> {
 async function writeEncryptedAuth(data: Record<string, unknown>): Promise<void> {
   const fs = await import("node:fs/promises")
   const crypto = await import("node:crypto")
-  const key = Buffer.from(process.env.UNIFIA_AUTH_ENCRYPTION_KEY ?? "", "base64")
+  // D12 (§9.4 Lane D4) — typed decode of the mobile encryption key
+  // (see `readEncryptedAuth` for the rationale).
+  const keyB64 = readMobileEncryptionKeyFromEnv(process.env as Record<string, string | undefined>)
+  if (!keyB64) throw new Error("UNIFIA_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
+  const key = Buffer.from(keyB64, "base64")
   if (key.length !== 32) throw new Error("UNIFIA_AUTH_ENCRYPTION_KEY must be a 32-byte base64 key")
   const iv = crypto.randomBytes(12)
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)

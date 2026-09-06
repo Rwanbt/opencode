@@ -63,6 +63,13 @@ describe("V03 — WorkbenchUiPhase (terminal + transient states)", () => {
     expect(lifecycleIdx).toBeGreaterThan(unsupportedIdx)
   })
 
+  test("a disposed connection attempt cannot publish a stale result", () => {
+    expect(provider).toMatch(/let providerGeneration = 0/)
+    expect(provider).toMatch(/const attemptGeneration = providerGeneration/)
+    expect(provider).toMatch(/attemptGeneration !== providerGeneration/)
+    expect(provider).toMatch(/providerGeneration \+= 1/)
+  })
+
   test("retryConnection is idempotent for unsupported and locks on retrying", () => {
     // The body must check both states BEFORE the first side-effect
     // (eventsAbort.abort()) and set/unset `retrying` around the work.

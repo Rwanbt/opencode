@@ -1,0 +1,3 @@
+{
+  "reason": "Native candidate uses single-process generation; multi-process fencing requires a second OS process. To be exercised in WINDOWS_PREFLIGHT."
+}

@@ -7,8 +7,7 @@ import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
-
-const decodeFile = (value: { content: string; encoding: "utf-8" | "base64" }) => value.encoding === "utf-8" ? value.content : new TextDecoder().decode(Uint8Array.from(atob(value.content), (char) => char.charCodeAt(0)))
+import { decodeFile, parseWorkflowDefinition } from "./automate-decode"
 
 export function AutomateSurface(): JSX.Element {
   const language = useLanguage()
@@ -54,8 +53,9 @@ export function AutomateSurface(): JSX.Element {
     const file = definitionFile.data?.results[0]
     if (!current || !file) return
     try {
-      const definition = JSON.parse(decodeFile(file)) as Record<string, unknown>
-      if (typeof definition.id !== "string" || definition.version !== 1 || !Array.isArray(definition.steps)) throw new Error(t("workbench.automate.invalidDefinition"))
+      const parsed = parseWorkflowDefinition(decodeFile(file))
+      if (parsed.kind === "error") throw new Error(t("workbench.automate.invalidDefinition"))
+      const definition = { id: parsed.definition.id, version: parsed.definition.version, steps: parsed.definition.steps } as Record<string, unknown>
       await startDefinition(definition)
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : t("workbench.automate.startFailed"))
