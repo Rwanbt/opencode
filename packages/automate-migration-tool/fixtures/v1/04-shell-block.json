@@ -1,0 +1,17 @@
+{
+  "id": "wf-fixture-shell-blocked",
+  "version": 1,
+  "workspaceId": "ws-fixture",
+  "steps": [
+    {
+      "id": "fetch",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://api.example.com/data" }
+    },
+    {
+      "id": "transform-via-shell",
+      "capability": "shell",
+      "input": { "cmd": "jq '.results' /tmp/fetch.body" }
+    }
+  ]
+}

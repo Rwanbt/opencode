@@ -5,9 +5,10 @@ import { trimTrailingSeparators } from "./path-separators.js"
 
 export const P3_CAPABILITIES = [
   "workspace.read", "workspace.write", "workspace.watch", "artifact.create",
-  "artifact.export", "artifact.preview", "terminal.run", "network.request", "browser.navigate",
-  "desktop.observe", "desktop.control", "remote.receive", "remote.respond",
-  "secret.read", "package.install", "workflow.run",
+  "artifact.export", "artifact.preview", "artifact.render", "designsystem.read",
+  "plugin.apply", "media.generate", "terminal.run", "network.request",
+  "browser.navigate", "desktop.observe", "desktop.control", "remote.receive",
+  "remote.respond", "secret.read", "package.install", "workflow.run",
 ] as const
 export type P3Capability = (typeof P3_CAPABILITIES)[number]
 
