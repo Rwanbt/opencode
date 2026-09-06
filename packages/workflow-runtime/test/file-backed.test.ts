@@ -128,10 +128,11 @@ describe("M1-10 file-backed DurableHistoryAuthority", () => {
     expect(run).not.toBeNull()
     expect(run!.status).toBe("running") // final state after both transitions
     const proj = await auth2.getMaterializedProjection(RUN_ID)
-    expect(proj.status).toBe("running")
-    expect(proj.lastTransitionAt).toBe(1_700_000_600)
-    expect(proj.pendingEffects).toHaveLength(1)
-    expect(proj.pendingTimers).toHaveLength(1)
+    expect(proj).not.toBeNull()
+    expect(proj!.status).toBe("running")
+    expect(proj!.lastTransitionAt).toBe(1_700_000_600)
+    expect(proj!.pendingEffects).toHaveLength(1)
+    expect(proj!.pendingTimers).toHaveLength(1)
   })
 
   test("(4) recovery: unknown runId on the second authority returns null", async () => {

@@ -122,8 +122,14 @@ describe("NativeDurableHistoryAuthority", () => {
       await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
       const projection = await ctx.authority.getMaterializedProjection("run-1")
       expect(projection).toMatchObject({ runId: "run-1", status: "waiting", lastTransitionAt: 1100 })
-      expect(projection.pendingEffects).toEqual(["tool.http:run-1"])
-      expect(projection.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
+      expect(projection!.pendingEffects).toEqual(["tool.http:run-1"])
+      expect(projection!.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("projection on unknown run returns null (contract read)", async () => {
+    const ctx = freshHistory(); try {
+      await expect(ctx.authority.getMaterializedProjection("run-ghost")).resolves.toBeNull()
     } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
@@ -147,7 +153,7 @@ describe("NativeDurableHistoryAuthority", () => {
       expect(second.inspectTransitions("run-1")).toHaveLength(1)
       expect(second.inspectCommands("run-1")).toHaveLength(1)
       const projection = await second.getMaterializedProjection("run-1")
-      expect(projection.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
+      expect(projection!.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
       await second.transition(token, "run-1", { from: "waiting", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })
       expect((await second.getRun("run-1"))!.status).toBe("running")
       second.close()

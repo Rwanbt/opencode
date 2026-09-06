@@ -264,11 +264,9 @@ export class InMemoryDurableHistoryAuthority implements DurableHistoryAuthority 
 
   async getMaterializedProjection(
     runId: string,
-  ): Promise<MaterializedRunProjection> {
+  ): Promise<MaterializedRunProjection | null> {
     const state = this.runs.get(runId)
-    if (!state) {
-      throw new RunNotFoundError(runId)
-    }
+    if (!state) return null
     const lastEvent =
       state.history.length > 0
         ? state.history[state.history.length - 1]!

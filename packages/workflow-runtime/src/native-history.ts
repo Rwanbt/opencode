@@ -212,10 +212,10 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     })()
   }
 
-  async getMaterializedProjection(runId: string): Promise<MaterializedRunProjection> {
+  async getMaterializedProjection(runId: string): Promise<MaterializedRunProjection | null> {
     const db = this.requireDb()
     const run = await this.getRun(runId)
-    if (!run) throw new RunNotFoundError(runId)
+    if (!run) return null
     const transitions = db.query("SELECT seq, from_status, to_status, effect_slot_id, occurred_at, is_compensating FROM run_transitions WHERE run_id = ? ORDER BY seq").all(runId) as TransitionRow[]
     const commands = db.query("SELECT seq, kind, payload_json, enqueued_at FROM commands WHERE run_id = ? ORDER BY seq").all(runId) as CommandRow[]
     const timers = db.query("SELECT timer_id, fire_at, overlap_policy, scheduled_at FROM timers WHERE run_id = ? ORDER BY fire_at").all(runId) as TimerRow[]

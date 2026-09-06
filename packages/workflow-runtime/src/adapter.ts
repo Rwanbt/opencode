@@ -2,15 +2,15 @@
 /**
  * DurableHistoryAuthority adapter — Plan V2.3.1 §41, M1 plan §3.9 (C-M1-09).
  *
- * **This file is interface-only. No implementation is committed.**
+ * **This file is interface-only. No implementation lives here —
+ * see `in-memory.ts`, `file-backed.ts` and `native-history.ts`.**
  *
  * The five method signatures below are the substrate-agnostic
  * contract every concrete authority (`native` SQLite, `dbos`
- * Postgres, `temporal` Cloud) MUST satisfy. The implementations are
- * blocked on ADR-000 — at the time of writing, ADR-000 is still
- * PROPOSED, and committing a physical implementation before the
- * substrate decision is locked would create a re-write tax (plan
- * §626, §736).
+ * Postgres, `temporal` Cloud) MUST satisfy. ADR-000 is ratified
+ * (UNIFIA_NATIVE, 2026-09-05); the in-memory, file-backed and native
+ * implementations are committed, while DBOS / Temporal remain future
+ * substrates bound by this same interface (plan §626, §736).
  *
  * The companion contract half lives in
  * `packages/contracts/src/workflow-run.ts`:
@@ -209,10 +209,8 @@ export interface DurableHistoryAuthority {
   getMaterializedProjection(runId: string): Promise<MaterializedRunProjection | null>
 }
 
-// Implementation deferred to ADR-000 (Native / DBOS / Temporal).
-//
-// The class implementations (`NativeHistoryAuthority`,
-// `DbosHistoryAuthority`, `TemporalHistoryAuthority`) are *not*
-// committed in this card. They will land in subsequent cards after
-// ADR-000 is decided. The interface above is the only thing
-// `@unifia/workflow-runtime` exports from this file.
+// Implementations: `InMemoryDurableHistoryAuthority` (tests),
+// `FileBackedDurableHistoryAuthority` (file snapshots) and
+// `NativeDurableHistoryAuthority` (production UNIFIA_NATIVE SQLite,
+// ADR-000 ratified 2026-09-05). DBOS / Temporal authorities remain
+// future substrates and must satisfy this same interface.

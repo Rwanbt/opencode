@@ -185,7 +185,7 @@ export class FileBackedDurableHistoryAuthority implements DurableHistoryAuthorit
 
   async getMaterializedProjection(
     runId: string,
-  ): Promise<MaterializedRunProjection> {
+  ): Promise<MaterializedRunProjection | null> {
     return this.inner.getMaterializedProjection(runId)
   }
 
