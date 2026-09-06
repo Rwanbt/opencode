@@ -7,17 +7,11 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import {
   ApprovalBrokerV4,
-  ApprovalV4Error,
-  GraphRuntimeEngine,
-  NativeApprovalAuthority,
-  NativeAttemptAuthority,
-  NativeDurableHistoryAuthority,
-  AuthorityError,
-  takeoverAuthority,
+  type ApprovalV4Error,
+  type AuthorityError,
   type ApprovalBinding,
   type AuthorityToken,
 } from "@unifia/workflow-runtime"
-import type { WorkflowRun } from "@unifia/contracts"
 import { WorkbenchServer } from "../src/index.js"
 import { NativeWorkflowRuntimePort } from "../src/native-workflow-port.js"
 
@@ -30,35 +24,6 @@ const definition = {
   version: 1,
   workspaceId: "ws",
   steps: [{ id: "s0", capability: "workspace.read", input: {} }],
-}
-
-const graphDefinition = {
-  definitionId: definition.id,
-  ownershipScope: scope,
-  displayName: definition.id,
-  nodes: [{ id: "step-0", family: "tool.http" as const, config: { capability: "workspace.read", input: {} } }],
-  edges: [],
-  concurrency: { kind: "single" as const },
-  defaultFailurePolicy: { kind: "propagate" as const },
-  defaultTimeoutMs: 0,
-  createdAt: 0,
-  updatedAt: 0,
-}
-
-function run(runId: string): WorkflowRun {
-  return {
-    runId,
-    deploymentId: "dep-1",
-    workflowVersionId: "ver-1",
-    deploymentScope: deployment,
-    triggerId: "trig-1",
-    triggerEventId: "evt-1",
-    durableAuthorityId: runId,
-    durableAuthorityKind: "native",
-    status: "running",
-    createdAt: 100,
-    updatedAt: 100,
-  }
 }
 
 function binding(runId: string, invocation: string): ApprovalBinding {
@@ -87,39 +52,43 @@ async function expectStale(action: () => unknown, label: string): Promise<void> 
   expect.unreachable()
 }
 
-function takeover(path: string, token: AuthorityToken, owner: string): AuthorityToken {
-  const db = new Database(path)
-  try {
-    return takeoverAuthority(db, token, owner, now())
-  } finally {
-    db.close()
+async function removeTempDir(dir: string): Promise<void> {
+  // Windows can keep SQLite file locks briefly after close; retry the
+  // teardown instead of failing the gate on an environmental EBUSY.
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      return
+    } catch {
+      Bun.gc(true)
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
   }
+  rmSync(dir, { recursive: true, force: true })
+}
+
+function makeServer(port: NativeWorkflowRuntimePort, owner: string): WorkbenchServer {
+  return new WorkbenchServer({
+    auth: { authenticate: async () => ({ id: owner, kind: "human" }) as never },
+    workspace: {} as never,
+    runtime: {} as never,
+    workflow: port,
+    audit: { record: () => undefined },
+    capability: { check: async () => "allow" },
+  })
 }
 
 describe("canonical authority production path", () => {
-  test("fences every native mutation across one HTTP-started run and SQLite file", async () => {
+  test("fences every native mutation through the production port assembly", async () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-authority-e2e-"))
     const path = join(dir, "workflow.sqlite")
+    // #47: the ONLY durable handles are the port's own assembly. Nothing
+    // is constructed laterally on the same file — graph, history,
+    // attempts and approvals all flow through `port`.
     const port = new NativeWorkflowRuntimePort({ databasePath: path, now })
-    const history = new NativeDurableHistoryAuthority({ databasePath: path, now })
-    const attempts = new NativeAttemptAuthority({ databasePath: path, now })
-    const approvals = new NativeApprovalAuthority({ databasePath: path, now })
-    const graph = new GraphRuntimeEngine({ databasePath: path, definition: graphDefinition, now })
-    const broker = new ApprovalBrokerV4(approvals)
 
     try {
-      history.initialize()
-      attempts.initialize()
-      approvals.initialize()
-      graph.initialize()
-      const server = new WorkbenchServer({
-        auth: { authenticate: async () => ({ id: "owner-a", kind: "human" }) as never },
-        workspace: {} as never,
-        runtime: {} as never,
-        workflow: port,
-        audit: { record: () => undefined },
-        capability: { check: async () => "allow" },
-      })
+      const server = makeServer(port, "owner-a")
 
       const started = await server.fetch(new Request("http://127.0.0.1/v1/workflows", {
         method: "POST",
@@ -130,20 +99,34 @@ describe("canonical authority production path", () => {
       const state = await started.json() as { workflowId: string; authorityToken: AuthorityToken }
       const runId = state.workflowId
       const tokenA = state.authorityToken
+      expect(tokenA).toMatchObject({ workflowRunId: runId, generation: 1, authorityOwnerId: "owner-a" })
 
-      history.register(run(runId))
-      expect(history.claim(runId, "owner-a")).toEqual(tokenA)
-      approvals.claim(runId, "owner-a")
+      // Exactly one shared authority row after the HTTP start.
+      const db = new Database(path)
+      try {
+        expect(db.query("SELECT COUNT(*) AS count FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ count: 1 })
+        expect(db.query("SELECT generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ generation: 1, owner_id: "owner-a" })
+      } finally {
+        db.close()
+      }
 
-      const tokenA4 = takeover(path, takeover(path, takeover(path, tokenA, "owner-a-2"), "owner-a-3"), "owner-a-4")
+      const broker = new ApprovalBrokerV4(port.approvalAuthority)
+      const history = port.historyAuthority
+      const attempts = port.attemptAuthority
+
+      const tokenA4 = port.takeover(port.takeover(port.takeover(tokenA, "owner-a-2"), "owner-a-3"), "owner-a-4")
       expect(tokenA4.generation).toBe(4)
-      const tokenB = takeover(path, tokenA4, "owner-b")
+      const tokenB = port.takeover(tokenA4, "owner-b")
       expect(tokenB).toMatchObject({ workflowRunId: runId, generation: 5, authorityOwnerId: "owner-b" })
       const staleA = tokenA
 
-      await expectStale(() => graph.setDeadline(runId, staleA, "step-0", 20_000), "graph")
-      graph.setDeadline(runId, tokenB, "step-0", 20_000)
+      // Graph through the assembly.
+      await expectStale(() => port.graphEngineFor(staleA), "graph assembly")
+      const engine = port.graphEngineFor(tokenB)
+      await expectStale(() => engine.setDeadline(runId, staleA, "step-0", 20_000), "graph")
+      engine.setDeadline(runId, tokenB, "step-0", 20_000)
 
+      // History + timers through the assembly.
       await expectStale(() => history.transition(staleA, runId, { from: "running", to: "waiting", effectSlotId: "slot-a", occurredAt: 9_999, isCompensating: false }), "history transition")
       await expectStale(() => history.scheduleTimer(staleA, "timer-a", runId, 10_100, "allow"), "history timer")
       await history.transition(tokenB, runId, { from: "running", to: "waiting", effectSlotId: "slot-b", occurredAt: 10_000, isCompensating: false })
@@ -152,6 +135,7 @@ describe("canonical authority production path", () => {
       expect(history.inspectTransitions(runId)).toHaveLength(1)
       expect(history.inspectTimers(runId)).toHaveLength(0)
 
+      // Attempts + effects through the assembly.
       await expectStale(() => attempts.allocateAttempt(staleA, "li-a", "effect-a"), "attempt allocation")
       const attempt = attempts.allocateAttempt(tokenB, "li-b", "effect-b")
       attempts.recordAttemptOutcome(tokenB, "li-b", attempt.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
@@ -159,6 +143,7 @@ describe("canonical authority production path", () => {
       attempts.reconcileEffect(tokenB, "effect-b", "SUCCEEDED", { ok: true })
       expect(attempts.inspectEffect(runId, "effect-b")?.status).toBe("SUCCEEDED")
 
+      // Approvals through the assembly.
       const firstBinding = binding(runId, "li-approval-1")
       await expectStale(() => broker.request({ ...firstBinding, expiresAt: 20_000, requestGeneration: 5 }, staleA), "approval request")
       const first = await broker.request({ ...firstBinding, expiresAt: 20_000, requestGeneration: 5 }, tokenB)
@@ -170,29 +155,29 @@ describe("canonical authority production path", () => {
       await expectStale(() => broker.cancel(second.approvalId, { id: "requester", kind: "human" }, staleA), "approval cancel")
       expect((await broker.cancel(second.approvalId, { id: "requester", kind: "human" }, tokenB)).state).toBe("CANCELLED")
 
+      // Cancel through the assembly: late A is fenced before any mutation.
       await expectStale(() => port.cancel(staleA), "workflow cancel")
 
-      graph.close(); port.close(); history.close(); attempts.close(); approvals.close()
+      // Restart: a fresh port on the same file rediscovers the assembly.
+      port.close()
       const restartedPort = new NativeWorkflowRuntimePort({ databasePath: path, now })
-      const restartedHistory = new NativeDurableHistoryAuthority({ databasePath: path, now })
-      const restartedAttempts = new NativeAttemptAuthority({ databasePath: path, now })
-      const restartedApprovals = new NativeApprovalAuthority({ databasePath: path, now })
-      const restartedGraph = new GraphRuntimeEngine({ databasePath: path, definition: graphDefinition, now })
-      restartedHistory.initialize(); restartedAttempts.initialize(); restartedApprovals.initialize(); restartedGraph.initialize()
-      const restartedBroker = new ApprovalBrokerV4(restartedApprovals)
-      const restartedServer = new WorkbenchServer({
-        auth: { authenticate: async () => ({ id: "owner-b", kind: "human" }) as never },
-        workspace: {} as never, runtime: {} as never, workflow: restartedPort,
-        audit: { record: () => undefined }, capability: { check: async () => "allow" },
-      })
-      await expectStale(() => restartedGraph.setDeadline(runId, staleA, "step-0", 21_000), "restarted graph")
-      restartedGraph.setDeadline(runId, tokenB, "step-0", 21_000)
+      const restartedBroker = new ApprovalBrokerV4(restartedPort.approvalAuthority)
+      const restartedServer = makeServer(restartedPort, "owner-b")
+      const restartedHistory = restartedPort.historyAuthority
+      const restartedAttempts = restartedPort.attemptAuthority
+      const restartedEngine = restartedPort.graphEngineFor(tokenB)
+      await expectStale(() => restartedPort.graphEngineFor(staleA), "restarted graph assembly")
+      await expectStale(() => restartedEngine.setDeadline(runId, staleA, "step-0", 21_000), "restarted graph")
+      restartedEngine.setDeadline(runId, tokenB, "step-0", 21_000)
       await expectStale(() => restartedAttempts.allocateAttempt(staleA, "li-restart", "effect-restart"), "restarted attempt")
       const restartedAttempt = restartedAttempts.allocateAttempt(tokenB, "li-restart", "effect-restart")
       restartedAttempts.recordAttemptOutcome(tokenB, "li-restart", restartedAttempt.attemptId, "SUCCEEDED", { result: { ok: true } })
       await expectStale(() => restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, staleA), "restarted approval")
       const restartedApproval = await restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, tokenB)
       expect(restartedApproval.state).toBe("PENDING")
+      // occurredAt stays within the frozen clock so the ONLY possible
+      // failure is the authority fence itself.
+      await expectStale(() => restartedHistory.transition(staleA, runId, { from: "waiting", to: "failed", effectSlotId: "slot-stale", occurredAt: 9_999, isCompensating: false }), "restarted history")
       const cancelled = await restartedServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/cancel`, {
         method: "POST",
         headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(tokenB) },
@@ -200,22 +185,18 @@ describe("canonical authority production path", () => {
       expect(cancelled.status).toBe(200)
       expect((await cancelled.json() as { status: string }).status).toBe("cancelled")
 
-      const db = new Database(path)
+      const db2 = new Database(path)
       try {
-        expect(db.query("SELECT COUNT(*) AS count FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ count: 1 })
-        expect(db.query("SELECT generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ generation: 5, owner_id: "owner-b" })
+        expect(db2.query("SELECT COUNT(*) AS count FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ count: 1 })
+        expect(db2.query("SELECT generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId)).toEqual({ generation: 5, owner_id: "owner-b" })
       } finally {
-        db.close()
+        db2.close()
       }
-      restartedGraph.close()
       restartedPort.close()
-      restartedHistory.close()
-      restartedAttempts.close()
-      restartedApprovals.close()
     } finally {
       Bun.gc(true)
       await new Promise((resolve) => setTimeout(resolve, 100))
-      rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 })
+      await removeTempDir(dir)
     }
   })
 })
