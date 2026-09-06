@@ -12,7 +12,7 @@
  */
 import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { AuthorityError, GraphRuntimeEngine, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, takeoverAuthority, type AuthorityToken } from "@unifia/workflow-runtime"
+import { AuthorityError, GraphRuntimeEngine, GraphRuntimeError, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, takeoverAuthority, type AuthorityToken } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition, WorkflowRun } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
@@ -45,7 +45,8 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
    */
   private ensureServices(): void {
     if (this.historySvc) return
-    const history = new NativeDurableHistoryAuthority({ databasePath: this.options.databasePath, now: this.options.now })
+    const db = this.ensureDb()
+    const history = new NativeDurableHistoryAuthority({ databasePath: this.options.databasePath, now: this.options.now, database: db })
     history.initialize()
     const attempts = new NativeAttemptAuthority({ databasePath: this.options.databasePath, now: this.options.now })
     attempts.initialize()
@@ -106,7 +107,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const existing = this.engines.get(key)
     if (existing) return existing
     this.ensureDb()
-    const engine = new GraphRuntimeEngine({ databasePath: this.options.databasePath, definition: toIr(definition), now: this.options.now })
+    const engine = new GraphRuntimeEngine({ databasePath: this.options.databasePath, definition: toIr(definition), now: this.options.now, database: this.ensureDb() })
     engine.initialize()
     this.engines.set(key, engine)
     return engine
@@ -154,8 +155,25 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
+    this.ensureServices()
+    const history = this.historyAuthority
     const engine = this.ensureEngine(definition, loaded.versionId)
+    const current = await history.getRun(runId)
+    if (current && isTerminalHistoryStatus(current.status)) {
+      // Canonical history wins: a terminal run never advances again.
+      return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
+    }
     engine.advance(runId, token, { input: {} })
+    // Heal: a graph that already reached a terminal state while the
+    // canonical history is still open (crash between pre-boundary
+    // writes) closes the boundary now, atomically.
+    const terminal = this.graphTerminalStatus(runId, definition, engine)
+    if (terminal && current) {
+      const db = this.ensureDb()
+      db.transaction(() => {
+        this.composeTerminalBoundary(token, runId, engine, terminal, current.status)
+      })()
+    }
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
@@ -166,7 +184,13 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const loaded = this.ensureLoaded(runId)
     const engine = this.ensureEngine(loaded.definition, loaded.versionId)
     engine.assertAuthority(runId, token)
-    return engine.inspectEvents(runId).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
+    const events = engine.inspectEvents(runId).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
+    // P0-A: expose the canonical history authority alongside the graph journal
+    // (same shape) — the run authority is history, not the graph.
+    this.ensureServices()
+    const canonical = this.historyAuthority.inspectTransitions(runId)
+      .map((t, i) => ({ kind: `history:${t.from}->${t.to}`, nodeId: null as string | null, seq: events.length + i }))
+    return [...events, ...canonical]
   }
 
   async inspect(token: AuthorityToken): Promise<WorkflowStatePort> {
@@ -198,11 +222,63 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
+    this.ensureServices()
+    const history = this.historyAuthority
+    const before = await history.getRun(runId)
+    if (before && isTerminalHistoryStatus(before.status)) {
+      throw new GraphRuntimeError("RUN_ALREADY_TERMINAL", `workflow run is ${before.status}: ${runId}`)
+    }
     const engine = this.ensureEngine(definition, loaded.versionId)
-    engine.completeNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), output)
-    // schedule + surface the successor step (single-pass walk convergence)
-    engine.advance(runId, token, { input: {} })
+    const db = this.ensureDb()
+    // P0-A atomic boundary: step completion, walk advance, graph terminal
+    // mark and canonical history transition commit in ONE shared transaction
+    // (nested savepoints — a throw anywhere rolls back all, no split-brain).
+    db.transaction(() => {
+      engine.completeNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), output)
+      // schedule + surface the successor step (single-pass walk convergence)
+      engine.advance(runId, token, { input: {} })
+      const terminal = this.graphTerminalStatus(runId, definition, engine)
+      if (terminal && before) {
+        this.composeTerminalBoundary(token, runId, engine, terminal, before.status)
+      }
+    })()
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
+  }
+
+  /**
+   * P0-A atomic terminal boundary core. Graph terminal mark + canonical
+   * history transition, executed synchronously inside the CALLER-owned
+   * shared transaction (all durable I/O below is sync SQLite; the async
+   * history wrapper is never used here because its rejection would escape
+   * the enclosing transaction unnoticed — see transitionSync). A throw
+   * anywhere rolls back the whole boundary: no split-brain.
+   */
+  private composeTerminalBoundary(token: AuthorityToken, runId: string, engine: GraphRuntimeEngine, status: "completed" | "failed" | "cancelled", from: WorkflowRun["status"]): void {
+    const marked = engine.markRunTerminal(runId, token, status)
+    if (marked.alreadyTerminal) return
+    this.historyAuthority.transitionSync(token, runId, {
+      from,
+      to: status,
+      effectSlotId: `terminal:${status}`,
+      occurredAt: this.now(),
+      isCompensating: false,
+    })
+  }
+
+  /** Graph-derived terminality, mirroring the state() mapping below. */
+  private graphTerminalStatus(runId: string, definition: WorkflowDefinitionPort, engine: GraphRuntimeEngine): "completed" | "failed" | "cancelled" | null {
+    for (let i = 0; i < definition.steps.length; i++) {
+      const nodeState = engine.nodeState(runId, stepNodeId(i))
+      if (!nodeState) return null
+      if (nodeState.status === "COMPLETED") continue
+      if (nodeState.status === "FAILED") {
+        const reason = nodeState.outputJson ? ((JSON.parse(nodeState.outputJson) as { reason?: string }).reason ?? "") : ""
+        return reason.includes("cancelled") ? "cancelled" : "failed"
+      }
+      if (nodeState.status === "SKIPPED") return "cancelled"
+      return null
+    }
+    return "completed"
   }
 
   private firstActiveStep(runId: string, definition: WorkflowDefinitionPort): number {
@@ -220,15 +296,35 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
+    this.ensureServices()
+    const history = this.historyAuthority
+    const before = await history.getRun(runId)
+    if (before && isTerminalHistoryStatus(before.status)) {
+      // Idempotent cancel: an already-terminal run reports its canonical
+      // state without mutating (safe retries).
+      return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
+    }
     const engine = this.ensureEngine(definition, loaded.versionId)
+    // Durable intent FIRST (directive 20), then the atomic terminal boundary.
     engine.requestCancel(runId, token, "workbench cancel")
-    // the workbench boundary IS the worker reaction point: the surfaced
-    // in-flight step observes the durable cancel flag and fails itself
-    try { engine.failNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), "cancelled by workbench") } catch { /* already terminal */ }
+    const db = this.ensureDb()
+    db.transaction(() => {
+      // the workbench boundary IS the worker reaction point: the surfaced
+      // in-flight step observes the durable cancel flag and fails itself
+      const stepId = stepNodeId(this.firstActiveStep(runId, definition))
+      const step = engine.nodeState(runId, stepId)
+      if (step && step.status !== "COMPLETED" && step.status !== "FAILED" && step.status !== "SKIPPED") {
+        engine.failNode(runId, token, stepId, "cancelled by workbench")
+      }
+      const terminal = this.graphTerminalStatus(runId, definition, engine)
+      if (terminal && before) {
+        this.composeTerminalBoundary(token, runId, engine, terminal, before.status)
+      }
+    })()
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
-  private state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string, authorityToken: AuthorityToken): WorkflowStatePort {
+  private async state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string, authorityToken: AuthorityToken): Promise<WorkflowStatePort> {
     const engine = this.ensureEngine(definition, versionId)
     const steps = definition.steps
     let nextStep = steps.length
@@ -251,6 +347,15 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       break
     }
     if (nextStep >= steps.length && status === "running") status = "completed"
+    // P0-A canonical mapping: a terminal durable history overrides the
+    // graph-derived detail, so HTTP state == projection == recovered state.
+    // Non-terminal runs keep the graph detail (pending vs running).
+    this.ensureServices()
+    const run = await this.historyAuthority.getRun(runId)
+    if (run && isTerminalHistoryStatus(run.status)) {
+      const terminal = run.status === "completed" ? "completed" : run.status === "failed" ? "failed" : "cancelled"
+      return { workflowId: runId, definition, status: terminal, nextStep, outputs, versionId, versionDigest, authorityToken }
+    }
     return { workflowId: runId, definition, status, nextStep, outputs, versionId, versionDigest, authorityToken }
   }
 }
@@ -261,6 +366,12 @@ function requireToken(token: AuthorityToken | undefined): asserts token is Autho
 
 function stepNodeId(index: number): string {
   return `step-${index}`
+}
+
+/** Canonical terminal run states (ADR-004): the durable history owns them. */
+function isTerminalHistoryStatus(status: WorkflowRun["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled" ||
+    status === "cancelled_with_active_effect" || status === "cancelled_with_unknown_external_state"
 }
 
 function toIr(definition: WorkflowDefinitionPort): WorkflowDefinition {
