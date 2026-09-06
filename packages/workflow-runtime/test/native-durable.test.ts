@@ -14,12 +14,22 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { NativeDurableHistoryAuthority } from "../src/native-history"
 import { NativeApprovalAuthority, type NativeApprovalAuthorityOptions } from "../src/native-approval-authority"
-import { DefaultSecretRedactor, NativeAttemptAuthority } from "../src/native-attempts"
+import { AttemptAuthorityError, DefaultSecretRedactor, NativeAttemptAuthority, type AttemptAuthorityErrorCode } from "../src/native-attempts"
 import { ApprovalBrokerV4, ApprovalV4Error, type AuthorityToken, type ApprovalBinding } from "../src/approval-v4"
 import type { WorkflowRun } from "@unifia/contracts"
 
 const scope = { organizationId: "org", workspaceId: "ws" }
 const deployment = { ownershipScope: scope, environmentId: "test" }
+
+function expectAttemptError(run: () => unknown, code: AttemptAuthorityErrorCode): void {
+  try {
+    run()
+    expect.unreachable()
+  } catch (error) {
+    expect(error).toBeInstanceOf(AttemptAuthorityError)
+    expect((error as AttemptAuthorityError).code).toBe(code)
+  }
+}
 
 const makeRun = (runId: string): WorkflowRun => ({
   runId, deploymentId: "dep-1", workflowVersionId: "ver-1", deploymentScope: deployment,
@@ -356,17 +366,17 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
       const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
       a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
-      // a late SUCCEEDED attempt outcome must NOT silently overwrite UNKNOWN
-      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
-      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+      // UNKNOWN is reconciliation-only; no second attempt may be minted.
+      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       // only explicit reconciliation moves it, and it is journalled + flagged
       a.reconcileEffect("run-1", "ek.pay.charge", "SUCCEEDED", { reconciled: true })
       const effect = a.inspectEffect("run-1", "ek.pay.charge")
       expect(effect!.status).toBe("SUCCEEDED"); expect(effect!.reconciled).toBe(true)
+      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "EFFECT_ALREADY_TERMINAL")
       expect(() => a.reconcileEffect("run-1", "ek.pay.charge", "FAILED", {})).toThrow("already terminal")
       a.close()
-    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+    } finally { Bun.gc(true); rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }) }
   })
 
   test("idempotency: terminal effect is never overwritten by a late attempt outcome", () => {
@@ -402,6 +412,23 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
       b.reconcileEffect("run-1", "ek.x", "FAILED", {})
       expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("FAILED")
       b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconciled failure requires explicit retry authorization", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-retry-auth-"))
+    try {
+      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
+      a.initialize()
+      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.reconcileEffect("run-1", "ek.pay.charge", "FAILED", { reconciled: true })
+      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+      a.authorizeRetry("run-1", "ek.pay.charge")
+      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+      expect(retry.seq).toBe(2)
+      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+      a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
@@ -455,9 +482,8 @@ describe("ACK-loss production regression (directive 23, FC-04 principle)", () =>
       a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       const effect = a.inspectEffect("run-1", "ek.pay.charge")
       expect(effect!.status).toBe("UNKNOWN_EXTERNAL_STATE")
-      // NO blind retry: a retry attempt outcome CANNOT move the effect out of UNKNOWN
-      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
-      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "SUCCEEDED", { result: { done: true } })
+      // NO blind retry: UNKNOWN rejects allocation before a second dispatch.
+      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       a.close()
       // RESTART: UNKNOWN survives; only the explicit reconciliation exits

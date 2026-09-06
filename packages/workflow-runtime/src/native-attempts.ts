@@ -25,6 +25,18 @@ import type { Database } from "bun:sqlite"
 export type AttemptOutcome = "SUCCEEDED" | "FAILED" | "UNKNOWN_EXTERNAL_STATE"
 export type EffectStatus = AttemptOutcome | "PENDING"
 
+export type AttemptAuthorityErrorCode = "RECONCILIATION_REQUIRED" | "RETRY_NOT_AUTHORIZED" | "EFFECT_ALREADY_TERMINAL"
+
+export class AttemptAuthorityError extends Error {
+  readonly code: AttemptAuthorityErrorCode
+
+  constructor(code: AttemptAuthorityErrorCode, message: string) {
+    super(message)
+    this.name = "AttemptAuthorityError"
+    this.code = code
+  }
+}
+
 export interface SecretRedactor {
   /** Register secret material resolved from the OS broker (this process). */
   register(material: string): void
@@ -128,6 +140,12 @@ CREATE TABLE IF NOT EXISTS effect_journal (
   occurred_at INTEGER NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS retry_authorizations (
+  run_id TEXT NOT NULL,
+  effect_key TEXT NOT NULL,
+  authorized_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, effect_key)
+);
 `
 
 export class NativeAttemptAuthority {
@@ -184,9 +202,21 @@ export class NativeAttemptAuthority {
   allocateAttempt(runId: string, liId: string, effectKey: string): DurableAttempt {
     const db = this.requireDb()
     if (!runId || !liId || !effectKey) throw new Error("allocateAttempt: runId, liId and effectKey are required")
+    const effect = readEffect(db, runId, effectKey)
+    if (effect?.status === "UNKNOWN_EXTERNAL_STATE") {
+      throw new AttemptAuthorityError("RECONCILIATION_REQUIRED", `effect requires reconciliation before allocation: ${effectKey}`)
+    }
+    if (effect?.reconciled === 1 && effect.status === "SUCCEEDED") {
+      throw new AttemptAuthorityError("EFFECT_ALREADY_TERMINAL", `reconciled effect is terminal: ${effectKey}`)
+    }
+    const authorized = effect?.reconciled === 1 && effect.status === "FAILED"
+    if (authorized && !readRetryAuthorization(db, runId, effectKey)) {
+      throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `retry authorization required: ${effectKey}`)
+    }
     let created!: DurableAttempt
     db.transaction(() => {
       const now = this.now()
+      if (authorized) db.query("DELETE FROM retry_authorizations WHERE run_id = ? AND effect_key = ?").run(runId, effectKey)
       db.query("INSERT OR IGNORE INTO logical_invocations (run_id, li_id, created_at) VALUES (?, ?, ?)").run(runId, liId, now)
       const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM attempts WHERE run_id = ? AND li_id = ?").get(runId, liId) as { seq: number }
       const attemptId = `att:${runId}:${liId}:${seq.seq}`
@@ -197,6 +227,17 @@ export class NativeAttemptAuthority {
       created = { runId, logicalInvocationId: liId, attemptId, seq: seq.seq, effectKey, outcome: null, resultJson: null, ackLost: false, createdAt: now }
     })()
     return created
+  }
+
+  /** Record the explicit decision that a reconciled failure may be retried. */
+  authorizeRetry(runId: string, effectKey: string): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      const effect = readEffect(db, runId, effectKey)
+      if (!effect) throw new Error(`effect not found: ${effectKey}`)
+      if (effect.status !== "FAILED" || effect.reconciled !== 1) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `only reconciled failures may be authorized: ${effectKey}`)
+      db.query("INSERT OR REPLACE INTO retry_authorizations (run_id, effect_key, authorized_at) VALUES (?, ?, ?)").run(runId, effectKey, this.now())
+    })()
   }
 
   /**
@@ -226,14 +267,14 @@ export class NativeAttemptAuthority {
    */
   reconcileEffect(runId: string, effectKey: string, outcome: "SUCCEEDED" | "FAILED", result?: unknown): void {
     const db = this.requireDb()
+    const current = readEffect(db, runId, effectKey)
+    if (!current) throw new Error(`effect not found: ${effectKey}`)
+    if (current.status === "SUCCEEDED" || current.status === "FAILED") throw new Error(`effect already terminal: ${effectKey} (${current.status})`)
     db.transaction(() => {
-      const row = db.query("SELECT status, reconciled FROM effects WHERE run_id = ? AND effect_key = ?").get(runId, effectKey) as { status: EffectStatus; reconciled: number } | null
-      if (!row) throw new Error(`effect not found: ${effectKey}`)
-      if (row.status === "SUCCEEDED" || row.status === "FAILED") throw new Error(`effect already terminal: ${effectKey} (${row.status})`)
       const now = this.now()
       db.query("UPDATE effects SET status = ?, result_json = ?, reconciled = 1, updated_at = ? WHERE run_id = ? AND effect_key = ?")
         .run(outcome, result === undefined ? null : JSON.stringify(result), now, runId, effectKey)
-      this.journal(db, runId, effectKey, row.status, outcome, now)
+      this.journal(db, runId, effectKey, current.status, outcome, now)
     })()
   }
 
@@ -297,4 +338,22 @@ export class NativeAttemptAuthority {
 
 function toEffect(row: { run_id: string; effect_key: string; effect_id: string; status: string; result_json: string | null; reconciled: number; updated_at: number }): DurableEffect {
   return { runId: row.run_id, effectKey: row.effect_key, effectId: row.effect_id, status: row.status as EffectStatus, resultJson: row.result_json, reconciled: row.reconciled === 1, updatedAt: row.updated_at }
+}
+
+function readEffect(db: Database, runId: string, effectKey: string): { status: EffectStatus; reconciled: number } | null {
+  const query = db.query("SELECT status, reconciled FROM effects WHERE run_id = ? AND effect_key = ?")
+  try {
+    return query.get(runId, effectKey) as { status: EffectStatus; reconciled: number } | null
+  } finally {
+    query.finalize()
+  }
+}
+
+function readRetryAuthorization(db: Database, runId: string, effectKey: string): boolean {
+  const query = db.query("SELECT effect_key FROM retry_authorizations WHERE run_id = ? AND effect_key = ?")
+  try {
+    return query.get(runId, effectKey) !== null
+  } finally {
+    query.finalize()
+  }
 }
