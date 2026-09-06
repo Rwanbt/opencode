@@ -19,12 +19,12 @@ test does not prove that the web runtime owns a platform bridge.
 
 | Capability (Local GA) | Contract | Runtime | E2E | Verdict |
 |---|---|---|---|---|
-| Durable WorkflowRun authority | PASS (contracts) | PASS (NativeDurableHistoryAuthority) | PASS (e2e-full-journey) | **SUPPORTED** |
-| Approval lifecycle (D-02 V4) | PASS (22 matrix) | PASS (NativeApprovalAuthority + fencing) | PASS (directive-8 proofs + E2E) | **SUPPORTED** |
-| Graph control (8 families) | PASS (M2) | PASS (GraphRuntimeEngine) | PASS (per-family + journey) | **SUPPORTED** |
-| Durable wait/timers | PASS (timer.ts) | PASS (dueTimers/markTimerFired) | PASS (E2E timer) | **SUPPORTED** |
-| Effects + retry + uncertainty | PASS | PASS (NativeAttemptAuthority) | PASS (E2E ACK-loss/retry) | **SUPPORTED** |
-| Cancellation | PASS | PASS (requestCancel + fencing) | PASS (E2E cancel) | **SUPPORTED** |
+| Durable WorkflowRun authority | PASS (contracts) | PASS (shared AuthorityToken) | PASS (canonical-authority-e2e, restart/takeover) | **SUPPORTED** |
+| Approval lifecycle (D-02 V4) | PASS (22 matrix) | PASS (NativeApprovalAuthority + shared fencing) | PASS (directive-8 proofs + canonical E2E) | **SUPPORTED** |
+| Graph control (8 families) | PASS (M2) | PASS (GraphRuntimeEngine + shared fencing) | PASS (per-family + canonical E2E) | **SUPPORTED** |
+| Durable wait/timers | PASS (timer.ts) | PASS (dueTimers/markTimerFired + fencing) | PASS (canonical E2E timer) | **SUPPORTED** |
+| Effects + retry + uncertainty | PASS | PASS (NativeAttemptAuthority + shared fencing) | PASS (canonical E2E ACK-loss/reconciliation) | **SUPPORTED** |
+| Cancellation | PASS | PASS (requestCancel + shared fencing) | PASS (canonical E2E cancel) | **SUPPORTED** |
 | Retention/archival | PASS (ADR-016) | PASS (applyHistoryRetention) | PASS (retention.test) | **SUPPORTED** |
 | Version compatibility | PASS (ADR-018) | PASS (schema gate fail-closed) | PASS (skew test) | **SUPPORTED** |
 | Immutable publication/diagnosis | PASS | PASS (promoteToVersion pin + journal) | PASS (HTTP pin + events) | **SUPPORTED** |
@@ -49,4 +49,5 @@ NOT_CERTIFIED rows require the browser/network harness and the AI-compiler
 runtime wire - they are NOT advertised in the Local GA core profile and do
 not block the core product verdict; they block the FULL-surface FINAL GO.
 
-LOCAL COMMITS ONLY - NOT REMOTELY PUBLISHED.
+Native authority/fencing commits are published on the implementation branch;
+merge remains pending review.

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2026 Unifia contributors -->
 
-# Final gates assessment (directive 52 pre-check) - 2026-09-05
+# Final gates assessment (directive 52 pre-check) - 2026-09-06
 
 Measured state of every FINAL GO gate. Honest: OPEN gates are named
 with their exact next action. No generic DONE.
@@ -21,9 +21,9 @@ D-02 V4 durable                 : PASS (14 directive-8 proofs on the
 M1 production                   : PASS (native history/approval/
                                   attempts authorities; restart-safe)
 M2 production                   : RUNTIME GREEN per family (8 control
-                                  families + advance walk + crash
-                                  proofs); E2E layer OPEN (host wiring
-                                  started: NativeWorkflowRuntimePort)
+                                   families + advance walk + crash
+                                   proofs); canonical authority E2E PASS
+                                   through NativeWorkflowRuntimePort
 M3 production                   : PASS core (identities, durable
                                   timers at-most-once, durable
                                   cancellation with stale fencing,

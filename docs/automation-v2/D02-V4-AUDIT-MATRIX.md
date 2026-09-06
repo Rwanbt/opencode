@@ -3,7 +3,7 @@
 
 # D-02 V4 — Mechanical audit matrix (contract gate)
 
-> Generated 2026-09-04 from source commit `1591cd4d68` + D-02 V4 hardening batch.
+> Updated 2026-09-06 from the native runtime authority/fencing implementation.
 > Requirement sources: master plan D-02 sections 6-20, ADR-0007 V3 (frozen),
 > ADR-001 digest machinery, ADR-008 authoritative clock.
 > Level: **CONTRACT gate** on the authority facade. The **production durable
@@ -65,17 +65,17 @@ Status legend: `PASS` = implemented + mechanically tested at contract level ·
 
 ## Measured evidence (this batch)
 
-- `packages/workflow-runtime`: **61/61** (was 47/47 + 8 V4) in 0.49s
+- `packages/workflow-runtime`: **118/118** after shared authority fencing
 - `packages/contracts`: 632/632 · `packages/digest-runtime`: 12/12 ·
   `packages/workflow-catalog`: 5/5 · `packages/automate-migration-tool`: 32/32 ·
   `packages/workbench-server`: 84/84 · `packages/release-hardening`: typecheck only
-- Turbo typecheck: **47/47** tasks (isolated cache)
-- LOCAL COMMITS ONLY — NOT REMOTELY PUBLISHED.
+- Workbench production authority E2E: **1/1**, 38 assertions, Bun/SQLite
+- Implementation commits are published on the branch; merge remains pending review.
 
 ## Out of scope here (remains open)
 
-- Production durable gate (sections 18/20): substrate transaction, real
-  restart, real multiprocess fencing — blocked on ADR-000.
+- Production durable gate (sections 18/20): native substrate transaction, real
+  restart, and canonical takeover fencing — PASS for the tested local path.
 - One observed flake in `workbench-server` suite (single failure on first run,
   84/84 on two consecutive re-runs) — P2, root cause not yet identified.
 ## Durable gate CLOSE (2026-09-05, post-ADR-000 ratification)
@@ -108,10 +108,16 @@ atomic state + history            PASS (approvals + journal + authority row in O
 durable eventSequence             PASS (monotonic across restart: [1,2] preserved)
 ```
 
-Package suite after the durable wiring: **80/80** (incl. the 20-test
+Package suite after the durable wiring: **118/118** (incl. the 20-test
 V4 contract matrix unchanged). The durable gate of D-02 V4 is CLOSED
 for the ratified substrate; multiprocess fencing at scale remains
 covered by the M0 FC-14/FC-25 real-multiprocess evidence
 (`M0_RESULTS_UNIFIA_NATIVE.json`).
 
-LOCAL COMMITS ONLY — NOT REMOTELY PUBLISHED.
+Production-path authority E2E: `packages/workbench-server/test/canonical-authority-e2e.test.ts`,
+one SQLite file, generation 4 → 5 takeover, stale/current mutation matrix,
+and restart rehydration: **PASS (38 assertions)**.
+
+The durable D-02 authority and graph-fencing gate is CLOSED for the native
+production path. The branch commits are remotely published; merge remains
+pending normal review.

@@ -171,7 +171,29 @@ describe("canonical authority production path", () => {
       expect((await broker.cancel(second.approvalId, { id: "requester", kind: "human" }, tokenB)).state).toBe("CANCELLED")
 
       await expectStale(() => port.cancel(staleA), "workflow cancel")
-      const cancelled = await server.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/cancel`, {
+
+      graph.close(); port.close(); history.close(); attempts.close(); approvals.close()
+      const restartedPort = new NativeWorkflowRuntimePort({ databasePath: path, now })
+      const restartedHistory = new NativeDurableHistoryAuthority({ databasePath: path, now })
+      const restartedAttempts = new NativeAttemptAuthority({ databasePath: path, now })
+      const restartedApprovals = new NativeApprovalAuthority({ databasePath: path, now })
+      const restartedGraph = new GraphRuntimeEngine({ databasePath: path, definition: graphDefinition, now })
+      restartedHistory.initialize(); restartedAttempts.initialize(); restartedApprovals.initialize(); restartedGraph.initialize()
+      const restartedBroker = new ApprovalBrokerV4(restartedApprovals)
+      const restartedServer = new WorkbenchServer({
+        auth: { authenticate: async () => ({ id: "owner-b", kind: "human" }) as never },
+        workspace: {} as never, runtime: {} as never, workflow: restartedPort,
+        audit: { record: () => undefined }, capability: { check: async () => "allow" },
+      })
+      await expectStale(() => restartedGraph.setDeadline(runId, staleA, "step-0", 21_000), "restarted graph")
+      restartedGraph.setDeadline(runId, tokenB, "step-0", 21_000)
+      await expectStale(() => restartedAttempts.allocateAttempt(staleA, "li-restart", "effect-restart"), "restarted attempt")
+      const restartedAttempt = restartedAttempts.allocateAttempt(tokenB, "li-restart", "effect-restart")
+      restartedAttempts.recordAttemptOutcome(tokenB, "li-restart", restartedAttempt.attemptId, "SUCCEEDED", { ok: true })
+      await expectStale(() => restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, staleA), "restarted approval")
+      const restartedApproval = await restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, tokenB)
+      expect(restartedApproval.state).toBe("PENDING")
+      const cancelled = await restartedServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/cancel`, {
         method: "POST",
         headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(tokenB) },
       }))
@@ -185,12 +207,12 @@ describe("canonical authority production path", () => {
       } finally {
         db.close()
       }
+      restartedGraph.close()
+      restartedPort.close()
+      restartedHistory.close()
+      restartedAttempts.close()
+      restartedApprovals.close()
     } finally {
-      graph.close()
-      port.close()
-      history.close()
-      attempts.close()
-      approvals.close()
       Bun.gc(true)
       await new Promise((resolve) => setTimeout(resolve, 100))
       rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 })
