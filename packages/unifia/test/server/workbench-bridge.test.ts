@@ -12,7 +12,15 @@ const previousPassword = process.env.UNIFIA_SERVER_PASSWORD
 const previousToken = process.env.UNIFIA_KEYCHAIN_TOKEN
 const previousAuditLog = process.env.UNIFIA_WORKBENCH_AUDIT_LOG
 process.env.UNIFIA_SERVER_PASSWORD = "unifia-workbench-bridge-password-0123456789"
-process.env.UNIFIA_KEYCHAIN_TOKEN = "private-ipc-token"
+// D12 (§9.4 Lane D4) — the sidecar now decodes the IPC bearer
+// through `tryDecodeWorkbenchIpcBearer`, which requires a 64-char
+// lowercase hex string. The legacy "private-ipc-token" value (17
+// chars) was a TestConventions-style placeholder; the production
+// Tauri shell mints 256 bits as two concatenated UUIDv4 `simple()`
+// strings (auth_storage.rs:282-283), and the test now mirrors that
+// shape so the bearer round-trips through the typed boundary.
+const ipcBearer = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+process.env.UNIFIA_KEYCHAIN_TOKEN = ipcBearer
 process.env.UNIFIA_WORKBENCH_AUDIT_LOG = path.join(root, "workbench-audit.jsonl")
 
 try {
@@ -20,7 +28,7 @@ try {
   if (!bridge) throw new Error("private Workbench bridge did not initialize")
   const workspacePath = path.join(root, "workspace")
   await mkdir(workspacePath)
-  const nativeHeaders = { "x-unifia-keychain-token": "private-ipc-token", "content-type": "application/json" }
+  const nativeHeaders = { "x-unifia-keychain-token": ipcBearer, "content-type": "application/json" }
 
   const opened = await bridge.native(new Request("http://127.0.0.1/workbench/native/token", {
     method: "POST", headers: nativeHeaders,

@@ -173,8 +173,17 @@ export function DesignSpecEditor(props: {
         >
           {props.openState === "opening" ? "Ouverture…" : "Ouvrir dans l'atelier"}
         </button>
+        {/* One line reports both flows: saving a version and exporting the
+            render both write `saveMessage`. Only `saveState` was exposed, so
+            a completed export and a failed one were indistinguishable in the
+            DOM — both read `idle`, because the export never touches
+            `saveState`. The export state now has its own attribute. */}
         <Show when={props.saveMessage}>
-          <span data-design-save-result={props.saveState} class="text-12-regular text-text-weak">
+          <span
+            data-design-save-result={props.saveState}
+            data-design-export-result={props.exportState}
+            class="text-12-regular text-text-weak"
+          >
             {props.saveMessage}
           </span>
         </Show>

@@ -67,9 +67,10 @@ export const GATE_C_CONDITIONS: readonly GateEntry[] = [
     condition: "Workflows reprenables",
     evidence: "executed",
     run: async () => {
-      const { WorkflowRuntime, FileWorkflowStore } = await import("@unifia/workflow-runtime")
-      assert(typeof WorkflowRuntime.prototype.resume === "function", "the workflow runtime has no resume")
-      assert(typeof FileWorkflowStore.prototype.load === "function", "workflow state is not reloadable from a store")
+      const { FileBackedDurableHistoryAuthority } = await import("@unifia/workflow-runtime")
+      assert(typeof FileBackedDurableHistoryAuthority.prototype.getRun === "function", "durable workflow state cannot be read after restart")
+      assert(typeof FileBackedDurableHistoryAuthority.prototype.transition === "function", "durable workflow state cannot resume through transitions")
+      assert(typeof FileBackedDurableHistoryAuthority.prototype.getMaterializedProjection === "function", "workflow state has no restart-safe projection")
     },
   },
   {

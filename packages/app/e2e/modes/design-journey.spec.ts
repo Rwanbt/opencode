@@ -2,6 +2,7 @@
 
 import { test, expect } from "../fixtures"
 import { installWorkbenchMock } from "../fixtures/workbench-mock"
+import { openSpecTab } from "../design/surface"
 import { dirPath } from "../utils"
 
 // V14.5 — first end-to-end run of the design journey with a
@@ -17,13 +18,17 @@ test("V14.5 — mock workbench bridge keeps the design surface in the connected 
   await page.goto(`${dirPath(directory)}/design`)
   await expect(page).toHaveURL(new RegExp(`/${slug}/design(?:[/?#]|$)`))
 
-  // The connection banner shows the connected state, not the
-  // unsupported terminal from V03.
-  await expect(page.locator('[data-workbench-connection="ready"]')).toBeVisible()
+  // The connection banner shows the connected state, not the unsupported
+  // terminal from V03. The attribute is the Design surface own one:
+  // data-workbench-connection is rendered by Work, so the previous locator
+  // could never match — nobody noticed because the suite did not load.
+  await expect(page.locator('[data-design-connection="ready"]')).toBeVisible()
   await expect(page.getByText(/workbench instance/i).first()).toBeVisible()
 
-  // The design surface mounts; the spec editor is present.
-  await expect(page.locator("#workbench-design-spec")).toBeVisible()
+  // The design surface mounts; the spec editor is present. Fichiers is the
+  // default tab, so the editor only exists once Spec is selected — the
+  // previous version asserted it straight away and could not pass.
+  await openSpecTab(page)
   await expect(page.locator("[data-design-spec-editor]")).toBeVisible()
 })
 
@@ -42,6 +47,7 @@ test("V14.5 — listDesignSystems is reachable and surfaces the mock catalog", a
   })
   await page.setViewportSize({ width: 1400, height: 800 })
   await page.goto(`${dirPath(directory)}/design`)
+  await openSpecTab(page)
   await expect(page.locator("[data-design-catalog=\"mock-catalog\"]")).toBeVisible()
   await expect(page.getByText("Mock catalog · 9.9.9")).toBeVisible()
 })

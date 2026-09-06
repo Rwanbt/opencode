@@ -3,6 +3,14 @@
 import { test, expect } from "../fixtures"
 import { waitSessionIdle } from "../actions"
 import { dirPath } from "../utils"
+import { installWorkbenchMock } from "../fixtures/workbench-mock"
+
+const RELOAD_CYCLES = Number(process.env.E2E_RELOAD_CYCLES ?? 10)
+const PROMPTS_PER_CYCLE = Number(process.env.E2E_RELOAD_PROMPTS ?? 100)
+const RELOAD_MODES = (process.env.E2E_RELOAD_MODES ?? "design,automate,work").split(",").map((mode) => {
+  if (mode === "design" || mode === "automate" || mode === "work") return mode
+  throw new Error(`Unsupported E2E reload mode: ${mode}`)
+})
 
 /**
  * Stability across full reloads, under session load.
@@ -38,14 +46,23 @@ import { dirPath } from "../utils"
  */
 
 test("10 reload cycles under session load do not grow event streams, query observers or cache entries", async ({ page, project, assistant }) => {
-  test.setTimeout(600_000)
-
-  await project.open()
+  // The defaults are the certification workload. Smaller values are allowed
+  // only for local diagnosis. The backend takes about 1.57 s per sequential
+  // prompt under this harness, so 1,000 prompts plus 30 reloads need this
+  // measured 35-minute budget without weakening the contract.
+  test.setTimeout(2_100_000)
+  await project.open({
+    // Automate is capability-gated. This spec certifies reload behaviour in
+    // the supported browser-E2E profile, so provide only the platform bridge
+    // boundary and the grant required to reach the real surface.
+    beforeGoto: () => installWorkbenchMock(page, { grants: ["workflow.run"] }),
+  })
   const sessionID = await project.user("Create the temporary E2E session and do not modify files.")
   const route = `${dirPath(project.directory)}/work`
   await page.goto(route)
   await expect(page).toHaveURL(/\/work(?:[/?#]|$)/)
   await expect(page.locator('[data-workbench-mode="work"]').first()).toBeVisible()
+  await expect(page.locator('[data-workbench-connection="ready"]')).toBeVisible()
 
   const baseline = await page.evaluate(() => {
     const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
@@ -63,18 +80,19 @@ test("10 reload cycles under session load do not grow event streams, query obser
     }
   })
 
-  for (let cycle = 1; cycle <= 10; cycle += 1) {
+  for (let cycle = 1; cycle <= RELOAD_CYCLES; cycle += 1) {
     // Walk the three modes and return. The cycle counter is
     // embedded in the assistant token so the test can verify
     // each prompt actually completed (a stuck cycle would
     // not advance the counter).
     const token = `PERF_CYCLE_${cycle}_${Date.now()}`
-    await assistant.reply(token)
-    for (const mode of ["design", "automate", "work"] as const) {
+    for (const mode of RELOAD_MODES) {
       await page.goto(`${dirPath(project.directory)}/${mode}`)
+      await expect(page.locator('[data-workbench-bootstrap="ready"]')).toBeVisible()
       await expect(page.locator(`[data-workbench-mode="${mode}"]`).first()).toBeVisible()
     }
-    for (let message = 1; message <= 100; message += 1) {
+    for (let message = 1; message <= PROMPTS_PER_CYCLE; message += 1) {
+      if (message === 1) await assistant.reply(token)
       const callsBefore = await assistant.calls()
       await project.sdk.session.prompt({
         sessionID,

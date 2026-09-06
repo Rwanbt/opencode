@@ -40,13 +40,14 @@ Both are authoritative, for different questions, checked in this order:
    — outright (server allowlist), already approved, or does it need a new
    approval?*
 
-**Capability matrix for `work-design`** (2026-08-17):
+**Capability matrix for `work-design`** (2026-08-17; updated 2026-08-31):
 
 | Capability | Granted at connection | Reaches the gate without it? |
 |---|---|---|
 | `workspace.read`, `workspace.watch` | Yes (`READ_CAPABILITIES`, `provider.tsx`) | N/A — always present |
 | `artifact.create`, `artifact.export` | No | **Yes — step-up eligible** (`STEP_UP_ELIGIBLE_CAPABILITIES`) |
-| `workspace.write`, `workflow.run`, `desktop.control`, `desktop.observe`, `browser.navigate`, `package.install` | No | No — hard `403`, gate never runs |
+| `workflow.run`, `desktop.control`, `desktop.observe`, `browser.navigate`, `package.install` | No | No — hard `403`, gate never runs |
+| `workspace.write` | **Yes** (widened 2026-08-23, see Update below) | N/A — always present in `principal.scopes` when the surface lease requests it |
 
 Step-up eligibility exists because Design/Work trigger `artifact.create`
 (save) and `artifact.export` (export) for real, on a token that only ever
@@ -104,6 +105,52 @@ server at any of them:
 - `workflow.run` is refused before the gate runs regardless of how the gate
   is configured — see `capability-scope.test.ts`'s dedicated test asserting
   this even against a gate stub that would otherwise allow everything.
+
+## Update 2026-08-31 — `workspace.write` widened to the connection lease
+
+The capability matrix above lists `workspace.write` as "No — hard 403".
+In practice, since 2026-08-23, the connection lease the surface requests at
+`WorkbenchClient.connect` time carries `workspace.write` because two real
+Design/Work operations need it:
+
+1. **Fichiers CRUD** — the file picker, the CRUD panel, the rename and
+   remove operations all call `#files(..., "create" | "write" | "remove" |
+   "rename", principal)` (`packages/workbench-server/src/index.ts:630-673`),
+   which checks the `workspace.write` capability. With a read/watch-only
+   lease, every one of those routes answered a flat 403 in the shipped app
+   while passing its own tests against a fully-scoped test principal.
+2. **Composer uploads** — the artifact preview composer writes to the
+   workspace via the same `workspace.write` route.
+
+`artifact.preview` is widened for the same reason and is narrower than
+`workspace.read`: it reads one artifact's bytes, not arbitrary workspace
+files. Without it `ArtifactPreview`'s read of the raw artifact answered a
+flat 403, because `artifact.preview` is not step-up eligible either.
+
+The shipped surface — three layers in agreement — is:
+
+- `packages/workbench-shell/src/routes.ts:185` —
+  `SURFACE_LEASE_CAPABILITIES = ["workspace.read", "workspace.write",
+  "workspace.watch", "artifact.preview"]` (with an inline comment that
+  documents the same widening).
+- `packages/workbench-server/src/index.ts:98-103` — `SURFACE_GRANTED_CAPABILITIES`
+  mirrors the same four.
+- `packages/desktop/src-tauri/src/lib.rs:183-188` —
+  `ALLOWED_CONNECTION_CAPABILITIES` (the native bridge's issuance guard) is
+  the same four.
+
+The matrix in this ADR is now stale. The widening is **intentional**, not
+a regression: the server's `#checkCapability` (`index.ts:1304-1313`) still
+refuses any capability absent from `principal.scopes` before the gate runs,
+so a token that was never issued `workspace.write` is still refused without
+ever creating an approval. Only a token that asked for `workspace.write`
+at connection time (which only the WebView's surface lease does today) ever
+reaches the gate, and the gate is configured to allow it.
+
+This update is documentation, not a behavioural change: the code path
+described above has been live since 2026-08-23. The matrix is brought into
+agreement with the shipped surface; the decision (token-scope check first,
+then gate) is unchanged.
 
 ## Implementation references
 

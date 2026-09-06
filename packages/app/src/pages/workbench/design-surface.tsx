@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createQuery } from "@tanstack/solid-query"
 import { useLanguage } from "@/context/language"
@@ -44,6 +44,16 @@ import { DesignBrowserTab } from "@/pages/workbench/design-browser-tab"
 import { DesignSketchTab } from "@/pages/workbench/design-sketch-tab"
 import { createDesignSnapshot } from "@/pages/workbench/design-snapshot"
 import { createDesignToolbarState } from "@/pages/workbench/design-toolbar-state"
+import {
+  canStartApproval,
+  createApprovalOperations,
+  isApprovalModalVisible,
+  reduceApprovalState,
+  type ApprovalEvent,
+  type ApprovalState,
+} from "@/pages/workbench/design-approval"
+
+export type { ApprovalState, ApprovalEvent } from "@/pages/workbench/design-approval"
 
 export function DesignSurface(): JSX.Element {
   const language = useLanguage()
@@ -76,6 +86,23 @@ export function DesignSurface(): JSX.Element {
   const [saveMessage, setSaveMessage] = createSignal("")
   const [exportState, setExportState] = createSignal<"idle" | "exporting" | "exported" | "error">("idle")
   const [openState, setOpenState] = createSignal<"idle" | "opening" | "opened" | "error">("idle")
+  // DA-UI-02 — recoverable approval UX for the create/export flow.
+  // The 8-state machine lives here; the modal, the timer, and the
+  // navigation-cleanup hook all read it.
+  const [approvalState, setApprovalStateRaw] = createSignal<ApprovalState>({ kind: "idle" })
+  const setApprovalState = (event: ApprovalEvent) => setApprovalStateRaw((current) => reduceApprovalState(current, event))
+  // DA-UI-03 — the in-flight request handle. The `runExportFlow`
+  // writes it before the first `await` and clears it on every
+  // terminal transition; `onCleanup` (below) calls `abort()` so a
+  // navigation away from the Design surface never leaves a half-
+  // finished operation talking to the broker.
+  let exportAbort: AbortController | undefined
+  // DA-UI-03 — the approval TTL timer. Set when the modal opens,
+  // cleared when the user acts (allow/deny/cancel) or when the
+  // approval state transitions to a terminal state. The timer
+  // dispatches the `expire` event, which only takes effect when
+  // the state is still `approval-required` (the reducer guards it).
+  let approvalExpireTimer: ReturnType<typeof setTimeout> | undefined
   const draftStore = createIndexedDbDesignDraftStore()
 
   // Phase 3 — `DesignSurface` holds the workshop's tab state. Before phase 3,
@@ -452,44 +479,150 @@ export function DesignSurface(): JSX.Element {
       setSaveMessage(error instanceof Error ? error.message : "design version could not be saved")
     }
   }
-  async function exportDesignRender(): Promise<void> {
-    const current = connection()
+  /**
+   * DA-UI-02 — `runExportFlow` is the state-machine wrapper around the
+   * old `exportDesignRender` call. The pre-DA-UI-02 code did two
+   * things wrong: (1) it folded the `202 approvalRequired` response
+   * into the same success branch as the nominal `exported` result,
+   * leaving the user with no way to allow/deny/retry, and (2) it
+   * had no guard against a second concurrent click racing the first
+   * (a "double-click" could have queued two requests and confused
+   * the broker). The new flow:
+   *
+   *   1. `canStartApproval` rejects the click when the machine is
+   *      mid-flight — this is the DA-UI-03 double-click guard.
+   *   2. The first `await` (createArtifact) and second (exportArtifact)
+   *      both observe the abort signal so navigating away from the
+   *      Design surface tears the operation down cleanly.
+   *   3. On `202 approvalRequired` we transition to the
+   *      `approval-required` sub-state, schedule the expiry timer,
+   *      and render the modal. The user can then allow, deny, or
+   *      cancel; the resolve path is `runResolveApproval` below.
+   *   4. On any other error, the machine transitions to `failed`
+   *      and the surface shows the message.
+   *
+   * The function is also self-contained so the retry path (after
+   * an `allow` decision) calls it recursively from the `resolving`
+   * branch of the modal handler.
+   */
+  async function runExportFlow(): Promise<void> {
+    const live = connection()
     const designSpec = spec().spec
-    if (!current || !designSpec || exportState() === "exporting") return
+    if (!live || !designSpec) return
+    // DA-UI-03 — double-click idempotency. A second click while the
+    // machine is mid-flight is a no-op (the button is also visually
+    // disabled in the spec editor, but the guard here is the
+    // authoritative one).
+    if (!canStartApproval(approvalState())) return
+    if (exportAbort) exportAbort.abort()
+    exportAbort = new AbortController()
+    const signal = exportAbort.signal
+    const isRetry = approvalState().kind === "retrying"
+    if (isRetry) {
+      setApprovalState({ type: "retry-start" })
+    } else {
+      setApprovalState({ type: "request-start" })
+    }
     setExportState("exporting")
     setSaveMessage("")
     try {
-      const render = await current.client.createArtifact({
-        workspaceId: current.workspaceId,
-        kind: "svg",
-        filename: "design-preview.svg",
-        content: renderDesignSpecSvg(designSpec, { width: 1440, height: 1080 }),
-        metadata: { derivedFrom: artifactId() ?? "draft", format: "image/svg+xml" },
-        provenance: { sourceTool: "design-renderer", capabilityPack: "workbench-design" },
-      })
-      const result = await current.client.exportArtifact(current.workspaceId, render.artifact.artifactId, { metadata: "keep", outbox: "design" })
-      // P6-2 — approbation ≠ erreur. Le chemin gouverné (qui exige une
-      // approbation) retourne un `approvalId` et non un `exported` : du
-      // point de vue de l'utilisateur qui a déclenché l'action, l'export
-      // a été soumis avec succès ; le bandeau rouge était une fausse
-      // alerte. On utilise `exported` (même état que le chemin nominal)
-      // et on garde le message détaillé pour distinguer les deux cas
-      // dans le bandeau de feedback.
+      const render = await live.client.createArtifact(
+        {
+          workspaceId: live.workspaceId,
+          kind: "svg",
+          filename: "design-preview.svg",
+          content: renderDesignSpecSvg(designSpec, { width: 1440, height: 1080 }),
+          metadata: { derivedFrom: artifactId() ?? "draft", format: "image/svg+xml" },
+          provenance: { sourceTool: "design-renderer", capabilityPack: "workbench-design" },
+        },
+        signal,
+      )
+      const result = await live.client.exportArtifact(
+        live.workspaceId,
+        render.artifact.artifactId,
+        { metadata: "keep", outbox: "design" },
+        signal,
+      )
       if ("approvalId" in result && result.approvalId) {
+        // 202 — broker gated the operation. The default TTL mirrors
+        // the broker's `ttlMs` (5 min in the workbench-server
+        // bootstrap); we accept whatever the server reported via
+        // `expiresAt` if it ever adds one. Today
+        // `AcceptedOperation` carries no `expiresAt`, so we
+        // synthesize it from the documented default.
+        const expiresAt = Date.now() + 5 * 60_000
+        setApprovalState({ type: "request-approval-required", approvalId: result.approvalId, capability: "artifact.export", resource: render.artifact.artifactId, expiresAt })
+        clearApprovalTimer()
+        approvalExpireTimer = setTimeout(() => setApprovalState({ type: "expire" }), Math.max(0, expiresAt - Date.now()))
+        // P6-2 — approval ≠ error: the spec editor's button still
+        // shows the "submitted" state; the modal is the surface the
+        // user acts on.
         setExportState("exported")
         setSaveMessage(`Export soumis à approbation : ${result.approvalId}`)
-      } else if ("exported" in result) {
+        return
+      }
+      if ("exported" in result) {
+        setApprovalState({ type: "request-succeeded" })
         setExportState("exported")
         setSaveMessage(`SVG exporté : ${result.exported.relativePath}`)
+        return
       }
+      throw new Error("export returned an unrecognised envelope")
     } catch (error) {
+      if (signal.aborted) {
+        // Navigation away from the Design surface — the onCleanup
+        // hook already cancelled the machine; the aborted promise
+        // is a no-op here, not a failure.
+        return
+      }
+      setApprovalState({ type: "request-failed", error: error instanceof Error ? error.message : "design render export failed" })
       setExportState("error")
       setSaveMessage(error instanceof Error ? error.message : "design render export failed")
     }
   }
+
+  /** Drop the expiry timer, wherever the machine leaves `approval-required`. */
+  function clearApprovalTimer(): void {
+    if (approvalExpireTimer) {
+      clearTimeout(approvalExpireTimer)
+      approvalExpireTimer = undefined
+    }
+  }
+
+  // DA-UI-02 / DA-UI-03 — allow, deny, cancel, re-request and the
+  // navigation teardown. They live in `design-approval.ts` with the client
+  // injected: this file cannot be loaded by `bun:test` (Solid's `use` is
+  // client-only), so anything written here can only ever be checked by a
+  // regex over its own source — which is how an expiry shipped with no
+  // reachable control and a request left pending on the broker.
+  const approvalOps = createApprovalOperations({
+    client: () => connection()?.client,
+    state: approvalState,
+    dispatch: setApprovalState,
+    clearTimer: clearApprovalTimer,
+    restart: runExportFlow,
+    report: (outcome) => {
+      setExportState(outcome.exportState)
+      setSaveMessage(outcome.message)
+    },
+  })
+
+  // DA-UI-03 — navigation cleanup. The Design surface unmounts when the
+  // user switches mode or closes the workspace. Both paths must withdraw
+  // any pending approval: aborting the local fetch does not tell the
+  // broker, so the request would sit there until its TTL ran out and the
+  // next attempt would race it.
+  onCleanup(() => {
+    if (exportAbort) {
+      exportAbort.abort()
+      exportAbort = undefined
+    }
+    approvalOps.detach()
+  })
+
   /**
    * Phase 7 — manual, production-grade artifact generation, no agent
-   * required. `exportDesignRender` above already proves the spec renders to
+   * required. `runExportFlow` above already proves the spec renders to
    * a real, persisted SVG artifact; this reuses the same render call but,
    * instead of sending it to the outbox, opens it in the workshop through
    * the exact `stream` pipeline a real agent's `<artifact>` block would use
@@ -586,7 +719,7 @@ export function DesignSurface(): JSX.Element {
         saveMessage={saveMessage()}
         onSave={() => void saveDesignVersion()}
         exportState={exportState()}
-        onExport={() => void exportDesignRender()}
+        onExport={() => void runExportFlow()}
         openState={openState()}
         onOpenInWorkshop={() => void openSpecInWorkshop()}
         versionPanel={versionPanel()}
@@ -676,7 +809,133 @@ export function DesignSurface(): JSX.Element {
           </div>
         }
       />
+      {/* DA-UI-02 — the approval modal. Visible only when the machine
+          is in `approval-required` or `resolving`; the modal owns its
+          own Allow/Deny/Cancel buttons and reads the machine for the
+          approval id, capability and deadline. The expiration warning
+          (DA-UI-03) is rendered non-modally inside the same component
+          when `state.expired` is true. */}
+      <ApprovalModal
+        state={approvalState()}
+        onAllow={() => void approvalOps.resolve("allow")}
+        onDeny={() => void approvalOps.resolve("deny")}
+        onCancel={() => void approvalOps.cancel()}
+        onRerequest={() => void approvalOps.rerequest()}
+      />
     </section>
+  )
+}
+
+/**
+ * DA-UI-02 — the approval modal. Renders nothing when the machine
+ * is not waiting on the user. The visible states are:
+ *   - `approval-required` (waiting for the user's decision),
+ *   - `resolving` (request to broker in flight, brief).
+ *
+ * When `state.expired` is true the modal keeps its warning but swaps the
+ * allow/deny/cancel trio for "annuler" and "demander une nouvelle
+ * approbation" — both wired to the broker. The doc comment used to
+ * promise "a single re-approve button" that the markup never rendered:
+ * every control was behind `!expired`, so an expiry left a full-screen
+ * overlay with no way out.
+ */
+function ApprovalModal(props: {
+  state: ApprovalState
+  onAllow: () => void
+  onDeny: () => void
+  onCancel: () => void
+  onRerequest: () => void
+}): JSX.Element {
+  return (
+    <Show when={isApprovalModalVisible(props.state)}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="design-approval-title"
+        data-design-approval-modal={props.state.kind}
+        data-design-approval-expired={props.state.kind === "approval-required" && props.state.expired ? "true" : "false"}
+        class="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      >
+        <div class="w-full max-w-md rounded-lg border border-border-base bg-background-base p-5 shadow-xl">
+          <h2 id="design-approval-title" class="text-16-medium text-text-base">
+            Approbation requise
+          </h2>
+          <Show when={props.state.kind === "approval-required" ? props.state : null}>
+            {(s) => (
+              <>
+                <p class="mt-2 text-13-regular text-text-weak" data-design-approval-id={s().approvalId}>
+                  Cette opération nécessite une approbation ({s().capability}). Le serveur attend votre décision avant de continuer.
+                </p>
+                <Show when={s().expired}>
+                  <p
+                    data-design-approval-expired-warning
+                    class="mt-2 rounded border border-border-warning bg-background-warning/30 p-2 text-12-regular text-text-warning"
+                  >
+                    L'approbation a expiré. Vous pouvez en demander une nouvelle.
+                  </p>
+                </Show>
+                <p class="mt-2 text-11-regular text-text-weak" data-design-approval-deadline>
+                  Expire à : {new Date(s().expiresAt).toLocaleTimeString()}
+                </p>
+              </>
+            )}
+          </Show>
+          <Show when={props.state.kind === "resolving"}>
+            <p class="mt-2 text-13-regular text-text-weak">Envoi de la décision au serveur…</p>
+          </Show>
+          <div class="mt-4 flex flex-wrap justify-end gap-2">
+            {/* An expired approval gets its own pair of actions. The first
+                version hid every button here, leaving a full-screen modal
+                with a warning and no way out — and the pending request on
+                the server with it. */}
+            <Show when={props.state.kind === "approval-required" && props.state.expired}>
+              <button
+                type="button"
+                data-design-approval-action="cancel"
+                class="rounded border border-border-base px-3 py-1.5 text-12-medium"
+                onClick={() => props.onCancel()}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                data-design-approval-action="rerequest"
+                class="rounded border border-border-focus bg-background-focus px-3 py-1.5 text-12-medium text-text-inverse"
+                onClick={() => props.onRerequest()}
+              >
+                Demander une nouvelle approbation
+              </button>
+            </Show>
+            <Show when={props.state.kind === "approval-required" && !props.state.expired}>
+              <button
+                type="button"
+                data-design-approval-action="deny"
+                class="rounded border border-border-base px-3 py-1.5 text-12-medium"
+                onClick={() => props.onDeny()}
+              >
+                Refuser
+              </button>
+              <button
+                type="button"
+                data-design-approval-action="cancel"
+                class="rounded border border-border-base px-3 py-1.5 text-12-medium"
+                onClick={() => props.onCancel()}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                data-design-approval-action="allow"
+                class="rounded border border-border-focus bg-background-focus px-3 py-1.5 text-12-medium text-text-inverse"
+                onClick={() => props.onAllow()}
+              >
+                Approuver et réessayer
+              </button>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </Show>
   )
 }
 
