@@ -1,0 +1,45 @@
+{
+  "measured": true,
+  "concurrentRace": true,
+  "distinctOsProcesses": 2,
+  "winnerProcessLocalOwnerId": "owner-B-1788559005946-z0hhsl",
+  "loserProcessLocalOwnerId": "owner-A-1788559005946-zzhqsu",
+  "currentPersistedAuthorityOwnerId": "owner-B-1788559005946-z0hhsl",
+  "winnerOwnerId": "owner-B-1788559005946-z0hhsl",
+  "loserOwnerId": "owner-B-1788559005946-z0hhsl",
+  "winnerPid": 26060,
+  "loserPid": 12240,
+  "finalGeneration": 1,
+  "winnerMutate": {
+    "accepted": true,
+    "generation": 1,
+    "authorityOwnerId": "owner-B-1788559005946-z0hhsl"
+  },
+  "loserMutate": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY",
+    "currentGeneration": 1,
+    "currentAuthorityOwnerId": "owner-B-1788559005946-z0hhsl"
+  },
+  "winnerDispatch": {
+    "accepted": true,
+    "effectKey": "ek-fc14-1788559006199",
+    "generation": 1,
+    "authorityOwnerId": "owner-B-1788559005946-z0hhsl"
+  },
+  "loserDispatch": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY",
+    "currentGeneration": 1,
+    "currentAuthorityOwnerId": "owner-B-1788559005946-z0hhsl"
+  },
+  "winnerMutateAccepted": true,
+  "loserMutateRejected": true,
+  "winnerDispatchAccepted": true,
+  "loserDispatchRejected": true,
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "DBOS_GO_SQLITE",
+  "testId": "FC-14",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

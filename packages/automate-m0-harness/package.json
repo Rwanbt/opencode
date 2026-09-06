@@ -1,0 +1,26 @@
+{
+  "name": "@unifia/automate-m0-harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "M0 substrate proof runtime half (ADR-000 §6, 2026-09-03). Drives a minimal in-process substrate through the 10 M0 criteria. Per ADR-000 §7, any non-PASS blocks M1.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./qualification": "./src/qualification/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@unifia/automate-m0-contract": "workspace:*",
+    "better-sqlite3": "13.0.3"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "@types/better-sqlite3": "7.6.13",
+    "typescript": "catalog:"
+  }
+}

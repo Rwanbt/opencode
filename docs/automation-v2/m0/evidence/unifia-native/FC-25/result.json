@@ -1,0 +1,36 @@
+{
+  "measured": true,
+  "distinctOsProcesses": 2,
+  "oldOwnerAliveDuringTakeover": true,
+  "oldOwnerDidNotReleaseBeforeTakeover": true,
+  "oldOwnerPid": 25216,
+  "newGenerationGreaterThanOld": true,
+  "newOwnerCommitAccepted": true,
+  "staleOwnerCommitRejected": true,
+  "staleOwnerDispatchRejected": true,
+  "takeover": {
+    "previousGeneration": 1,
+    "newGeneration": 2,
+    "previousAuthorityOwnerId": "zombie-A-1788558996028-jf9oyi",
+    "newAuthorityOwnerId": "zombie-B-1788558996028-nhbufw"
+  },
+  "newOwnerMutate": {
+    "accepted": true
+  },
+  "staleMutate": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "staleDispatch": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "runId": "run-fc25-zombie-1788558996028-u1cr21",
+  "ownerA": "zombie-A-1788558996028-jf9oyi",
+  "ownerB": "zombie-B-1788558996028-nhbufw",
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "UNIFIA_NATIVE",
+  "testId": "FC-25",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}
