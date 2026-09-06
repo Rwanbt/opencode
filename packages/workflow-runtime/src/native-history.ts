@@ -38,6 +38,7 @@ import {
   RunNotFoundError,
   isLegalTransition,
 } from "./in-memory.ts"
+import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
 
 export interface NativeHistoryAuthorityOptions {
   /** SQLite database file path. Created on initialize if absent. */
@@ -48,7 +49,7 @@ export interface NativeHistoryAuthorityOptions {
   readonly now?: () => number
 }
 
-const SCHEMA_V1 = `
+const SCHEMA_V1 = `${WORKFLOW_AUTHORITY_SCHEMA}
 CREATE TABLE IF NOT EXISTS runs (
   run_id TEXT PRIMARY KEY,
   run_json TEXT NOT NULL,
@@ -138,6 +139,10 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     })()
   }
 
+  claim(runId: string, ownerId: string): AuthorityToken {
+    return claimAuthority(this.requireDb(), runId, ownerId, this.now())
+  }
+
   async getRun(runId: string): Promise<WorkflowRun | null> {
     const db = this.requireDb()
     const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
@@ -145,11 +150,12 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     return deepCopy(JSON.parse(row.run_json) as WorkflowRun)
   }
 
-  async transition(runId: string, event: AtomicTransitionBoundary): Promise<void> {
+  async transition(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): Promise<void> {
     const db = this.requireDb()
     const parsed = AtomicTransitionBoundarySchema.parse(event)
     if (parsed.occurredAt > this.now()) throw new HistoryAuthorityError(`transition.occurredAt is in the future: ${parsed.occurredAt}`)
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
       if (!row) throw new RunNotFoundError(runId)
       const current = row.status as WorkflowRunStatus
@@ -169,10 +175,11 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     })()
   }
 
-  async enqueueCommand(runId: string, command: { kind: string; payload: unknown }): Promise<void> {
+  async enqueueCommand(token: AuthorityToken, runId: string, command: { kind: string; payload: unknown }): Promise<void> {
     const db = this.requireDb()
     if (!command.kind) throw new HistoryAuthorityError("command.kind is required")
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const exists = db.query("SELECT run_id FROM runs WHERE run_id = ?").get(runId)
       if (!exists) throw new RunNotFoundError(runId)
       const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM commands WHERE run_id = ?").get(runId) as { seq: number }
@@ -181,9 +188,10 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     })()
   }
 
-  async scheduleTimer(timerId: string, runId: string, fireAt: number, overlapPolicy: OverlapPolicy): Promise<void> {
+  async scheduleTimer(token: AuthorityToken, timerId: string, runId: string, fireAt: number, overlapPolicy: OverlapPolicy): Promise<void> {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const exists = db.query("SELECT run_id FROM runs WHERE run_id = ?").get(runId)
       if (!exists) throw new RunNotFoundError(runId)
       const existing = db.query("SELECT timer_id FROM timers WHERE run_id = ? AND timer_id = ?").get(runId, timerId)
@@ -259,9 +267,10 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     return rows.map((row) => ({ runId: row.run_id, timerId: row.timer_id, fireAt: row.fire_at }))
   }
 
-  markTimerFired(runId: string, timerId: string, nowMs: number): void {
+  markTimerFired(token: AuthorityToken, runId: string, timerId: string, nowMs: number): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const existing = db.query("SELECT timer_id FROM timers_fired WHERE run_id = ? AND timer_id = ?").get(runId, timerId)
       if (existing) throw new HistoryAuthorityError(`timer already fired: ${timerId}`)
       db.query("INSERT INTO timers_fired (run_id, timer_id, fired_at) VALUES (?, ?, ?)").run(runId, timerId, nowMs)

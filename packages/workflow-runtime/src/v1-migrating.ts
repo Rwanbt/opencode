@@ -38,6 +38,7 @@ import {
 } from "@unifia/contracts"
 import { migrateV1ToV2, type V1WorkflowDefinition } from "@unifia/automate-migration-tool"
 import type { DurableHistoryAuthority } from "./adapter.ts"
+import type { AuthorityToken } from "./authority.ts"
 
 // ============================================================================
 // V1 history record shape
@@ -106,7 +107,7 @@ export class V1MigratingAuthority implements Pick<DurableHistoryAuthority, "getR
    * waiting -> running, etc.) consistent with the V2 IR's structure
    * so the linear history is preserved across the migration.
    */
-  async loadV1(record: V1HistoryRecord, timestamps?: { createdAt: number; updatedAt: number }): Promise<WorkflowRun> {
+  async loadV1(token: AuthorityToken, record: V1HistoryRecord, timestamps?: { createdAt: number; updatedAt: number }): Promise<WorkflowRun> {
     const parsed = V1HistoryRecordSchema.parse(record)
     const ts = timestamps ?? { createdAt: parsed.createdAt, updatedAt: parsed.updatedAt }
 
@@ -164,7 +165,7 @@ export class V1MigratingAuthority implements Pick<DurableHistoryAuthority, "getR
     //    (post-M0) — M1-11 only needs the migration to be
     //    deterministic and idempotent.
     if (parsed.status !== "running") {
-      await this.inner.transition(parsed.runId, {
+        await this.inner.transition(token, parsed.runId, {
         from: "running",
         to: parsed.status,
         effectSlotId: "v1-import",

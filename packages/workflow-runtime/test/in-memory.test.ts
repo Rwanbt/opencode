@@ -32,9 +32,11 @@ import {
   InMemoryDurableHistoryAuthority,
   RunNotFoundError,
 } from "../src/index.ts"
+import type { AuthorityToken } from "../src/authority.ts"
 
 const RUN_ID = "run-m1-09-001"
 const DEPLOY_ID = "dep-m1-09-001"
+const TOKEN: AuthorityToken = { workflowRunId: RUN_ID, generation: 1, authorityOwnerId: "test" }
 
 function makeRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
   return {
@@ -114,7 +116,7 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
   test("(4) transition running -> completed is legal and updates state", async () => {
     const auth = makeAuthority()
     auth.register(makeRun({ status: "running" }))
-    await auth.transition(RUN_ID, makeTransition("running", "completed"))
+    await auth.transition(TOKEN, RUN_ID, makeTransition("running", "completed"))
     const got = await auth.getRun(RUN_ID)
     expect(got!.status).toBe("completed")
   })
@@ -123,26 +125,26 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
     const auth = makeAuthority()
     auth.register(makeRun({ status: "completed" }))
     await expect(
-      auth.transition(RUN_ID, makeTransition("completed", "running")),
+      auth.transition(TOKEN, RUN_ID, makeTransition("completed", "running")),
     ).rejects.toThrow(IllegalTransitionError)
   })
 
   test("(6) transition running -> failed is legal; failed is terminal", async () => {
     const auth = makeAuthority()
     auth.register(makeRun({ status: "running" }))
-    await auth.transition(RUN_ID, makeTransition("running", "failed"))
+    await auth.transition(TOKEN, RUN_ID, makeTransition("running", "failed"))
     const got = await auth.getRun(RUN_ID)
     expect(got!.status).toBe("failed")
     // failed is terminal: any further transition is illegal.
     await expect(
-      auth.transition(RUN_ID, makeTransition("failed", "running")),
+      auth.transition(TOKEN, RUN_ID, makeTransition("failed", "running")),
     ).rejects.toThrow(IllegalTransitionError)
   })
 
   test("(7) transition on unknown runId throws RunNotFoundError", async () => {
     const auth = makeAuthority()
     await expect(
-      auth.transition("nope", makeTransition("running", "completed")),
+      auth.transition({ ...TOKEN, workflowRunId: "nope" }, "nope", makeTransition("running", "completed")),
     ).rejects.toThrow(RunNotFoundError)
   })
 
@@ -151,15 +153,15 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
     auth.register(makeRun({ status: "running" }))
     // Current is running, but event says from=completed.
     await expect(
-      auth.transition(RUN_ID, makeTransition("completed", "completed")),
+      auth.transition(TOKEN, RUN_ID, makeTransition("completed", "completed")),
     ).rejects.toThrow(/does not match current status/)
   })
 
   test("(9) transition records the event in the linear history", async () => {
     const auth = makeAuthority()
     auth.register(makeRun({ status: "running" }))
-    await auth.transition(RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
-    await auth.transition(RUN_ID, makeTransition("waiting", "running", 1_700_000_600))
+    await auth.transition(TOKEN, RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
+    await auth.transition(TOKEN, RUN_ID, makeTransition("waiting", "running", 1_700_000_600))
     const hist = auth.inspectHistory(RUN_ID)
     expect(hist.length).toBe(2)
     expect(hist[0]!.to).toBe("waiting")
@@ -169,8 +171,8 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
   test("(10) enqueueCommand appends to the command queue", async () => {
     const auth = makeAuthority()
     auth.register(makeRun())
-    await auth.enqueueCommand(RUN_ID, { kind: "tool.http", payload: { url: "https://x" } })
-    await auth.enqueueCommand(RUN_ID, { kind: "human.approval", payload: { node: "n1" } })
+    await auth.enqueueCommand(TOKEN, RUN_ID, { kind: "tool.http", payload: { url: "https://x" } })
+    await auth.enqueueCommand(TOKEN, RUN_ID, { kind: "human.approval", payload: { node: "n1" } })
     const cmds = auth.inspectCommands(RUN_ID)
     expect(cmds.length).toBe(2)
     expect(cmds[0]!.kind).toBe("tool.http")
@@ -180,7 +182,7 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
   test("(11) scheduleTimer appends to the timer queue with overlap policy", async () => {
     const auth = makeAuthority()
     auth.register(makeRun())
-    await auth.scheduleTimer("tmr-1", RUN_ID, 1_700_000_500, "queue")
+    await auth.scheduleTimer(TOKEN, "tmr-1", RUN_ID, 1_700_000_500, "queue")
     const timers = auth.inspectTimers(RUN_ID)
     expect(timers.length).toBe(1)
     expect(timers[0]!.timerId).toBe("tmr-1")
@@ -190,9 +192,9 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
   test("(12) getMaterializedProjection reflects current state", async () => {
     const auth = makeAuthority()
     auth.register(makeRun({ status: "running" }))
-    await auth.transition(RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
-    await auth.enqueueCommand(RUN_ID, { kind: "tool.http", payload: {} })
-    await auth.scheduleTimer("tmr-1", RUN_ID, 1_700_000_700, "queue")
+    await auth.transition(TOKEN, RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
+    await auth.enqueueCommand(TOKEN, RUN_ID, { kind: "tool.http", payload: {} })
+    await auth.scheduleTimer(TOKEN, "tmr-1", RUN_ID, 1_700_000_700, "queue")
     const proj = await auth.getMaterializedProjection(RUN_ID)
     expect(proj.runId).toBe(RUN_ID)
     expect(proj.status).toBe("waiting")

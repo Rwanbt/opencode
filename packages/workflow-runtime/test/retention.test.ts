@@ -41,8 +41,9 @@ describe("Retention ADR-016 + version skew ADR-018 (directives 41-42)", () => {
       authority.initialize()
       authority.register(makeRun("run-active"))
       authority.register(makeRun("run-done"))
-      await authority.transition("run-done", { from: "running", to: "completed", effectSlotId: "s", occurredAt: 1100, isCompensating: false })
-      await authority.enqueueCommand("run-done", { kind: "tool.http", payload: { n: 1 } })
+      const token = authority.claim("run-done", "owner-a")
+      await authority.transition(token, "run-done", { from: "running", to: "completed", effectSlotId: "s", occurredAt: 1100, isCompensating: false })
+      await authority.enqueueCommand(token, "run-done", { kind: "tool.http", payload: { n: 1 } })
       const { applyHistoryRetention } = await import("../src/retention")
       const db = (authority as unknown as { db: any }).db
       // young cutoff: nothing eligible

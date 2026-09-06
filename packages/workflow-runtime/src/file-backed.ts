@@ -52,6 +52,7 @@ import {
   type TimerEnvelope,
 } from "./in-memory"
 import type { DurableHistoryAuthority } from "./adapter"
+import type { AuthorityToken } from "./authority.ts"
 
 // ============================================================================
 // Snapshot shape
@@ -148,29 +149,7 @@ export class FileBackedDurableHistoryAuthority implements DurableHistoryAuthorit
     }
     for (const [runId, snap] of Object.entries(parsed.runs)) {
       this.inner.register(snap.run)
-      for (const t of snap.history) {
-        try {
-          await this.inner.transition(runId, t)
-        } catch (err: unknown) {
-          // A replayed transition that is now illegal (e.g. a
-          // snapshot from a different schema) is a fail-closed case.
-          // We surface it but the snapshot is still loadable for
-          // forensic purposes.
-          if (this.options.verbose) {
-            // eslint-disable-next-line no-console
-            console.warn(`[file-backed] replay transition failed for ${runId}: ${String(err)}`)
-          }
-        }
-      }
-      for (const cmd of snap.commands) {
-        await this.inner.enqueueCommand(runId, {
-          kind: cmd.kind,
-          payload: cmd.payload,
-        })
-      }
-      for (const t of snap.timers) {
-        await this.inner.scheduleTimer(t.timerId, t.runId, t.fireAt, t.overlapPolicy)
-      }
+      this.inner.restore(snap)
     }
     this.lastSnapshotAt = Date.now()
   }
@@ -179,26 +158,28 @@ export class FileBackedDurableHistoryAuthority implements DurableHistoryAuthorit
     return this.inner.getRun(runId)
   }
 
-  async transition(runId: string, event: AtomicTransitionBoundary): Promise<void> {
-    await this.inner.transition(runId, event)
+  async transition(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): Promise<void> {
+    await this.inner.transition(token, runId, event)
     await this.writeSnapshot()
   }
 
   async enqueueCommand(
+    token: AuthorityToken,
     runId: string,
     command: { kind: string; payload: unknown },
   ): Promise<void> {
-    await this.inner.enqueueCommand(runId, command)
+    await this.inner.enqueueCommand(token, runId, command)
     await this.writeSnapshot()
   }
 
   async scheduleTimer(
+    token: AuthorityToken,
     timerId: string,
     runId: string,
     fireAt: number,
     overlapPolicy: OverlapPolicy,
   ): Promise<void> {
-    await this.inner.scheduleTimer(timerId, runId, fireAt, overlapPolicy)
+    await this.inner.scheduleTimer(token, timerId, runId, fireAt, overlapPolicy)
     await this.writeSnapshot()
   }
 

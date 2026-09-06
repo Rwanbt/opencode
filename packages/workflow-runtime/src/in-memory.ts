@@ -54,6 +54,7 @@ import {
 } from "@unifia/contracts"
 import { z } from "zod"
 import type { DurableHistoryAuthority } from "./adapter.ts"
+import { assertTokenForRun, type AuthorityToken } from "./authority.ts"
 
 // ============================================================================
 // Errors
@@ -174,13 +175,29 @@ export class InMemoryDurableHistoryAuthority implements DurableHistoryAuthority 
     })
   }
 
+  restore(snapshot: {
+    run: WorkflowRun
+    commands: CommandEnvelope[]
+    timers: TimerEnvelope[]
+    history: AtomicTransitionBoundary[]
+  }): void {
+    const run = WorkflowRunSchema.parse(snapshot.run)
+    this.runs.set(run.runId, {
+      run,
+      commands: deepCopy(snapshot.commands),
+      timers: deepCopy(snapshot.timers),
+      history: deepCopy(snapshot.history),
+    })
+  }
+
   async getRun(runId: string): Promise<WorkflowRun | null> {
     const state = this.runs.get(runId)
     if (!state) return null
     return deepCopy(state.run)
   }
 
-  async transition(runId: string, event: AtomicTransitionBoundary): Promise<void> {
+  async transition(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): Promise<void> {
+    assertTokenRun(token, runId)
     const parsed = AtomicTransitionBoundarySchema.parse(event)
     const state = this.runs.get(runId)
     if (!state) {
@@ -207,9 +224,11 @@ export class InMemoryDurableHistoryAuthority implements DurableHistoryAuthority 
   }
 
   async enqueueCommand(
+    token: AuthorityToken,
     runId: string,
     command: { kind: string; payload: unknown },
   ): Promise<void> {
+    assertTokenRun(token, runId)
     const state = this.runs.get(runId)
     if (!state) {
       throw new RunNotFoundError(runId)
@@ -223,11 +242,13 @@ export class InMemoryDurableHistoryAuthority implements DurableHistoryAuthority 
   }
 
   async scheduleTimer(
+    token: AuthorityToken,
     timerId: string,
     runId: string,
     fireAt: number,
     overlapPolicy: OverlapPolicy,
   ): Promise<void> {
+    assertTokenRun(token, runId)
     const state = this.runs.get(runId)
     if (!state) {
       throw new RunNotFoundError(runId)
@@ -321,6 +342,10 @@ export class InMemoryDurableHistoryAuthority implements DurableHistoryAuthority 
 
 function deepCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function assertTokenRun(token: AuthorityToken, runId: string): void {
+  assertTokenForRun(token, runId)
 }
 
 export { isLegalTransition }

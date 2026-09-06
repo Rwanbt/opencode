@@ -46,6 +46,7 @@ import type {
   OverlapPolicy,
   WorkflowRun,
 } from "@unifia/contracts"
+import type { AuthorityToken } from "./authority.ts"
 
 /**
  * The substrate-agnostic durable history contract.
@@ -144,7 +145,7 @@ export interface DurableHistoryAuthority {
    *                returns a typed error) or the run does
    *                not exist.
    */
-  transition(runId: string, event: AtomicTransitionBoundary): Promise<void>
+  transition(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): Promise<void>
 
   /**
    * Enqueue a command for the run's executor.
@@ -162,6 +163,7 @@ export interface DurableHistoryAuthority {
    *                 - `payload` : opaque to the substrate.
    */
   enqueueCommand(
+    token: AuthorityToken,
     runId: string,
     command: { kind: string; payload: unknown },
   ): Promise<void>
@@ -184,6 +186,7 @@ export interface DurableHistoryAuthority {
    *                       conflict with a previous timer.
    */
   scheduleTimer(
+    token: AuthorityToken,
     timerId: string,
     runId: string,
     fireAt: number,

@@ -42,12 +42,13 @@ const makeRun = (runId: string): WorkflowRun => ({
 const fixedNow = { value: 10_000 }
 const clock = () => fixedNow.value
 
-function freshHistory(): { authority: NativeDurableHistoryAuthority; dir: string; path: string } {
+function freshHistory(): { authority: NativeDurableHistoryAuthority; token: AuthorityToken; dir: string; path: string } {
   const dir = mkdtempSync(join(tmpdir(), "unifia-native-hist-"))
   const path = join(dir, "history.sqlite")
   const authority = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
   authority.initialize()
-  return { authority, dir, path }
+  const token = authority.claim("run-1", "owner-a")
+  return { authority, token, dir, path }
 }
 
 describe("NativeDurableHistoryAuthority", () => {
@@ -64,7 +65,7 @@ describe("NativeDurableHistoryAuthority", () => {
   test("applies a legal transition atomically and journals it", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      await ctx.authority.transition("run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
       const run = await ctx.authority.getRun("run-1")
       expect(run!.status).toBe("waiting"); expect(run!.updatedAt).toBe(1100)
       const history = ctx.authority.inspectTransitions("run-1")
@@ -76,9 +77,9 @@ describe("NativeDurableHistoryAuthority", () => {
   test("rejects illegal transitions and from-mismatches", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      await ctx.authority.transition("run-1", { from: "running", to: "completed", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
-      await expect(ctx.authority.transition("run-1", { from: "completed", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })).rejects.toThrow("Illegal transition")
-      await expect(ctx.authority.transition("run-1", { from: "waiting", to: "completed", effectSlotId: "slot-3", occurredAt: 1200, isCompensating: false })).rejects.toThrow("does not match current status")
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "completed", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "completed", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })).rejects.toThrow("Illegal transition")
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "waiting", to: "completed", effectSlotId: "slot-3", occurredAt: 1200, isCompensating: false })).rejects.toThrow("does not match current status")
       expect((await ctx.authority.getRun("run-1"))!.status).toBe("completed")
     } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
@@ -86,17 +87,27 @@ describe("NativeDurableHistoryAuthority", () => {
   test("rejects a future occurredAt (substrate obligation)", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      await expect(ctx.authority.transition("run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 20_000, isCompensating: false })).rejects.toThrow("future")
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 20_000, isCompensating: false })).rejects.toThrow("future")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("fences protected mutations by run and current authority", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      const wrongRun = { ...ctx.token, workflowRunId: "run-2" }
+      await expect(ctx.authority.enqueueCommand(wrongRun, "run-1", { kind: "tool.http", payload: {} })).rejects.toThrow("authority token")
+      await expect(ctx.authority.transition({ ...ctx.token, generation: 2 }, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })).rejects.toThrow("stale authority")
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
     } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
   test("enqueues commands and applies timer overlap policies", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      await ctx.authority.enqueueCommand("run-1", { kind: "tool.http", payload: { url: "/x" } })
-      await ctx.authority.scheduleTimer("t-1", "run-1", 2000, "allow")
-      await ctx.authority.scheduleTimer("t-1", "run-1", 2500, "forbid")
-      await ctx.authority.scheduleTimer("t-1", "run-1", 3000, "replace")
+      await ctx.authority.enqueueCommand(ctx.token, "run-1", { kind: "tool.http", payload: { url: "/x" } })
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2000, "allow")
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2500, "forbid")
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 3000, "replace")
       const timers = ctx.authority.inspectTimers("run-1")
       expect(timers).toHaveLength(1); expect(timers[0]!.fireAt).toBe(3000)
       expect(ctx.authority.inspectCommands("run-1")).toHaveLength(1)
@@ -106,9 +117,9 @@ describe("NativeDurableHistoryAuthority", () => {
   test("derives the materialized projection from persisted facts", async () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      await ctx.authority.enqueueCommand("run-1", { kind: "tool.http", payload: {} })
-      await ctx.authority.scheduleTimer("t-1", "run-1", 2000, "allow")
-      await ctx.authority.transition("run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await ctx.authority.enqueueCommand(ctx.token, "run-1", { kind: "tool.http", payload: {} })
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2000, "allow")
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
       const projection = await ctx.authority.getMaterializedProjection("run-1")
       expect(projection).toMatchObject({ runId: "run-1", status: "waiting", lastTransitionAt: 1100 })
       expect(projection.pendingEffects).toEqual(["tool.http:run-1"])
@@ -123,9 +134,10 @@ describe("NativeDurableHistoryAuthority", () => {
       const first = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
       first.initialize()
       first.register(makeRun("run-1"))
-      await first.transition("run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
-      await first.enqueueCommand("run-1", { kind: "human.approval", payload: { id: "a-1" } })
-      await first.scheduleTimer("t-1", "run-1", 2000, "allow")
+      const token = first.claim("run-1", "owner-a")
+      await first.transition(token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await first.enqueueCommand(token, "run-1", { kind: "human.approval", payload: { id: "a-1" } })
+      await first.scheduleTimer(token, "t-1", "run-1", 2000, "allow")
       first.close()
 
       const second = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
@@ -136,7 +148,7 @@ describe("NativeDurableHistoryAuthority", () => {
       expect(second.inspectCommands("run-1")).toHaveLength(1)
       const projection = await second.getMaterializedProjection("run-1")
       expect(projection.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
-      await second.transition("run-1", { from: "waiting", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })
+      await second.transition(token, "run-1", { from: "waiting", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })
       expect((await second.getRun("run-1"))!.status).toBe("running")
       second.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
@@ -444,13 +456,13 @@ describe("NativeDurableHistoryAuthority — durable timers (directives 16-17)", 
   test("no early fire; due exactly at fireAt; markTimerFired removes from due (at-most-once)", () => {
     const ctx = freshHistory(); try {
       ctx.authority.register(makeRun("run-1"))
-      ctx.authority.scheduleTimer("t-1", "run-1", 5000, "allow")
+       ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 5000, "allow")
       expect(ctx.authority.dueTimers(4999)).toHaveLength(0)
       expect(ctx.authority.dueTimers(5000)).toEqual([{ runId: "run-1", timerId: "t-1", fireAt: 5000 }])
-      ctx.authority.markTimerFired("run-1", "t-1", 5000)
+       ctx.authority.markTimerFired(ctx.token, "run-1", "t-1", 5000)
       expect(ctx.authority.dueTimers(99999)).toHaveLength(0)
       expect(ctx.authority.firedTimers("run-1")).toEqual([{ runId: "run-1", timerId: "t-1", firedAt: 5000 }])
-      try { ctx.authority.markTimerFired("run-1", "t-1", 5001); expect.unreachable() } catch { /* at-most-once */ }
+       try { ctx.authority.markTimerFired(ctx.token, "run-1", "t-1", 5001); expect.unreachable() } catch { /* at-most-once */ }
     } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 
@@ -460,13 +472,14 @@ describe("NativeDurableHistoryAuthority — durable timers (directives 16-17)", 
       const first = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
       first.initialize()
       first.register(makeRun("run-1"))
-      first.scheduleTimer("t-9", "run-1", 7000, "allow")
+       const token = first.claim("run-1", "owner-a")
+       first.scheduleTimer(token, "t-9", "run-1", 7000, "allow")
       first.close()
       const second = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
       second.initialize()
       const due = second.dueTimers(8000)
       expect(due).toEqual([{ runId: "run-1", timerId: "t-9", fireAt: 7000 }])
-      second.markTimerFired("run-1", "t-9", 8000)
+       second.markTimerFired(token, "run-1", "t-9", 8000)
       // a THIRD process sees the fired fact (no duplicate logical fire)
       const third = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
       third.initialize()

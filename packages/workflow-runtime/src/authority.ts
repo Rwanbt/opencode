@@ -37,6 +37,17 @@ export function assertAuthority(db: Database, token: AuthorityToken): void {
   }
 }
 
+export function assertAuthorityForRun(db: Database, token: AuthorityToken, runId: string): void {
+  assertTokenForRun(token, runId)
+  assertAuthority(db, token)
+}
+
+export function assertTokenForRun(token: AuthorityToken, runId: string): void {
+  if (!token || token.workflowRunId !== runId || !token.authorityOwnerId || !Number.isSafeInteger(token.generation)) {
+    throw new AuthorityError("AUTHORITY_TOKEN_REQUIRED", `authority token does not target ${runId}`)
+  }
+}
+
 export function claimAuthority(db: Database, runId: string, ownerId: string, now: number): AuthorityToken {
   db.query("INSERT OR IGNORE INTO workflow_authority (run_id, generation, owner_id, created_at, updated_at) VALUES (?, 1, ?, ?, ?)").run(runId, ownerId, now, now)
   const row = db.query("SELECT generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId) as { generation: number; owner_id: string } | null

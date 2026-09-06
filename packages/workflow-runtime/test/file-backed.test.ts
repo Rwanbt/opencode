@@ -20,9 +20,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { type WorkflowRun } from "@unifia/contracts"
 import { FileBackedDurableHistoryAuthority } from "../src/index.ts"
+import type { AuthorityToken } from "../src/authority.ts"
 
 const RUN_ID = "run-m1-10-001"
 const DEPLOY_ID = "dep-m1-10-001"
+const TOKEN: AuthorityToken = { workflowRunId: RUN_ID, generation: 1, authorityOwnerId: "test" }
 
 function makeRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
   return {
@@ -93,7 +95,7 @@ describe("M1-10 file-backed DurableHistoryAuthority", () => {
     })
     await auth.load()
     await auth.register(makeRun({ status: "running" }))
-    await auth.transition(RUN_ID, makeTransition("running", "completed"))
+    await auth.transition(TOKEN, RUN_ID, makeTransition("running", "completed"))
     // Snapshot file must exist on disk.
     await access(snapPath)
     const json = await readFile(snapPath, "utf-8")
@@ -112,10 +114,10 @@ describe("M1-10 file-backed DurableHistoryAuthority", () => {
     })
     await auth1.load()
     await auth1.register(makeRun({ status: "running" }))
-    await auth1.transition(RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
-    await auth1.transition(RUN_ID, makeTransition("waiting", "running", 1_700_000_600))
-    await auth1.enqueueCommand(RUN_ID, { kind: "tool.http", payload: { url: "x" } })
-    await auth1.scheduleTimer("tmr-1", RUN_ID, 1_700_000_700, "queue")
+    await auth1.transition(TOKEN, RUN_ID, makeTransition("running", "waiting", 1_700_000_500))
+    await auth1.transition(TOKEN, RUN_ID, makeTransition("waiting", "running", 1_700_000_600))
+    await auth1.enqueueCommand(TOKEN, RUN_ID, { kind: "tool.http", payload: { url: "x" } })
+    await auth1.scheduleTimer(TOKEN, "tmr-1", RUN_ID, 1_700_000_700, "queue")
     // Second authority: load the same file.
     const auth2 = new FileBackedDurableHistoryAuthority({
       authorityKind: "native",
