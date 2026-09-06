@@ -15,7 +15,11 @@
  */
 
 import { P3_CAPABILITIES, type P3Capability } from "@unifia/contracts"
-import type { WorkflowDefinition, WorkflowStep } from "@unifia/workflow-runtime"
+export * from "./loader"
+export * from "./validator"
+
+export type WorkflowStepPort = { id: string; capability: P3Capability; input: Record<string, unknown>; requiresApproval?: boolean }
+export type WorkflowDefinitionPort = { id: string; version: number; workspaceId: string; steps: readonly WorkflowStepPort[] }
 
 export type SandboxRequirement = "none" | "native-restricted" | "docker" | "wsl2" | "lima"
 export type ApprovalRequirement = "none" | "required"
@@ -140,9 +144,9 @@ export function workflowCapabilities(workflow: DeclaredWorkflow): readonly P3Cap
  * unvalidated projection would silently drop the declarations this module
  * exists to enforce.
  */
-export function toRuntimeDefinition(workflow: DeclaredWorkflow, workspaceId: string): WorkflowDefinition {
+export function toRuntimeDefinition(workflow: DeclaredWorkflow, workspaceId: string): WorkflowDefinitionPort {
   validateWorkflow(workflow)
-  const steps: WorkflowStep[] = workflow.steps.map((step) => ({
+  const steps: WorkflowStepPort[] = workflow.steps.map((step) => ({
     id: step.id,
     capability: step.capability,
     input: { scope: step.scope, sandbox: step.sandbox, timeoutMs: step.timeoutMs, retry: step.retry, output: step.output, reversible: step.reversible, costUnits: step.costUnits },
