@@ -13,7 +13,7 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
-import { FileBackedApprovalStore, InMemoryApprovalStore, LocalApprovalBrokerV2 } from "../src/approval-v2.ts"
+import { FileBackedApprovalStore, InMemoryApprovalStore, LocalApprovalBrokerV2 } from "../src/approval-v2.js"
 
 const PRUNED = new Set(["node_modules", "dist", "build", ".turbo", "coverage"])
 

@@ -24,7 +24,7 @@
 process.env.UNIFIA_ALLOW_LEGACY_APPROVAL_V2 = "1"
 
 import { describe, expect, test } from "bun:test"
-import { FileBackedApprovalStore, InMemoryApprovalStore, LocalApprovalBrokerV2, ApprovalRejectedError } from "../src/approval-v2.ts"
+import { FileBackedApprovalStore, InMemoryApprovalStore, LocalApprovalBrokerV2, ApprovalRejectedError } from "../src/approval-v2.js"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

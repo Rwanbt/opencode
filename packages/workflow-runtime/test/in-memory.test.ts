@@ -32,8 +32,8 @@ import {
   IllegalTransitionError,
   InMemoryDurableHistoryAuthority,
   RunNotFoundError,
-} from "../src/index.ts"
-import type { AuthorityToken } from "../src/authority.ts"
+} from "../src/index.js"
+import type { AuthorityToken } from "../src/authority.js"
 
 const RUN_ID = "run-m1-09-001"
 const DEPLOY_ID = "dep-m1-09-001"

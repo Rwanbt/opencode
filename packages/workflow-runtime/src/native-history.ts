@@ -29,16 +29,16 @@ import {
   AtomicTransitionBoundarySchema,
   WorkflowRunSchema,
 } from "@unifia/contracts"
-import { CURRENT_DURABLE_SCHEMA_VERSION, ensureSchemaVersion, RETENTION_SCHEMA } from "./retention.ts"
+import { CURRENT_DURABLE_SCHEMA_VERSION, ensureSchemaVersion, RETENTION_SCHEMA } from "./retention.js"
 import type { Database } from "bun:sqlite"
-import type { DurableHistoryAuthority } from "./adapter.ts"
+import type { DurableHistoryAuthority } from "./adapter.js"
 import {
   HistoryAuthorityError,
   IllegalTransitionError,
   RunNotFoundError,
   isLegalTransition,
-} from "./in-memory.ts"
-import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
+} from "./in-memory.js"
+import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.js"
 
 export interface NativeHistoryAuthorityOptions {
   /** SQLite database file path. Created on initialize if absent. */

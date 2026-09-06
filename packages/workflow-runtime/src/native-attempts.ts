@@ -30,7 +30,7 @@
  * is safe); every fact is a row — restart recovery is free.
  */
 import type { Database } from "bun:sqlite"
-import { assertAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
+import { assertAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.js"
 
 export type AttemptOutcome = "SUCCEEDED" | "FAILED" | "UNKNOWN_EXTERNAL_STATE"
 export type EffectStatus = AttemptOutcome | "PENDING"

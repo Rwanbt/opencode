@@ -37,8 +37,8 @@ import {
   WorkflowRunStatusSchema,
 } from "@unifia/contracts"
 import { migrateV1ToV2, type V1WorkflowDefinition } from "@unifia/automate-migration-tool"
-import type { DurableHistoryAuthority } from "./adapter.ts"
-import type { AuthorityToken } from "./authority.ts"
+import type { DurableHistoryAuthority } from "./adapter.js"
+import type { AuthorityToken } from "./authority.js"
 
 // ============================================================================
 // V1 history record shape

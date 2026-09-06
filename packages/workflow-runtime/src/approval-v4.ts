@@ -3,9 +3,9 @@
 
 import { digest as digestEnvelope } from "@unifia/digest-runtime"
 import type { DeploymentScope, OwnershipScope } from "@unifia/contracts"
-import type { AuthorityToken } from "./authority.ts"
+import type { AuthorityToken } from "./authority.js"
 
-export type { AuthorityToken } from "./authority.ts"
+export type { AuthorityToken } from "./authority.js"
 
 export type ApprovalV4State = "PENDING" | "APPROVED" | "DENIED" | "EXPIRED" | "CANCELLED" | "STALE"
 export type ApprovalDecision = "APPROVED" | "DENIED"

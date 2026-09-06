@@ -20,10 +20,10 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { InMemoryDurableHistoryAuthority } from "../src/in-memory.ts"
-import { V1MigratingAuthority } from "../src/v1-migrating.ts"
-import type { V1HistoryRecord } from "../src/v1-migrating.ts"
-import type { AuthorityToken } from "../src/authority.ts"
+import { InMemoryDurableHistoryAuthority } from "../src/in-memory.js"
+import { V1MigratingAuthority } from "../src/v1-migrating.js"
+import type { V1HistoryRecord } from "../src/v1-migrating.js"
+import type { AuthorityToken } from "../src/authority.js"
 
 const TOKEN: AuthorityToken = { workflowRunId: "v1-run-001", generation: 1, authorityOwnerId: "test" }
 

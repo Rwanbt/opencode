@@ -53,8 +53,8 @@ import {
   AtomicTransitionBoundarySchema,
 } from "@unifia/contracts"
 import { z } from "zod"
-import type { DurableHistoryAuthority } from "./adapter.ts"
-import { assertTokenForRun, type AuthorityToken } from "./authority.ts"
+import type { DurableHistoryAuthority } from "./adapter.js"
+import { assertTokenForRun, type AuthorityToken } from "./authority.js"
 
 // ============================================================================
 // Errors

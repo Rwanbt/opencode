@@ -46,7 +46,7 @@ import type {
   OverlapPolicy,
   WorkflowRun,
 } from "@unifia/contracts"
-import type { AuthorityToken } from "./authority.ts"
+import type { AuthorityToken } from "./authority.js"
 
 /**
  * The substrate-agnostic durable history contract.

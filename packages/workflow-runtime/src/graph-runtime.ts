@@ -24,7 +24,7 @@ import { extractMapKeyMaterial } from "@unifia/contracts"
 import { validateWorkflowGraph } from "@unifia/contracts"
 import { evaluate } from "@unifia/expression-runtime"
 import type { Database } from "bun:sqlite"
-import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
+import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.js"
 
 export type GraphNodeStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "SKIPPED"
 

@@ -52,7 +52,7 @@ import {
   type TimerEnvelope,
 } from "./in-memory"
 import type { DurableHistoryAuthority } from "./adapter"
-import type { AuthorityToken } from "./authority.ts"
+import type { AuthorityToken } from "./authority.js"
 
 // ============================================================================
 // Snapshot shape

@@ -28,10 +28,10 @@ import type {
   ApprovalHistoryEventKind,
   ApprovalRecord,
   AuthorityToken,
-} from "./approval-v4.ts"
-import { ApprovalV4Error } from "./approval-v4.ts"
+} from "./approval-v4.js"
+import { ApprovalV4Error } from "./approval-v4.js"
 import type { Database } from "bun:sqlite"
-import { WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
+import { WORKFLOW_AUTHORITY_SCHEMA } from "./authority.js"
 
 export interface NativeApprovalAuthorityOptions {
   readonly databasePath: string
