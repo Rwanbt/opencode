@@ -22,10 +22,9 @@ export interface NativeWorkflowRuntimePortOptions {
 }
 
 export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
-  private engine: GraphRuntimeEngine | null = null
+  private readonly engines = new Map<string, GraphRuntimeEngine>()
   private db: Database | null = null
-  private readonly loaded = new Map<string, WorkflowDefinitionPort>()
-  private readonly pins = new Map<string, { versionId: string; versionDigest: string }>()
+  private readonly loaded = new Map<string, { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string }>()
   private readonly options: NativeWorkflowRuntimePortOptions
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
@@ -38,105 +37,108 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     this.db = new Database(this.options.databasePath)
     this.db.exec("PRAGMA journal_mode = WAL")
     this.db.exec("PRAGMA synchronous = FULL")
-    this.db.exec("CREATE TABLE IF NOT EXISTS wf_definitions (workflow_id TEXT PRIMARY KEY, definition_json TEXT NOT NULL)")
+    this.db.exec("CREATE TABLE IF NOT EXISTS workflow_versions (definition_id TEXT NOT NULL, version_id TEXT NOT NULL, version_digest TEXT NOT NULL, definition_json TEXT NOT NULL, PRIMARY KEY (definition_id, version_id))")
+    this.db.exec("CREATE TABLE IF NOT EXISTS workflow_runs (run_id TEXT PRIMARY KEY, definition_id TEXT NOT NULL, version_id TEXT NOT NULL, version_digest TEXT NOT NULL)")
     return this.db
   }
 
-  /** True restart/rediscover: the definition itself is a durable fact. */
-  private ensureLoaded(workflowId: string): WorkflowDefinitionPort {
-    const cached = this.loaded.get(workflowId)
+  /** Rediscover a run and its immutable pinned version from durable facts. */
+  private ensureLoaded(runId: string): { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string } {
+    const cached = this.loaded.get(runId)
     if (cached) return cached
     const db = this.ensureDb()
-    const row = db.query("SELECT definition_json FROM wf_definitions WHERE workflow_id = ?").get(workflowId) as { definition_json: string } | null
-    if (!row) throw new Error(`workflow definition not found: ${workflowId}`)
-    const restored = JSON.parse(row.definition_json) as WorkflowDefinitionPort & { versionId?: string; versionDigest?: string }
-    if (restored.versionId) this.pins.set(workflowId, { versionId: restored.versionId, versionDigest: restored.versionDigest ?? "" })
-    this.loaded.set(workflowId, restored)
-    return restored
+    const row = db.query("SELECT v.definition_json, v.version_id, v.version_digest FROM workflow_runs r JOIN workflow_versions v ON v.definition_id = r.definition_id AND v.version_id = r.version_id WHERE r.run_id = ?").get(runId) as { definition_json: string; version_id: string; version_digest: string } | null
+    if (!row) throw new Error(`workflow run not found: ${runId}`)
+    const loaded = { definition: JSON.parse(row.definition_json) as WorkflowDefinitionPort, versionId: row.version_id, versionDigest: row.version_digest }
+    this.loaded.set(runId, loaded)
+    return loaded
   }
 
-  private ensureEngine(definition?: WorkflowDefinitionPort): GraphRuntimeEngine {
-    if (this.engine) return this.engine
-    if (!definition) throw new Error("workflow runtime not started: no definition loaded")
+  private ensureEngine(definition: WorkflowDefinitionPort, versionId: string): GraphRuntimeEngine {
+    const key = `${definition.id}:${versionId}`
+    const existing = this.engines.get(key)
+    if (existing) return existing
     this.ensureDb()
-    this.engine = new GraphRuntimeEngine({ databasePath: this.options.databasePath, definition: toIr(definition), now: this.options.now })
-    this.engine.initialize()
-    return this.engine
+    const engine = new GraphRuntimeEngine({ databasePath: this.options.databasePath, definition: toIr(definition), now: this.options.now })
+    engine.initialize()
+    this.engines.set(key, engine)
+    return engine
   }
 
   async start(definition: WorkflowDefinitionPort): Promise<WorkflowStatePort> {
     // Directive 36: the immutable publication pin is computed at start
     // (versionId = JCS content digest) and persisted with the run.
     const ir = toIr(definition)
-    const version = promoteToVersion(ir, 1, "workbench")
-    this.pins.set(definition.id, { versionId: version.versionId, versionDigest: version.versionDigest.value })
+    const version = promoteToVersion(ir, definition.version, "workbench", 0)
     const db = this.ensureDb()
-    const pins = this.pins.get(definition.id) ?? { versionId: "", versionDigest: "" }
-    db.query("INSERT OR REPLACE INTO wf_definitions (workflow_id, definition_json) VALUES (?, ?)").run(definition.id, JSON.stringify({ ...definition, versionId: pins.versionId, versionDigest: pins.versionDigest }))
-    const engine = this.ensureEngine(definition)
-    const runId = runIdFor(definition.id)
+    db.query("INSERT OR IGNORE INTO workflow_versions (definition_id, version_id, version_digest, definition_json) VALUES (?, ?, ?, ?)").run(definition.id, version.versionId, version.versionDigest.value, JSON.stringify(definition))
+    const runId = crypto.randomUUID()
+    db.query("INSERT INTO workflow_runs (run_id, definition_id, version_id, version_digest) VALUES (?, ?, ?, ?)").run(runId, definition.id, version.versionId, version.versionDigest.value)
+    this.loaded.set(runId, { definition, versionId: version.versionId, versionDigest: version.versionDigest.value })
+    const engine = this.ensureEngine(definition, version.versionId)
     engine.startRun(runId)
     engine.advance(runId, { input: {} })
-    return this.state(runId, definition)
+    return this.state(runId, definition, version.versionId, version.versionDigest.value)
   }
 
-  async resume(workflowId: string): Promise<WorkflowStatePort> {
-    const definition = this.ensureLoaded(workflowId)
-    const runId = runIdFor(workflowId)
-    const engine = this.ensureEngine(definition)
+  async resume(runId: string): Promise<WorkflowStatePort> {
+    const loaded = this.ensureLoaded(runId)
+    const definition = loaded.definition
+    const engine = this.ensureEngine(definition, loaded.versionId)
     engine.advance(runId, { input: {} })
-    return this.state(runId, definition)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 
   /** Directive 37: read-only durable journal (diagnosis surface). */
-  async history(workflowId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]> {
-    const definition = this.ensureLoaded(workflowId)
-    const engine = this.ensureEngine(definition)
-    return engine.inspectEvents(runIdFor(workflowId)).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
+  async history(runId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]> {
+    const loaded = this.ensureLoaded(runId)
+    const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    return engine.inspectEvents(runId).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
   }
 
   /** Release the durable connection (workbench shutdown / test teardown). */
   close(): void {
-    this.engine?.close()
-    this.engine = null
+    for (const engine of this.engines.values()) engine.close()
+    this.engines.clear()
+    try { this.db?.exec("PRAGMA wal_checkpoint(TRUNCATE)") } catch { /* engine teardown may already hold the checkpoint lock */ }
     this.db?.close()
     this.db = null
   }
 
   /** External dispatch completes the surfaced step (durable fact). */
-  async complete(workflowId: string, output: unknown): Promise<WorkflowStatePort> {
-    const definition = this.ensureLoaded(workflowId)
-    if (!definition) throw new Error(`workflow definition not loaded: ${workflowId}`)
-    const runId = runIdFor(workflowId)
-    const engine = this.ensureEngine(definition)
+  async complete(runId: string, output: unknown): Promise<WorkflowStatePort> {
+    const loaded = this.ensureLoaded(runId)
+    const definition = loaded.definition
+    const engine = this.ensureEngine(definition, loaded.versionId)
     engine.completeNode(runId, stepNodeId(this.firstActiveStep(runId, definition)), output)
     // schedule + surface the successor step (single-pass walk convergence)
     engine.advance(runId, { input: {} })
-    return this.state(runId, definition)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 
   private firstActiveStep(runId: string, definition: WorkflowDefinitionPort): number {
+    const loaded = this.ensureLoaded(runId)
+    const engine = this.ensureEngine(definition, loaded.versionId)
     for (let i = 0; i < definition.steps.length; i++) {
-      const nodeState = this.engine!.nodeState(runId, stepNodeId(i))
+      const nodeState = engine.nodeState(runId, stepNodeId(i))
       if (!nodeState || nodeState.status === "RUNNING") return i
     }
     throw new Error(`no active step to complete: ${definition.id}`)
   }
 
-  async cancel(workflowId: string): Promise<WorkflowStatePort> {
-    const definition = this.ensureLoaded(workflowId)
-    if (!definition) throw new Error(`workflow definition not loaded: ${workflowId}`)
-    const runId = runIdFor(workflowId)
-    const engine = this.ensureEngine(definition)
+  async cancel(runId: string): Promise<WorkflowStatePort> {
+    const loaded = this.ensureLoaded(runId)
+    const definition = loaded.definition
+    const engine = this.ensureEngine(definition, loaded.versionId)
     engine.requestCancel(runId, "workbench cancel")
     // the workbench boundary IS the worker reaction point: the surfaced
     // in-flight step observes the durable cancel flag and fails itself
     try { engine.failNode(runId, stepNodeId(this.firstActiveStep(runId, definition)), "cancelled by workbench") } catch { /* already terminal */ }
-    return this.state(runId, definition)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 
-  private state(runId: string, definition: WorkflowDefinitionPort): WorkflowStatePort {
-    const engine = this.engine!
+  private state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string): WorkflowStatePort {
+    const engine = this.ensureEngine(definition, versionId)
     const steps = definition.steps
     let nextStep = steps.length
     let status: WorkflowStatePort["status"] = "running"
@@ -158,13 +160,8 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       break
     }
     if (nextStep >= steps.length && status === "running") status = "completed"
-    const pins = this.pins.get(definition.id)
-    return { workflowId: definition.id, definition, status, nextStep, outputs, versionId: pins?.versionId, versionDigest: pins?.versionDigest }
+    return { workflowId: runId, definition, status, nextStep, outputs, versionId, versionDigest }
   }
-}
-
-function runIdFor(workflowId: string): string {
-  return `wf:${workflowId}`
 }
 
 function stepNodeId(index: number): string {

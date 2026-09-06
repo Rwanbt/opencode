@@ -24,18 +24,23 @@ describe("durable workflow HTTP surface (directive 35)", () => {
         method: "POST", headers: { authorization: "Bearer t", "content-type": "application/json" }, body: JSON.stringify(definition),
       }))
       expect(started.status).toBe(201)
-      const inspected = await server.fetch(new Request("http://127.0.1/v1/workflows/wf-http-1", { headers: { authorization: "Bearer t" } }))
+      const startedBody = await started.json() as { workflowId: string }
+      const inspected = await server.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}`, { headers: { authorization: "Bearer t" } }))
       expect(inspected.status).toBe(200)
       const inspectedBody = await inspected.json()
       expect(inspectedBody.versionId).toBeDefined(); expect(inspectedBody.versionDigest).toBeDefined()
       expect(Array.isArray(inspectedBody.events)).toBe(true)
-      const cancelled = await server.fetch(new Request("http://127.0.1/v1/workflows/wf-http-1/cancel", {
+      const cancelled = await server.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}/cancel`, {
         method: "POST", headers: { authorization: "Bearer t" }
       }))
       expect(cancelled.status).toBe(200)
       const cancelledBody = await cancelled.json()
       expect(cancelledBody.status).toBe("cancelled")
       port.close()
-    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+    } finally {
+      Bun.gc(true)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 })
+    }
   })
 })
