@@ -6,11 +6,11 @@ local execution evidence and checkpoints only.
 
 ## Current Phase
 
-Phase A8: #45 reconciliation-only effect guard complete locally; #44 remains next.
+Phase A11: Automate canonical authority, multi-run isolation, and reconciliation fencing verified on the native production path.
 
 ## Current Branch
 
-`agent/automate-v2-baseline-20260901`
+`agent/automate-v2-baseline-20260901` at `3a33967e95`
 
 ## Current HEAD
 
@@ -20,7 +20,7 @@ Phase A8: #45 reconciliation-only effect guard complete locally; #44 remains nex
 
 | Ref | Current SHA | Roadmap checkpoint SHA | Notes |
 |---|---|---|---|
-| `origin/agent/automate-v2-baseline-20260901` | `af48118975aef109937393a52989a8067c61dfc8` | same | current Automate baseline |
+| `origin/agent/automate-v2-baseline-20260901` | `3a33967e95` | same | current Automate baseline |
 | `origin/work-design` | `1bbbe6a614d90f1208e834767a2e28184cf0253c` | `1bbbe6a614...` | direct ancestor of Automate; 305 commits behind |
 | `origin/feat/sovereign-knowledge-core` | `b511ea44f45d4f4a61ef027a3a4cf914715c0b0a` | same | independent Knowledge history; untouched |
 | `origin/dev` | `95350647140a382ee6d5d61bc2f6639597d80f0b` | same | current integration target checkpoint |
@@ -29,15 +29,16 @@ Refs were fetched on 2026-09-06. Re-fetch before every integration action.
 
 ## Open Blockers
 
-- #43: canonical WorkflowRun authority and shared fencing, P0.
-- #44: independent WorkflowRun identities and immutable version pinning, P0.
-- #45: reject raw attempt allocation after `UNKNOWN_EXTERNAL_STATE`, P0.
 - Native desktop certification remains environment-blocked by LLVM OOM / Windows paging-file exhaustion.
 
 ## Closed Blockers
 
 - Automate tri-state access and deep-link bootstrap: shipped in `af48118975`.
 - Automate reload stability workload `10 x 100`: PASS in 34.3 minutes, one worker.
+- #44 multi-run isolation and immutable version pinning: verified and pushed.
+- #45 reconciliation-only effect guard: verified and pushed.
+- #43 canonical authority and shared fencing: verified and pushed.
+- Integrated production authority E2E: PASS, including restart after generation-5 takeover.
 
 ## Completed Gates
 
@@ -47,20 +48,19 @@ Refs were fetched on 2026-09-06. Re-fetch before every integration action.
 - Targeted mode/provider tests: 49/49 PASS.
 - App typecheck: PASS.
 - Full Automate reload contract: PASS.
-- GitHub issues #43, #44, #45: OPEN, labeled `type:bug` and `priority:P0`.
+- GitHub issues #43, #44, #45 remain OPEN pending review/merge; implementation commits are pushed.
 
 ## Current Gate
 
-Automate P0 production path: NO-GO. Isolated Native components are not yet
-evidence of one production WorkflowRun authority.
+Automate P0 production path: GREEN for the tested native local production path.
+Final merge/issue closure remains pending review and normal CI.
 
 ## Next Exact Action
 
-1. Claim the authorized P0 issue tranche before implementation.
-2. Run the relevant Automate baseline suites from package directories.
-3. Implement #44's real run/version identities.
-4. Implement #43's canonical authority token and shared production-path fencing.
-5. Close only after the integrated production E2E proves stale-owner rejection across all protected surfaces.
+1. Re-read current Work-Design and Automate refs before promotion.
+2. Run promotion topology and regression checks without merging yet.
+3. Open the review PR with complete Automate evidence and current issue AC.
+4. Close #43/#44/#45 only after merge and final acceptance re-read.
 
 ## Tests Baseline
 
@@ -70,18 +70,18 @@ evidence of one production WorkflowRun authority.
 
 ## Tests Latest
 
-- `packages/workflow-runtime`: `115/115` PASS.
-- `packages/workbench-server`: `87/87` server assertions plus `53/53` Vitest checks PASS.
+- `packages/workflow-runtime`: `118/118` PASS.
+- `packages/workbench-server`: `87/87` server assertions plus targeted native authority E2E PASS.
 - `packages/automate-m0-contract`: `177/177` PASS.
 - #45 tranche: `native-durable.test.ts` `30/30` PASS after the guard and explicit retry-authorisation changes.
-- #45 tranche: full `workflow-runtime` suite `116/116` PASS.
+- #45 tranche: full `workflow-runtime` suite `118/118` PASS.
 - #45 tranche: workflow-runtime typecheck PASS.
 
 ## Known Deviations
 
 - The roadmap's supplied `work-design` and `dev` values were checkpoints, not current refs; current refs are recorded above.
-- The code audit confirms `NativeWorkflowRuntimePort` still caches one graph engine and derives run identity from `workflowId`.
-- #45 local fix rejects allocation after `UNKNOWN_EXTERNAL_STATE`; production-path integration remains open.
+- The native production path now requires explicit `AuthorityToken` for protected mutations.
+- The legacy full journey test still has a Windows SQLite cleanup lock and Vitest cannot load `bun:sqlite`; the canonical Bun E2E is the active gate.
 - The underlying historical Chromium resource failure remains a P2 investigation item; the full reload contract passes.
 
 ## Conflict Decisions
@@ -97,10 +97,9 @@ evidence of one production WorkflowRun authority.
 
 ## Last Checkpoint
 
-2026-09-06: roadmap created locally from fetched refs at `af48118975`. Baseline
-Automate suites pass. Claims recorded on #44 and #45. #45 local implementation
-tests pass and is committed locally; no remote code mutation performed; GitHub
-issue comments/assignments are the only remote state changes.
+2026-09-06: Automate authority convergence verified and pushed through commits
+`57e2b8e42b`, `2706cfccb4`, `6b31f0bb6f`, `bc5a4a04fb`, `9afb48baea`,
+`d8f08e03e6`, and `3a33967e95`. Canonical Bun E2E passes with 38 assertions.
 
 ## Phase Checkpoint Format
 
@@ -123,14 +122,14 @@ NEXT EXACT ACTION:
 
 ### A - Automate P0
 
-- [ ] #43 canonical authority and shared fencing
-- [ ] #44 multi-run isolation and immutable version pinning (claimed)
-- [ ] #45 reconciliation-only unknown effect state (claimed; local implementation green, production integration open)
-- [ ] integrated production E2E
+- [x] #43 canonical authority and shared fencing (implementation + production E2E pushed)
+- [x] #44 multi-run isolation and immutable version pinning (implementation pushed)
+- [x] #45 reconciliation-only unknown effect state (implementation pushed)
+- [x] integrated production E2E (Bun native path)
 
 ### B - Automate to Work-Design
 
-- [ ] topology verified for promotion
+- [ ] topology verified for promotion (next)
 - [ ] fast-forward
 - [ ] regression
 - [ ] local safety checkpoint
