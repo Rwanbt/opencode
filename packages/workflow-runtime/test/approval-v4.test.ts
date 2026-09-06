@@ -59,6 +59,7 @@ function authority(now = 100, seed: Partial<ApprovalAuthorityState> = {}): {
       fenced(current)
       return state.history.filter((event) => event.approvalId === approvalId)
     },
+    fence: (current) => fenced(current),
   }
   return {
     impl,
@@ -217,6 +218,7 @@ describe("ApprovalBrokerV4", () => {
       },
       async read() { return undefined },
       async readHistory() { return [] },
+      fence: () => undefined,
     }
     const broker = new ApprovalBrokerV4(failing)
     await expect(broker.request(input(), token)).rejects.toThrow("SUBSTRATE_COMMIT_FAILED")

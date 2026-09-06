@@ -381,9 +381,10 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
        a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { ok: 1 } })
        expect(() => a.recordAttemptOutcome(token, "li-1", first.attemptId, "FAILED", {})).toThrow("already terminal")
       expect(a.inspectEffect("run-1", "ek.http.call")!.status).toBe("SUCCEEDED")
-      // a NEW attempt on the same LI still works (retry after success is allowed to allocate, outcome re-records a new attempt row)
-       const retry = a.allocateAttempt(token, "li-1", "ek.http.call")
-      expect(retry.seq).toBe(2)
+      // SUCCEEDED is terminal unconditionally: minting another attempt would
+      // risk redispatching an already-realized external effect.
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.http.call"), "EFFECT_ALREADY_TERMINAL")
+      expect(a.inspectAttempts("run-1", "li-1")).toHaveLength(1)
       a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
@@ -413,8 +414,8 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
     try {
        const { authority: a, token } = freshAttempts(dir)
        const first = a.allocateAttempt(token, "li-1", "ek.fs.write")
-       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
        const retry = a.allocateAttempt(token, "li-1", "ek.fs.write")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
        a.recordAttemptOutcome(token, "li-1", retry.attemptId, "FAILED", { result: { n: 2 } })
       const effect = a.inspectEffect("run-1", "ek.fs.write")
       expect(effect!.status).toBe("SUCCEEDED")
@@ -452,8 +453,55 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
        a.authorizeRetry(token, "ek.pay.charge")
        const retry = a.allocateAttempt(token, "li-1", "ek.pay.charge")
       expect(retry.seq).toBe(2)
-       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+      // The consumed authorization reopened the logical effect: the cycle is
+      // fresh PENDING again, so normal allocation resumes and the new
+      // outcome genuinely drives the effect.
+      const reopened = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(reopened!.status).toBe("PENDING"); expect(reopened!.reconciled).toBe(false)
+      expect(a.inspectJournal("run-1", "ek.pay.charge").map((e) => [e.from, e.to])).toContainEqual(["FAILED", "PENDING"])
+      const third = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+      expect(third.seq).toBe(3)
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("SUCCEEDED")
       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("direct FAILED retry: authorize reopens the effect, new outcome drives it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-direct-failed-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.job.run")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "FAILED", { result: { exit: 3 } })
+      expect(a.inspectEffect("run-1", "ek.job.run")!.status).toBe("FAILED")
+      // A plain FAILED effect (never reconciled) still requires authorization.
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.job.run"), "RETRY_NOT_AUTHORIZED")
+      a.authorizeRetry(token, "ek.job.run")
+      const retry = a.allocateAttempt(token, "li-1", "ek.job.run")
+      expect(retry.seq).toBe(2)
+      expect(a.inspectJournal("run-1", "ek.job.run").map((e) => [e.from, e.to])).toContainEqual(["FAILED", "PENDING"])
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { exit: 0 } })
+      const effect = a.inspectEffect("run-1", "ek.job.run")
+      expect(effect!.status).toBe("SUCCEEDED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("UNKNOWN reconcile FAILED then authorized retry lands SUCCEEDED", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-unknown-retry-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.refund")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.reconcileEffect(token, "ek.pay.refund", "FAILED", { probe: "absent" })
+      expect(a.inspectEffect("run-1", "ek.pay.refund")!.status).toBe("FAILED")
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.refund"), "RETRY_NOT_AUTHORIZED")
+      a.authorizeRetry(token, "ek.pay.refund")
+      const retry = a.allocateAttempt(token, "li-1", "ek.pay.refund")
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { refunded: true } })
+      const effect = a.inspectEffect("run-1", "ek.pay.refund")
+      expect(effect!.status).toBe("SUCCEEDED")
+       a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })

@@ -43,6 +43,9 @@ import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AU
 export interface NativeHistoryAuthorityOptions {
   /** SQLite database file path. Created on initialize if absent. */
   readonly databasePath: string
+  /** Shared connection for atomic cross-authority boundaries (P0-A).
+   * When provided, the authority uses it and never closes it. */
+  readonly database?: Database
   /** Authority kind recorded on registered runs. */
   readonly authorityKind?: DurableAuthorityKind
   /** Injectable clock (tests). Defaults to Date.now. */
@@ -98,15 +101,20 @@ interface TimerRow { timer_id: string; fire_at: number; overlap_policy: string; 
 
 export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
   private db: Database | null = null
+  private readonly ownsDb: boolean
   private readonly options: Required<Pick<NativeHistoryAuthorityOptions, "authorityKind">> & NativeHistoryAuthorityOptions
 
   constructor(options: NativeHistoryAuthorityOptions) {
     this.options = { authorityKind: options.authorityKind ?? "native", ...options }
+    this.ownsDb = options.database === undefined
+    if (options.database) this.db = options.database
   }
 
   initialize(): void {
-    const { Database } = require("bun:sqlite") as { Database: new (path: string) => Database }
-    this.db = new Database(this.options.databasePath)
+    if (!this.db) {
+      const { Database } = require("bun:sqlite") as { Database: new (path: string) => Database }
+      this.db = new Database(this.options.databasePath)
+    }
     // FC-13-proven durable configuration: WAL + synchronous=FULL.
     this.db.exec("PRAGMA journal_mode = WAL")
     this.db.exec("PRAGMA synchronous = FULL")
@@ -118,8 +126,11 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
   }
 
   close(): void {
-    this.db?.close()
-    this.db = null
+    // An injected shared connection belongs to the caller: never close it here.
+    if (this.ownsDb) {
+      this.db?.close()
+      this.db = null
+    }
   }
 
   private requireDb(): Database {
@@ -152,31 +163,60 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
 
   async transition(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): Promise<void> {
     const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     const parsed = AtomicTransitionBoundarySchema.parse(event)
     if (parsed.occurredAt > this.now()) throw new HistoryAuthorityError(`transition.occurredAt is in the future: ${parsed.occurredAt}`)
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
-      const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
-      if (!row) throw new RunNotFoundError(runId)
-      const current = row.status as WorkflowRunStatus
-      if (parsed.from !== current) {
-        throw new HistoryAuthorityError(`transition.from (${parsed.from}) does not match current status (${current})`)
-      }
-      if (!isLegalTransition(parsed.from, parsed.to)) {
-        throw new IllegalTransitionError(parsed.from, parsed.to)
-      }
-      const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM run_transitions WHERE run_id = ?").get(runId) as { seq: number }
-      db.query("INSERT INTO run_transitions (run_id, seq, from_status, to_status, effect_slot_id, occurred_at, is_compensating) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(runId, seq.seq, parsed.from, parsed.to, parsed.effectSlotId, parsed.occurredAt, parsed.isCompensating ? 1 : 0)
-      const run = JSON.parse(row.run_json) as WorkflowRun
-      const updated: WorkflowRun = { ...run, status: parsed.to, updatedAt: parsed.occurredAt }
-      db.query("UPDATE runs SET run_json = ?, status = ?, updated_at = ? WHERE run_id = ?")
-        .run(JSON.stringify(updated), parsed.to, parsed.occurredAt, runId)
+      this.writeTransition(db, runId, parsed)
     })()
+  }
+
+  /**
+   * Synchronous terminal-transition core for atomic cross-authority
+   * composition (P0-A). Same fence, validation and mutation as
+   * transition(), but WITHOUT its own transaction: the caller MUST
+   * invoke it inside a shared transaction that also carries the graph
+   * consequence, so both commit atomically or neither does. A throw
+   * anywhere propagates synchronously (unlike the async wrapper, whose
+   * rejection would escape an enclosing transaction unnoticed).
+   */
+  transitionSync(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): void {
+    const db = this.requireDb()
+    assertAuthorityForRun(db, token, runId)
+    const parsed = AtomicTransitionBoundarySchema.parse(event)
+    if (parsed.occurredAt > this.now()) throw new HistoryAuthorityError(`transition.occurredAt is in the future: ${parsed.occurredAt}`)
+    this.writeTransition(db, runId, parsed)
+  }
+
+  private writeTransition(db: Database, runId: string, parsed: AtomicTransitionBoundary): void {
+    const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
+    if (!row) throw new RunNotFoundError(runId)
+    const current = row.status as WorkflowRunStatus
+    if (parsed.from !== current) {
+      throw new HistoryAuthorityError(`transition.from (${parsed.from}) does not match current status (${current})`)
+    }
+    if (!isLegalTransition(parsed.from, parsed.to)) {
+      throw new IllegalTransitionError(parsed.from, parsed.to)
+    }
+    const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM run_transitions WHERE run_id = ?").get(runId) as { seq: number }
+    db.query("INSERT INTO run_transitions (run_id, seq, from_status, to_status, effect_slot_id, occurred_at, is_compensating) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(runId, seq.seq, parsed.from, parsed.to, parsed.effectSlotId, parsed.occurredAt, parsed.isCompensating ? 1 : 0)
+    const run = JSON.parse(row.run_json) as WorkflowRun
+    const updated: WorkflowRun = { ...run, status: parsed.to, updatedAt: parsed.occurredAt }
+    db.query("UPDATE runs SET run_json = ?, status = ?, updated_at = ? WHERE run_id = ?")
+      .run(JSON.stringify(updated), parsed.to, parsed.occurredAt, runId)
   }
 
   async enqueueCommand(token: AuthorityToken, runId: string, command: { kind: string; payload: unknown }): Promise<void> {
     const db = this.requireDb()
+    // P1 fence precedence: a stale owner/generation reports STALE_AUTHORITY
+    // before semantic validation can mask the fence. The in-transaction
+    // assert below keeps the check atomic with the mutation.
+    assertAuthorityForRun(db, token, runId)
     if (!command.kind) throw new HistoryAuthorityError("command.kind is required")
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)

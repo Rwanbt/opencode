@@ -184,6 +184,21 @@ describe("canonical authority production path", () => {
       }))
       expect(cancelled.status).toBe(200)
       expect((await cancelled.json() as { status: string }).status).toBe("cancelled")
+      // P0-A: cancellation is canonically durable, and survives reopen.
+      expect((await restartedPort.historyAuthority.getMaterializedProjection(runId))!.status).toBe("cancelled")
+      restartedPort.close()
+      const reread = new NativeWorkflowRuntimePort({ databasePath: path, now })
+      try {
+        const rereadServer = makeServer(reread, "owner-b")
+        const reinspected = await rereadServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}`, {
+          headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(tokenB) },
+        }))
+        expect(reinspected.status).toBe(200)
+        expect((await reinspected.json() as { status: string }).status).toBe("cancelled")
+        expect((await reread.historyAuthority.getMaterializedProjection(runId))!.status).toBe("cancelled")
+      } finally {
+        reread.close()
+      }
 
       const db2 = new Database(path)
       try {
@@ -192,7 +207,6 @@ describe("canonical authority production path", () => {
       } finally {
         db2.close()
       }
-      restartedPort.close()
     } finally {
       Bun.gc(true)
       await new Promise((resolve) => setTimeout(resolve, 100))
