@@ -1,0 +1,24 @@
+{
+  "name": "@unifia/observability",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Kernel-side observability foundation: zero-alloc structured logger with secret-leak canary, lock-free metrics, OTel-compatible tracing. C-M1-12, Plan V2.3.1 §3.12 + §5.7.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*",
+    "@unifia/capability-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

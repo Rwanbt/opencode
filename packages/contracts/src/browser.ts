@@ -35,3 +35,111 @@ export class BrowserAutomationBroker {
   async screenshot(workspaceId: string): Promise<Uint8Array> { if (this.#switches.isEngaged("browser")) throw new Error("browser is disabled"); return this.#driver.screenshot(this.profile(workspaceId)) }
   async quarantineDownload(workspaceId: string, filename: string, bytes: Uint8Array): Promise<string> { if (this.#switches.isEngaged("browser")) throw new Error("browser is disabled"); if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) throw new Error("unsafe download filename"); return this.#driver.quarantineDownload(this.profile(workspaceId), filename, bytes) }
 }
+
+/* ------------------------------------------------------------------ */
+/* PostM3-R2 — Browser isolation contracts (Plan V2.3.1 §218, ADR-013)*/
+/* ------------------------------------------------------------------ */
+
+/**
+ * Browser isolation contracts.
+ *
+ * The browser automation broker above (M1 era) is the *driver*
+ * (Playwright / Puppeteer behind a profile). These schemas are the
+ * *trust boundary* for any webview that runs Unifia content
+ * (artifacts, generative UI, document packs). The CSP and iframe
+ * sandbox together make the browser tab a "container" with
+ * strictly limited capabilities — the runtime can prove, by
+ * reading these values, that the iframe cannot reach origins or
+ * APIs the policy forbids.
+ *
+ * BR-01 — Browser isolation (CSP + iframe sandbox).
+ * BR-02 — Egress control (allowlist of origins, cookie policy).
+ */
+import { z } from "zod"
+
+/* ------------------------------------------------------------------ */
+/* BR-01 — Browser isolation (CSP + iframe sandbox)                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Maximum length of a CSP directive string. Real-world CSPs for
+ * the same app rarely exceed 1 KB; anything larger is almost
+ * certainly a copy-paste mistake or a config injection attempt.
+ */
+export const CSP_DIRECTIVE_MAX_CHARS = 1024
+
+/**
+ * The set of valid iframe `sandbox` token values. The HTML spec
+ * enumerates these. Tokens not in this set are silently dropped
+ * by browsers, so we fail loudly at config-parse time instead of
+ * letting the user think they have a sandbox they don't.
+ */
+export const IFRAME_SANDBOX_VALUES: ReadonlySet<string> = new Set([
+  "allow-forms",
+  "allow-modals",
+  "allow-orientation-lock",
+  "allow-pointer-lock",
+  "allow-popups",
+  "allow-popups-to-escape-sandbox",
+  "allow-presentation",
+  "allow-same-origin",
+  "allow-scripts",
+  "allow-top-navigation",
+])
+
+export const BrowserIsolationSchema = z
+  .object({
+    /** Content Security Policy directive. Must be at least 1 directive. */
+    csp: z.string().min(1).max(CSP_DIRECTIVE_MAX_CHARS),
+    /** iframe sandbox values. Empty array = fully sandboxed. */
+    iframeSandbox: z.array(z.string()).readonly().default([]),
+    /** Whether to allow top-level navigation. Default false. */
+    allowTopNavigation: z.boolean().default(false),
+    /** Whether to allow same-origin (preserves cookies). Default false. */
+    allowSameOrigin: z.boolean().default(false),
+  })
+  .refine(
+    (b) =>
+      !(b.allowSameOrigin && !b.iframeSandbox.includes("allow-scripts")),
+    {
+      message:
+        "browser: allowSameOrigin requires iframeSandbox to include 'allow-scripts'",
+    },
+  )
+export type BrowserIsolation = z.infer<typeof BrowserIsolationSchema>
+
+export function parseBrowserIsolation(input: unknown): BrowserIsolation {
+  return BrowserIsolationSchema.parse(input)
+}
+
+/* ------------------------------------------------------------------ */
+/* BR-02 — Egress control                                             */
+/* ------------------------------------------------------------------ */
+
+/** Maximum length of an origin string in the allowlist. */
+export const EGRESS_ORIGIN_MAX_CHARS = 1024
+
+/** Default-deny semantics (allowlist). Block-by-default is the
+ *  safe direction; only the rare "dev / open" profile flips this. */
+export const EGRESS_DEFAULT_DENY = true
+
+export const BrowserEgressPolicySchema = z.object({
+  /**
+   * Allowed origins for fetch / XHR. Pattern: `https://example.com`
+   * or `*` (a literal asterisk, not a wildcard host). Empty array
+   * + `defaultDeny: true` = "no egress at all".
+   */
+  allowedOrigins: z
+    .array(z.string().min(1).max(EGRESS_ORIGIN_MAX_CHARS))
+    .readonly()
+    .default([]),
+  /** Whether to block third-party cookies. Default true. */
+  blockThirdPartyCookies: z.boolean().default(true),
+  /** Whether to deny by default (allowlist) or allow by default (blocklist). */
+  defaultDeny: z.boolean().default(EGRESS_DEFAULT_DENY),
+})
+export type BrowserEgressPolicy = z.infer<typeof BrowserEgressPolicySchema>
+
+export function parseBrowserEgressPolicy(input: unknown): BrowserEgressPolicy {
+  return BrowserEgressPolicySchema.parse(input)
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@unifia/secret-broker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "typescript": "catalog:"
+  }
+}
