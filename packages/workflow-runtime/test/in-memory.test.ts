@@ -23,6 +23,7 @@
  *  (11) scheduleTimer appends to the timer queue with overlap policy.
  *  (12) getMaterializedProjection reflects current state.
  *  (13) projection on empty history reports zero transitions.
+ *  (14) getMaterializedProjection on unknown runId returns null (contract read).
  */
 
 import { describe, expect, test } from "bun:test"
@@ -196,20 +197,27 @@ describe("M1-09 in-memory DurableHistoryAuthority", () => {
     await auth.enqueueCommand(TOKEN, RUN_ID, { kind: "tool.http", payload: {} })
     await auth.scheduleTimer(TOKEN, "tmr-1", RUN_ID, 1_700_000_700, "queue")
     const proj = await auth.getMaterializedProjection(RUN_ID)
-    expect(proj.runId).toBe(RUN_ID)
-    expect(proj.status).toBe("waiting")
-    expect(proj.lastTransitionAt).toBe(1_700_000_500)
-    expect(proj.pendingEffects).toHaveLength(1)
-    expect(proj.pendingTimers).toHaveLength(1)
-    expect(proj.pendingTimers![0]!.timerId).toBe("tmr-1")
+    expect(proj).not.toBeNull()
+    expect(proj!.runId).toBe(RUN_ID)
+    expect(proj!.status).toBe("waiting")
+    expect(proj!.lastTransitionAt).toBe(1_700_000_500)
+    expect(proj!.pendingEffects).toHaveLength(1)
+    expect(proj!.pendingTimers).toHaveLength(1)
+    expect(proj!.pendingTimers![0]!.timerId).toBe("tmr-1")
   })
 
   test("(13) projection on empty history reports zero transitions", async () => {
     const auth = makeAuthority()
     auth.register(makeRun())
     const proj = await auth.getMaterializedProjection(RUN_ID)
-    expect(proj.lastTransitionAt).toBeUndefined()
-    expect(proj.pendingEffects).toHaveLength(0)
-    expect(proj.pendingTimers).toHaveLength(0)
+    expect(proj).not.toBeNull()
+    expect(proj!.lastTransitionAt).toBeUndefined()
+    expect(proj!.pendingEffects).toHaveLength(0)
+    expect(proj!.pendingTimers).toHaveLength(0)
+  })
+
+  test("(14) getMaterializedProjection on unknown runId returns null", async () => {
+    const auth = makeAuthority()
+    await expect(auth.getMaterializedProjection("run-unknown")).resolves.toBeNull()
   })
 })

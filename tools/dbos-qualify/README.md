@@ -1,3 +1,16 @@
+<!--
+SPDX-License-Identifier: MIT
+Copyright (c) 2026 Unifia contributors
+
+Derived from https://github.com/Rwanbt/unifia@3bf597d629500a1064d63a1c4a61e45094ccf4e2
+Original path: tools/dbos-qualify/README.md
+Original license: MIT
+Original copyright: Unifia contributors
+
+Modifications: staged for the A2 M0 qualification slice.
+Responsible: hermes-agent@local.invalid
+-->
+
 # DBOS Go qualification candidate
 
 This is the M0 qualification kernel for the `DBOS_GO_SQLITE`

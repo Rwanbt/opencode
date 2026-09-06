@@ -1,3 +1,16 @@
+<!--
+SPDX-License-Identifier: MIT
+Copyright (c) 2026 Unifia contributors
+
+Derived from https://github.com/Rwanbt/unifia@5639c129eb
+Original path: docs/automation-v2/m0/archive/pre-cp6-3-attribution-repair/README.md
+Original license: MIT
+Original copyright: Unifia contributors
+
+Modifications: staged for the A5b-r1 app/docs slice.
+Responsible: hermes-agent@local.invalid
+-->
+
 # Archive — pre-CP6.3 attribution repair
 
 **Date**: 2026-09-04
