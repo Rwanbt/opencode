@@ -15,8 +15,9 @@ is green.
 
 - Base: `origin/work-design` at `1bbbe6a614d90f1208e834767a2e28184cf0253c`.
 - Source: `origin/agent/automate-v2-baseline-20260901` at
-  `0a892f5b105b692d004137b6903f9a3fa12f4c77` (includes the #47 production
-  assembly and the A3 contract alignment; pushed 2026-09-06).
+  `6bb7f153d6a6e53a2c22da0d3d5af683625a364b` (includes the r2 atomic
+  boundary, effect machine, precedence and HTTP-proof code; pushed
+  2026-09-06).
 - The source is a fast-forward descendant of the base. All slice branches
   below are pushed to `origin` for review; nothing is merged.
 
@@ -26,28 +27,29 @@ is green.
 |---|---|---|---|
 | A1 | Contract base | `packages/contracts` core (scopes, digests, timers, IR split, run, map-key, graph) + direct tests | contracts `145/145`, typecheck |
 | A2 | Qualification + substrate decision | `packages/automate-m0-contract`, `packages/automate-m0-harness`, `tools/dbos-*`, M0 evidence, ADR-000 | m0-contract `177/177`, harness `39 pass 13 skip`, typechecks |
-| A3-r1 | Durable runtime core | `packages/workflow-runtime`, `packages/expression-runtime`, `packages/digest-runtime`, `packages/automate-migration-tool`, contract deltas, runtime ADR evidence; INCLUDES the projection-null contract alignment | runtime `120/120`, contracts `341/341`, typechecks |
-| A4-r1 | Workbench durable surface | `packages/workbench-server` (native port + production assembly), `packages/workflow-catalog`, HTTP + canonical E2E tests; INCLUDES the TS2353 test fix and the #47 wiring | server suite `24 + 53`, workflow tests `11/11` incl. canonical E2E `46` expects, catalog `63 + 5`, typecheck |
-| A5a-r1 | Remaining contracts + isolated services | PostM3 contracts, `packages/secret-broker`, `packages/observability`, `packages/scheduler`, `packages/artifact-store`, `packages/capability-runtime`, `tools/fc13-guest` | contracts `644/644`, per-service suites + typechecks, runtime + server spot re-verification |
-| A5b-r1 | App surface + docs | `packages/app` Automate surface, `packages/mobile`, `packages/unifia`, `packages/workbench-shell`, `packages/mcp-transport`, `packages/release-hardening`, ADR + certification docs | app typecheck, targeted mode/provider `49/49`, server typecheck + canonical E2E |
+| A3-r2 | Durable runtime core | `packages/workflow-runtime` (effect terminal machine, stale precedence, shared-DB atomic core), `packages/expression-runtime`, `packages/digest-runtime`, `packages/automate-migration-tool`, runtime ADR evidence | runtime `127/127`, contracts `341/341`, typechecks |
+| A4-r2 | Workbench durable surface | `packages/workbench-server` (native port + production assembly + atomic terminal boundary), `packages/workflow-catalog`, HTTP + canonical + terminal + versions tests | server suite `24 + 53`, workflow tests `15/15`, catalog `63 + 5`, typecheck |
+| A5a-r2 | Remaining contracts + isolated services | PostM3 contracts, `packages/secret-broker`, `packages/observability`, `packages/scheduler`, `packages/artifact-store`, `packages/capability-runtime`, `tools/fc13-guest` | contracts `648/648`, per-service suites + typechecks, runtime + server spot re-verification |
+| A5b-r2 | App surface + docs | `packages/app` Automate surface, `packages/mobile`, `packages/unifia`, `packages/workbench-shell`, `packages/mcp-transport`, `packages/release-hardening`, ADR + certification docs | app typecheck, targeted mode/provider `49/49`, server typecheck + canonical E2E |
 
 ## Dependency Rules
 
 1. A1 is the contract base for all later slices.
 2. A2 records the substrate decision and qualification evidence required before
-   A3-r1 can claim durable production behavior.
-3. A3-r1 owns `AuthorityToken`, graph execution, attempts, timers, approvals,
-   and retention. A4-r1 must not duplicate those decisions.
-4. A4-r1 is the only slice that exposes the durable runtime through Workbench HTTP.
-5. A5a-r1/A5b-r1 may consume the HTTP contract but must not add an
+   A3-r2 can claim durable production behavior.
+3. A3-r2 owns `AuthorityToken`, graph execution, attempts, timers, approvals,
+   retention and the atomic cross-authority core. A4-r2 must not duplicate
+   those decisions.
+4. A4-r2 is the only slice that exposes the durable runtime through Workbench HTTP.
+5. A5a-r2/A5b-r2 may consume the HTTP contract but must not add an
    authority-token bypass.
 6. `origin/dev` is outside this promotion plan. It must not be mutated or used
    as a base by any slice.
 
-## Repaired Stack (r1, current)
+## Repaired Stack (r2, current)
 
-The first stack (A3/A4/A5a/A5b) is preserved as immutable review
-checkpoints and is SUPERSEDED by the r1 stack below. Old branches were
+The r1 stack (A3-r1/A4-r1/A5a-r1/A5b-r1) is preserved as immutable review
+checkpoints and is SUPERSEDED by the r2 stack below. Old branches were
 never force-pushed. A1/A2 were kept as-is after inspection found no cause
 to rebuild them.
 
@@ -55,40 +57,47 @@ to rebuild them.
 |---|---|---|---|
 | A1 | `integration/automate-a1-contracts` | `ff9fa1bfd1` | contracts `145/145`, typecheck clean |
 | A2 | `integration/automate-a2-m0` | `0208882bfd` | m0-contract `177/177`, harness `39 pass 13 skip`, typechecks clean |
-| A3-r1 | `integration/automate-a3-runtime-r1` | `64b92bb946` | runtime `120/120`, contracts `341/341`, typechecks clean |
-| A4-r1 | `integration/automate-a4-workbench-r1` | `3cccb53e12` | server suite `24 + 53`, workflow `11/11`, catalog `63 + 5`, typecheck clean |
-| A5a-r1 | `integration/automate-a5-foundations-r1` | `94ce9fd176` | contracts `644/644`, foundations `49 + 33 + 5 + 16 + 17`, runtime + server spot green |
-| A5b-r1 | `integration/automate-a5b-app-r1` | `f1b259eb8f` | app typecheck + targeted `49/49`, server typecheck + canonical E2E `46` expects |
+| A3-r2 | `integration/automate-a3-runtime-r2` | `a2e50d63ce` | runtime `127/127`, typecheck clean |
+| A4-r2 | `integration/automate-a4-workbench-r2` | `c09e01c8ac` | server suite `24 + 53`, workflow `15/15` (terminal + versions + canonical), catalog `63 + 5`, typecheck clean |
+| A5a-r2 | `integration/automate-a5-foundations-r2` | `9934660b7a` | contracts `644/644`, foundations `49 + 33 + 5 + 16 + 17`, runtime + server spot green |
+| A5b-r2 | `integration/automate-a5b-app-r2` | `9334312783` | contracts `648/648`, runtime `120/120`, app typecheck + targeted `49/49`, server typecheck + canonical E2E `50` expects, full foundations + m0 gates green |
 
-Each `-r1` branch descends directly from the previous verified tip:
-A2 -> A3-r1 -> A4-r1 -> A5a-r1 -> A5b-r1. Linearity is checkable with
-`git log --oneline` on any r1 tip.
+Each `-r2` branch descends directly from the previous verified tip:
+A2 -> A3-r2 -> A4-r2 -> A5a-r2 -> A5b-r2. Linearity is checkable with
+`git log --oneline` on any r2 tip. Note: A4-r2 was rebased onto A3-r2
+after creation (wrong initial base); the rebase was conflict-free and
+the branch was fully re-verified afterwards.
 
-## Corrections Applied in r1
+## Corrections Applied in r2
 
-- A3 contract divergence: `getMaterializedProjection()` on a missing run
-  now returns `null` per the canonical contract (was `RunNotFoundError`)
-  in `in-memory.ts`, `native-history.ts` and `file-backed.ts`, with two
-  new regression tests. The stale ADR-000-deferred comment in
-  `adapter.ts` now records the ratified Native implementation.
-- A4 autonomy: the TS2353 fix (`{ result: { ok: true } }`) is committed
-  INSIDE A4-r1, so A4-r1 passes alone. No uncommitted fix is required.
-- #47 production assembly: `NativeWorkflowRuntimePort` now owns history,
-  attempts and approvals on the same SQLite file, registers the
-  `WorkflowRun` at `start`, claims generation-1 ownership in every
-  subsystem, and exposes `historyAuthority` / `attemptAuthority` /
-  `approvalAuthority` / `graphEngineFor` / `takeover`. The canonical E2E
-  drives graph, approval, attempt/effect, timer, history and cancel
-  exclusively through the port, across a restart, with a 15-point stale
-  matrix (46 expects).
-- The `workflow-ir.ts` split (`1193 + 128 + 363` lines, same 77 public
-  exports) is kept: the source monolith exceeds the 1500-line ceiling.
-- The pre-push hook blocked the first push on the latent TS2353 (turbo
-  typecheck 46/47); after the fix it is 47/47 green.
+- P0-A canonical run state: `complete()`/`cancel()` compose the graph
+  terminal mark (`markRunTerminal`, idempotent) and the canonical history
+  transition (`transitionSync`) in ONE shared SQLite transaction — nested
+  savepoints, proven by a deterministic rollback test (forced inner
+  failure reverts graph writes). `state()` maps terminal history to HTTP
+  status, so HTTP == projection == recovered state. `resume()` heals a
+  graph-terminal/history-open skew atomically; terminal history blocks
+  further advance, `complete()` on a finished run throws
+  RUN_ALREADY_TERMINAL, `cancel()` stays idempotent.
+- P0-B effect machine: SUCCEEDED always blocks allocation
+  (EFFECT_ALREADY_TERMINAL); FAILED requires explicit authorization and
+  consumes it atomically (FAILED -> PENDING journalled, reconciled
+  reset); the new outcome genuinely drives the effect. `authorizeRetry`
+  accepts any FAILED effect; `inspectJournal` exposes the audit trail.
+- P1 stale precedence: fence-first on history (transition,
+  enqueueCommand), attempts (allocate), graph (all decide/fan-out/loop
+  families) and broker facade (new `ApprovalAuthority.fence`), with a
+  5-family zero-mutation proof plus discrimination controls.
+- P1 #44 HTTP proof: `workflow-versions-http.test.ts` (R1/R2 share V1,
+  R3 pins V2, cancel isolation, restart persistence) through HTTP only.
+- The pre-push hook blocked the first r2 push on nothing new (turbo
+  typecheck 47/47 green throughout).
+- r1 findings stay fixed: TS2353 inside A4-r1/A4-r2, projection-null
+  alignment, #47 assembly (now extended with the terminal boundary).
 
 ## Parity
 
-Final tree parity A5b-r1 vs source is recorded in
+Final tree parity A5b-r2 vs source is recorded in
 `docs/integration/AUTOMATE-PROMOTION-PARITY.md` (two-dot diff, explicit
 allowlist, zero undocumented divergence).
 
@@ -98,7 +107,11 @@ allowlist, zero undocumented divergence).
   were deleted (reinstallable) to free ~10 GB each time.
 - DBOS re-execution still blocked (Go bootstrap 404, tests stay skipped);
   FC-13 still blocked (no QEMU). Both remain explicit, never converted
-  to fresh PASS.
+  to fresh PASS. One transient m0-harness failure observed (timing
+  flake), green on two reruns.
+- Uncommitted foreign edits were observed in two worktrees (port
+  shared-DB injection adopted after verification; M0 evidence rerun left
+  stashed, outcomes identical). No foreign commits on any r2 branch.
 - `dev` was never touched; no PR was opened or merged during repair.
 - Pre-existing lint warnings (unused imports, import-type style) were
   left untouched; the review scope is promotion integrity, not a lint
