@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
 import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -16,6 +17,7 @@ import { NativeDurableHistoryAuthority } from "../src/native-history"
 import { NativeApprovalAuthority, type NativeApprovalAuthorityOptions } from "../src/native-approval-authority"
 import { AttemptAuthorityError, DefaultSecretRedactor, NativeAttemptAuthority, type AttemptAuthorityErrorCode } from "../src/native-attempts"
 import { ApprovalBrokerV4, ApprovalV4Error, type AuthorityToken, type ApprovalBinding } from "../src/approval-v4"
+import { claimAuthority } from "../src/authority"
 import type { WorkflowRun } from "@unifia/contracts"
 
 const scope = { organizationId: "org", workspaceId: "ws" }
@@ -155,6 +157,16 @@ function freshApproval(): { authority: NativeApprovalAuthority; broker: Approval
   return { authority, broker: new ApprovalBrokerV4(authority), token: { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }, dir }
 }
 
+function freshAttempts(dir: string, redact?: DefaultSecretRedactor): { authority: NativeAttemptAuthority; token: AuthorityToken } {
+  const path = join(dir, "x.sqlite")
+  const authority = new NativeAttemptAuthority({ databasePath: path, now: clock, redact })
+  authority.initialize()
+  const db = new Database(path)
+  const token = claimAuthority(db, "run-1", "owner-a", clock())
+  db.close()
+  return { authority, token }
+}
+
 const approvalInput = (overrides: Record<string, unknown> = {}) => ({ ...binding(), expiresAt: 20_000, requestGeneration: 1, ...overrides })
 
 describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
@@ -169,7 +181,7 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
 
   test("takeover bumps generation: old token dies, new token rules (exactly one winner)", async () => {
     const ctx = freshApproval(); try {
-      ctx.authority.takeover("run-1", "owner-b")
+      ctx.authority.takeover(ctx.token, "owner-b")
       await expect(ctx.authority.transact(ctx.token, async (state) => ({ state, result: 1 }))).rejects.toThrow("STALE_AUTHORITY")
       const fresh: AuthorityToken = { workflowRunId: "run-1", generation: 2, authorityOwnerId: "owner-b" }
       const out = await ctx.authority.transact(fresh, async (state) => ({ state, result: state.generation }))
@@ -226,8 +238,10 @@ describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
       })
       await first
       // simulate a lost authority (generation bump by another claim)
-      ctx.authority.takeover("run-1", "owner-b")
+      ctx.authority.takeover(ctx.token, "owner-b")
+      const fresh: AuthorityToken = { workflowRunId: "run-1", generation: 2, authorityOwnerId: "owner-b" }
       await expect(ctx.authority.transact(ctx.token, async (state) => ({ state, result: 2 }))).rejects.toThrow("STALE_AUTHORITY")
+      await expect(ctx.authority.transact(fresh, async (state) => ({ state, result: state.generation }))).resolves.toBe(2)
     } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
 })
@@ -329,10 +343,9 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("retry semantics: same LI + same EffectKey -> NEW AttemptId, monotonic seq", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.mail.send")
-      const second = a.allocateAttempt("run-1", "li-1", "ek.mail.send")
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.mail.send")
+       const second = a.allocateAttempt(token, "li-1", "ek.mail.send")
       expect(first.attemptId).not.toBe(second.attemptId)
       expect(first.seq).toBe(1); expect(second.seq).toBe(2)
       const effectId = NativeAttemptAuthority.effectId("run-1", "ek.mail.send")
@@ -345,14 +358,13 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("outcome recording: attempt becomes terminal, effect follows; double-record rejected", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att2-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.http.call")
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { ok: 1 } })
-      expect(() => a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "FAILED", {})).toThrow("already terminal")
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.http.call")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+       expect(() => a.recordAttemptOutcome(token, "li-1", first.attemptId, "FAILED", {})).toThrow("already terminal")
       expect(a.inspectEffect("run-1", "ek.http.call")!.status).toBe("SUCCEEDED")
       // a NEW attempt on the same LI still works (retry after success is allowed to allocate, outcome re-records a new attempt row)
-      const retry = a.allocateAttempt("run-1", "li-1", "ek.http.call")
+       const retry = a.allocateAttempt(token, "li-1", "ek.http.call")
       expect(retry.seq).toBe(2)
       a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
@@ -361,20 +373,19 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("UNKNOWN_EXTERNAL_STATE: first-class outcome; terminal states are never overwritten; reconciliation journals", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att3-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       // UNKNOWN is reconciliation-only; no second attempt may be minted.
-      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       // only explicit reconciliation moves it, and it is journalled + flagged
-      a.reconcileEffect("run-1", "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+       a.reconcileEffect(token, "ek.pay.charge", "SUCCEEDED", { reconciled: true })
       const effect = a.inspectEffect("run-1", "ek.pay.charge")
       expect(effect!.status).toBe("SUCCEEDED"); expect(effect!.reconciled).toBe(true)
-      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "EFFECT_ALREADY_TERMINAL")
-      expect(() => a.reconcileEffect("run-1", "ek.pay.charge", "FAILED", {})).toThrow("already terminal")
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "EFFECT_ALREADY_TERMINAL")
+       expect(() => a.reconcileEffect(token, "ek.pay.charge", "FAILED", {})).toThrow("already terminal")
       a.close()
     } finally { Bun.gc(true); rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }) }
   })
@@ -382,12 +393,11 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("idempotency: terminal effect is never overwritten by a late attempt outcome", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att4-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.fs.write")
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
-      const retry = a.allocateAttempt("run-1", "li-1", "ek.fs.write")
-      a.recordAttemptOutcome("run-1", "li-1", retry.attemptId, "FAILED", { result: { n: 2 } })
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.fs.write")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
+       const retry = a.allocateAttempt(token, "li-1", "ek.fs.write")
+       a.recordAttemptOutcome(token, "li-1", retry.attemptId, "FAILED", { result: { n: 2 } })
       const effect = a.inspectEffect("run-1", "ek.fs.write")
       expect(effect!.status).toBe("SUCCEEDED")
       const attempts = a.inspectAttempts("run-1", "li-1")
@@ -400,16 +410,14 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("RESTART: attempts, effects and journal survive close + reopen", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att5-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.x")
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.x")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
       a.close()
-      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      b.initialize()
+       const { authority: b, token: tokenB } = freshAttempts(dir)
       expect(b.inspectAttempts("run-1", "li-1")).toHaveLength(1)
       expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
-      b.reconcileEffect("run-1", "ek.x", "FAILED", {})
+       b.reconcileEffect(tokenB, "ek.x", "FAILED", {})
       expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("FAILED")
       b.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
@@ -418,16 +426,15 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
   test("reconciled failure requires explicit retry authorization", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-att-retry-auth-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
-      a.reconcileEffect("run-1", "ek.pay.charge", "FAILED", { reconciled: true })
-      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
-      a.authorizeRetry("run-1", "ek.pay.charge")
-      const retry = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+       a.reconcileEffect(token, "ek.pay.charge", "FAILED", { reconciled: true })
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+       a.authorizeRetry(token, "ek.pay.charge")
+       const retry = a.allocateAttempt(token, "li-1", "ek.pay.charge")
       expect(retry.seq).toBe(2)
-      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
       a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
@@ -475,22 +482,20 @@ describe("ACK-loss production regression (directive 23, FC-04 principle)", () =>
   test("provider commits, candidate loses ack: UNKNOWN first-class, NO blind retry path, reconcile-only exit, restart-proof", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-ackloss-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      const first = a.allocateAttempt("run-1", "li-1", "ek.pay.charge")
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
       // the provider committed but the transport ACK was lost:
-      a.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       const effect = a.inspectEffect("run-1", "ek.pay.charge")
       expect(effect!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       // NO blind retry: UNKNOWN rejects allocation before a second dispatch.
-      expectAttemptError(() => a.allocateAttempt("run-1", "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
       expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
       a.close()
       // RESTART: UNKNOWN survives; only the explicit reconciliation exits
-      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      b.initialize()
+       const { authority: b, token: tokenB } = freshAttempts(dir)
       expect(b.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
-      b.reconcileEffect("run-1", "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+       b.reconcileEffect(tokenB, "ek.pay.charge", "SUCCEEDED", { reconciled: true })
       expect(b.inspectEffect("run-1", "ek.pay.charge")!.reconciled).toBe(true)
       b.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
@@ -501,23 +506,21 @@ describe("Recovery / reconciliation loop (directive 22)", () => {
   test("restart scan: non-terminal PENDING surfaced for re-drive (new attempts), UNKNOWN surfaced for reconcile-only", () => {
     const dir = mkdtempSync(join(tmpdir(), "unifia-recovery-"))
     try {
-      const a = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      a.initialize()
-      a.allocateAttempt("run-1", "li-1", "ek.inflight")
-      const first = a.allocateAttempt("run-1", "li-2", "ek.pay")
-      a.recordAttemptOutcome("run-1", "li-2", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+       const { authority: a, token } = freshAttempts(dir)
+       a.allocateAttempt(token, "li-1", "ek.inflight")
+       const first = a.allocateAttempt(token, "li-2", "ek.pay")
+       a.recordAttemptOutcome(token, "li-2", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       a.close()
-      const b = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock })
-      b.initialize()
+       const { authority: b, token: tokenB } = freshAttempts(dir)
       const pending = b.pendingEffects("run-1")
       expect(pending.map((e) => e.effectKey)).toEqual(["ek.inflight"])
       const uncertain = b.uncertainEffects("run-1")
       expect(uncertain.map((e) => e.effectKey)).toEqual(["ek.pay"])
       // re-drive of the PENDING effect = NEW attempt (no blind replay of attempt 1)
-      const reDrive = b.allocateAttempt("run-1", "li-1", "ek.inflight")
+       const reDrive = b.allocateAttempt(tokenB, "li-1", "ek.inflight")
       expect(reDrive.seq).toBe(2)
       // reconciliation is the only exit for the UNKNOWN effect
-      b.reconcileEffect("run-1", "ek.pay", "SUCCEEDED", { ok: true })
+       b.reconcileEffect(tokenB, "ek.pay", "SUCCEEDED", { ok: true })
       expect(b.uncertainEffects("run-1")).toHaveLength(0)
       b.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
@@ -531,14 +534,13 @@ describe("Secret-leak canary (directive 39)", () => {
       const CANARY = "CANARY-SECRET-s3cr3t-value"
       const redactor = new DefaultSecretRedactor()
       redactor.register(CANARY) // the OS broker registers material it resolves for this process
-      const attempts = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: clock, redact: redactor })
-      attempts.initialize()
+       const { authority: attempts, token: attemptToken } = freshAttempts(dir, redactor)
       // realistic path 1: a tool effect whose result accidentally embeds the secret
-      const first = attempts.allocateAttempt("run-1", "li-1", "ek.http.call")
-      attempts.recordAttemptOutcome("run-1", "li-1", first.attemptId, "SUCCEEDED", { result: { body: `ok ${CANARY}` } })
+       const first = attempts.allocateAttempt(attemptToken, "li-1", "ek.http.call")
+       attempts.recordAttemptOutcome(attemptToken, "li-1", first.attemptId, "SUCCEEDED", { result: { body: `ok ${CANARY}` } })
       // realistic path 2: an effect error carrying the secret
-      const second = attempts.allocateAttempt("run-1", "li-2", "ek.http.fail")
-      attempts.recordAttemptOutcome("run-1", "li-2", second.attemptId, "FAILED", { result: { error: `conn refused at ${CANARY}` } })
+       const second = attempts.allocateAttempt(attemptToken, "li-2", "ek.http.fail")
+       attempts.recordAttemptOutcome(attemptToken, "li-2", second.attemptId, "FAILED", { result: { error: `conn refused at ${CANARY}` } })
       const approval = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
       approval.initialize(); approval.claim("run-1", "owner-a")
       const broker = new ApprovalBrokerV4(approval)

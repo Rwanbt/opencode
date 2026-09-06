@@ -31,6 +31,7 @@ import type {
 } from "./approval-v4.ts"
 import { ApprovalV4Error } from "./approval-v4.ts"
 import type { Database } from "bun:sqlite"
+import { WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
 
 export interface NativeApprovalAuthorityOptions {
   readonly databasePath: string
@@ -40,14 +41,7 @@ export interface NativeApprovalAuthorityOptions {
   readonly now?: () => number
 }
 
-const SCHEMA_V1 = `
-CREATE TABLE IF NOT EXISTS approval_authority (
-  run_id TEXT PRIMARY KEY,
-  generation INTEGER NOT NULL,
-  owner_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
+const SCHEMA_V1 = `${WORKFLOW_AUTHORITY_SCHEMA}
 CREATE TABLE IF NOT EXISTS approvals (
   run_id TEXT NOT NULL,
   approval_id TEXT NOT NULL,
@@ -110,39 +104,41 @@ export class NativeApprovalAuthority implements ApprovalAuthority {
     const db = this.requireDb()
     const now = this.now()
     db.transaction(() => {
-      const existing = db.query("SELECT run_id, generation, owner_id FROM approval_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
+      const existing = db.query("SELECT run_id, generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
       if (existing) {
         if (existing.owner_id !== ownerId) throw new ApprovalV4Error("AUTHORITY_OWNED_BY_OTHER")
         return
       }
-      db.query("INSERT INTO approval_authority (run_id, generation, owner_id, created_at, updated_at) VALUES (?, 1, ?, ?, ?)")
+      db.query("INSERT INTO workflow_authority (run_id, generation, owner_id, created_at, updated_at) VALUES (?, 1, ?, ?, ?)")
         .run(runId, ownerId, now, now)
     })()
   }
 
   /** Authority takeover (FC-25): bumps generation, deposes the previous owner. */
-  takeover(runId: string, newOwnerId: string): void {
+  takeover(token: AuthorityToken, newOwnerId: string): void {
     const db = this.requireDb()
     const now = this.now()
     db.transaction(() => {
-      const existing = db.query("SELECT run_id, generation, owner_id FROM approval_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
+      const runId = token.workflowRunId
+      const existing = db.query("SELECT run_id, generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
       if (!existing) throw new ApprovalV4Error("AUTHORITY_NOT_CLAIMED")
+      if (existing.generation !== token.generation || existing.owner_id !== token.authorityOwnerId) throw new ApprovalV4Error("STALE_AUTHORITY")
       if (existing.owner_id === newOwnerId) throw new ApprovalV4Error("TAKEOVER_SAME_OWNER")
-      db.query("UPDATE approval_authority SET generation = generation + 1, owner_id = ?, updated_at = ? WHERE run_id = ?")
+      db.query("UPDATE workflow_authority SET generation = generation + 1, owner_id = ?, updated_at = ? WHERE run_id = ?")
         .run(newOwnerId, now, runId)
     })()
   }
 
   inspectAuthority(runId: string): { generation: number; ownerId: string } | null {
     const db = this.requireDb()
-    const row = db.query("SELECT generation, owner_id FROM approval_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
+    const row = db.query("SELECT generation, owner_id FROM workflow_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
     return row ? { generation: row.generation, ownerId: row.owner_id } : null
   }
 
   isTrustedSystemActor(actor: ApprovalActor, token: AuthorityToken): boolean {
     if (actor.kind !== "system" || !this.trustedIds.has(actor.id)) return false
     const db = this.requireDb()
-    const row = db.query("SELECT owner_id FROM approval_authority WHERE run_id = ?").get(token.workflowRunId) as { owner_id: string } | null
+    const row = db.query("SELECT owner_id FROM workflow_authority WHERE run_id = ?").get(token.workflowRunId) as { owner_id: string } | null
     return row !== null && row.owner_id === token.authorityOwnerId
   }
 
@@ -174,7 +170,7 @@ export class NativeApprovalAuthority implements ApprovalAuthority {
         db.query("INSERT INTO approval_history (run_id, event_sequence, event_id, approval_id, kind, previous_state, actor_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
           .run(token.workflowRunId, event.eventSequence, event.eventId, event.approvalId, event.kind, event.previousState, event.actorId, event.occurredAt)
       }
-      db.query("UPDATE approval_authority SET updated_at = ? WHERE run_id = ?").run(this.now(), token.workflowRunId)
+      db.query("UPDATE workflow_authority SET updated_at = ? WHERE run_id = ?").run(this.now(), token.workflowRunId)
       result = next.result
     })()
     return result
@@ -182,7 +178,7 @@ export class NativeApprovalAuthority implements ApprovalAuthority {
 
   private authorityRow(runId: string): AuthorityRow {
     const db = this.requireDb()
-    const row = db.query("SELECT run_id, generation, owner_id, created_at, updated_at FROM approval_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
+    const row = db.query("SELECT run_id, generation, owner_id, created_at, updated_at FROM workflow_authority WHERE run_id = ?").get(runId) as AuthorityRow | null
     if (!row) throw new ApprovalV4Error("AUTHORITY_NOT_CLAIMED")
     return row
   }
@@ -215,7 +211,7 @@ export class NativeApprovalAuthority implements ApprovalAuthority {
 
   private fenceRead(token: AuthorityToken): void {
     const db = this.requireDb()
-    const auth = db.query("SELECT run_id, generation, owner_id FROM approval_authority WHERE run_id = ?").get(token.workflowRunId) as AuthorityRow | null
+    const auth = db.query("SELECT run_id, generation, owner_id FROM workflow_authority WHERE run_id = ?").get(token.workflowRunId) as AuthorityRow | null
     if (!auth) throw new ApprovalV4Error("AUTHORITY_NOT_CLAIMED")
     if (token.generation !== auth.generation || token.authorityOwnerId !== auth.owner_id) throw new ApprovalV4Error("STALE_AUTHORITY")
   }

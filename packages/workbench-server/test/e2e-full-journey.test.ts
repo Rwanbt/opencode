@@ -9,6 +9,7 @@
  * kernel boundary the production worker process would use.
  */
 import { describe, expect, it } from "vitest"
+import { Database } from "bun:sqlite"
 import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -17,7 +18,7 @@ import { NativeWorkflowRuntimePort } from "../src/native-workflow-port.js"
 import type { WorkflowDefinitionPort } from "../src/workflow-port.js"
 import { NativeApprovalAuthority } from "@unifia/workflow-runtime"
 import { NativeAttemptAuthority } from "@unifia/workflow-runtime"
-import { ApprovalBrokerV4, type AuthorityToken, type ApprovalBinding } from "@unifia/workflow-runtime"
+import { ApprovalBrokerV4, claimAuthority, type AuthorityToken, type ApprovalBinding } from "@unifia/workflow-runtime"
 
 const principal = { id: "u1", kind: "human" as const }
 
@@ -111,12 +112,15 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
       // ---- directives 15-17: effect identity + ACK-loss + retry ----
       const attempts = new NativeAttemptAuthority({ databasePath: join(dir, "x.sqlite"), now: () => 1000 })
       attempts.initialize()
-      const first = attempts.allocateAttempt("run-1", "li-1", "ek.pay")
-      attempts.recordAttemptOutcome("run-1", "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      const db = new Database(join(dir, "x.sqlite"))
+      const attemptToken = claimAuthority(db, "run-1", "owner-a", 1000)
+      db.close()
+      const first = attempts.allocateAttempt(attemptToken, "li-1", "ek.pay")
+      attempts.recordAttemptOutcome(attemptToken, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       expect(attempts.inspectEffect("run-1", "ek.pay")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
-      const retry = attempts.allocateAttempt("run-1", "li-1", "ek.pay")
+      const retry = attempts.allocateAttempt(attemptToken, "li-1", "ek.pay")
       expect(retry.seq).toBe(2); expect(retry.attemptId).not.toBe(first.attemptId)
-      attempts.reconcileEffect("run-1", "ek.pay", "SUCCEEDED", { ok: true })
+      attempts.reconcileEffect(attemptToken, "ek.pay", "SUCCEEDED", { ok: true })
       // ---- directive 19: durable cancellation + fencing + restart persistence ----
       attempts.close()
       const cancelled = await port2.cancel(startedBody.workflowId)

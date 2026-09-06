@@ -3,11 +3,13 @@
 
 import { digest as digestEnvelope } from "@unifia/digest-runtime"
 import type { DeploymentScope, OwnershipScope } from "@unifia/contracts"
+import type { AuthorityToken } from "./authority.ts"
+
+export type { AuthorityToken } from "./authority.ts"
 
 export type ApprovalV4State = "PENDING" | "APPROVED" | "DENIED" | "EXPIRED" | "CANCELLED" | "STALE"
 export type ApprovalDecision = "APPROVED" | "DENIED"
 export type ApprovalActor = { readonly id: string; readonly kind: "human" | "system" }
-export type AuthorityToken = { readonly workflowRunId: string; readonly generation: number; readonly authorityOwnerId: string }
 
 export type ApprovalBinding = {
   readonly workflowRunId: string

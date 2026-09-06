@@ -21,6 +21,7 @@
  * is safe); every fact is a row — restart recovery is free.
  */
 import type { Database } from "bun:sqlite"
+import { assertAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
 
 export type AttemptOutcome = "SUCCEEDED" | "FAILED" | "UNKNOWN_EXTERNAL_STATE"
 export type EffectStatus = AttemptOutcome | "PENDING"
@@ -100,7 +101,7 @@ export interface DurableEffect {
   readonly updatedAt: number
 }
 
-const SCHEMA_V1 = `
+const SCHEMA_V1 = `${WORKFLOW_AUTHORITY_SCHEMA}
 CREATE TABLE IF NOT EXISTS logical_invocations (
   run_id TEXT NOT NULL,
   li_id TEXT NOT NULL,
@@ -199,22 +200,18 @@ export class NativeAttemptAuthority {
    * registered on first allocation. PENDING effect row is created on
    * first sight of the EffectKey (no-op if it exists).
    */
-  allocateAttempt(runId: string, liId: string, effectKey: string): DurableAttempt {
+  allocateAttempt(token: AuthorityToken, liId: string, effectKey: string): DurableAttempt {
     const db = this.requireDb()
+    const runId = token.workflowRunId
     if (!runId || !liId || !effectKey) throw new Error("allocateAttempt: runId, liId and effectKey are required")
-    const effect = readEffect(db, runId, effectKey)
-    if (effect?.status === "UNKNOWN_EXTERNAL_STATE") {
-      throw new AttemptAuthorityError("RECONCILIATION_REQUIRED", `effect requires reconciliation before allocation: ${effectKey}`)
-    }
-    if (effect?.reconciled === 1 && effect.status === "SUCCEEDED") {
-      throw new AttemptAuthorityError("EFFECT_ALREADY_TERMINAL", `reconciled effect is terminal: ${effectKey}`)
-    }
-    const authorized = effect?.reconciled === 1 && effect.status === "FAILED"
-    if (authorized && !readRetryAuthorization(db, runId, effectKey)) {
-      throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `retry authorization required: ${effectKey}`)
-    }
     let created!: DurableAttempt
     db.transaction(() => {
+      assertAuthority(db, token)
+      const effect = readEffect(db, runId, effectKey)
+      if (effect?.status === "UNKNOWN_EXTERNAL_STATE") throw new AttemptAuthorityError("RECONCILIATION_REQUIRED", `effect requires reconciliation before allocation: ${effectKey}`)
+      if (effect?.reconciled === 1 && effect.status === "SUCCEEDED") throw new AttemptAuthorityError("EFFECT_ALREADY_TERMINAL", `reconciled effect is terminal: ${effectKey}`)
+      const authorized = effect?.reconciled === 1 && effect.status === "FAILED"
+      if (authorized && !readRetryAuthorization(db, runId, effectKey)) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `retry authorization required: ${effectKey}`)
       const now = this.now()
       if (authorized) db.query("DELETE FROM retry_authorizations WHERE run_id = ? AND effect_key = ?").run(runId, effectKey)
       db.query("INSERT OR IGNORE INTO logical_invocations (run_id, li_id, created_at) VALUES (?, ?, ?)").run(runId, liId, now)
@@ -230,9 +227,11 @@ export class NativeAttemptAuthority {
   }
 
   /** Record the explicit decision that a reconciled failure may be retried. */
-  authorizeRetry(runId: string, effectKey: string): void {
+  authorizeRetry(token: AuthorityToken, effectKey: string): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthority(db, token)
+      const runId = token.workflowRunId
       const effect = readEffect(db, runId, effectKey)
       if (!effect) throw new Error(`effect not found: ${effectKey}`)
       if (effect.status !== "FAILED" || effect.reconciled !== 1) throw new AttemptAuthorityError("RETRY_NOT_AUTHORIZED", `only reconciled failures may be authorized: ${effectKey}`)
@@ -246,9 +245,11 @@ export class NativeAttemptAuthority {
    * external side effect happened; the effect row moves to the same
    * status and stays reconcilable.
    */
-  recordAttemptOutcome(runId: string, liId: string, attemptId: string, outcome: AttemptOutcome, input: { result?: unknown; ackLost?: boolean } = {}): void {
+  recordAttemptOutcome(token: AuthorityToken, liId: string, attemptId: string, outcome: AttemptOutcome, input: { result?: unknown; ackLost?: boolean } = {}): void {
     const db = this.requireDb()
+    const runId = token.workflowRunId
     db.transaction(() => {
+      assertAuthority(db, token)
       const row = db.query("SELECT seq, effect_key, outcome FROM attempts WHERE run_id = ? AND li_id = ? AND attempt_id = ?").get(runId, liId, attemptId) as { seq: number; effect_key: string; outcome: string | null } | null
       if (!row) throw new Error(`attempt not found: ${attemptId}`)
       if (row.outcome !== null) throw new Error(`attempt already terminal: ${attemptId} (${row.outcome})`)
@@ -265,12 +266,14 @@ export class NativeAttemptAuthority {
    * Reconciliation: the ONLY path out of UNKNOWN_EXTERNAL_STATE for an
    * effect. Terminal effects are never overwritten (idempotency).
    */
-  reconcileEffect(runId: string, effectKey: string, outcome: "SUCCEEDED" | "FAILED", result?: unknown): void {
+  reconcileEffect(token: AuthorityToken, effectKey: string, outcome: "SUCCEEDED" | "FAILED", result?: unknown): void {
     const db = this.requireDb()
-    const current = readEffect(db, runId, effectKey)
-    if (!current) throw new Error(`effect not found: ${effectKey}`)
-    if (current.status === "SUCCEEDED" || current.status === "FAILED") throw new Error(`effect already terminal: ${effectKey} (${current.status})`)
+    const runId = token.workflowRunId
     db.transaction(() => {
+      assertAuthority(db, token)
+      const current = readEffect(db, runId, effectKey)
+      if (!current) throw new Error(`effect not found: ${effectKey}`)
+      if (current.status === "SUCCEEDED" || current.status === "FAILED") throw new Error(`effect already terminal: ${effectKey} (${current.status})`)
       const now = this.now()
       db.query("UPDATE effects SET status = ?, result_json = ?, reconciled = 1, updated_at = ? WHERE run_id = ? AND effect_key = ?")
         .run(outcome, result === undefined ? null : JSON.stringify(result), now, runId, effectKey)
