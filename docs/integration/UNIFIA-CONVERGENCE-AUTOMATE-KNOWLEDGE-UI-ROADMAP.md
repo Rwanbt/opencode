@@ -10,17 +10,17 @@ Phase A11: Automate canonical authority, multi-run isolation, and reconciliation
 
 ## Current Branch
 
-`agent/automate-v2-baseline-20260901` at `3a33967e95`
+`agent/automate-v2-baseline-20260901` at `3bf597d629`
 
 ## Current HEAD
 
-`af48118975aef109937393a52989a8067c61dfc8`
+`3bf597d629500a1064d63a1c4a61e45094ccf4e2`
 
 ## Source Branches and SHAs
 
 | Ref | Current SHA | Roadmap checkpoint SHA | Notes |
 |---|---|---|---|
-| `origin/agent/automate-v2-baseline-20260901` | `3a33967e95` | same | current Automate baseline |
+| `origin/agent/automate-v2-baseline-20260901` | `3bf597d629500a1064d63a1c4a61e45094ccf4e2` | same | current Automate baseline |
 | `origin/work-design` | `1bbbe6a614d90f1208e834767a2e28184cf0253c` | `1bbbe6a614...` | direct ancestor of Automate; 305 commits behind |
 | `origin/feat/sovereign-knowledge-core` | `b511ea44f45d4f4a61ef027a3a4cf914715c0b0a` | same | independent Knowledge history; untouched |
 | `origin/dev` | `95350647140a382ee6d5d61bc2f6639597d80f0b` | same | current integration target checkpoint |
@@ -73,6 +73,16 @@ Measured 2026-09-06 after fetching current refs:
   this is not a reviewable single promotion PR under the repository size gate.
 - No merge, rebase, or branch mutation was performed. Promotion must be split
   into independently buildable/reviewable increments.
+
+## Promotion Plan
+
+`docs/integration/AUTOMATE-PROMOTION-SLICES.md` defines five stacked review
+slices: contracts/foundations, M0 qualification, durable runtime, Workbench
+HTTP surface, then application/hardening. The original commit history is not
+cleanly partitionable; mixed commits must be reconstructed in a fresh
+integration worktree rather than cherry-picked wholesale. `dev` is explicitly
+out of scope: `work-design` is the sole promotion target. No promotion branch
+or merge has been created.
 
 ## Tests Baseline
 
@@ -141,10 +151,18 @@ NEXT EXACT ACTION:
 
 ### B - Automate to Work-Design
 
-- [ ] topology verified for promotion (next)
-- [ ] fast-forward
-- [ ] regression
-- [ ] local safety checkpoint
+- [x] topology verified for promotion
+- [x] A1 contracts and foundations (integration/automate-a1-contracts @ `ff9fa1bfd1`, contracts 145/145)
+- [x] A2 M0 qualification (integration/automate-a2-m0 @ `0208882bfd`, m0-contract 177/177)
+- [x] A3 durable runtime (integration/automate-a3-runtime @ `189d6a6792`, runtime 118/118)
+- [x] A4 Workbench HTTP (integration/automate-a4-workbench @ `012d893d90`, workflow E2E 11/11)
+- [x] A5a foundations (integration/automate-a5-foundations @ `bcd8b8d350`, contracts 644/644)
+- [x] A5b app and docs (integration/automate-a5b-app @ `323e5e0e8c`, app 49/49, parity-identical to source modulo six divergences)
+- [x] regression (per-slice suites re-run green on 2026-09-06)
+- [ ] local safety checkpoint (independent reviewer inspection of A5b vs source + merge decision — NO merge performed)
+- [ ] review PRs opened against work-design (stacked A1..A5b, Refs while working; dev untouched, nothing pushed)
+
+Full slice record: `docs/integration/AUTOMATE-PROMOTION-SLICES.md` § Execution Record.
 
 ### C - Knowledge Convergence
 
