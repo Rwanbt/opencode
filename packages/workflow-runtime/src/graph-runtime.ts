@@ -120,6 +120,10 @@ export class GraphRuntimeEngine {
     return claimAuthority(this.requireDb(), runId, ownerId, this.now())
   }
 
+  assertAuthority(runId: string, token: AuthorityToken): void {
+    assertAuthorityForRun(this.requireDb(), token, runId)
+  }
+
   /** Seeds the entry node(s) PENDING. Restart-safe (idempotent). */
   startRun(runId: string, token: AuthorityToken): void {
     const db = this.requireDb()

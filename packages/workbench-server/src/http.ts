@@ -10,10 +10,23 @@
 import type { FileReadResult, FileWrite, WorkspaceManifest } from "@unifia/contracts"
 import { migrateWorkspaceManifest } from "@unifia/contracts"
 import type { JsonRecord } from "./types.js"
+import type { AuthorityToken } from "@unifia/workflow-runtime"
 
 /** Build a JSON `Response` with the standard content-type. */
 export function json(status: number, body: JsonRecord): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+}
+
+export function workflowAuthority(request: Request): AuthorityToken | undefined {
+  const raw = request.headers.get("x-workflow-authority-token")
+  if (!raw) return undefined
+  try {
+    const token = JSON.parse(raw) as Partial<AuthorityToken>
+    if (typeof token.workflowRunId !== "string" || typeof token.authorityOwnerId !== "string" || !Number.isSafeInteger(token.generation)) return undefined
+    return token as AuthorityToken
+  } catch {
+    return undefined
+  }
 }
 
 /** True iff `error` is a Node ENOENT-shaped error. */

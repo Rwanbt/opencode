@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: MIT */
 
 import type { P3Capability } from "@unifia/contracts"
+import type { AuthorityToken } from "@unifia/workflow-runtime"
+
+export type { AuthorityToken }
 
 /**
  * Transitional route port for the legacy workbench workflow surface.
@@ -33,13 +36,17 @@ export type WorkflowStatePort = {
   /** Immutable publication pins (directive 36) - set at start. */
   readonly versionId?: string
   readonly versionDigest?: string
+  readonly authorityToken: AuthorityToken
   readonly error?: string
 }
 
 export type WorkflowRuntimePort = {
-  start(definition: WorkflowDefinitionPort): Promise<WorkflowStatePort>
-  resume(workflowId: string): Promise<WorkflowStatePort>
-  cancel(workflowId: string): Promise<WorkflowStatePort>
+  start(definition: WorkflowDefinitionPort, authorityOwnerId: string): Promise<WorkflowStatePort>
+  resume(token: AuthorityToken): Promise<WorkflowStatePort>
+  cancel(token: AuthorityToken): Promise<WorkflowStatePort>
+  inspect(token: AuthorityToken): Promise<WorkflowStatePort>
   /** Directive 37: read-only durable journal for diagnosis. */
-  history?(workflowId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]>
+  history(token: AuthorityToken): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]>
+  /** Worker-only boundary for completing the currently surfaced step. */
+  complete(token: AuthorityToken, output: unknown): Promise<WorkflowStatePort>
 }

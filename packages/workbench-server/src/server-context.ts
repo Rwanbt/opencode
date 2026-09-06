@@ -78,7 +78,6 @@ export type ServerContext = {
   readonly runtimeTokens: Map<string, string>
   readonly nativeTokens: Map<string, Set<string>>
   readonly sessionOwners: Map<string, string>
-  readonly workflowOwners: Map<string, string>
   readonly pluginsByWorkspace: Map<string, readonly PluginEntry[]>
 
   /** Helpers handlers reach for. */

@@ -81,7 +81,6 @@ export class WorkbenchServer implements ServerContext {
   readonly runtimeTokens = new Map<string, string>()
   readonly nativeTokens = new Map<string, Set<string>>()
   readonly sessionOwners = new Map<string, string>()
-  readonly workflowOwners = new Map<string, string>()
   readonly pluginsByWorkspace = new Map<string, readonly PluginEntry[]>()
 
   constructor(dependencies: ServerDependencies) {

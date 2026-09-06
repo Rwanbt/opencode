@@ -12,7 +12,7 @@
  */
 import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { GraphRuntimeEngine, type AuthorityToken } from "@unifia/workflow-runtime"
+import { AuthorityError, GraphRuntimeEngine, type AuthorityToken } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
@@ -25,7 +25,6 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   private readonly engines = new Map<string, GraphRuntimeEngine>()
   private db: Database | null = null
   private readonly loaded = new Map<string, { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string }>()
-  private readonly tokens = new Map<string, AuthorityToken>()
   private readonly options: NativeWorkflowRuntimePortOptions
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
@@ -66,7 +65,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     return engine
   }
 
-  async start(definition: WorkflowDefinitionPort): Promise<WorkflowStatePort> {
+  async start(definition: WorkflowDefinitionPort, authorityOwnerId: string): Promise<WorkflowStatePort> {
     // Directive 36: the immutable publication pin is computed at start
     // (versionId = JCS content digest) and persisted with the run.
     const ir = toIr(definition)
@@ -77,28 +76,38 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     db.query("INSERT INTO workflow_runs (run_id, definition_id, version_id, version_digest) VALUES (?, ?, ?, ?)").run(runId, definition.id, version.versionId, version.versionDigest.value)
     this.loaded.set(runId, { definition, versionId: version.versionId, versionDigest: version.versionDigest.value })
     const engine = this.ensureEngine(definition, version.versionId)
-    const token = engine.claimAuthority(runId, "workbench")
-    this.tokens.set(runId, token)
+    const token = engine.claimAuthority(runId, authorityOwnerId)
     engine.startRun(runId, token)
     engine.advance(runId, token, { input: {} })
-    return this.state(runId, definition, version.versionId, version.versionDigest.value)
+    return this.state(runId, definition, version.versionId, version.versionDigest.value, token)
   }
 
-  async resume(runId: string): Promise<WorkflowStatePort> {
+  async resume(token: AuthorityToken): Promise<WorkflowStatePort> {
+    requireToken(token)
+    const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
-    this.tokens.set(runId, token)
     engine.advance(runId, token, { input: {} })
-    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
   /** Directive 37: read-only durable journal (diagnosis surface). */
-  async history(runId: string): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]> {
+  async history(token: AuthorityToken): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]> {
+    requireToken(token)
+    const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    engine.assertAuthority(runId, token)
     return engine.inspectEvents(runId).map((event) => ({ kind: event.kind, nodeId: event.nodeId, seq: event.seq }))
+  }
+
+  async inspect(token: AuthorityToken): Promise<WorkflowStatePort> {
+    requireToken(token)
+    const loaded = this.ensureLoaded(token.workflowRunId)
+    const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    engine.assertAuthority(token.workflowRunId, token)
+    return this.state(token.workflowRunId, loaded.definition, loaded.versionId, loaded.versionDigest, token)
   }
 
   /** Release the durable connection (workbench shutdown / test teardown). */
@@ -111,16 +120,16 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   }
 
   /** External dispatch completes the surfaced step (durable fact). */
-  async complete(runId: string, output: unknown): Promise<WorkflowStatePort> {
+  async complete(token: AuthorityToken, output: unknown): Promise<WorkflowStatePort> {
+    requireToken(token)
+    const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
-    this.tokens.set(runId, token)
     engine.completeNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), output)
     // schedule + surface the successor step (single-pass walk convergence)
     engine.advance(runId, token, { input: {} })
-    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
   private firstActiveStep(runId: string, definition: WorkflowDefinitionPort): number {
@@ -133,20 +142,20 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     throw new Error(`no active step to complete: ${definition.id}`)
   }
 
-  async cancel(runId: string): Promise<WorkflowStatePort> {
+  async cancel(token: AuthorityToken): Promise<WorkflowStatePort> {
+    requireToken(token)
+    const runId = token.workflowRunId
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
-    this.tokens.set(runId, token)
     engine.requestCancel(runId, token, "workbench cancel")
     // the workbench boundary IS the worker reaction point: the surfaced
     // in-flight step observes the durable cancel flag and fails itself
     try { engine.failNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), "cancelled by workbench") } catch { /* already terminal */ }
-    return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
+    return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
-  private state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string): WorkflowStatePort {
+  private state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string, authorityToken: AuthorityToken): WorkflowStatePort {
     const engine = this.ensureEngine(definition, versionId)
     const steps = definition.steps
     let nextStep = steps.length
@@ -169,8 +178,12 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       break
     }
     if (nextStep >= steps.length && status === "running") status = "completed"
-    return { workflowId: runId, definition, status, nextStep, outputs, versionId, versionDigest }
+    return { workflowId: runId, definition, status, nextStep, outputs, versionId, versionDigest, authorityToken }
   }
+}
+
+function requireToken(token: AuthorityToken | undefined): asserts token is AuthorityToken {
+  if (!token) throw new AuthorityError("AUTHORITY_TOKEN_REQUIRED")
 }
 
 function stepNodeId(index: number): string {

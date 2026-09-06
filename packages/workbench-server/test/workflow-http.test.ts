@@ -24,14 +24,15 @@ describe("durable workflow HTTP surface (directive 35)", () => {
         method: "POST", headers: { authorization: "Bearer t", "content-type": "application/json" }, body: JSON.stringify(definition),
       }))
       expect(started.status).toBe(201)
-      const startedBody = await started.json() as { workflowId: string }
-      const inspected = await server.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}`, { headers: { authorization: "Bearer t" } }))
+      const startedBody = await started.json() as { workflowId: string; authorityToken: object }
+      const authority = JSON.stringify(startedBody.authorityToken)
+      const inspected = await server.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}`, { headers: { authorization: "Bearer t", "x-workflow-authority-token": authority } }))
       expect(inspected.status).toBe(200)
       const inspectedBody = await inspected.json()
       expect(inspectedBody.versionId).toBeDefined(); expect(inspectedBody.versionDigest).toBeDefined()
       expect(Array.isArray(inspectedBody.events)).toBe(true)
       const cancelled = await server.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}/cancel`, {
-        method: "POST", headers: { authorization: "Bearer t" }
+         method: "POST", headers: { authorization: "Bearer t", "x-workflow-authority-token": authority }
       }))
       expect(cancelled.status).toBe(200)
       const cancelledBody = await cancelled.json()

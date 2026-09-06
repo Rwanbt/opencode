@@ -6,7 +6,7 @@
  */
 import type { WorkflowDefinitionPort } from "../workflow-port.js"
 import type { Principal } from "../auth.js"
-import { body, json } from "../http.js"
+import { body, json, workflowAuthority } from "../http.js"
 import type { ServerContext } from "../server-context.js"
 
 /** POST /v1/browser/:action */
@@ -96,10 +96,8 @@ export async function desktopAction(
 /**
  * POST /v1/workflows/:action — start/resume/cancel a workflow run.
  *
- * WHY the in-memory `workflowOwners` map: the runtime is session-scoped
- * but workflows outlive any single session, so the server keeps a
- * workspace→workflowId lookup. Capped at `workflowOwnerLimit` (1000) to
- * avoid unbounded growth in long-running sidecars.
+ * Authority is carried explicitly by the caller. The route does not retain
+ * workflow ownership or synthesize a token after restart.
  */
 export async function workflowAction(
   ctx: ServerContext,
@@ -122,13 +120,7 @@ export async function workflowAction(
     const gate = await ctx.checkCapability("workflow.run", input.workspaceId, principal)
     if (gate) return gate
     const definition = { ...(input.definition as WorkflowDefinitionPort), workspaceId: input.workspaceId }
-    const state = await ctx.workflow.start(definition)
-    ctx.workflowOwners.set(state.workflowId, input.workspaceId)
-    while (ctx.workflowOwners.size > 1_000) {
-      const oldest = ctx.workflowOwners.keys().next().value
-      if (typeof oldest !== "string") break
-      ctx.workflowOwners.delete(oldest)
-    }
+    const state = await ctx.workflow.start(definition, principal.id)
     // DA-AUD-03: the route label is "workflow.start", the broker's
     // capability is "workflow.run". Record both so a downstream reader
     // can answer "what did the user ask for?" AND "what capability
@@ -142,24 +134,21 @@ export async function workflowAction(
   if (typeof input.workflowId !== "string") {
     return ctx.deny(principal, "workflow.scope", 400, { reason: "missing-workflow-id" })
   }
-  const workspaceId = ctx.workflowOwners.get(input.workflowId)
-  if (!workspaceId || !ctx.authorize(request, workspaceId)) {
+  if (typeof input.workspaceId !== "string") {
+    return ctx.deny(principal, "workflow.scope", 400, { reason: "missing-workspace-id" })
+  }
+  const workspaceId = input.workspaceId
+  const token = workflowAuthority(request)
+  if (!token || token.workflowRunId !== input.workflowId || !ctx.authorize(request, workspaceId)) {
     return ctx.deny(principal, "workflow.scope", 403, { resource: input.workflowId })
   }
   const state =
     action === "resume"
-      ? await ctx.workflow.resume(input.workflowId)
-      : action === "cancel"
-        ? await ctx.workflow.cancel(input.workflowId)
+       ? await ctx.workflow.resume(token)
+       : action === "cancel"
+         ? await ctx.workflow.cancel(token)
         : undefined
   if (!state) return ctx.deny(principal, "workflow.action", 400, { resource: input.workflowId })
-  if (
-    action === "cancel" ||
-    state.status === "completed" ||
-    state.status === "failed" ||
-    state.status === "cancelled"
-  )
-    ctx.workflowOwners.delete(input.workflowId)
   ctx.allow(principal, `workflow.${action}`, { resource: workspaceId })
   return json(200, { state })
 }

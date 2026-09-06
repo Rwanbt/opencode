@@ -46,14 +46,14 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
         method: "POST", headers: { authorization: "Bearer t", "content-type": "application/json" }, body: JSON.stringify(def("wf-e2e", "V1")),
       }))
       expect(started.status).toBe(201)
-      const startedBody = (await started.json()) as { workflowId: string; versionId?: string; versionDigest?: string; status: string; nextStep: number }
+      const startedBody = (await started.json()) as { workflowId: string; authorityToken: AuthorityToken; versionId?: string; versionDigest?: string; status: string; nextStep: number }
       expect(startedBody.status).toBe("running")
       // ---- immutable publication pin (directive 9) ----
       expect(startedBody.versionId).toBeDefined(); expect(startedBody.versionId).toBe(startedBody.versionDigest)
       const pinnedVersion = startedBody.versionId!
 
       // worker completes step 0 via the durable kernel boundary
-      const afterS0 = await port.complete(startedBody.workflowId, { bytes: 42 })
+      const afterS0 = await port.complete(startedBody.authorityToken, { bytes: 42 })
       expect(afterS0.nextStep).toBe(1)
 
       // ---- directive 12: RESTART - a NEW server+port rediscovers from durable facts ----
@@ -63,18 +63,18 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
         workspace: {} as never, runtime: {} as never, workflow: port2,
         audit: { record: () => undefined }, capability: { check: async () => "allow" },
       })
-      const resumed = await port2.resume(startedBody.workflowId)
+      const resumed = await port2.resume(startedBody.authorityToken)
       expect(resumed.nextStep).toBe(1)
       expect(resumed.versionId).toBe(pinnedVersion)
 
       // ---- directive 9: publish V2 AFTER - the existing run must NOT follow latest ----
-      const run2 = await port2.start(def("wf-e2e", "V2"))
+      const run2 = await port2.start(def("wf-e2e", "V2"), "u1")
       expect(run2.versionId).not.toBe(pinnedVersion)
-      const stillV1 = await port2.resume(startedBody.workflowId)
+      const stillV1 = await port2.resume(startedBody.authorityToken)
       expect(stillV1.versionId).toBe(pinnedVersion)
 
       // ---- directive 20: diagnosis - read-only durable journal over HTTP ----
-      const inspected = await server2.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}`, { headers: { authorization: "Bearer t" } }))
+      const inspected = await server2.fetch(new Request(`http://127.0.1/v1/workflows/${startedBody.workflowId}`, { headers: { authorization: "Bearer t", "x-workflow-authority-token": JSON.stringify(startedBody.authorityToken) } }))
       const diagnosis = (await inspected.json()) as { events: { kind: string }[]; status: string }
       expect(inspected.status).toBe(200)
       expect(diagnosis.events.some((e) => e.kind === "NODE_COMPLETED")).toBe(true)
@@ -125,10 +125,10 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
       attempts.reconcileEffect(attemptToken, "ek.pay", "SUCCEEDED", { ok: true })
       // ---- directive 19: durable cancellation + fencing + restart persistence ----
       attempts.close()
-      const cancelled = await port2.cancel(startedBody.workflowId)
+      const cancelled = await port2.cancel(startedBody.authorityToken)
       expect(cancelled.status).toBe("cancelled")
       const port3 = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
-      const afterRestart = await port3.resume(startedBody.workflowId)
+      const afterRestart = await port3.resume(startedBody.authorityToken)
       expect(afterRestart.status).toBe("cancelled")
       port2.close(); port3.close(); port.close()
     } finally {
