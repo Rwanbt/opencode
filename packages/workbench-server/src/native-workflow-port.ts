@@ -12,7 +12,7 @@
  */
 import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { GraphRuntimeEngine } from "@unifia/workflow-runtime"
+import { GraphRuntimeEngine, type AuthorityToken } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
@@ -25,6 +25,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   private readonly engines = new Map<string, GraphRuntimeEngine>()
   private db: Database | null = null
   private readonly loaded = new Map<string, { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string }>()
+  private readonly tokens = new Map<string, AuthorityToken>()
   private readonly options: NativeWorkflowRuntimePortOptions
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
@@ -76,8 +77,10 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     db.query("INSERT INTO workflow_runs (run_id, definition_id, version_id, version_digest) VALUES (?, ?, ?, ?)").run(runId, definition.id, version.versionId, version.versionDigest.value)
     this.loaded.set(runId, { definition, versionId: version.versionId, versionDigest: version.versionDigest.value })
     const engine = this.ensureEngine(definition, version.versionId)
-    engine.startRun(runId)
-    engine.advance(runId, { input: {} })
+    const token = engine.claimAuthority(runId, "workbench")
+    this.tokens.set(runId, token)
+    engine.startRun(runId, token)
+    engine.advance(runId, token, { input: {} })
     return this.state(runId, definition, version.versionId, version.versionDigest.value)
   }
 
@@ -85,7 +88,9 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    engine.advance(runId, { input: {} })
+    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
+    this.tokens.set(runId, token)
+    engine.advance(runId, token, { input: {} })
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 
@@ -110,9 +115,11 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    engine.completeNode(runId, stepNodeId(this.firstActiveStep(runId, definition)), output)
+    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
+    this.tokens.set(runId, token)
+    engine.completeNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), output)
     // schedule + surface the successor step (single-pass walk convergence)
-    engine.advance(runId, { input: {} })
+    engine.advance(runId, token, { input: {} })
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 
@@ -130,10 +137,12 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const loaded = this.ensureLoaded(runId)
     const definition = loaded.definition
     const engine = this.ensureEngine(definition, loaded.versionId)
-    engine.requestCancel(runId, "workbench cancel")
+    const token = this.tokens.get(runId) ?? engine.claimAuthority(runId, "workbench")
+    this.tokens.set(runId, token)
+    engine.requestCancel(runId, token, "workbench cancel")
     // the workbench boundary IS the worker reaction point: the surfaced
     // in-flight step observes the durable cancel flag and fails itself
-    try { engine.failNode(runId, stepNodeId(this.firstActiveStep(runId, definition)), "cancelled by workbench") } catch { /* already terminal */ }
+    try { engine.failNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), "cancelled by workbench") } catch { /* already terminal */ }
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest)
   }
 

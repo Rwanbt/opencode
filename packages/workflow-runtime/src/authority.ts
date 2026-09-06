@@ -43,9 +43,10 @@ export function assertAuthorityForRun(db: Database, token: AuthorityToken, runId
 }
 
 export function assertTokenForRun(token: AuthorityToken, runId: string): void {
-  if (!token || token.workflowRunId !== runId || !token.authorityOwnerId || !Number.isSafeInteger(token.generation)) {
+  if (!token || !token.authorityOwnerId || !Number.isSafeInteger(token.generation)) {
     throw new AuthorityError("AUTHORITY_TOKEN_REQUIRED", `authority token does not target ${runId}`)
   }
+  if (token.workflowRunId !== runId) throw new AuthorityError("STALE_AUTHORITY", `authority token does not target ${runId}`)
 }
 
 export function claimAuthority(db: Database, runId: string, ownerId: string, now: number): AuthorityToken {

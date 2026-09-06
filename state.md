@@ -9,6 +9,8 @@
 - Whether `page.goto()` full documents are the intended certification model rather than a harness artifact | the test contract explicitly describes reloads but its resource metric is document-local | inspect original certification intent and compare a fresh-page reproduction | P1
 
 ### VERIFIED FINDINGS
+- GraphRuntimeEngine durable transitions now require explicit shared AuthorityToken fencing, initialize workflow_authority, and reject cross-run/stale tokens | packages/workflow-runtime/src/graph-runtime.ts; packages/workflow-runtime/src/authority.ts; packages/workflow-runtime/test/graph-runtime.test.ts | `bun test test/graph-runtime.test.ts` and `bun x tsc --noEmit` from packages/workflow-runtime -> 24 pass, 0 fail, typecheck clean | confirmed
+- NativeWorkflowRuntimePort claims and threads durable graph authority tokens | packages/workbench-server/src/native-workflow-port.ts | `bun run typecheck` and targeted native workflow/HTTP tests -> typecheck clean, 4 pass, 0 fail | confirmed
 - Targeted mode/provider tests pass | packages/app/src/context/mode.test.ts; packages/app/src/context/mode-directory.test.ts; packages/app/src/context/workbench/provider.test.ts | `bun test --preload ./happydom.ts ./src/context/mode.test.ts ./src/context/mode-directory.test.ts ./src/context/workbench/provider.test.ts` -> 49 pass, 0 fail | confirmed
 - App typecheck passes after the tri-state and generation changes | packages/app | `bun run typecheck` -> exit 0 | confirmed
 - Repeated reloads fail without prompt load | packages/app/e2e/modes/mode-reload-stability.spec.ts | `E2E_RELOAD_CYCLES=10 E2E_RELOAD_PROMPTS=0 bun run test:e2e -- --workers=1 e2e/modes/mode-reload-stability.spec.ts` -> missing Work/Automate mode projection | confirmed

@@ -24,6 +24,7 @@ import { extractMapKeyMaterial } from "@unifia/contracts"
 import { validateWorkflowGraph } from "@unifia/contracts"
 import { evaluate } from "@unifia/expression-runtime"
 import type { Database } from "bun:sqlite"
+import { assertAuthorityForRun, claimAuthority, type AuthorityToken, WORKFLOW_AUTHORITY_SCHEMA } from "./authority.ts"
 
 export type GraphNodeStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "SKIPPED"
 
@@ -46,7 +47,7 @@ export interface GraphNodeState {
   readonly updatedAt: number
 }
 
-const SCHEMA_V1 = `
+const SCHEMA_V1 = `${WORKFLOW_AUTHORITY_SCHEMA}
 CREATE TABLE IF NOT EXISTS graph_nodes (
   run_id TEXT NOT NULL,
   node_id TEXT NOT NULL,
@@ -115,10 +116,15 @@ export class GraphRuntimeEngine {
     return this.db
   }
 
+  claimAuthority(runId: string, ownerId: string): AuthorityToken {
+    return claimAuthority(this.requireDb(), runId, ownerId, this.now())
+  }
+
   /** Seeds the entry node(s) PENDING. Restart-safe (idempotent). */
-  startRun(runId: string): void {
+  startRun(runId: string, token: AuthorityToken): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const existing = db.query("SELECT node_id FROM graph_nodes WHERE run_id = ?").get(runId)
       if (existing) return
       for (const nodeId of this.entryNodeIds()) {
@@ -156,12 +162,13 @@ export class GraphRuntimeEngine {
    * executable, the other is SKIPPED (no side effects); the decision
    * commits atomically with the branch journal.
    */
-  decideIf(runId: string, nodeId: string, env: Record<string, unknown>): { result: boolean; takenNodeId: string; skippedNodeId: string; committedNow: boolean } {
+  decideIf(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { result: boolean; takenNodeId: string; skippedNodeId: string; committedNow: boolean } {
     const node = this.requireNode(nodeId, "control.if")
     const config = parseControlIfConfig(node.config)
     const db = this.requireDb()
     let outcome!: { result: boolean; takenNodeId: string; skippedNodeId: string; committedNow: boolean }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const result = this.committedDecision<{ result: boolean; takenNodeId: string; skippedNodeId: string }>(db, runId, nodeId, () => {
         const value = evaluate(config.condition, env)
         if (typeof value !== "boolean") throw new GraphRuntimeError("EXPR_NOT_BOOLEAN", `control.if condition did not evaluate to a boolean: ${nodeId}`)
@@ -201,12 +208,13 @@ export class GraphRuntimeEngine {
    * control.switch (directive 7): exact case resolution, optional
    * default; decision is committed once — restart keeps it.
    */
-  decideSwitch(runId: string, nodeId: string, env: Record<string, unknown>): { caseValue: string | null; takenNodeId: string; skippedNodeIds: string[]; committedNow: boolean } {
+  decideSwitch(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { caseValue: string | null; takenNodeId: string; skippedNodeIds: string[]; committedNow: boolean } {
     const node = this.requireNode(nodeId, "control.switch")
     const config = parseControlSwitchConfig(node.config)
     const db = this.requireDb()
     let outcome!: { caseValue: string | null; takenNodeId: string; skippedNodeIds: string[]; committedNow: boolean }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const result = this.committedDecision<{ caseValue: string | null; takenNodeId: string; skippedNodeIds: string[] }>(db, runId, nodeId, () => {
         const raw = evaluate(config.discriminator, env)
         const key = String(raw)
@@ -235,12 +243,13 @@ export class GraphRuntimeEngine {
    * Branches are execution units under the SAME run authority — no child
    * run, no second authority. Branch targets become PENDING.
    */
-  fanOutParallel(runId: string, nodeId: string): { branchIds: string[]; targets: string[]; committedNow: boolean } {
+  fanOutParallel(runId: string, token: AuthorityToken, nodeId: string): { branchIds: string[]; targets: string[]; committedNow: boolean } {
     const node = this.requireNode(nodeId, "control.parallel")
     const config = parseControlParallelConfig(node.config)
     const db = this.requireDb()
     let outcome!: { branchIds: string[]; targets: string[]; committedNow: boolean }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const result = this.committedDecision<{ branchIds: string[]; targets: string[] }>(db, runId, nodeId, () => ({
         branchIds: config.branches.map((branch) => branch.branchId),
         targets: config.branches.map((branch) => {
@@ -261,9 +270,10 @@ export class GraphRuntimeEngine {
   }
 
   /** Mark a node COMPLETED with its durable output (branch/effect completion). */
-  completeNode(runId: string, nodeId: string, output: unknown): void {
+  completeNode(runId: string, token: AuthorityToken, nodeId: string, output: unknown): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const state = this.rawState(db, runId, nodeId)
       if (!state) throw new GraphRuntimeError("NODE_NOT_STARTED", nodeId)
       if (state.status === "COMPLETED" || state.status === "FAILED" || state.status === "SKIPPED") throw new GraphRuntimeError("NODE_ALREADY_TERMINAL", `${nodeId} is ${state.status}`)
@@ -274,9 +284,10 @@ export class GraphRuntimeEngine {
   }
 
   /** Mark a node FAILED with a durable reason (branch failure, effect failure). */
-  failNode(runId: string, nodeId: string, reason: string): void {
+  failNode(runId: string, token: AuthorityToken, nodeId: string, reason: string): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const state = this.rawState(db, runId, nodeId)
       if (!state) throw new GraphRuntimeError("NODE_NOT_STARTED", nodeId)
       if (state.status === "COMPLETED" || state.status === "FAILED" || state.status === "SKIPPED") throw new GraphRuntimeError("NODE_ALREADY_TERMINAL", `${nodeId} is ${state.status}`)
@@ -292,12 +303,13 @@ export class GraphRuntimeEngine {
    * materializes branch outputs in CONFIG order (deterministic, never
    * completion order). No branch re-computation ever happens.
    */
-  tryJoinMerge(runId: string, nodeId: string): { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null } {
+  tryJoinMerge(runId: string, token: AuthorityToken, nodeId: string): { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null } {
     const node = this.requireNode(nodeId, "control.merge")
     const config = parseControlMergeConfig(node.config)
     const db = this.requireDb()
     let outcome!: { fired: boolean; firedNow: boolean; outputs: unknown[] | null; failedBranch: string | null }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const statuses = new Map<string, GraphNodeStatus>()
       for (const branch of config.branches) {
         const state = this.rawState(db, runId, branch)
@@ -349,7 +361,7 @@ export class GraphRuntimeEngine {
    * for the current iteration only (completed iteration side effects are
    * facts — they are never replayed blindly).
    */
-  enterLoop(runId: string, nodeId: string, env: Record<string, unknown>): { iteration: number; done: boolean; bodyNodeId: string | null } {
+  enterLoop(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { iteration: number; done: boolean; bodyNodeId: string | null } {
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     const isRepeat = node.family === "control.repeat"
@@ -358,6 +370,7 @@ export class GraphRuntimeEngine {
     const db = this.requireDb()
     let outcome!: { iteration: number; done: boolean; bodyNodeId: string | null }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       // auto-seed (loops are reached as branch/flow targets)
       const seeded = this.rawState(db, runId, nodeId)
       if (!seeded) this.setStatus(db, runId, nodeId, "PENDING")
@@ -417,7 +430,7 @@ export class GraphRuntimeEngine {
    * LogicalInvocationId is derived deterministically (stable across
    * restart, retries get fresh AttemptIds at the attempt layer).
    */
-  fanOutMap(runId: string, nodeId: string, env: Record<string, unknown>): { elementIds: string[]; instanceIds: string[]; committedNow: boolean } {
+  fanOutMap(runId: string, token: AuthorityToken, nodeId: string, env: Record<string, unknown>): { elementIds: string[]; instanceIds: string[]; committedNow: boolean } {
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     if (node.family !== "control.map") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.map`)
@@ -425,6 +438,7 @@ export class GraphRuntimeEngine {
     const db = this.requireDb()
     let outcome!: { elementIds: string[]; instanceIds: string[]; committedNow: boolean }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const result = this.committedDecision<{ elementIds: string[]; instanceIds: string[] }>(db, runId, nodeId, () => {
         const collection = evaluate(config.input, env)
         if (!Array.isArray(collection)) throw new GraphRuntimeError("MAP_INPUT_NOT_LIST", `control.map input did not evaluate to a list: ${nodeId}`)
@@ -460,7 +474,7 @@ export class GraphRuntimeEngine {
    * never resolved "latest" afterwards; restart returns the pinned
    * binding (TOCTOU-proof by durable decision).
    */
-  dispatchChild(runId: string, nodeId: string): { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean } {
+  dispatchChild(runId: string, token: AuthorityToken, nodeId: string): { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean } {
     const node = this.nodes.get(nodeId)
     if (!node) throw new GraphRuntimeError("NODE_UNKNOWN", nodeId)
     if (node.family !== "control.child") throw new GraphRuntimeError("FAMILY_MISMATCH", `node ${nodeId} is ${node.family}, not control.child`)
@@ -468,6 +482,7 @@ export class GraphRuntimeEngine {
     const db = this.requireDb()
     let outcome!: { childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string; committedNow: boolean }
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const result = this.committedDecision<{ childDefinitionId: string | null; childDeploymentId: string | null; childVersion: string | null; childRunId: string }>(db, runId, nodeId, () => ({
         childDefinitionId: config.definitionId ?? null,
         childDeploymentId: config.deploymentId ?? null,
@@ -492,10 +507,12 @@ export class GraphRuntimeEngine {
    * (completion via completeNode/failNode). Restart-safe by
    * construction: every handler is idempotent on committed decisions.
    */
-  advance(runId: string, env: Record<string, unknown>): { entered: string[]; readyForDispatch: string[] } {
+  advance(runId: string, token: AuthorityToken, env: Record<string, unknown>): { entered: string[]; readyForDispatch: string[] } {
     const db = this.requireDb()
     const entered: string[] = []
     const readyForDispatch: string[] = []
+    return db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
     // Iterate the DEFINITION (not just existing rows): non-entry nodes are
     // invisible until a predecessor scheduled them, yet the walk must reach
     // them the moment their predecessors are terminal.
@@ -507,15 +524,15 @@ export class GraphRuntimeEngine {
       if (!active && node.family !== "control.merge") continue
       if (!this.predecessorsTerminal(db, runId, node.id)) continue
       switch (node.family) {
-        case "control.if": this.decideIf(runId, node.id, env); entered.push(node.id); break
-        case "control.switch": this.decideSwitch(runId, node.id, env); entered.push(node.id); break
-        case "control.parallel": this.fanOutParallel(runId, node.id); entered.push(node.id); break
-        case "control.map": this.fanOutMap(runId, node.id, env); entered.push(node.id); break
+        case "control.if": this.decideIf(runId, token, node.id, env); entered.push(node.id); break
+        case "control.switch": this.decideSwitch(runId, token, node.id, env); entered.push(node.id); break
+        case "control.parallel": this.fanOutParallel(runId, token, node.id); entered.push(node.id); break
+        case "control.map": this.fanOutMap(runId, token, node.id, env); entered.push(node.id); break
         case "control.repeat":
-        case "control.while": this.enterLoop(runId, node.id, env); entered.push(node.id); break
-        case "control.child": this.dispatchChild(runId, node.id); entered.push(node.id); break
+        case "control.while": this.enterLoop(runId, token, node.id, env); entered.push(node.id); break
+        case "control.child": this.dispatchChild(runId, token, node.id); entered.push(node.id); break
         case "control.merge": {
-          const join = this.tryJoinMerge(runId, node.id)
+          const join = this.tryJoinMerge(runId, token, node.id)
           if (join.firedNow) entered.push(node.id)
           break
         }
@@ -533,7 +550,8 @@ export class GraphRuntimeEngine {
         }
       }
     }
-    return { entered, readyForDispatch }
+      return { entered, readyForDispatch }
+    })()
   }
 
   /** A node is READY when every incoming non-on-failure edge starts from a terminal node. */
@@ -554,9 +572,10 @@ export class GraphRuntimeEngine {
    * worker that completes afterwards hits the terminal-state fencing
    * (NODE_ALREADY_TERMINAL).
    */
-  requestCancel(runId: string, reason: string): void {
+  requestCancel(runId: string, token: AuthorityToken, reason: string): void {
     const db = this.requireDb()
     db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
       const existing = db.query("SELECT run_id FROM cancel_requests WHERE run_id = ?").get(runId)
       if (existing) return
       db.query("INSERT INTO cancel_requests (run_id, reason, requested_at) VALUES (?, ?, ?)").run(runId, reason, this.now())
@@ -582,11 +601,12 @@ export class GraphRuntimeEngine {
    * (completion, failure, expiry) commits first WINS - the loser gets
    * NODE_ALREADY_TERMINAL. Exactly one terminal result per node.
    */
-  expireDue(nowMs: number): readonly { runId: string; nodeId: string }[] {
+  expireDue(runId: string, token: AuthorityToken, nowMs: number): readonly { runId: string; nodeId: string }[] {
     const db = this.requireDb()
     const expired: { runId: string; nodeId: string }[] = []
     db.transaction(() => {
-      const rows = db.query("SELECT run_id, node_id FROM graph_nodes WHERE status = ? AND deadline_at IS NOT NULL AND deadline_at <= ?").all("RUNNING", nowMs) as { run_id: string; node_id: string }[]
+      assertAuthorityForRun(db, token, runId)
+      const rows = db.query("SELECT run_id, node_id FROM graph_nodes WHERE run_id = ? AND status = ? AND deadline_at IS NOT NULL AND deadline_at <= ?").all(runId, "RUNNING", nowMs) as { run_id: string; node_id: string }[]
       for (const row of rows) {
         db.query("UPDATE graph_nodes SET status = ?, output_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ? AND status = ?")
           .run("FAILED", JSON.stringify({ reason: "timeout" }), this.now(), row.run_id, row.node_id, "RUNNING")
@@ -598,10 +618,13 @@ export class GraphRuntimeEngine {
   }
 
   /** Persist a deadline when work starts (setDeadline at dispatch). */
-  setDeadline(runId: string, nodeId: string, deadlineAt: number | null): void {
+  setDeadline(runId: string, token: AuthorityToken, nodeId: string, deadlineAt: number | null): void {
     const db = this.requireDb()
-    db.query("UPDATE graph_nodes SET deadline_at = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
-      .run(deadlineAt, this.now(), runId, nodeId)
+    db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
+      db.query("UPDATE graph_nodes SET deadline_at = ?, updated_at = ? WHERE run_id = ? AND node_id = ?")
+        .run(deadlineAt, this.now(), runId, nodeId)
+    })()
   }
 
   private rawState(db: Database, runId: string, nodeId: string): { status: string; output_json: string | null; decision_json: string | null } | null {
