@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createSimpleContext } from "@unifia/ui/context"
 import { SHELL_MODES, type ShellMode } from "@unifia/workbench-shell/modes"
-import { modeHref, parseModeLocation, sessionAdoptionPath } from "./mode-directory"
+import { modeHref, parseModeLocation, sessionAdoptionPath, type AutomateAccess } from "./mode-directory"
 import { Persist, persisted } from "@/utils/persist"
 
 // ADR-1041 supersedes ADR-1033. SHELL_MODES is still the 4-entry contract
@@ -19,9 +19,8 @@ const { use: useMode, provider: ModeContextProvider } = createSimpleContext({
     const location = useLocation()
     const navigate = useNavigate()
     // DA-UI-01 — the rail hides Automate unless the principal holds
-    // `workflow.run` on the active workspace. It starts hidden: an
-    // in-flight connection must not flash Automate into the rail before
-    // the broker has decided.
+    // `workflow.run` on the active workspace. The route remains pending while
+    // the broker resolves the grant, so a deep link is not normalized away.
     //
     // The grant is PUSHED in by `AutomateGrantBridge` (directory-layout),
     // never pulled from here. Reading `useWorkspaceWorkbench()` in this
@@ -31,13 +30,13 @@ const { use: useMode, provider: ModeContextProvider } = createSimpleContext({
     // prop. A parent cannot read a context its own descendant provides:
     // the lookup threw during init and the error boundary replaced the
     // whole application, on every route.
-    const [automateAccessible, setAutomateAccessible] = createSignal(false)
+    const [automateAccess, setAutomateAccess] = createSignal<AutomateAccess>("unknown")
     const visibleModes = createMemo<readonly ShellMode[]>(() =>
-      automateAccessible() ? SHELL_MODES : SHELL_MODES.filter((mode) => mode !== "automate"),
+      automateAccess() === "allowed" ? SHELL_MODES : SHELL_MODES.filter((mode) => mode !== "automate"),
     )
     const isMode = (value: string | undefined): value is ShellMode =>
-      !!value && SHELL_MODES.includes(value as ShellMode) && (value !== "automate" || automateAccessible())
-    const route = createMemo(() => parseModeLocation(location.pathname, location.search, automateAccessible()))
+      !!value && SHELL_MODES.includes(value as ShellMode) && (value !== "automate" || automateAccess() !== "denied")
+    const route = createMemo(() => parseModeLocation(location.pathname, location.search, automateAccess()))
     const directory = createMemo(() => route().directory)
     const sessionId = createMemo(() => {
       const current = route()
@@ -98,7 +97,8 @@ const { use: useMode, provider: ModeContextProvider } = createSimpleContext({
        * read of the workbench context because of the hierarchy described
        * above; see `automate-flag.ts` for the predicate itself.
        */
-      setAutomateAccessible,
+       setAutomateAccess,
+       automateAccess,
       active,
       select,
       directory,

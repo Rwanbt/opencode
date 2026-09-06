@@ -21,8 +21,9 @@
   directory boundary, preventing a valid Automate deep link from deadlocking
   before grant discovery. No accessibility rule was weakened.
 - Browser E2E mode/design/navigation/resource/latency gates: `15/15 PASS`.
-- Automate reload long-run: `OPEN`; it reaches Automate, but the unchanged
-  `10 x 100` prompt workload exceeded 20 minutes.
+- Automate reload long-run: `PASS`; the unchanged `10 x 100` prompt workload
+  and its resource assertions pass in 34.3 minutes with one worker. The
+  measured 35-minute budget retains the full sequential contract.
 - Native desktop: `BLOCKED_ENVIRONMENT` due to LLVM OOM / Windows error 1455;
   TypeScript adapter and Vite build remain green.
 

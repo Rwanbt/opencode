@@ -1,0 +1,19 @@
+### DECISIONS
+- Treat full-reload instability as distinct from the 10 x 100 prompt-cost problem | `10 x 0` fails before prompts run | increasing timeout or reducing workload | active
+- Preserve `/automate` while the Workbench grant is unresolved | a boolean conflated pending and denied access | fallback to Code before grant resolution | active
+- Fence Workbench connection completion by provider generation | a disposed provider must not publish a late connection | rely only on lifecycle cleanup | active
+- Set the certification timeout to 35 minutes | the measured sequential backend cost is about 1.57 s per prompt | reduce the 10 x 100 workload or use an arbitrary timeout | active
+
+### UNCERTAINTIES
+- What resource previously reached Chromium's `ERR_INSUFFICIENT_RESOURCES` during repeated full reloads | no longer blocks certification because the bootstrap gate passes the full workload, but the underlying browser-resource mechanism was not isolated | reproduce without the bootstrap gate and inspect browser resource accounting | P2
+- Whether `page.goto()` full documents are the intended certification model rather than a harness artifact | the test contract explicitly describes reloads but its resource metric is document-local | inspect original certification intent and compare a fresh-page reproduction | P1
+
+### VERIFIED FINDINGS
+- Targeted mode/provider tests pass | packages/app/src/context/mode.test.ts; packages/app/src/context/mode-directory.test.ts; packages/app/src/context/workbench/provider.test.ts | `bun test --preload ./happydom.ts ./src/context/mode.test.ts ./src/context/mode-directory.test.ts ./src/context/workbench/provider.test.ts` -> 49 pass, 0 fail | confirmed
+- App typecheck passes after the tri-state and generation changes | packages/app | `bun run typecheck` -> exit 0 | confirmed
+- Repeated reloads fail without prompt load | packages/app/e2e/modes/mode-reload-stability.spec.ts | `E2E_RELOAD_CYCLES=10 E2E_RELOAD_PROMPTS=0 bun run test:e2e -- --workers=1 e2e/modes/mode-reload-stability.spec.ts` -> missing Work/Automate mode projection | confirmed
+- A failing reload emitted `ERR_INSUFFICIENT_RESOURCES` for a Vite module after cancelled backend/Vite requests | prior instrumented reproduction of mode-reload-stability | Playwright browser event output observed `net::ERR_INSUFFICIENT_RESOURCES` for `hover-card.tsx` | confirmed
+- Disabling the global SDK event-start in this spec did not stabilize `10 x 0` | packages/app/src/context/global-sync.tsx temporary diagnostic, reverted | same `10 x 0` failure persisted | confirmed
+- The bootstrap marker makes the zero-prompt reload gate stable | packages/app/src/pages/workbench-mode.tsx | `E2E_RELOAD_CYCLES=10 E2E_RELOAD_PROMPTS=0 E2E_RELOAD_MODES=design,automate,work bun run test:e2e -- --workers=1 e2e/modes/mode-reload-stability.spec.ts` -> 1 pass twice | confirmed
+- The full 10 x 100 reload contract passes | packages/app/e2e/modes/mode-reload-stability.spec.ts | `bun run test:e2e -- --workers=1 e2e/modes/mode-reload-stability.spec.ts` -> 1 pass in 34.3m | confirmed
+- The prompt backend is the long-run cost | packages/app/e2e/modes/mode-reload-stability.spec.ts | `E2E_RELOAD_CYCLES=1 E2E_RELOAD_PROMPTS=10 E2E_RELOAD_DIAGNOSTICS=1 bun run test:e2e -- --workers=1 e2e/modes/mode-reload-stability.spec.ts` -> prompt request 15,667 ms, response 26 ms, idle 450 ms | confirmed

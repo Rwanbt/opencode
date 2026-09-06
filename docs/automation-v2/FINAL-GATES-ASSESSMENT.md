@@ -115,9 +115,10 @@ IMPLEMENTATION:
 
 E2E:
   mode/design/navigation + resource + latency suites: 15/15 PASS.
-  mode-reload-stability reaches Automate after the fix, but the 10 x 100
-  prompt long-run exceeded 20 minutes and remains OPEN; workload/assertions
-  were not reduced.
+  mode-reload-stability: PASS - the unchanged 10 x 100 prompt workload and
+  its resource assertions pass in 34.3 minutes (one worker). The measured
+  35-minute budget reflects 1.57 s per sequential prompt; no workload or
+  assertion was reduced.
 
 HARNESS:
   mode-reload-stability now installs the canonical mock with workflow.run.

@@ -59,6 +59,7 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
     const bridgeError = (): Error | undefined => bridgeErrorValue
     const [retrying, setRetrying] = createSignal(false)
     let pending: Promise<WorkbenchConnection> | undefined
+    let providerGeneration = 0
     let eventsAbort = new AbortController()
     let eventsTask: Promise<void> | undefined
     // E14: one coalescer per provider instance. The window (50 ms by
@@ -127,12 +128,14 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
         return Promise.reject(bridgeError() ?? new Error(t("workbench.errors.bridgeUnavailable")))
       }
       setError(undefined)
+      const attemptGeneration = providerGeneration
       pending = lifecycle.connect(props.workspacePath, async ({ signal, setPhase: updatePhase, acquire }) => {
         updatePhase("initializing")
         if (signal.aborted) throw signal.reason
         updatePhase("opening")
         const value = await platform.workbench!.connect({ workspacePath: props.workspacePath, capabilities: SURFACE_LEASE_CAPABILITIES })
         acquire(value.revoke)
+        if (signal.aborted || attemptGeneration !== providerGeneration) throw signal.reason ?? new Error("Workbench connection became stale")
         setIdentity(createWorkbenchTaskIdentity({ codeSessionId: props.codeSessionId, workbenchSessionId: crypto.randomUUID() }))
         updatePhase("handshaking")
         setConnection(value)
@@ -171,6 +174,7 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
     }
 
     onCleanup(() => {
+      providerGeneration += 1
       unsubscribe()
       eventsAbort.abort()
       coalesced.stop()

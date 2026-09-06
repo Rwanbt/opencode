@@ -97,6 +97,11 @@ test("automate route resolves normally when explicitly unlocked", () => {
   expect(parseModeLocation(`/${directory}/automate`, "", true)).toMatchObject({ kind: "mode", mode: "automate" })
 })
 
+test("automate route remains requested while its grant is unresolved", () => {
+  const directory = base64Encode("D:/App/OpenCode/opencode-work-design")
+  expect(parseModeLocation(`/${directory}/automate`, "", "unknown")).toMatchObject({ kind: "mode", mode: "automate" })
+})
+
 // Mirrors the surface lease pinned at workbench-shell/src/routes.ts:185
 // (kept inline here to avoid pulling the workbench-shell dep into a
 // pure-config test; the broker-side set is asserted at

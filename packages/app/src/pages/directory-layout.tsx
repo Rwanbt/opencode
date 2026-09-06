@@ -2,7 +2,7 @@ import { DataProvider } from "@unifia/ui/context"
 import { showToast } from "@unifia/ui/toast"
 import { base64Encode } from "@unifia/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, onCleanup, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
@@ -40,14 +40,24 @@ import { useMode } from "@/context/mode"
 function AutomateGrantBridge(props: ParentProps) {
   const workbench = useWorkspaceWorkbench()
   const mode = useMode()
-  createEffect(() => {
+  onMount(() => {
+    let current = true
+    mode.setAutomateAccess("unknown")
     // A direct Automate deep link cannot mount AutomateSurface until the grant
     // is known, so connect here at the provider boundary to avoid a cold-load
     // deadlock. Unsupported web runtimes remain fail-closed in the provider.
-    void workbench.ensureConnected().catch(() => undefined)
-    mode.setAutomateAccessible(isAutomateAccessible(workbench.grants()))
+    void workbench.ensureConnected().then(
+      (connection) => {
+        if (current) {
+          mode.setAutomateAccess(isAutomateAccessible(connection.grants) ? "allowed" : "denied")
+        }
+      },
+      () => {
+        if (current) mode.setAutomateAccess("denied")
+      },
+    )
+    onCleanup(() => { current = false })
   })
-  onCleanup(() => mode.setAutomateAccessible(false))
   return <>{props.children}</>
 }
 
