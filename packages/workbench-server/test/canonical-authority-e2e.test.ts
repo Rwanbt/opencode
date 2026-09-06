@@ -189,7 +189,7 @@ describe("canonical authority production path", () => {
       restartedGraph.setDeadline(runId, tokenB, "step-0", 21_000)
       await expectStale(() => restartedAttempts.allocateAttempt(staleA, "li-restart", "effect-restart"), "restarted attempt")
       const restartedAttempt = restartedAttempts.allocateAttempt(tokenB, "li-restart", "effect-restart")
-      restartedAttempts.recordAttemptOutcome(tokenB, "li-restart", restartedAttempt.attemptId, "SUCCEEDED", { ok: true })
+      restartedAttempts.recordAttemptOutcome(tokenB, "li-restart", restartedAttempt.attemptId, "SUCCEEDED", { result: { ok: true } })
       await expectStale(() => restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, staleA), "restarted approval")
       const restartedApproval = await restartedBroker.request({ ...binding(runId, "li-restart-approval"), expiresAt: 20_000, requestGeneration: 5 }, tokenB)
       expect(restartedApproval.state).toBe("PENDING")

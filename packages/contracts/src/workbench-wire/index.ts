@@ -82,8 +82,6 @@ export const WORKBENCH_REQUEST_HEADERS = [
   "accept",
   "authorization",
   "content-type",
-  "x-unifia-instance-id",
-  "x-unifia-client-time",
   "idempotency-key",
   "last-event-id",
   "x-unifia-file-session",
