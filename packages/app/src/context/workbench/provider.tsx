@@ -3,13 +3,20 @@
 import { createSimpleContext } from "@unifia/ui/context"
 import { SURFACE_LEASE_CAPABILITIES, WorkbenchEventDispatcher, createWorkbenchTaskIdentity, WorkbenchLifecycle, type WorkbenchConnection, type WorkbenchLifecyclePhase, type WorkbenchTaskIdentity } from "@unifia/workbench-shell"
 import { useQueryClient } from "@tanstack/solid-query"
-import { createSignal, onCleanup, type ParentProps } from "solid-js"
+import { createMemo, createSignal, onCleanup, type ParentProps } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { decideEventRetry } from "./event-retry"
 import { createCoalescedInvalidate } from "./query-invalidation"
 
 let activeEventStreams = 0
+
+// DA-UI-01 — frozen empty set used as the fallback before the
+// `connection` signal resolves. Sharing one reference across calls
+// means the rail's `grants.has("workflow.run")` returns `false` with
+// a stable identity, and any code wrapping it in a memo can memoize
+// safely without false invalidation on each render.
+const EMPTY_GRANTS: ReadonlySet<string> = new Set<string>()
 
 export function getWorkbenchListenerCount(): number {
   return activeEventStreams
@@ -52,6 +59,7 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
     const bridgeError = (): Error | undefined => bridgeErrorValue
     const [retrying, setRetrying] = createSignal(false)
     let pending: Promise<WorkbenchConnection> | undefined
+    let providerGeneration = 0
     let eventsAbort = new AbortController()
     let eventsTask: Promise<void> | undefined
     // E14: one coalescer per provider instance. The window (50 ms by
@@ -120,12 +128,14 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
         return Promise.reject(bridgeError() ?? new Error(t("workbench.errors.bridgeUnavailable")))
       }
       setError(undefined)
+      const attemptGeneration = providerGeneration
       pending = lifecycle.connect(props.workspacePath, async ({ signal, setPhase: updatePhase, acquire }) => {
         updatePhase("initializing")
         if (signal.aborted) throw signal.reason
         updatePhase("opening")
         const value = await platform.workbench!.connect({ workspacePath: props.workspacePath, capabilities: SURFACE_LEASE_CAPABILITIES })
         acquire(value.revoke)
+        if (signal.aborted || attemptGeneration !== providerGeneration) throw signal.reason ?? new Error("Workbench connection became stale")
         setIdentity(createWorkbenchTaskIdentity({ codeSessionId: props.codeSessionId, workbenchSessionId: crypto.randomUUID() }))
         updatePhase("handshaking")
         setConnection(value)
@@ -164,6 +174,7 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
     }
 
     onCleanup(() => {
+      providerGeneration += 1
       unsubscribe()
       eventsAbort.abort()
       coalesced.stop()
@@ -205,6 +216,12 @@ const { use, provider: WorkbenchContextProvider } = createSimpleContext({
       identity,
       uiPhase,
       detail,
+      // DA-UI-01 — the rail (and any other capability-gated affordance)
+      // reads from this set rather than re-querying the server. The set
+      // is rebuilt only when the underlying `connection` signal changes,
+      // so an in-place rotation that doesn't change `instanceId` keeps
+      // the same Set reference and the rail doesn't flicker.
+      grants: createMemo<ReadonlySet<string>>(() => connection()?.grants ?? EMPTY_GRANTS),
       beginOperation: () => setIdentity({ ...identity(), operationId: crypto.randomUUID() }),
       ensureConnected,
       retryConnection,

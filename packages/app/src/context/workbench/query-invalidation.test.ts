@@ -24,6 +24,12 @@ const connection: WorkbenchConnection = {
   // a real WorkbenchClient.
   client: undefined as never,
   revoke: () => Promise.resolve(),
+  // DA-UI-01 — capability-gated affordances consume the connection's
+  // `grants` set. The query-invalidation mapper doesn't read it, but
+  // the type is now required; an empty set matches the base surface
+  // lease (no `workflow.run` ⇒ Automate is hidden, but the mapper's
+  // contract is unchanged).
+  grants: new Set<string>(),
 }
 
 function mutationEvent(overrides: Partial<{ type: "workspace.changed" | "operation.updated" | "approval.updated"; resource: { type: string; id: string } }> = {}): WorkspaceEvent {

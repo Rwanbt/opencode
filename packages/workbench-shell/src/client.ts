@@ -62,6 +62,23 @@ export type WorkbenchConnection = {
   instanceId: string
   workspaceId: string
   revoke(): Promise<void>
+  /**
+   * DA-UI-01 — the capabilities the calling principal holds for this
+   * workspace. Mirrors the server-side `principal.scopes` that
+   * `workbench-server/src/index.ts:#authenticate` builds at the start
+   * of every request (a `workspace.open` baseline plus the lease's
+   * requested capabilities). Surfaced to the UI so capability-gated
+   * affordances (e.g. the Automate rail entry, gated on
+   * `workflow.run`) can hide themselves before a click produces a 403.
+   *
+   * The set is computed locally from the lease the connection was
+   * opened with — the server's `principal.scopes` is the source of
+   * truth at request time, but the two are derived from the same input
+   * (the bearer token's `capabilities` claim), so they cannot diverge
+   * for a freshly opened connection. See B07 §3 D1 in
+   * `b07-cap-approval-mcp.md` for the cross-package propagation.
+   */
+  grants: ReadonlySet<string>
 }
 
 export type RequestOptions = {
@@ -424,7 +441,7 @@ export class WorkbenchClient {
   // an undeclared header name here is a type error, not a runtime CORS
   // failure discovered later (FUNC-002).
   #headers(token = this.#token.current()): Partial<Record<WorkbenchRequestHeader, string>> {
-    return { accept: "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), "x-unifia-instance-id": this.#instanceId, "x-unifia-client-time": String(this.#now()) }
+    return { accept: "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }
   }
 
   #send(path: string, method: RequestOptions["method"], token: string | undefined, options: RequestOptions): Promise<Response> {
@@ -443,7 +460,14 @@ export async function connectWorkbench(options: WorkbenchConnectionOptions): Pro
     const client = new WorkbenchClient({ ...options, instanceId: adapted.instanceId, token: adapted.provider })
     const handshake = await client.handshake()
     if (!handshake.accepted || handshake.instanceId !== adapted.instanceId) throw new Error("workbench server identity mismatch")
-    return { client, serverOrigin: new URL(options.baseUrl).origin, instanceId: adapted.instanceId, workspaceId: adapted.workspaceId, revoke: adapted.revoke }
+    // DA-UI-01 — derive the same set the server will assemble as
+    // `principal.scopes`: a `workspace.open` baseline (added server-side
+    // for every authenticated bearer in `workbench-server/src/index.ts`
+    // `#authenticate`) plus the lease's requested capabilities. We
+    // snapshot the set once at open time so consumer code can hand the
+    // reference to reactive scopes without re-allocating on every read.
+    const grants = new Set<string>(["workspace.open", ...options.tokenRequest.capabilities])
+    return { client, serverOrigin: new URL(options.baseUrl).origin, instanceId: adapted.instanceId, workspaceId: adapted.workspaceId, revoke: adapted.revoke, grants }
   } catch (primary) {
     if (!adapted) throw primary
     try {

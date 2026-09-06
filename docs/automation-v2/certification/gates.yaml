@@ -1,0 +1,484 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Unifia contributors
+#
+# certification/gates.yaml — initial version (plan §30-31)
+# Cible premiere : Automate Core × local-single-node × Windows
+# Date : 2026-09-01
+# Source : plan V2.3.1, EXECUTION_PROFILE_REQUIREMENTS.md, THREAT_MODEL.md
+#
+# Format : chaque gate definit required suites, required commands,
+# required artifacts, required ADRs, required dependencies, security
+# thresholds, allowed skips, exact evidence.
+# Harness/test evidence prevaut sur opinion de reviewer (plan §31).
+
+version: 1
+target_profile:
+  capability: automate-core
+  execution: local-single-node
+  platform: windows
+  schema_version: 4
+
+# ============================================================
+# Section 1 — Build / typecheck / lint (gates de base)
+# ============================================================
+gates:
+  build:
+    description: "Mandatory build (sidecar + app)."
+    required_commands:
+      - "cd packages/unifia && bun run build --single"
+      - "cd packages/desktop && CARGO_BUILD_JOBS=1 bun tauri build"
+    required_artifacts:
+      - "packages/unifia/dist/unifia-windows-x64/bin/unifia.exe"
+      - "packages/desktop/src-tauri/target/release/Unifia.exe"
+      - "packages/desktop/src-tauri/target/release/unifia-cli.exe"
+      - "packages/desktop/src-tauri/target/release/templates/design/"
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §5: sidecar sha256 e5367d57a405cf84178fe56afd5d427846524b0742b6477c81f362fe6cc1c108 (build ↔ staged ↔ dist, identique)"
+      - "SESSION-2 §5: Unifia.exe demarre (keychain + sidecar spawn)"
+    status: GREEN
+    blocker: false
+
+  typecheck:
+    description: "TypeScript typecheck on the whole monorepo."
+    required_commands:
+      - "bun turbo typecheck --concurrency=1"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §7: 38/38 vert"
+    status: GREEN
+    blocker: false
+
+  lint:
+    description: "Biome lint of the monorepo source."
+    required_commands:
+      - "bunx biome check packages/"
+    required_artifacts: []
+    allowed_skips:
+      - reason: "biome ne lit pas packages/app/e2e/** (finding R-008)"
+        scope: "packages/app/e2e"
+    evidence:
+      - "SESSION-2 §7: 1452 fichiers vert"
+    status: GREEN_WITH_DEBT
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-008"
+
+# ============================================================
+# Section 2 — Tests unitaires / integration
+# ============================================================
+  unit_app:
+    description: "Unit tests for packages/app."
+    required_commands:
+      - "cd packages/app && bun test --preload ./happydom.ts ./src"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §7: 1175 pass, 0 fail"
+    status: GREEN
+    blocker: false
+
+  unit_unifia:
+    description: "Unit tests for packages/unifia (knowledge tests)."
+    required_commands:
+      - "cd packages/unifia && bun run test:knowledge"
+    required_artifacts:
+      - "packages/unifia/dist/unifia-windows-x64/bin/unifia.exe"
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §2: 892 pass, 1 skip, 0 fail, en pilotant le binaire"
+    status: GREEN
+    blocker: false
+
+  unit_workflow_runtime:
+    description: "Unit tests for packages/workflow-runtime. Couverture M1-09 (in-memory) + M1-10 (file-backed) + M1-11 (V1MigratingAuthority)."
+    required_commands:
+      - "cd packages/workflow-runtime && bun test"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "2026-09-03 workflow-runtime: 27/27 PASS (in-memory 14 + file-backed 7 + M1-11 V1MigratingAuthority 6 + deprecated V1 stub 1, 62 expect() calls)"
+      - "M1-09 (2e8a8b4dd6): 14/14 PASS, transition matrix per ADR-022 §4"
+      - "M1-10 (5e7a9fcbfa): 7/7 PASS, write-to-temp + rename atomic, JSON snapshot fail-closed"
+      - "M1-11 (b31ff4a043): 6/6 PASS, V1→V2 history migration wraps any DurableHistoryAuthority"
+    status: GREEN
+    blocker: false
+
+  unit_workbench_orchestrator:
+    description: "Unit tests for packages/workbench-orchestrator."
+    required_commands:
+      - "cd packages/workbench-orchestrator && bun test test/orchestrator.test.ts"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "listing Get-ChildItem: test/ present"
+    status: GREEN
+    blocker: false
+    note: "2026-09-04: WorkbenchOrchestrator 28/28 passed; the gate is contract/unit green."
+
+  unit_automate_surface:
+    description: "Unit tests for automate-surface.tsx (8 gates §16.3). Phase 1+2 livrees: smoke test statique (5 assertions) + parseWorkflowDefinition round-trip (12 assertions)."
+    required_commands:
+      - "cd packages/app && bun test src/pages/workbench/automate-surface.test.ts"
+      - "cd packages/app && bun test src/pages/workbench/automate-decode.test.ts"
+    required_artifacts:
+      - "packages/app/src/pages/workbench/automate-surface.test.ts"
+      - "packages/app/src/pages/workbench/automate-decode.test.ts"
+    allowed_skips:
+      - reason: "Phase 3 (e2e Playwright sur les 8 sorties §16.3) est post-ADR-000 (besoin d'un runtime de workflow reel pour mesurer l'approval_required end-to-end)."
+        scope: "e2e_automate (Playwright)"
+    evidence:
+      - "2026-09-03 automate-surface.test.ts: 5/5 PASS (smoke test statique: composant exporte, imports decodeFile/parseWorkflowDefinition, client.startWorkflow, approvalRequired, parseWorkflowDefinition(decodeFile))"
+      - "2026-09-03 automate-decode.test.ts: 12/12 PASS (parseWorkflowDefinition: round-trip, base64, UTF-8, definition.id/version/steps validation, 7 invariants, 21 expect() calls)"
+    status: GREEN
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-013"
+    card_refs:
+      - "IMPLEMENTATION_CARD_INDEX.md#C-PRE1-01"
+
+# ============================================================
+# Section 3 — Tests E2E (Playwright)
+# ============================================================
+  e2e_design:
+    description: "Design surface e2e (visual, a11y, approval, mode)."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/design"
+    required_artifacts:
+      - "packages/app/e2e/design/__screenshots__/win32/"
+    allowed_skips:
+      - reason: "Linux baselines visuelles absentes (finding R-007)"
+        scope: "e2e/design/design-visual.spec.ts on linux"
+    evidence:
+      - "SESSION-2 §7: 20/20 sur 3 runs consecutifs (36.3 / 37.5 / 43.1 s)"
+    status: GREEN_WIN32
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-007"
+
+  e2e_app:
+    description: "App-wide e2e (home, modes, etc.)."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/app e2e/modes"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §7.1: workers defaut 10/19 fail (harness). PLAYWRIGHT_WORKERS=1: 22 passed / 8 failed (4 des 8 corrigés en 24b04998e2)."
+    status: PARTIAL
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-004 (titlebar-history x3)"
+      - "RISK_REGISTER.md#R-005 (mode-reload-stability)"
+      - "RISK_REGISTER.md#R-006 (switcher mobile V06)"
+
+  e2e_automate:
+    description: "E2E for automate-surface (8 gates §16.3)."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/automate"
+    required_artifacts: []
+    allowed_skips: []
+    evidence: []
+    status: RED
+    blocker: true
+    blocker_reason: "Finding R-013: aucune spec n'existe. La cible premiere exige les 8 sorties §16.3 mesurees."
+    debt_refs:
+      - "RISK_REGISTER.md#R-013"
+    card_refs:
+      - "IMPLEMENTATION_CARD_INDEX.md#C-PRE1-01"
+
+# ============================================================
+# Section 4 — A11y
+# ============================================================
+  a11y_axe:
+    description: "Axe WCAG 2.1 AA scans, scoped to Design surface."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/design/design-a11y.spec.ts"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §3.3: 6 etats vert, hors color-contrast enregistre"
+    status: GREEN_WITH_DEBT
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-002 (color-contrast text-text-weak)"
+      - "RISK_REGISTER.md#R-003 (nested-interactive workspace tabs)"
+
+# ============================================================
+# Section 5 — Visual regression
+# ============================================================
+  visual_regression_win32:
+    description: "Baseline-versioned visual regression on win32."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/design/design-visual.spec.ts"
+    required_artifacts:
+      - "packages/app/e2e/design/__screenshots__/win32/{light,dark}-{375,768,1280,1440}.png"
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §3.2: 8 baselines, 2 runs 20/20 consecutifs, diff artifact ecrit"
+    status: GREEN
+    blocker: false
+
+  visual_determinism:
+    description: "Capture/reload/capture byte-comparison (works on any platform)."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/design/design-visual.spec.ts -g 'determinism'"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "SESSION-2 §3.2: tourne partout, baseline ou pas"
+    status: GREEN
+    blocker: false
+
+  visual_regression_linux:
+    description: "Baseline-versioned visual regression on Linux."
+    required_commands:
+      - "PLAYWRIGHT_WORKERS=1 bunx playwright test e2e/design/design-visual.spec.ts"
+    required_artifacts: []
+    allowed_skips:
+      - reason: "Pas de baseline Linux (finding R-007). Generation en CI = gate certifie son propre resultat."
+        scope: "linux"
+    evidence: []
+    status: SKIP
+    blocker: false
+    debt_refs:
+      - "RISK_REGISTER.md#R-007"
+
+# ============================================================
+# Section 6 — Security gates (plan §125)
+# ============================================================
+  secret_canary:
+    description: "Secret-leak canary — no plaintext secret in history, logs, traces, LLM, model-visible DOM, accessibility, screenshot, artifacts, debugger, audit export."
+    required_commands:
+      - "cd packages/observability && bun test"
+    required_artifacts:
+      - "packages/observability/test/observability.test.ts"
+    allowed_skips: []
+    evidence:
+      - "packages/observability/test/observability.test.ts covers SecretLeakageError and scanSecretsInFields"
+    status: PARTIAL
+    blocker: true
+    blocker_reason: "Logger canary is implemented and tested, but the full cross-surface GA proof remains outstanding."
+    card_refs:
+      - "IMPLEMENTATION_CARD_INDEX.md#C-PRE1-01 (suite minimale prefigure)"
+      - "ADR-010"
+
+  ai_security_gates:
+    description: "Plan §168: hallucinated executable tool = 0, Critical capability omission = 0, Critical approval omission = 0, Critical data-policy violation = 0, forbidden secret-to-model flow = 0."
+    required_commands:
+      - "TODO: gold benchmark (plan §167-168), post-AI track"
+    required_artifacts: []
+    allowed_skips:
+      - reason: "AI Compiler profile non requis pour Automate Core local (cible premiere)"
+        scope: "automate-core × local-single-node"
+    evidence: []
+    status: NA_THIS_PROFILE
+    blocker: false
+
+# ============================================================
+# Section 7 — Multi-tenant
+# ============================================================
+  multi_tenant:
+    description: "Plan §226: A cannot read/use/approve B's workflow/credential/artifact/log/metric."
+    required_commands:
+      - "TODO: C-PRE1-05 (workbench-orchestrator isolation test) + ADR-020 + ADR-010"
+    required_artifacts: []
+    allowed_skips: []
+    evidence: []
+    status: NOT_BUILT
+    blocker: true
+    blocker_reason: "Pre-requis pour tout profile multi-tenant. Local-single-node n'exclut pas le multi-tenant si plusieurs workspaces sont ouverts."
+    card_refs:
+      - "IMPLEMENTATION_CARD_INDEX.md#C-PRE1-05"
+
+# ============================================================
+# Section 8 — Branche / ruleset
+# ============================================================
+  branch_protection:
+    description: "Branche d'integration a une effective protection (no force-push, required CI, required reviews, CODEOWNERS). Mesure la protection effective, pas un count de rulesets. Per D-04 (2026-09-03), topologie recommandee = dev comme integration (deja protegee classiquement)."
+    required_commands:
+      - "gh api repos/Rwanbt/unifia/branches/<integration-branch>/protection"
+      - "gh api repos/Rwanbt/unifia/rulesets"
+    required_artifacts:
+      - ".github/CODEOWNERS"
+    allowed_skips:
+      - reason: "Verification distante par Erwan (admin GitHub externe). Pas d'action distante Mavis."
+        scope: "remote verification"
+    evidence:
+      - "2026-09-03 dev protegee classiquement (verification requise par Erwan)"
+      - "2026-09-03 main protegee classiquement (verification requise par Erwan)"
+      - "2026-09-03 gh api repos/Rwanbt/unifia/rulesets -> [] (zero rulesets, mais classic protection suffit)"
+      - "2026-09-03 agent/automate-v2-baseline-20260901 NON protegee (cible feature branch, OK)"
+      - "2026-09-03 integration/rev3m-20260901/design-automate INEXISTANTE sur remote"
+    status: RED
+    blocker: false
+    note: "D-04 (2026-09-03) : verification effective protection par Erwan (admin GitHub). Pas d'action distante Mavis. Pas bloquant pour cible premiere locale. F-CERT-01 reclassifie en topologie effective (classic protection suffit, pas obligatoirement ruleset)."
+    finding: "F-CERT-01: zero ruleset on Rwanbt/unifia. Tracked in EXECUTION_STATUS 2026-09-02. Reclasse en 2026-09-03 par D-04."
+
+# ============================================================
+# Section 9 — ADR dependencies
+# ============================================================
+  adr_dependencies:
+    description: "ADRs minimum pour la cible premiere Automate Core × local-single-node × Windows."
+    required_adrs:
+      - "ADR-000 (substrate)"
+      - "ADR-001 (canonicalisation)"
+      - "ADR-002 (WorkflowIR)"
+      - "ADR-003 (expression)"
+      - "ADR-004 (history authority)"
+      - "ADR-005 (artifact contract)"
+      - "ADR-010 (key/secret)"
+      - "ADR-019 (code/shell, architectural impact)"
+      - "ADR-020 (ownership)"
+      - "ADR-022 (timer, architectural impact)"
+      - "ADR-023 (network, architectural impact)"
+      - "ADR-024 (extension, architectural impact)"
+      - "ADR-027 (supply chain policy, C-AR-02) -- ratifié 2026-09-02"
+    allowed_skips:
+      - reason: "ADR-016/021 conditionnels (depends on substrate choice)"
+        scope: "ADR-016, ADR-021"
+    evidence:
+      - "EXECUTION_STATUS.md 2026-09-02: 26 ADR V2.3.1 ecrits, 25/26 DECIDED, ADR-000 CHANGES_REQUIRED (en attente P-1/P-2)"
+      - "ADR-027 ratifie C-AR-02 (bun/zod/biome/husky/exact versions, no fast-check, no renovate)"
+    status: RED
+    blocker: true
+    blocker_reason: "ADR-000 reste CHANGES_REQUIRED. ADR-027 DECIDED 2026-09-02."
+
+# ============================================================
+# Section 10 — Substrate proof (M0 proof gate, ADR-000 §6/§7)
+# ============================================================
+  m0_substrate_proof:
+    description: "Plan §194 + ADR-000 §6/§7 (correction pack 2026-09-03) + review v1.1 (2026-09-03). RECLASSIFIED 2026-09-03: 51/51 = M0 contract feasibility + minimal reference substrate, NOT substrate selection proof. La sélection du substrate (UNIFIA_NATIVE vs DBOS_GO_SQLITE) exige le M0 comparatif pack gelé (FC-01..FC-32 + FC-31A/B + FC-13-CTRL + power-loss + real multi-process + replay model). ADR-000 statut réel = NOT_RATIFIED."
+    required_commands:
+      - "cd packages/automate-m0-contract && bun test test/m0-proof.test.ts"
+      - "cd packages/automate-m0-harness && bun test"
+    required_artifacts:
+      - "packages/automate-m0-contract/test/m0-proof.test.ts"
+      - "packages/automate-m0-harness/test/m0-runtime.test.ts"
+    allowed_skips: []
+    evidence:
+      - "2026-09-03 m0-contract M0 proof: 36/36 PASS = M0_CONTRACT_FEASIBILITY (le contrat M0 est cohérent et exécutable)"
+      - "2026-09-03 m0-harness runtime proof: 15/15 PASS = MINIMAL_REFERENCE_SUBSTRATE (un substrate jouet peut satisfaire les 10 critères logiques, pas un kernel de production)"
+      - "Total: 51/51 M0 scenarios PASS"
+      - "ADR-000 §7 amended to record proof gate SATISFIED (pending Erwan's formal ratification)"
+    status: GREEN
+    blocker: false
+    note: "M0 proof gate SATISFIED on both halves. Formal ratification of ADR-000 by Erwan (Décideur final) is the next step before M1 cards 1-12 can start."
+
+# ============================================================
+# Section 11 — Production gate (GA)
+# ============================================================
+  ga_blockers:
+    description: "Plan §236: no Critical, no High. Medium: FIXED or ACCEPTED_RISK."
+    required:
+      - "Tous les blocker ci-dessus = GREEN ou GREEN_WITH_DEBT accepte"
+      - "Aucun NO_GO architectural (plan §238)"
+    evidence: []
+    status: NOT_READY
+    blocker: true
+    blocker_reason: "Cible premiere non GA. Le pipeline complet de la phase 1 n'est pas execute."
+
+# ============================================================
+# Section 12 — Migration tool CI (plan §185 + §222-223, ADR-017)
+# ============================================================
+  migration_v1_to_v2:
+    description: "V1 fixture -> migration tool -> V2 validation (contract-level). Runtime execution is blocked by ADR-000; the contract mapping is runnable in CI now."
+    required_commands:
+      - "cd packages/automate-migration-tool && bun test"
+      - "cd packages/automate-migration-tool && bun run typecheck"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "packages/automate-migration-tool/src/{v1-ir,v2-ir,mapping,index}.ts (3 fichiers, 17 KB)"
+      - "packages/automate-migration-tool/test/mapping.test.ts (16/16 PASS, 40 expect() calls)"
+      - "bun run typecheck: 0 erreur"
+    status: GREEN
+    blocker: false
+    card_refs:
+      - "docs/automation-v2/POST-M3-TRACKS-PLAN.md#8.3"
+    note: "Pure mapping contract; the V2 parseSpec + execution are still blocked by ADR-000."
+
+# ============================================================
+# Section 13 — V2 contract test regression net
+# ============================================================
+  v2_contracts_regression:
+    description: "V2 contract tests (PostM3-R1 + R2 + R3-extra + M2-07/08/09 cumulative, 36+ GREEN cards). Regression net for the IR + side-effect contracts."
+    required_commands:
+      - "cd packages/contracts && bun test"
+      - "cd packages/automate-m0-contract && bun test"
+    required_artifacts: []
+    allowed_skips: []
+    evidence:
+      - "EXECUTION_STATUS.md 2026-09-03: V2 contracts 632/632 PASS (607 baseline + 25 M2-07/08/09 control.while/child node families + wait refine)"
+      - "m0-contract: 177/177 PASS (141 baseline + 36 M0 proof contract half)"
+      - "V2 total: 809/809 PASS"
+      - "PostM3-R1: 18 cartes GREEN (LI-01..05 + EI-01..03 + NW-01..07 + SC-01..05/07/08 = 34+22+31+25 = 112 tests)"
+      - "PostM3-R2: 23 cartes GREEN (CO-01..07 + BR-01..02 + AI-01..02 + EN-01..03 + UX-01 + DS-01..08 = 30+10+10+12+8+28 = 98 tests)"
+      - "PostM3-R3 extras: M2-TEST 22->46 (24 new tests)"
+      - "M2-07/08/09: 25 new tests for control.while + control.child + wait refine"
+    status: GREEN
+    blocker: false
+    card_refs:
+      - "docs/automation-v2/POST-M3-TRACKS-PLAN.md#2"
+      - "docs/automation-v2/M3-IMPLEMENTATION-PLAN.md"
+
+# ============================================================
+# Section 14 — License audit (ADR-027 §8, ADR-028 §1)
+# ============================================================
+  license_audit:
+    description: "All package.json files declare a license from the allowlist (MIT, Apache-2.0, BSD-2/3, ISC, MPL-2.0, 0BSD, CC0, Zlib, Python-2.0, BlueOak, Unlicense). No GPL/AGPL/LGPL."
+    required_commands:
+      - "bun <cert-prep-script> (license walker)"
+    required_artifacts: []
+    allowed_skips:
+      - reason: "Built dist artifacts (unifia-windows-x64) inherit the parent's license (MIT) but the dist itself doesn't carry a license field; this is by design."
+        scope: "packages/unifia/dist/**"
+    evidence:
+      - "2026-09-02 license walker: 57 package.json scanned, 54 MIT, 3 (none) for design-sketch/storybook/dist (non-source)"
+      - "Zero GPL/AGPL/LGPL in any package"
+    status: GREEN
+    blocker: false
+    note: "design-sketch and storybook are dev-only and unmaintained; flag to add license field when next touched."
+
+# ============================================================
+# Section 15 — Migration tool V1 fixture corpus (plan §185)
+# ============================================================
+  migration_v1_fixtures:
+    description: "5 V1 fixtures in `packages/automate-migration-tool/fixtures/v1/` cover sequential, approval, schedule, shell-block, manual-multistep patterns. 16 tests in fixtures.test.ts (3 invariants x 5 fixtures + 1 'all exist')."
+    required_commands:
+      - "cd packages/automate-migration-tool && bun test"
+    required_artifacts:
+      - "packages/automate-migration-tool/fixtures/v1/01-sequential-http.json"
+      - "packages/automate-migration-tool/fixtures/v1/02-approval-gate.json"
+      - "packages/automate-migration-tool/fixtures/v1/03-schedule-trigger.json"
+      - "packages/automate-migration-tool/fixtures/v1/04-shell-block.json"
+      - "packages/automate-migration-tool/fixtures/v1/05-manual-multistep.json"
+    allowed_skips: []
+    evidence:
+      - "32/32 tests PASS (16 mapping + 16 fixtures)"
+      - "bun run typecheck: 0 erreur"
+    status: GREEN
+    blocker: false
+
+# ============================================================
+# Sortie
+# ============================================================
+output:
+  format: "machine-readable yaml, this file"
+  reader: "agent (PRE-1) + CI (post-M1)"
+  update_policy: "update after each card. After each phase. After each ADR."
+
+# ============================================================
+# Liens
+# ============================================================
+references:
+  plan: "vault/.../UNIFIA-Automate-Master-Implementation-Plan-V2.3.1.md"
+  baseline: "docs/automation-v2/BASELINE.md"
+  trust_path: "docs/automation-v2/AUTOMATE_TRUST_PATH.md"
+  risk_register: "docs/automation-v2/RISK_REGISTER.md"
+  package_map: "docs/automation-v2/PACKAGE_MIGRATION_MAP.md"
+  card_index: "docs/automation-v2/IMPLEMENTATION_CARD_INDEX.md"
+  threat_model: "docs/automation-v2/THREAT_MODEL.md"
+  execution_profile: "docs/automation-v2/EXECUTION_PROFILE_REQUIREMENTS.md"
+  execution_status: "docs/automation-v2/EXECUTION_STATUS.md"
+  session_2_report: "D:/App/unifia/.artifacts/production-readiness/rev3m-20260901/SESSION-2-REPORT.md"

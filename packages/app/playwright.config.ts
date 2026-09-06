@@ -32,6 +32,13 @@ const terminalIgnore = skipTerminal
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
+  // V13 — visual baselines are committed to the tree, one directory per
+  // platform. Chromium on win32 and Chromium on linux do not rasterise the
+  // same page identically, so a single shared file would either fail on one
+  // of them or have to be loosened until it stopped proving anything. A
+  // platform without a committed baseline is reported as skipped, never as
+  // passed: see e2e/design/design-visual.spec.ts.
+  snapshotPathTemplate: "{testDir}/{testFileDir}/__screenshots__/{platform}/{arg}{ext}",
   testIgnore: terminalIgnore,
   timeout: Number(process.env.PLAYWRIGHT_TIMEOUT ?? 60_000),
   expect: {
@@ -42,6 +49,12 @@ export default defineConfig({
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
   forbidOnly: !!process.env.CI,
+  // Playwright would otherwise WRITE a missing baseline and let the run pass.
+  // A visual gate that generates its own reference from the run being judged
+  // proves nothing. Missing baselines are an error here, and
+  // e2e/design/design-visual.spec.ts turns that error into an explicit skip
+  // with the command that creates one.
+  updateSnapshots: "none",
   retries: Number(process.env.PLAYWRIGHT_RETRIES ?? (process.env.CI ? 2 : 0)),
   workers,
   reporter,

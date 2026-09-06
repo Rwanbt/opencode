@@ -33,7 +33,7 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
-  modes: readonly ShellMode[]
+  modes: Accessor<readonly ShellMode[]>
   activeMode: Accessor<ShellMode>
   onMode: (mode: ShellMode) => void
   modesLabel: string
@@ -71,7 +71,7 @@ export const SidebarContent = (props: {
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
               <nav aria-label={props.modesLabel} class="flex flex-col items-center gap-3">
-                <For each={props.modes}>
+                <For each={props.modes()}>
                   {(mode) => (
                     <Tooltip placement={placement()} value={props.modeLabel(mode)}>
                       <IconButton

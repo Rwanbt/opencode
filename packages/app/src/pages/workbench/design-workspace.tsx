@@ -66,46 +66,52 @@ export function DesignWorkspace(props: {
       data-design-workspace-tab-count={state().tabs.length}
     >
       <Show when={state().tabs.length > 0}>
+        {/* The action cluster used to sit INSIDE role="tablist", which axe
+            reports as aria-required-children (critical): a tablist may only
+            contain tabs, and a screen reader announcing "tab 1 of 5" over a
+            GitHub badge and three buttons is describing something that is not
+            there. The bar keeps its own element and its attribute; only the
+            tabs are inside the tablist now. */}
         <div
           class="flex h-9 shrink-0 items-center gap-1 border-b border-border-base bg-background-stronger px-2"
-          role="tablist"
-          aria-label={t("design.workspace.tabsLabel")}
           data-design-workspace-tab-bar
         >
           <div class="ml-auto flex items-center gap-1"><Show when={props.github}>{(view) => <GithubBadge view={view()} />}</Show><Show when={props.onOpenTerminal}><button type="button" class="rounded border border-border-base px-2 py-1 text-12-regular" data-design-open-terminal onClick={() => props.onOpenTerminal?.()}>Terminal</button></Show><Show when={props.onOpenBrowser}><button type="button" class="rounded border border-border-base px-2 py-1 text-12-regular" data-design-open-browser onClick={() => props.onOpenBrowser?.()}>Navigateur</button></Show><Show when={props.onOpenSketch}><button type="button" class="rounded border border-border-base px-2 py-1 text-12-regular" data-design-open-sketch onClick={() => props.onOpenSketch?.()}>Croquis</button></Show></div>
-          <For each={state().tabs}>
-            {(item) => (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={item.id === state().activeId}
-                class="flex h-7 items-center gap-2 rounded px-3 text-12-medium transition-colors"
-                classList={{
-                  "bg-background-base text-text-base": item.id === state().activeId,
-                  "text-text-weak hover:bg-background-base": item.id !== state().activeId,
-                }}
-                data-design-workspace-tab={item.id}
-                data-design-workspace-tab-kind={item.kind}
-                onClick={() => setState("activeId", activateTab(state(), item.id).activeId ?? undefined)}
-              >
-                <span>{item.title}</span>
-                <Show when={item.closable}>
-                  <button
-                    type="button"
-                    aria-label={t("design.workspace.closeTab", { title: item.title })}
-                    class="rounded p-1 text-12-regular text-text-weak hover:bg-border-base hover:text-text-base"
-                    data-design-workspace-tab-close={item.id}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setState(closeTab(state(), item.id))
-                    }}
-                  >
-                    ×
-                  </button>
-                </Show>
-              </button>
-            )}
-          </For>
+          <div class="flex items-center gap-1" role="tablist" aria-label={t("design.workspace.tabsLabel")} data-design-workspace-tablist>
+            <For each={state().tabs}>
+              {(item) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={item.id === state().activeId}
+                  class="flex h-7 items-center gap-2 rounded px-3 text-12-medium transition-colors"
+                  classList={{
+                    "bg-background-base text-text-base": item.id === state().activeId,
+                    "text-text-weak hover:bg-background-base": item.id !== state().activeId,
+                  }}
+                  data-design-workspace-tab={item.id}
+                  data-design-workspace-tab-kind={item.kind}
+                  onClick={() => setState("activeId", activateTab(state(), item.id).activeId ?? undefined)}
+                >
+                  <span>{item.title}</span>
+                  <Show when={item.closable}>
+                    <button
+                      type="button"
+                      aria-label={t("design.workspace.closeTab", { title: item.title })}
+                      class="rounded p-1 text-12-regular text-text-weak hover:bg-border-base hover:text-text-base"
+                      data-design-workspace-tab-close={item.id}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setState(closeTab(state(), item.id))
+                      }}
+                    >
+                      ×
+                    </button>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
         </div>
       </Show>
       <div class="flex h-full min-h-0 flex-col overflow-hidden" data-design-workspace-content>

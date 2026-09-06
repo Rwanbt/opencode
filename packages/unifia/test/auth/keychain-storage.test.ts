@@ -115,7 +115,11 @@ test("load throws with a clear message when env vars are missing", async () => {
 })
 
 test("rejects requests with a bad token", async () => {
-  setEnv("UNIFIA_KEYCHAIN_TOKEN", "wrong-token")
+  // D12 (§9.4 Lane D4) — the bad-token path must still be exercised
+  // through the typed boundary. We pass a 64-char hex string of a
+  // distinct value so the format passes `tryDecodeDesktopKeychainToken`
+  // and the mismatch is detected on the wire at the mock server.
+  setEnv("UNIFIA_KEYCHAIN_TOKEN", "deadbeef".repeat(8))
   const kc = new KeychainStorage()
   await expect(kc.load()).rejects.toThrow(/keychain list failed|401/)
 })
