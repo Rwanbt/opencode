@@ -171,23 +171,44 @@ export class NativeDurableHistoryAuthority implements DurableHistoryAuthority {
     if (parsed.occurredAt > this.now()) throw new HistoryAuthorityError(`transition.occurredAt is in the future: ${parsed.occurredAt}`)
     db.transaction(() => {
       assertAuthorityForRun(db, token, runId)
-      const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
-      if (!row) throw new RunNotFoundError(runId)
-      const current = row.status as WorkflowRunStatus
-      if (parsed.from !== current) {
-        throw new HistoryAuthorityError(`transition.from (${parsed.from}) does not match current status (${current})`)
-      }
-      if (!isLegalTransition(parsed.from, parsed.to)) {
-        throw new IllegalTransitionError(parsed.from, parsed.to)
-      }
-      const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM run_transitions WHERE run_id = ?").get(runId) as { seq: number }
-      db.query("INSERT INTO run_transitions (run_id, seq, from_status, to_status, effect_slot_id, occurred_at, is_compensating) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(runId, seq.seq, parsed.from, parsed.to, parsed.effectSlotId, parsed.occurredAt, parsed.isCompensating ? 1 : 0)
-      const run = JSON.parse(row.run_json) as WorkflowRun
-      const updated: WorkflowRun = { ...run, status: parsed.to, updatedAt: parsed.occurredAt }
-      db.query("UPDATE runs SET run_json = ?, status = ?, updated_at = ? WHERE run_id = ?")
-        .run(JSON.stringify(updated), parsed.to, parsed.occurredAt, runId)
+      this.writeTransition(db, runId, parsed)
     })()
+  }
+
+  /**
+   * Synchronous terminal-transition core for atomic cross-authority
+   * composition (P0-A). Same fence, validation and mutation as
+   * transition(), but WITHOUT its own transaction: the caller MUST
+   * invoke it inside a shared transaction that also carries the graph
+   * consequence, so both commit atomically or neither does. A throw
+   * anywhere propagates synchronously (unlike the async wrapper, whose
+   * rejection would escape an enclosing transaction unnoticed).
+   */
+  transitionSync(token: AuthorityToken, runId: string, event: AtomicTransitionBoundary): void {
+    const db = this.requireDb()
+    assertAuthorityForRun(db, token, runId)
+    const parsed = AtomicTransitionBoundarySchema.parse(event)
+    if (parsed.occurredAt > this.now()) throw new HistoryAuthorityError(`transition.occurredAt is in the future: ${parsed.occurredAt}`)
+    this.writeTransition(db, runId, parsed)
+  }
+
+  private writeTransition(db: Database, runId: string, parsed: AtomicTransitionBoundary): void {
+    const row = db.query("SELECT run_id, run_json, status, created_at, updated_at FROM runs WHERE run_id = ?").get(runId) as RunRow | null
+    if (!row) throw new RunNotFoundError(runId)
+    const current = row.status as WorkflowRunStatus
+    if (parsed.from !== current) {
+      throw new HistoryAuthorityError(`transition.from (${parsed.from}) does not match current status (${current})`)
+    }
+    if (!isLegalTransition(parsed.from, parsed.to)) {
+      throw new IllegalTransitionError(parsed.from, parsed.to)
+    }
+    const seq = db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM run_transitions WHERE run_id = ?").get(runId) as { seq: number }
+    db.query("INSERT INTO run_transitions (run_id, seq, from_status, to_status, effect_slot_id, occurred_at, is_compensating) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(runId, seq.seq, parsed.from, parsed.to, parsed.effectSlotId, parsed.occurredAt, parsed.isCompensating ? 1 : 0)
+    const run = JSON.parse(row.run_json) as WorkflowRun
+    const updated: WorkflowRun = { ...run, status: parsed.to, updatedAt: parsed.occurredAt }
+    db.query("UPDATE runs SET run_json = ?, status = ?, updated_at = ? WHERE run_id = ?")
+      .run(JSON.stringify(updated), parsed.to, parsed.occurredAt, runId)
   }
 
   async enqueueCommand(token: AuthorityToken, runId: string, command: { kind: string; payload: unknown }): Promise<void> {
