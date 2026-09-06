@@ -404,7 +404,7 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
       const effect = a.inspectEffect("run-1", "ek.pay.charge")
       expect(effect!.status).toBe("SUCCEEDED"); expect(effect!.reconciled).toBe(true)
        expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "EFFECT_ALREADY_TERMINAL")
-       expect(() => a.reconcileEffect(token, "ek.pay.charge", "FAILED", {})).toThrow("already terminal")
+       expectAttemptError(() => a.reconcileEffect(token, "ek.pay.charge", "FAILED", {}), "RECONCILIATION_CONFLICT")
       a.close()
     } finally { Bun.gc(true); rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }) }
   })
@@ -501,6 +501,59 @@ describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
       a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { refunded: true } })
       const effect = a.inspectEffect("run-1", "ek.pay.refund")
       expect(effect!.status).toBe("SUCCEEDED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect is idempotent on the same reconciled outcome", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-idem-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.ok")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.reconcileEffect(token, "ek.idem.ok", "SUCCEEDED", { ok: 1 })
+      const settled = a.inspectEffect("run-1", "ek.idem.ok")
+      expect(settled!.status).toBe("SUCCEEDED"); expect(settled!.reconciled).toBe(true)
+      const journalLen = a.inspectJournal("run-1", "ek.idem.ok").length
+      // Redelivered reconcile with the SAME outcome: no-op, zero mutation.
+      a.reconcileEffect(token, "ek.idem.ok", "SUCCEEDED", { ok: 1 })
+      const replayed = a.inspectEffect("run-1", "ek.idem.ok")
+      expect(replayed!.status).toBe("SUCCEEDED"); expect(replayed!.reconciled).toBe(true)
+      expect(a.inspectJournal("run-1", "ek.idem.ok")).toHaveLength(journalLen)
+      // Conflicting outcome on the reconciled effect: typed conflict.
+      expectAttemptError(() => a.reconcileEffect(token, "ek.idem.ok", "FAILED", {}), "RECONCILIATION_CONFLICT")
+      expect(a.inspectEffect("run-1", "ek.idem.ok")!.status).toBe("SUCCEEDED")
+      expect(a.inspectJournal("run-1", "ek.idem.ok")).toHaveLength(journalLen)
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect FAILED replay is idempotent; cross-outcome conflicts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-fail-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.fail")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
+      a.reconcileEffect(token, "ek.idem.fail", "FAILED", {})
+      const journalLen = a.inspectJournal("run-1", "ek.idem.fail").length
+      a.reconcileEffect(token, "ek.idem.fail", "FAILED", {})
+      expect(a.inspectEffect("run-1", "ek.idem.fail")!.status).toBe("FAILED")
+      expect(a.inspectJournal("run-1", "ek.idem.fail")).toHaveLength(journalLen)
+      expectAttemptError(() => a.reconcileEffect(token, "ek.idem.fail", "SUCCEEDED", {}), "RECONCILIATION_CONFLICT")
+      expect(a.inspectEffect("run-1", "ek.idem.fail")!.status).toBe("FAILED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect on a normally-succeeded effect stays illegal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-misuse-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.misuse")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: 1 })
+      expect(a.inspectEffect("run-1", "ek.idem.misuse")!.reconciled).toBe(false)
+      expect(() => a.reconcileEffect(token, "ek.idem.misuse", "SUCCEEDED", {})).toThrow("already terminal")
+      expect(a.inspectEffect("run-1", "ek.idem.misuse")!.status).toBe("SUCCEEDED")
        a.close()
     } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
   })
