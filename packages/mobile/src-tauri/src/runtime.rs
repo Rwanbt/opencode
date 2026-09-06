@@ -40,6 +40,17 @@ mod extraction;
 pub use extraction::{__cmd__extract_runtime, extract_runtime};
 use extraction::is_runtime_ready;
 
+// DA-SEC-01: derive a fresh `WorkbenchIpcBearer` from the
+// `MobileEncryptionKey` so the cipher key and the IPC bearer are
+// distinct strings. The module is platform-agnostic (pure crypto) so
+// it is declared unconditionally; on host/test builds it powers the
+// integration test in `server.rs::tests` and the cargo integration
+// test in `tests/bearer_env.rs`.
+mod bearer;
+// Re-exported for the cargo integration test in `tests/bearer_env.rs`
+// (which only sees the public API of the crate, not sibling modules).
+pub use bearer::derive_workbench_bearer;
+
 const DEFAULT_PORT: u32 = 14096;
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 const RUNTIME_SUBDIR: &str = "runtime";

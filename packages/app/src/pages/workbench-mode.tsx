@@ -3,6 +3,8 @@
 import { Show, lazy, type JSX } from "solid-js"
 import { useMode } from "@/context/mode"
 import { useLanguage } from "@/context/language"
+import { useGlobalSync } from "@/context/global-sync"
+import { useSync } from "@/context/sync"
 import { WorkSurface } from "@/pages/workbench/work-surface"
 
 // F10 — frontière lazy par mode. Work reste synchrone (c'est le mode
@@ -20,9 +22,15 @@ const AutomateSurface = lazy(() => MODE_LOADERS.automate.load() as Promise<{ def
 export default function WorkbenchMode(): JSX.Element {
   const mode = useMode()
   const language = useLanguage()
+  const globalSync = useGlobalSync()
+  const sync = useSync()
   const t = language.t
   return (
-    <main class="size-full min-h-0 bg-background-base" data-workbench-mode={mode.active()}>
+    <main
+      class="size-full min-h-0 bg-background-base"
+      data-workbench-mode={mode.active()}
+      data-workbench-bootstrap={globalSync.ready && sync.ready ? "ready" : "pending"}
+    >
       <Show when={mode.routeKind() === "invalid"}>
         <section class="size-full p-6" data-workbench-error="invalid-route">
           <h1 class="text-18-medium">{t("workbench.errors.invalidMode")}</h1>

@@ -1,0 +1,12 @@
+{
+  "status": "BLOCKED",
+  "blockedKind": "NO_METHODOLOGY",
+  "observations": {
+    "blockedReason": "NO_METHODOLOGY",
+    "detail": "FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env.",
+    "requiredMethodology": "(1) Configure a SQLite write with synchronous=FULL + WAL + checkpoint. (2) Trigger abrupt power-off / storage fault. (3) Reopen store. (4) Verify the write is durably present. Compare against FC-13-CTRL (which must lose).",
+    "fc13CtrlStatus": "BLOCKED (NO_METHODOLOGY) — see FC-13-CTRL record",
+    "nextActionOwner": "Erwan (env admin) OR a future VM-equipped agent session"
+  },
+  "note": "BLOCKED (NO_METHODOLOGY): FC-13 cannot be exercised: no fault-injection layer / VM control / reproducible storage fault. FC-13 depends on FC-13-CTRL first (negative control must lose) — if FC-13-CTRL is not executable, FC-13 cannot yield a valid result either. Both are BLOCKED in the same M0 env."
+}

@@ -40,7 +40,14 @@ export interface MockKeychainOptions {
 }
 
 function randomToken(): string {
-  const bytes = new Uint8Array(16)
+  // D12 (§9.4 Lane D4) — the desktop keychain IPC bearer is 64
+  // lowercase hex chars (256 bits, two concatenated UUIDv4 `simple()`
+  // strings — see auth_storage.rs:282-283). The mock used to mint
+  // 32 hex chars, which `tryDecodeDesktopKeychainToken` now rejects
+  // at the typed boundary, so tests that construct a `KeychainStorage`
+  // against this mock would otherwise report "unavailable" for the
+  // wrong reason.
+  const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")
 }
