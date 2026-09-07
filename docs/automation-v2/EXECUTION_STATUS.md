@@ -215,7 +215,7 @@ choice), R-013 phase 3.
 | M1-04 OwnershipScope Zod regex fix | **DONE** (6/6 PASS, 12 new tests) | scope.ts + 2 test files (e396416b65) |
 | M1-05 capability-enforcer spike | **DONE** (5/5 PASS) | spike (d44c619da4) |
 | M1-06 artifact-store enforcement | **DONE** (5/5+1 PASS, 16 tests, AAD 3→5) | packages/artifact-store/ (55fd0c09c8) |
-| M1-07 SecretBroker OS-level DPAPI | **DONE** (6/6 PASS, 26 tests, AAD 5→6) | packages/secret-broker/ (3f8e499f03) |
+| M1-07 SecretBroker scaffold (PBKDF2 fallback, NOT OS-backed) | **DONE** (6/6 PASS, 26 tests, AAD 5→6) | packages/secret-broker/ (3f8e499f03) |
 | M1-08 capability enforcer production lift | **DONE** (17 tests, C-AR-01 résolu) | packages/capability-runtime/ (f6ac82c192) |
 | M1-09 WorkflowRun types + DurableHistoryAuthority interface | **DONE** (YELLOW, interface only) | packages/contracts/src/workflow-run.ts (59f10e7b0b) |
 | M1-12 observability zero-alloc + secret-leak canary | **DONE** (5/5 PASS, 33 tests, **0 bytes delta** 1M emits) | packages/observability/ (7a6e00f3b5) |
@@ -457,7 +457,7 @@ c153ad2a0d chore(automate-v2): EXECUTION_STATUS update after PRE-1 pin
 | M1 | C-M1-04 OwnershipScope Zod regex fix | **DONE** (6/6 PASS, 12 new tests, regex `/^\S(.*\S)?$/`) | — |
 | M1 | C-M1-05 capability-enforcer spike | **DONE** (5/5 PASS) | — |
 | M1 | C-M1-06 artifact-store enforcement (plan §71 invariant) | **DONE** (5/5+1 PASS, 16 tests, AAD 3→5) | — |
-| M1 | C-M1-07 SecretBroker OS-level DPAPI | **DONE** (6/6 PASS, 26 tests, AAD 5→6) | 3f8e499f03 |
+| M1 | C-M1-07 SecretBroker scaffold (PBKDF2 fallback, NOT OS-backed) | **DONE** (6/6 PASS, 26 tests, AAD 5→6) | 3f8e499f03 |
 | M1 | C-M1-08 capability enforcer production lift (C-AR-01 résolu) | **DONE** (17 tests, `WorkerIdSchema.scopes` ajouté) | — |
 | M1 | C-M1-09 WorkflowRun types + DurableHistoryAuthority interface (YELLOW) | **DONE** (interface only, 14 tests) | 59f10e7b0b |
 | M1 | C-M1-10 Logical invocation identities (effect-slot, idempotency) | **NOT STARTED** (YELLOW) | bloqué ADR-000 |

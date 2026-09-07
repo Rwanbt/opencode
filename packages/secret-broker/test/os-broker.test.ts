@@ -29,6 +29,7 @@ import {
   CredentialRevokedError,
   EnvelopeIntegrityError,
   KeyUnavailableError,
+  OsSecureStorageUnavailableError,
   TenantMismatchError,
   type CredentialRef,
   type OwnershipScope,
@@ -75,13 +76,13 @@ const openedDirs: string[] = []
 function makeBroker(platform: NodeJS.Platform = process.platform, rootKey?: Uint8Array): SecretBroker {
   const dir = newTempStorageDir("unifia-os-broker-")
   openedDirs.push(dir)
-  return createOsBroker({ rootKey: rootKey ?? newKey(), platform, storageDir: dir })
+  return createOsBroker({ rootKey: rootKey ?? newKey(), platform, storageDir: dir, allowInsecureFallback: true })
 }
 
 beforeEach(() => {
   storageDir = newTempStorageDir("unifia-os-broker-suite-")
   openedDirs.push(storageDir)
-  broker = createOsBroker({ rootKey: newKey(), storageDir })
+  broker = createOsBroker({ rootKey: newKey(), storageDir, allowInsecureFallback: true })
 })
 
 afterEach(() => {
@@ -103,10 +104,17 @@ describe("createOsBroker — factory", () => {
     expect(typeof b.revoke).toBe("function")
   })
 
+  test("refuses to present the PBKDF2 fallback as OS secure storage by default", () => {
+    const dir = newTempStorageDir("unifia-os-broker-failclosed-")
+    openedDirs.push(dir)
+    expect(() => createOsBroker({ rootKey: newKey(), storageDir: dir })).toThrow(OsSecureStorageUnavailableError)
+    expect(() => createOsBroker({ rootKey: newKey(), storageDir: dir })).toThrow(/OS_SECURE_STORAGE_UNAVAILABLE/)
+  })
+
   test("the platform is recorded on disk (aadDomain trace, OS layer marker)", async () => {
     const dir = newTempStorageDir("unifia-os-broker-trace-")
     openedDirs.push(dir)
-    const b = createOsBroker({ rootKey: newKey(), platform: "win32", storageDir: dir })
+    const b = createOsBroker({ rootKey: newKey(), platform: "win32", storageDir: dir, allowInsecureFallback: true })
     const ref = credentialRef(SCOPE_A, "cred-trace")
     await b.storeCredential(ref, "trace-value", "credential-material")
     // The `kek` presence marker must exist.
@@ -212,8 +220,8 @@ describe("createOsBroker — persistence across instances", () => {
     const sharedDir = newTempStorageDir("unifia-os-broker-shared-")
     openedDirs.push(sharedDir)
     const sharedKey = newKey()
-    const a = createOsBroker({ rootKey: sharedKey, storageDir: sharedDir, platform: "linux" })
-    const b = createOsBroker({ rootKey: sharedKey, storageDir: sharedDir, platform: "linux" })
+    const a = createOsBroker({ rootKey: sharedKey, storageDir: sharedDir, platform: "linux", allowInsecureFallback: true })
+    const b = createOsBroker({ rootKey: sharedKey, storageDir: sharedDir, platform: "linux", allowInsecureFallback: true })
     const ref = credentialRef(SCOPE_A, "cred-persisted")
     await a.storeCredential(ref, "shared-secret", "credential-material")
     const fromB = await b.resolveCredential(ref, SCOPE_A)
@@ -223,8 +231,8 @@ describe("createOsBroker — persistence across instances", () => {
   test("a different root key on the same storage dir cannot read what instance A wrote (AEAD)", async () => {
     const sharedDir = newTempStorageDir("unifia-os-broker-mixed-")
     openedDirs.push(sharedDir)
-    const a = createOsBroker({ rootKey: newKey(), storageDir: sharedDir, platform: "linux" })
-    const b = createOsBroker({ rootKey: newKey(), storageDir: sharedDir, platform: "linux" })
+    const a = createOsBroker({ rootKey: newKey(), storageDir: sharedDir, platform: "linux", allowInsecureFallback: true })
+    const b = createOsBroker({ rootKey: newKey(), storageDir: sharedDir, platform: "linux", allowInsecureFallback: true })
     const ref = credentialRef(SCOPE_A, "cred-mixed")
     await a.storeCredential(ref, "A only", "credential-material")
     await expect(b.resolveCredential(ref, SCOPE_A)).rejects.toBeInstanceOf(EnvelopeIntegrityError)
@@ -317,8 +325,8 @@ describe("createOsBroker — PBKDF2 fallback", () => {
       const dir = newTempStorageDir(`unifia-os-broker-${platform}-`)
       openedDirs.push(dir)
       const sharedKey = newKey()
-      const a = createOsBroker({ rootKey: sharedKey, platform, storageDir: dir })
-      const b = createOsBroker({ rootKey: sharedKey, platform, storageDir: dir })
+      const a = createOsBroker({ rootKey: sharedKey, platform, storageDir: dir, allowInsecureFallback: true })
+      const b = createOsBroker({ rootKey: sharedKey, platform, storageDir: dir, allowInsecureFallback: true })
       const ref = credentialRef(SCOPE_A, "cred-cross-platform")
       await a.storeCredential(ref, `secret-on-${platform}`, "credential-material")
       const fromB = await b.resolveCredential(ref, SCOPE_A)
@@ -330,11 +338,11 @@ describe("createOsBroker — PBKDF2 fallback", () => {
     const dir = newTempStorageDir("unifia-os-broker-mismatch-")
     openedDirs.push(dir)
     const sharedKey = newKey()
-    const writer = createOsBroker({ rootKey: sharedKey, platform: "win32", storageDir: dir })
+    const writer = createOsBroker({ rootKey: sharedKey, platform: "win32", storageDir: dir, allowInsecureFallback: true })
     const ref = credentialRef(SCOPE_A, "cred-mismatch")
     await writer.storeCredential(ref, "windows-only", "credential-material")
     // A reader claiming to be on Linux refuses the dpapi-sealed file.
-    const reader = createOsBroker({ rootKey: sharedKey, platform: "linux", storageDir: dir })
+    const reader = createOsBroker({ rootKey: sharedKey, platform: "linux", storageDir: dir, allowInsecureFallback: true })
     await expect(reader.resolveCredential(ref, SCOPE_A)).rejects.toBeInstanceOf(EnvelopeIntegrityError)
   })
 })

@@ -82,6 +82,7 @@ import {
   CredentialRevokedError,
   EnvelopeIntegrityError,
   KeyUnavailableError,
+  OsSecureStorageUnavailableError,
   TenantMismatchError,
   type AtRestProtectionEnvelope,
   type BrowserAuthMaterial,
@@ -138,6 +139,13 @@ export type OsBrokerOptions = {
    * user's home.
    */
   storageDir?: string
+  /**
+   * Explicit opt-in to the PBKDF2 fallback. The fallback is NOT real OS
+   * secure storage; without a native DPAPI/Keychain/libsecret binding the
+   * factory refuses to present itself as OS secure storage unless the
+   * caller acknowledges this. Required: omit/false throws.
+   */
+  allowInsecureFallback?: boolean
 }
 
 /**
@@ -352,8 +360,9 @@ function envelopeFromJson(j: ReturnType<typeof envelopeToJson>): AtRestProtectio
  * (test (g) in the M1-07 spec).
  *
  * The broker throws `KeyUnavailableError` if `rootKey` is empty or
- * not 32 bytes. It never silently corrupts (plan §79): a tampered
- * envelope on disk fails the GCM tag and surfaces as
+ * not 32 bytes, and `OsSecureStorageUnavailableError` unless the caller
+ * explicitly opts into the PBKDF2 fallback (`allowInsecureFallback`). It
+ * never silently corrupts (plan §79): a tampered
  * `EnvelopeIntegrityError`.
  */
 export function createOsBroker(opts: OsBrokerOptions): SecretBroker {
@@ -367,6 +376,13 @@ export function createOsBroker(opts: OsBrokerOptions): SecretBroker {
   if (rootKey.length !== ROOT_KEY_BYTES) {
     throw new KeyUnavailableError(`root key must be ${ROOT_KEY_BYTES} bytes for AES-256-GCM, got ${rootKey.length}`)
   }
+
+    // Fail-closed: without a native OS binding this factory must not
+    // silently present the PBKDF2 fallback as secure storage. Root-key
+    // validation stays first so malformed keys keep their own error.
+    if (!opts.allowInsecureFallback) {
+      throw new OsSecureStorageUnavailableError("no native DPAPI/Keychain/libsecret binding; pass allowInsecureFallback only for tests and non-secret data")
+    }
 
   // --- OS layer setup -----------------------------------------------------
   ensureDir(storageDir)
@@ -748,6 +764,7 @@ export {
   CredentialRevokedError,
   EnvelopeIntegrityError,
   KeyUnavailableError,
+  OsSecureStorageUnavailableError,
   TenantMismatchError,
   type AtRestProtectionEnvelope,
   type BrowserAuthMaterial,

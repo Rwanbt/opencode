@@ -118,6 +118,12 @@ export class KeyUnavailableError extends Error {
     this.name = "KeyUnavailableError"
   }
 }
+export class OsSecureStorageUnavailableError extends Error {
+  constructor(reason: string) {
+    super(`OS_SECURE_STORAGE_UNAVAILABLE: ${reason}`)
+    this.name = "OsSecureStorageUnavailableError"
+  }
+}
 
 export class TenantMismatchError extends Error {
   constructor(reason: string) {
