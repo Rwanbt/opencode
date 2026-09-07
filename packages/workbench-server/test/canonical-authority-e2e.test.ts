@@ -178,6 +178,14 @@ describe("canonical authority production path", () => {
       // occurredAt stays within the frozen clock so the ONLY possible
       // failure is the authority fence itself.
       await expectStale(() => restartedHistory.transition(staleA, runId, { from: "waiting", to: "failed", effectSlotId: "slot-stale", occurredAt: 9_999, isCompensating: false }), "restarted history")
+      // #47: the HTTP surface itself must surface the fence as a typed 409,
+      // not only the in-process port boundary.
+      const staleResume = await restartedServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/resume`, { method: "POST", headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(staleA) } }))
+      expect(staleResume.status).toBe(409)
+      expect(((await staleResume.json()) as { error: string }).error).toBe("STALE_AUTHORITY")
+      const staleCancel = await restartedServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/cancel`, { method: "POST", headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(staleA) } }))
+      expect(staleCancel.status).toBe(409)
+      expect(((await staleCancel.json()) as { error: string }).error).toBe("STALE_AUTHORITY")
       const cancelled = await restartedServer.fetch(new Request(`http://127.0.0.1/v1/workflows/${runId}/cancel`, {
         method: "POST",
         headers: { authorization: "Bearer test", "x-workflow-authority-token": JSON.stringify(tokenB) },

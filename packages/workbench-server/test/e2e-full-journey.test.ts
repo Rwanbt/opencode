@@ -120,9 +120,15 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
       const first = attempts.allocateAttempt(attemptToken, "li-1", "ek.pay")
       attempts.recordAttemptOutcome(attemptToken, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
       expect(attempts.inspectEffect("run-1", "ek.pay")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // r2-final machine: the ONLY exit from UNKNOWN_EXTERNAL_STATE is an
+      // explicit reconciliation; a reconciled FAILED effect then needs an
+      // explicit retry authorization before a new attempt may be minted.
+      attempts.reconcileEffect(attemptToken, "ek.pay", "FAILED")
+      attempts.authorizeRetry(attemptToken, "ek.pay")
       const retry = attempts.allocateAttempt(attemptToken, "li-1", "ek.pay")
       expect(retry.seq).toBe(2); expect(retry.attemptId).not.toBe(first.attemptId)
-      attempts.reconcileEffect(attemptToken, "ek.pay", "SUCCEEDED", { ok: true })
+      attempts.recordAttemptOutcome(attemptToken, "li-1", retry.attemptId, "SUCCEEDED", { result: { ok: true } })
+      expect(attempts.inspectEffect("run-1", "ek.pay")!.status).toBe("SUCCEEDED")
       // ---- directive 19: durable cancellation + fencing + restart persistence ----
       attempts.close()
       const cancelled = await port2.cancel(startedBody.authorityToken)
@@ -134,7 +140,11 @@ describe("Directive 35 - full product E2E (HTTP + UNIFIA_NATIVE)", () => {
     } finally {
       Bun.gc(true)
       await new Promise((resolve) => setTimeout(resolve, 100))
-      rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 })
+      // WHY the retry loop: Windows holds SQLite file locks briefly after
+      // close (EBUSY); teardown flakiness is environmental, not product.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        try { rmSync(dir, { recursive: true, force: true }); break } catch { await new Promise((resolve) => setTimeout(resolve, 250)) }
+      }
     }
   })
 })
