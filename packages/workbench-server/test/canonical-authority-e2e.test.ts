@@ -116,9 +116,12 @@ describe("canonical authority production path", () => {
 
       const tokenA4 = port.takeover(port.takeover(port.takeover(tokenA, "owner-a-2"), "owner-a-3"), "owner-a-4")
       expect(tokenA4.generation).toBe(4)
+      // #47 literal: owner A ACTS at generation 4 (real graph mutation) before B takes over.
+      const engineA4 = port.graphEngineFor(tokenA4)
+      engineA4.setDeadline(runId, tokenA4, "step-0", 19_000)
       const tokenB = port.takeover(tokenA4, "owner-b")
       expect(tokenB).toMatchObject({ workflowRunId: runId, generation: 5, authorityOwnerId: "owner-b" })
-      const staleA = tokenA
+      const staleA = tokenA4
 
       // Graph through the assembly.
       await expectStale(() => port.graphEngineFor(staleA), "graph assembly")
