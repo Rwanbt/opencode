@@ -72,6 +72,7 @@ export const NodeFamilySchema = z.enum([
   "control.while",
   "control.child",
   "tool.http",
+  "tool.transform",
   "human.approval",
   "wait",
 ])

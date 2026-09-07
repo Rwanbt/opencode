@@ -46,8 +46,14 @@ function tokenize(src: string): Tok[] {
       while (j < src.length && src[j]! >= "0" && src[j]! <= "9") j++
       out.push({ kind: "num", text: src.slice(i, j), pos: i }); i = j; continue
     }
-    if ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_") {
+    // Phase 1 ($node refs): `$` starts an identifier (e.g. `$node`). A lone `$`
+    // or `$` followed by a non-identifier char is a parse error — fail closed.
+    if (c === "$" || (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_") {
       let j = i
+      if (c === "$") {
+        j++
+        if (j >= src.length || !/[A-Za-z_]/.test(src[j]!)) throw new ExpressionError("EXPR_PARSE_ERROR", `unexpected character ${JSON.stringify(c)} at ${i}`)
+      }
       while (j < src.length && /[A-Za-z0-9_]/.test(src[j]!)) j++
       out.push({ kind: "id", text: src.slice(i, j), pos: i }); i = j; continue
     }
@@ -234,8 +240,17 @@ function evalNode(node: AstNode, env: Record<string, unknown>, depth: number, li
       if (node.op === "[]") {
         const target = evalNode(node.left, env, next, limits)
         const index = evalNode(node.right, env, next, limits)
-        if (!Array.isArray(target) || typeof index !== "number") throw new ExpressionError("EXPR_TYPE_ERROR", "indexing requires a list and a number")
-        return target[index] ?? null
+        if (Array.isArray(target)) {
+          if (typeof index !== "number") throw new ExpressionError("EXPR_TYPE_ERROR", "indexing a list requires a number")
+          return target[index] ?? null
+        }
+        // Phase 1 ($node refs): CEL-consistent map access so display names work
+        // via brackets (`$node["HTTP A"]`). Missing keys read as null; the nodes
+        // layer turns unresolved $node paths into typed errors before evaluation.
+        if (target !== null && typeof target === "object" && typeof index === "string") {
+          return (target as { [key: string]: CelValue })[index] ?? null
+        }
+        throw new ExpressionError("EXPR_TYPE_ERROR", "indexing requires a list and a number, or an object and a string")
       }
       return evalBinary(node.op, evalNode(node.left, env, next, limits), evalNode(node.right, env, next, limits))
     }
