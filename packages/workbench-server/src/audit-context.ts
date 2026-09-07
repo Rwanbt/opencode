@@ -76,6 +76,15 @@ export function userAudit(
   ctx.audit.record(buildAuditContext(principal, action, opts), decision)
 }
 
+/**
+ * Audit decision taxonomy (do not reinterpret per call site):
+ * `allow` = the request proceeded / was granted; `deny` = an outcome was
+ * imposed against the resource (request refused, approval denied, workflow
+ * cancelled). A successful cancellation therefore audits as `deny` — the
+ * `reason` field (and the HTTP status: 4xx refusal vs 200 cancellation)
+ * is what distinguishes a refused request from a user-cancelled resource.
+ * Every `deny` userAudit call MUST carry a `reason`.
+ */
 /** Record an `allow` decision and return nothing. */
 export function allow(
   ctx: ServerContext,
