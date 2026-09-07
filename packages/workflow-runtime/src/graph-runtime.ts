@@ -607,6 +607,7 @@ export class GraphRuntimeEngine {
           break
         }
         case "tool.http":
+        case "tool.transform":
         case "human.approval":
         case "wait":
         case "trigger.manual":
@@ -726,6 +727,19 @@ export class GraphRuntimeEngine {
       db.query("INSERT INTO graph_nodes (run_id, node_id, status, decision_json, output_json, updated_at) VALUES (?, ?, ?, NULL, NULL, ?)")
         .run(runId, nodeId, status, this.now())
     }
+  }
+
+  /**
+   * Phase 1: fenced journal append for external dispatchers (the execution
+   * driver records NODE_DISPATCHED with the redacted resolved input). Same
+   * fence and same journal as every internal transition — no second path.
+   */
+  journalNodeEvent(runId: string, token: AuthorityToken, nodeId: string, kind: string, detail: unknown): void {
+    const db = this.requireDb()
+    db.transaction(() => {
+      assertAuthorityForRun(db, token, runId)
+      this.journal(db, runId, nodeId, kind, detail)
+    })()
   }
 
   private journal(db: Database, runId: string, nodeId: string | null, kind: string, detail: unknown): void {
