@@ -41,6 +41,8 @@ import { ProjectContext } from "./project-context"
 import { RAG } from "../rag"
 import { SessionLearn } from "./learn"
 import { readRecentLearnings } from "./learnings-context"
+import { recallMemoryContext } from "./memory-context"
+import { Config } from "../config/config"
 import type { ProjectID } from "../project/schema"
 import { NamedError } from "@unifia/util/error"
 import { SessionProcessor } from "./processor"
@@ -75,6 +77,29 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 const RAG_INDEX_MAX = 64
 const RAG_INDEX_TTL_MS = 30 * 60 * 1000
 const ragIndexedDirs = new Map<string, number>()
+
+/**
+ * Share of the context window automatic memory recall may occupy, and its
+ * ceiling. Recall competes with the conversation itself, so it stays a
+ * minority tenant: a few notes, not a briefing.
+ */
+const MEMORY_CONTEXT_SHARE = 0.03
+const MEMORY_CONTEXT_MAX_TOKENS = 1_200
+
+/**
+ * What the user asked on this turn, as plain text.
+ *
+ * Two consumers now derive a query from it — RAG and memory recall — and a
+ * second inline copy of this walk would be a second place for them to drift.
+ */
+function lastUserText(messages: MessageV2.WithParts[]): string | undefined {
+  const last = messages.findLast((m) => m.info.role === "user")
+  const text = last?.parts
+    .filter((p): p is MessageV2.TextPart => p.type === "text")
+    .map((p) => p.text)
+    .join(" ")
+  return text !== undefined && text.trim() !== "" ? text : undefined
+}
 
 async function ensureRagIndexed() {
   const dir = Instance.directory
@@ -1746,12 +1771,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const ragCtx = yield* Effect.promise(async () => {
                   await ensureRagIndexed()
                   if (!(await RAG.isEnabled())) return undefined
-                  const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-                  const userText = lastUserMsg?.parts
-                    .filter((p): p is MessageV2.TextPart => p.type === "text")
-                    .map((p) => p.text)
-                    .join(" ")
-                  if (!userText?.trim()) return undefined
+                  const userText = lastUserText(msgs)
+                  if (userText === undefined) return undefined
                   try {
                     const results = await RAG.search(Instance.project.id as ProjectID, userText, { topK: 3 })
                     return results.length > 0 ? RAG.formatContext(results) : undefined
@@ -1764,6 +1785,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   const learningsCtx = readRecentLearnings(Instance.worktree, learningsBudget)
                   if (learningsCtx) system.push(learningsCtx)
                 }
+                // Memory recall. Independent of RAG, which indexes source code:
+                // this is the vault of prose the agent and the user wrote about
+                // the project, and the two answer different questions.
+                const memoryCtx = yield* Effect.promise(async () => {
+                  const userText = lastUserText(msgs)
+                  if (userText === undefined) return undefined
+                  const cfg = await Config.get()
+                  return recallMemoryContext({
+                    worktree: Instance.worktree,
+                    settings: cfg.memory,
+                    providerId: currentUser.model.providerID,
+                    query: userText,
+                    // Built once per user turn and reused across the agent's
+                    // steps; this loop runs the block once per step.
+                    turnId: currentUser.id,
+                    budgetTokens: Math.max(0, Math.min(Math.floor(model.limit.context * MEMORY_CONTEXT_SHARE), MEMORY_CONTEXT_MAX_TOKENS)),
+                  })
+                })
+                if (memoryCtx) system.push(memoryCtx)
                 const format = currentUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({

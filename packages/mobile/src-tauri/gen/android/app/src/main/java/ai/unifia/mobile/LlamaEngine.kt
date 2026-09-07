@@ -409,7 +409,7 @@ object LlamaEngine {
                                 }
                             }
                             "unload" -> { unload(); "ok" }
-                            "loaded" -> if (loaded()) "true" else "false"
+                            "loaded" -> if (LlamaService.get()?.isModelActive() == true) "true" else "false"
                             "model_name" -> currentModelName ?: ""
                             "stop" -> { stop(); "ok" }
                             "generate" -> {

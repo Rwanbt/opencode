@@ -14,7 +14,7 @@ import { CHANNEL as channel, VERSION as version } from "./meta"
 import semver from "semver"
 
 // This fork publishes its own releases (tags `v<semver>-fork[.N]`, see
-// .github/workflows/fork-release.yml) instead of anomalyco/opencode's. Update
+// .github/workflows/release.yml) instead of anomalyco/opencode's. Update
 // checks must compare against this repo, or every install looks perpetually
 // out of date against upstream's own (unrelated) version numbering.
 const FORK_REPO = "Rwanbt/unifia"
@@ -25,7 +25,7 @@ const FORK_REPO = "Rwanbt/unifia"
 // compared this fork against a version line that is not its own.
 const NPM_PACKAGE = "unifia-ai"
 
-// Shipped as a release asset by .github/workflows/fork-release.yml, so the
+// Shipped as a release asset by .github/workflows/release.yml, so the
 // installer the upgrade path runs is the one this repo builds.
 const INSTALL_SCRIPT_URL = `https://github.com/${FORK_REPO}/releases/latest/download/install`
 

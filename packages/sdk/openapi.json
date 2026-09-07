@@ -21903,6 +21903,36 @@
               }
             }
           },
+          "memory": {
+            "description": "Persistent memory: a vault of Markdown notes the agent recalls and records across sessions.",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "description": "Enable the persistent memory vault: the memory_search / memory_read / memory_write tools and automatic recall at the start of each turn. Default: true.",
+                "type": "boolean"
+              },
+              "directory": {
+                "description": "Directory holding the memory notes. Relative paths resolve against the project root. Default: .unifia/memory. Point it at an existing Obsidian vault to use that vault as the memory.",
+                "type": "string"
+              },
+              "remote_recall": {
+                "description": "Allow memory notes to be sent to a remote (cloud) model. Default: false — notes stay on the machine and only a local model recalls them. This is the one switch that widens what may leave; see ADR-KNOW-0006.",
+                "type": "boolean"
+              },
+              "max_notes": {
+                "description": "Maximum notes injected by automatic recall at the start of a turn. Default: 5.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "deadline_ms": {
+                "description": "Time budget in milliseconds for automatic recall. Retrieval returns what it found when the deadline passes rather than delaying the turn. Default: 1500.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -22388,7 +22418,7 @@
             }
           }
         },
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "OAuth": {
         "type": "object",

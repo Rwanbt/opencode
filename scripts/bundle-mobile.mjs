@@ -26,7 +26,7 @@ const outdir = process.argv.includes("--outdir")
 
 const assetsDir = join(ROOT, "packages/mobile/src-tauri/gen/android/app/src/main/assets/runtime")
 // The release workflows export UNIFIA_VERSION / UNIFIA_CHANNEL (publish.yml,
-// fork-release.yml). Reading only the OPENCODE_* names made every Android build
+// release.yml). Reading only the OPENCODE_* names made every Android build
 // fall back to "local", so the app reported no version at all. The old names
 // stay as a fallback for anyone invoking this script with the pre-rebrand env.
 const runtimeVersion = process.env.UNIFIA_VERSION || process.env.OPENCODE_VERSION || "local"

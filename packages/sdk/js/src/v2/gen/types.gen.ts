@@ -1915,6 +1915,31 @@ export type Config = {
      */
     reserved?: number
   }
+  /**
+   * Persistent memory: a vault of Markdown notes the agent recalls and records across sessions.
+   */
+  memory?: {
+    /**
+     * Enable the persistent memory vault: the memory_search / memory_read / memory_write tools and automatic recall at the start of each turn. Default: true.
+     */
+    enabled?: boolean
+    /**
+     * Directory holding the memory notes. Relative paths resolve against the project root. Default: .unifia/memory. Point it at an existing Obsidian vault to use that vault as the memory.
+     */
+    directory?: string
+    /**
+     * Allow memory notes to be sent to a remote (cloud) model. Default: false — notes stay on the machine and only a local model recalls them. This is the one switch that widens what may leave; see ADR-KNOW-0006.
+     */
+    remote_recall?: boolean
+    /**
+     * Maximum notes injected by automatic recall at the start of a turn. Default: 5.
+     */
+    max_notes?: number
+    /**
+     * Time budget in milliseconds for automatic recall. Retrieval returns what it found when the deadline passes rather than delaying the turn. Default: 1500.
+     */
+    deadline_ms?: number
+  }
   experimental?: {
     disable_paste_summary?: boolean
     /**
@@ -2261,6 +2286,7 @@ export type Config = {
       retention_days?: number
     }
   }
+  [key: string]: unknown
 }
 
 export type OAuth = {

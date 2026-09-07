@@ -71,3 +71,8 @@ export * from "./workflow-run.js"
 // `@unifia/digest-runtime`, which depends on this package.
 export * from "./workflow-graph.js"
 export * from "./workflow-map-key.js"
+
+// Sovereign Knowledge core contracts (domain model, parser, retrieval,
+// policy). Knowledge owns this namespace; it never carries workflow
+// authority contracts.
+export * from "./knowledge/index.js"

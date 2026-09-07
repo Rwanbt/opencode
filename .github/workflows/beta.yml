@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   # schedule trigger disabled: this syncs "beta"-labeled team PRs, which this
   # solo fork doesn't receive, and its blacksmith-4vcpu-ubuntu-2404 runner was
-  # never migrated (see fork-release.yml / build-tauri using ubuntu-latest),
+  # never migrated (see release.yml / build-tauri using ubuntu-latest),
   # so hourly runs queued forever without executing.
   # - cron: "0 * * * *"
 

@@ -719,10 +719,30 @@ export namespace Provider {
               }
             }
 
-            const res = await fetchFn(input, {
-              ...opts,
-              timeout: false,
-            })
+            // A failure here surfaces to the caller as Bun's bare "The socket
+            // connection was closed unexpectedly", with no URL, no provider and
+            // no timing. Diagnosing one on Android cost five wrong hypotheses
+            // before the constant ~15.3s duration became visible at all, so the
+            // context is logged where the failure actually happens.
+            const startedAt = Date.now()
+            let res: Response
+            try {
+              res = await fetchFn(input, {
+                ...opts,
+                timeout: false,
+              })
+            } catch (e) {
+              log.error("provider fetch failed", {
+                providerID: model.providerID,
+                modelID: model.api.id,
+                url: input instanceof Request ? input.url : String(input),
+                method: opts.method ?? "GET",
+                elapsedMs: Date.now() - startedAt,
+                aborted: opts.signal?.aborted ?? false,
+                reason: e instanceof Error ? e.message : String(e),
+              })
+              throw e
+            }
 
             if (!chunkAbortCtl) return res
             return wrapSSE(res, chunkTimeout, chunkAbortCtl)

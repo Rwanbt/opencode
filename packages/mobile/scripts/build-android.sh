@@ -12,7 +12,9 @@ if [ ! -f "$SCRIPT_DIR/../src-tauri/assets/runtime/bin/bun" ]; then
   echo "Preparing Android runtime (first build)..."
   bash "$SCRIPT_DIR/prepare-android-runtime.sh"
 else
-  echo "Runtime binaries already prepared. Use prepare-android-runtime.sh to refresh."
+  echo "Runtime binaries already prepared. Refreshing the embedded Unifia CLI bundle..."
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  node "$REPO_ROOT/scripts/bundle-mobile.mjs" --outdir "$SCRIPT_DIR/../src-tauri/assets/runtime"
 fi
 
 # Ensure ONNX Runtime shared library is available for Kokoro TTS.

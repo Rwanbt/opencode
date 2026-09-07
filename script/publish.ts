@@ -9,11 +9,11 @@ import { fileURLToPath } from "url"
 // not own. Unreachable here by workflow gating (.github/workflows/publish.yml
 // runs only on `anomalyco/opencode`), and kept byte-compatible so the monthly
 // upstream sync stays conflict-free — but a manual run would still fire.
-// Unifia releases through .github/workflows/fork-release.yml.
+// Unifia releases through .github/workflows/release.yml.
 if (!process.env["UNIFIA_ALLOW_UPSTREAM_PUBLISH"]) {
   throw new Error(
     "script/publish.ts is upstream's release path and pushes to infrastructure this fork does not own. " +
-      "Unifia releases via .github/workflows/fork-release.yml; npm alone via packages/unifia/script/publish-npm.ts.",
+      "Unifia releases via .github/workflows/release.yml; npm alone via packages/unifia/script/publish-npm.ts.",
   )
 }
 

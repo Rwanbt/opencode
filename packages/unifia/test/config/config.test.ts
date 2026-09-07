@@ -370,19 +370,18 @@ test("handles file inclusion with replacement tokens", async () => {
   })
 })
 
-test("validates config schema and throws on invalid fields", async () => {
+test("validates known config fields while accepting unknown root keys", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
-        invalid_field: "should cause error",
+        snapshot: "not-a-boolean",
       })
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // Strict schema should throw an error for invalid fields
       await expect(Config.get()).rejects.toThrow()
     },
   })

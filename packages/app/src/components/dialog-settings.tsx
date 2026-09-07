@@ -16,6 +16,7 @@ import { SettingsBenchmark } from "./settings-benchmark"
 import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
 import { SettingsObservability } from "./settings-observability"
+import { SettingsMemory } from "./settings-memory"
 
 export const DialogSettings: Component = () => {
   const mobileLayout = useMobileLayout()
@@ -80,6 +81,10 @@ const DialogSettingsDesktop: Component = () => {
                     <Icon name="eye" />
                     {language.t("settings.fork.observability.title")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="memory">
+                    <Icon name="brain" />
+                    {language.t("settings.fork.memory.title")}
+                  </Tabs.Trigger>
                   <Tabs.Trigger value="plugins">
                     <Icon name="mcp" />
                     {language.t("settings.fork.plugins.title")}
@@ -123,6 +128,9 @@ const DialogSettingsDesktop: Component = () => {
       </Tabs.Content>
       <Tabs.Content value="observability" class="no-scrollbar">
         <SettingsObservability />
+      </Tabs.Content>
+      <Tabs.Content value="memory" class="no-scrollbar">
+        <SettingsMemory />
       </Tabs.Content>
       <Tabs.Content value="plugins" class="no-scrollbar">
         <SettingsPlugins />

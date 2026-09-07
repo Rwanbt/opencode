@@ -5,7 +5,7 @@ APP=unifia
 # Where releases are fetched from. This used to be anomalyco/opencode — the
 # upstream project — so a plain `./install` downloaded OpenCode and wrote it
 # over the user's own OpenCode binary. The fork publishes to its own repository
-# (see the `github.repository` guards in .github/workflows/fork-release.yml);
+# (see the `github.repository` guards in .github/workflows/release.yml);
 # overridable so the eventual repository rename is one variable, not five URLs.
 UNIFIA_RELEASE_REPO=${UNIFIA_RELEASE_REPO:-Rwanbt/unifia}
 

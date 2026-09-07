@@ -1,0 +1,27 @@
+Record something worth remembering after this session ends.
+
+Write a note when you learn something that will still be true next week and is not derivable from the code:
+
+- `decision` — a choice made, with the alternative that was rejected and why
+- `constraint` — a limit the project must respect (a platform quirk, a measured budget, a hard requirement)
+- `failure` — something that was tried and did not work, so it is not tried again
+- `preference` — how the user wants to be worked with
+- `learning` — a non-obvious fact about this system, discovered the hard way
+- `procedure` — a sequence that must be followed in order
+- `reference` — a pointer to an external resource that matters
+
+Do NOT write:
+- what the code already says (structure, signatures, what a function does)
+- what git history already records (that a bug was fixed, when, by whom)
+- anything that only matters inside this conversation
+- secrets, tokens or credentials — the vault refuses a body that carries one
+
+One note, one fact. Give the note a stable locator that describes its subject, in kebab-case, ending in `.md` — for example `decisions/why-sqlite-over-postgres.md`. Subdirectories are created as needed.
+
+State the WHY. A note that records a decision without its rejected alternative is a note that will be re-litigated.
+
+To change an existing note, call `memory_read` first and pass back its `id` and `versionHash`. Without them the write creates a new note; with a stale hash it is refused, which is how concurrent sessions are kept from overwriting each other.
+
+Notes are written as candidates and are recallable immediately. Every write goes through a write-ahead log and is reversible.
+
+By default a note is marked as never leaving this machine, so a cloud model will not recall it; `memory.remote_recall` in the configuration is what changes that, and it is the user's decision, not yours. Pass `private: true` for a note that must stay local whatever that setting says.
