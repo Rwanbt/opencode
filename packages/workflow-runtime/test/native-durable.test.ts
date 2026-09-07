@@ -615,6 +615,8 @@ describe("ACK-loss production regression (directive 23, FC-04 principle)", () =>
       // RESTART: UNKNOWN survives; only the explicit reconciliation exits
        const { authority: b, token: tokenB } = freshAttempts(dir)
       expect(b.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+       // #45: the refusal survives restart — still no second dispatch before reconcile.
+       expectAttemptError(() => b.allocateAttempt(tokenB, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
        b.reconcileEffect(tokenB, "ek.pay.charge", "SUCCEEDED", { reconciled: true })
       expect(b.inspectEffect("run-1", "ek.pay.charge")!.reconciled).toBe(true)
       b.close()
