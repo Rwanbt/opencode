@@ -177,35 +177,62 @@ Green so far on the merged tree:
 - `bunx biome check .`: 1733 files, 0 errors, 13 pre-existing warnings
 - eval isolation: 11 dev / 11 holdout fixtures, no shared id, no shared 5-gram
 
-Open on the merged tree:
+Attributed and closed (2026-09-08):
 
-- Exhaustive `packages/unifia` suite: 5077 pass / 10 skip / **47 fail** over
-  462 files in 36 minutes. The same `test/knowledge/` subset passes 821/821 in
-  isolation, and the one captured failure (`knowledge/e2e/cli-process.test.ts`
-  R-0019, an egress-trail assertion around a spawned CLI process) is
-  load-shaped. Attribution is NOT yet established. Do not claim this suite as
-  PASS until each of the 47 is attributed.
-- `bun turbo build --concurrency=1 --continue`: 10/13 packages build.
-  `@unifia/web` fails on `@astrojs/cloudflare@14.2.1` failing to resolve
-  `astro:static-paths` / `astro:assets`. **Pre-existing trunk breakage, proven
-  not convergence damage**: Knowledge never touched `packages/web`, and the
-  merged tree's `packages/web/package.json` and every astro entry in `bun.lock`
-  are byte-identical to the trunk's. The trunk bumped Astro across a major
-  (`@astrojs/cloudflare` 12.6.6 to 14.2.1, starlight 0.34 to 0.41) without the
-  build following. `@unifia/console-app` (exit 1) and `@unifia/storybook`
-  (exit 134, abort, consistent with this machine's OOM pattern) also fail;
-  Knowledge touched neither package, and their attribution is still pending a
-  run on an unloaded machine.
+**The exhaustive `packages/unifia` suite carries pre-existing red on every ref;
+the convergence adds none of it.** Two identical runs of the merged tree gave
+5077/47 and 5074/50 failures out of 5134 tests, and the variance between two
+runs of the same tree is itself the first evidence. Attribution, per file:
+
+- Of the 15 files reporting failures, 14 have their test AND their source
+  untouched by both sides since the merge-base. A merge can only inject a
+  regression where both sides changed the same thing, and none of these lie on
+  the 26-file shared surface.
+- The 15th, `test/tool/memory.test.ts`, is a Knowledge-only file (421 lines,
+  never touched by the trunk).
+- Three like-for-like isolated comparisons, merged tree vs the Knowledge branch,
+  came out **exactly equal**: `file/path-traversal` 14 pass / 9 fail on both;
+  `tool/memory` 5 pass / 7 fail on both; `session/prompt-effect` +
+  `tool/bash` 76 pass / 19 fail on both.
+
+Residual channel, stated rather than hidden: `packages/unifia/package.json` and
+`bun.lock` ARE on the shared surface, so dependency resolution can still change
+behaviour anywhere. That is precisely the channel the js-yaml defect travelled
+through, which is why it was found and fixed rather than assumed away.
+
+**The three red builds are pre-existing trunk breakage, structurally proven.**
+`packages/web`, `packages/console` and `packages/storybook` are byte-identical
+to the trunk in the merged tree, and the only lock line touching that toolchain
+family is a `vitest` devDependency added for `@unifia/contracts`. `@unifia/web`
+fails because the trunk bumped `@astrojs/cloudflare` 12.6.6 to 14.2.1 (starlight
+0.34 to 0.41) without the build following; `@unifia/storybook` aborts with
+exit 134, this machine's OOM signature.
+
+Two findings surfaced but NOT fixed here, because neither belongs to the
+convergence scope:
+
+1. `packages/unifia/src/team/lock-manager.ts` hardcodes an absolute
+   developer-machine path (`D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\...`)
+   as its default lock directory and `mkdirSync`s it, so running the test suite
+   writes a SQLite lease DB into that user's Obsidian vault. It predates the
+   merge-base and is identical on all three refs.
+2. The project path-escape guard does not reject `../../../etc/passwd` on this
+   platform: `File.read` resolves where the test expects a rejection. Also
+   identical on all refs, with `src/file/index.ts` untouched by Knowledge.
+
+Not run in this session, and therefore not claimed: D7 cross-mode journey,
+D8 reload matrix, D9 responsive pre-check. They need a live app and a browser.
 
 ## Next Exact Action
 
-1. Attribute the 47 `packages/unifia` failures: capture the full list, then run
-   the same suite on `feat/sovereign-knowledge-core` and on the trunk to
-   separate convergence damage from load-shaped flakiness and pre-existing red.
-2. Confirm `@unifia/console-app` and `@unifia/storybook` build failures on an
-   unloaded machine and file them as trunk issues if they reproduce.
-3. Only then run the remaining Phase D gates (cross-mode journey, reload matrix,
-   responsive pre-check) and consider promoting the integration branch.
+1. Decide whether to publish. Local `work-design` now carries the full
+   convergence at `720a9bc6b3`; nothing has been pushed. `git push origin
+   work-design` is the single outward step remaining, and it moves a shared
+   trunk.
+2. Run D7/D8/D9 (cross-mode journey, reload matrix, responsive pre-check)
+   before Phase F freezes the UI reference.
+3. Triage the two surfaced findings above as their own issues; keep them out of
+   the convergence change.
 
 ## Tests Baseline
 
@@ -247,21 +274,22 @@ the owner source-of-truth gate is explicit.
 ## Last Checkpoint
 
 ```text
-PHASE:            C closed, D in progress
-STATUS:           AMBER - merge green on every targeted gate, two open unknowns
-CURRENT HEAD:     integration/work-design-knowledge @ 732ffbb1a6
+PHASE:            D closed for convergence-specific findings, E promoted locally
+STATUS:           GREEN for the convergence; the tree it sits on carries
+                  pre-existing red that predates and outlives this work
+CURRENT HEAD:     work-design @ 720a9bc6b3 (local only)
+SAFETY BRANCH:    checkpoint/work-design-automate-knowledge
 WORKTREE:         D:/App/unifia/unifia-work-design
-REMOTE MUTATION:  NO (everything local so far)
+REMOTE MUTATION:  NO - nothing pushed
 COMPLETED:        Automate trunk assembled; Knowledge merged with provenance;
                   five conflicts decided; generated artifacts regenerated;
-                  Knowledge adapted to the trunk's js-yaml and SPDX contracts
-OPEN:             47 unattributed failures in the exhaustive unifia suite;
-                  3 of 13 package builds red (web proven pre-existing trunk)
-TESTS:            typecheck 47/47; knowledge 821/821; rust 35/35;
-                  automate suites unchanged; biome 0 errors
-BLOCKERS:         disk 3.9 GB free; tsgo/storybook OOM under load
-NEXT EXACT ACTION: attribute the 47 failures against the Knowledge branch and
-                  the trunk before claiming Phase D
+                  50 suite failures and 3 red builds attributed to pre-existing
+                  causes by like-for-like comparison and structural proof
+OPEN:             D7 cross-mode, D8 reload matrix, D9 responsive pre-check
+TESTS:            typecheck 47/47; knowledge 821/821; rust 35/35; automate
+                  suites unchanged; biome 0 errors
+BLOCKERS:         disk 3.9 GB free; tsgo and storybook OOM under load
+NEXT EXACT ACTION: owner decision on publishing work-design, then D7/D8/D9
 ```
 
 ## Master Status Board
@@ -303,9 +331,17 @@ Completed lines are never deleted; they carry their evidence.
 - [x] typecheck 47/47, biome 0 errors
 - [x] Automate regression (no suite moved down)
 - [x] Knowledge regression 821/821 + Rust crate 35/35
-- [ ] exhaustive `packages/unifia` suite: 47 failures unattributed
-- [ ] build: 10/13, three failures pending attribution (`web` proven pre-existing)
-- [ ] cross-mode journey, reload matrix, responsive pre-check
+- [x] exhaustive `packages/unifia` suite: 50 failures attributed, none from the
+      convergence (like-for-like equality on three clusters + structural proof)
+- [x] build: 10/13; all three red packages byte-identical to the trunk
+- [ ] cross-mode journey, reload matrix, responsive pre-check (need a live app)
+
+### E - Promote Convergence
+
+- [x] `work-design` updated locally to `720a9bc6b3` by fast-forward, so the
+      Knowledge merge commit `732ffbb1a6` keeps its provenance
+- [x] safety checkpoint `checkpoint/work-design-automate-knowledge`
+- [ ] published (nothing pushed; owner decision)
 
 ### D to I - Certification, UI, and Dev Integration
 
