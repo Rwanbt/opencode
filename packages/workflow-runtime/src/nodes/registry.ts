@@ -2,7 +2,7 @@
 /* Copyright (c) 2026 Unifia contributors */
 
 /**
- * Canonical node registry (Phase 1) — the single source of truth for
+ * Canonical node registry (Phase 1) ï¿½ the single source of truth for
  * node types and their executors.
  *
  * WHY one registry: the runtime, the HTTP API, the future canvas, the
@@ -16,7 +16,7 @@
  */
 import type { P3Capability } from "@unifia/contracts"
 
-export type NodeExecutorKind = "http" | "transform" | "external"
+export type NodeExecutorKind = "http" | "transform" | "internal" | "external"
 
 export type NodeMetadata = {
   readonly displayName: string
@@ -37,8 +37,10 @@ export type NodeDefinition = {
   /** Capabilities the executor needs; enforced by the P3 gate. */
   readonly capabilities: readonly P3Capability[]
   readonly effects: readonly string[]
-  /** Which executor runs nodes of this type. `external` = dispatched
-   * outside the runtime (human approval, waits, triggers). */
+  /** Which executor runs nodes of this type: `http`/`transform` run in the
+   * Phase 1 driver; `internal` runs inside the graph engine itself
+   * (control families); `external` is dispatched outside the runtime
+   * (human approval, waits, triggers). */
   readonly executor: NodeExecutorKind
 }
 
@@ -47,6 +49,18 @@ export class NodeRegistryError extends Error {
     super(message)
     this.name = "NodeRegistryError"
   }
+}
+
+/** Numeric-aware version comparison (`v2` < `v10`; lexical fallback). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(/[^0-9]+/).filter((part) => part.length > 0).map(Number)
+  const pb = b.split(/[^0-9]+/).filter((part) => part.length > 0).map(Number)
+  const length = Math.max(pa.length, pb.length)
+  for (let i = 0; i < length; i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return a < b ? -1 : a > b ? 1 : 0
 }
 
 export class NodeRegistry {
@@ -72,7 +86,7 @@ export class NodeRegistry {
       if (!exact) throw new NodeRegistryError("NODE_VERSION_UNKNOWN", `unknown node ${type}@${version}`)
       return exact
     }
-    const candidates = [...this.defs.values()].filter((d) => d.type === type).sort((a, b) => (a.version < b.version ? 1 : -1))
+    const candidates = [...this.defs.values()].filter((d) => d.type === type).sort((a, b) => compareVersions(b.version, a.version))
     const latest = candidates[0]
     if (!latest) throw new NodeRegistryError("NODE_TYPE_UNKNOWN", `unknown node type: ${type}`)
     return latest

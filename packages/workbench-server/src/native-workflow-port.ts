@@ -12,7 +12,7 @@
  */
 import type { NodeExecutionRecord, WorkflowDefinitionPort, WorkflowRunSummary, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { AuthorityError, BUILTIN_NODE_DEFINITIONS, driveToQuiescence, GraphRuntimeEngine, GraphRuntimeError, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, NodeRegistry, redactNodeData, takeoverAuthority, type AuthorityToken, type DriveReport } from "@unifia/workflow-runtime"
+import { ALL_FAMILY_MANIFESTS_V1, AuthorityError, BUILTIN_NODE_DEFINITIONS, driveToQuiescence, GraphRuntimeEngine, GraphRuntimeError, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, NodeRegistry, redactNodeData, takeoverAuthority, type AuthorityToken, type DriveReport } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition, WorkflowRun } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
@@ -33,7 +33,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
     this.options = options
-    for (const def of BUILTIN_NODE_DEFINITIONS) this.nodeRegistry.register(def)
+    for (const def of [...BUILTIN_NODE_DEFINITIONS, ...ALL_FAMILY_MANIFESTS_V1]) this.nodeRegistry.register(def)
   }
 
   private now(): number { return this.options.now?.() ?? Date.now() }
@@ -332,7 +332,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
    * (fencing, journaling, idempotence unchanged); the terminal boundary is
    * converged afterwards via the certified resume path.
    */
-  async run(token: AuthorityToken, options?: { fetch?: typeof fetch }): Promise<WorkflowStatePort & { drive: DriveReport }>
+  async run(token: AuthorityToken, options?: { fetch?: typeof fetch; authorize?: (capabilities: readonly string[], resource: string) => Promise<void> }): Promise<WorkflowStatePort & { drive: DriveReport }>
   {
     requireToken(token)
     const runId = token.workflowRunId
@@ -346,7 +346,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
       definition: toIr(loaded.definition),
       token,
       registry: this.nodeRegistry,
-      options: { fetchImpl: options?.fetch, now: () => this.now() },
+      options: { fetchImpl: options?.fetch, authorize: options?.authorize },
     })
     const state = await this.resume(token)
     return { ...state, drive: { dispatched: report.dispatched, terminal: report.terminal } }
@@ -356,10 +356,17 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
    * Phase 1: list runs (principal-authenticated at HTTP; per-run node
    * detail still requires the run authority token via executionNodes).
    */
-  async listWorkflows(): Promise<readonly WorkflowRunSummary[]>
+  async listWorkflows(workspaceIds?: readonly string[]): Promise<readonly WorkflowRunSummary[]>
   {
     const db = this.ensureDb()
-    const rows = db.query("SELECT r.run_id, r.definition_id, r.version_id, h.status, h.created_at, h.updated_at FROM workflow_runs r LEFT JOIN runs h ON h.run_id = r.run_id ORDER BY h.updated_at DESC LIMIT 100").all() as { run_id: string; definition_id: string; version_id: string; status: string | null; created_at: number | null; updated_at: number | null }[]
+    // Workspace scoping is structural: definition_json always carries the
+    // authoring workspaceId, so scoped callers can never see foreign runs.
+    // Unknown scope (legacy/test doubles without workspaces) sees everything.
+    const scoped = workspaceIds !== undefined
+    const placeholders = scoped ? workspaceIds.map(() => "?").join(",") : ""
+    const rows = (scoped
+      ? db.query(`SELECT r.run_id, r.definition_id, r.version_id, h.status, h.created_at, h.updated_at FROM workflow_runs r LEFT JOIN runs h ON h.run_id = r.run_id LEFT JOIN workflow_versions v ON v.definition_id = r.definition_id AND v.version_id = r.version_id WHERE json_extract(v.definition_json, '$.workspaceId') IN (${placeholders}) ORDER BY h.updated_at DESC LIMIT 100`).all(...workspaceIds)
+      : db.query("SELECT r.run_id, r.definition_id, r.version_id, h.status, h.created_at, h.updated_at FROM workflow_runs r LEFT JOIN runs h ON h.run_id = r.run_id ORDER BY h.updated_at DESC LIMIT 100").all()) as { run_id: string; definition_id: string; version_id: string; status: string | null; created_at: number | null; updated_at: number | null }[]
     return rows.map((row) => ({ workflowId: row.run_id, definitionId: row.definition_id, versionId: row.version_id, status: row.status ?? "unknown", createdAt: row.created_at ?? 0, updatedAt: row.updated_at ?? 0 }))
   }
 
@@ -380,7 +387,12 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     return ir.nodes.map((node) => {
       const state = engine.nodeState(runId, node.id)
       const nodeEvents = events.filter((event) => event.nodeId === node.id)
-      const dispatched = nodeEvents.find((event) => event.kind === "NODE_DISPATCHED")
+      // Latest intent wins: after a retry the attemptId must be the newest one.
+      let dispatched: (typeof nodeEvents)[number] | undefined
+      for (let i = nodeEvents.length - 1; i >= 0; i--) {
+        const candidate = nodeEvents[i]!
+        if (candidate.kind === "NODE_DISPATCH_INTENT") { dispatched = candidate; break }
+      }
       const dispatchDetail = dispatched?.detailJson ? (JSON.parse(dispatched.detailJson) as { attemptId?: string; input?: unknown }) : undefined
       let output: unknown = null
       if (state?.outputJson) {

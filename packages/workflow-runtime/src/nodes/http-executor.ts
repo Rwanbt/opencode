@@ -82,6 +82,88 @@ function isRetryableStatus(status: number): boolean {
   return status === 429 || (status >= 500 && status <= 599)
 }
 
+/** Fetch failure causes where no byte provably left this process (DNS refused,
+ * connection refused/unreachable). Anything else after dispatch - timeout,
+ * reset, hangup - is conservatively UNKNOWN: the provider may have committed.
+ */
+const NEVER_DISPATCHED_CAUSE_CODES = new Set([
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+])
+
+function causeCode(error: unknown): string | undefined {
+  const cause = (error as { cause?: { code?: unknown } }).cause
+  return typeof cause?.code === "string" ? cause.code : undefined
+}
+
+/** Headers stripped on cross-origin hops and protocol downgrades. */
+const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization"])
+
+function stripCredentials(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (!CREDENTIAL_HEADERS.has(key.toLowerCase())) out[key] = value
+  }
+  return out
+}
+
+function isCrossOriginOrDowngrade(from: URL, to: URL): boolean {
+  if (from.origin !== to.origin) return true
+  return from.protocol === "https:" && to.protocol === "http:"
+}
+
+async function readBoundedBody(response: Response, abort: () => void, expectedBytes: number | null): Promise<string> {
+  // Streamed with a byte counter: a chunked multi-gigabyte body without
+  // Content-Length must abort BEFORE materializing, and the AbortController
+  // stays armed for the whole body (a stalled body still times out).
+  // Lengths are UTF-8 bytes everywhere, never JS string units.
+  const reader = response.body?.getReader()
+  if (!reader) return ""
+  const chunks: Uint8Array[] = []
+  let bytes = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        bytes += value.byteLength
+        if (bytes > NODE_HTTP_RESPONSE_MAX_BYTES) {
+          abort()
+          try { await reader.cancel() } catch { }
+          throw new NodeExecutionError(
+            "HTTP_RESPONSE_TOO_LARGE",
+            "http response body exceeds limit",
+            false,
+          )
+        }
+        chunks.push(value)
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const merged = new Uint8Array(bytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  if (expectedBytes !== null && bytes !== expectedBytes) {
+    // Framing violation: fewer (or more) bytes than declared. Some fetch
+    // implementations detect this themselves; the explicit check keeps the
+    // guarantee for any injected fetchImpl. A truncated body is a mid-flight
+    // unknown, never a success.
+    throw new NodeExecutionError(
+      "HTTP_NETWORK_ERROR",
+      `http response truncated: read ${bytes} of ${expectedBytes} declared bytes`,
+      false,
+    )
+  }
+  return new TextDecoder().decode(merged)
+}
 export async function executeHttpRequest(
   config: HttpRequestConfig,
   fetchImpl: typeof fetch = fetch,
@@ -91,20 +173,26 @@ export async function executeHttpRequest(
   if (config.query) {
     for (const [key, value] of Object.entries(config.query)) target.searchParams.set(key, String(value))
   }
+  // timeoutMs 0 honors the IR contract ("no timeout"): no timer is armed.
+  // Absent/unset falls back to the bounded default. The controller stays
+  // alive for the whole operation either way.
+  const timeoutMs = config.timeoutMs ?? NODE_HTTP_TIMEOUT_MS
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), Math.max(1, config.timeoutMs ?? NODE_HTTP_TIMEOUT_MS))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  if (timeoutMs > 0) timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs))
   // Redirects are followed manually (not fetch-default) so the redirect
-  // budget is explicit, deterministic and fail-closed: over budget is a
-  // typed non-retryable error, and the final URL is always recorded.
+  // budget is explicit, deterministic and fail-closed, credentials never
+  // cross origins, and the final URL is always recorded.
   let currentUrl = target.toString()
   let currentMethod = config.method
   let currentBody = config.body === undefined ? undefined : typeof config.body === "string" ? config.body : JSON.stringify(config.body)
+  let hopHeaders: Record<string, string> = { ...(config.headers ?? {}) }
   let response: Response | undefined
   try {
     for (let hop = 0; hop <= NODE_HTTP_MAX_REDIRECTS; hop++) {
       const attempt = await fetchImpl(currentUrl, {
         method: currentMethod,
-        headers: config.headers,
+        headers: hopHeaders,
         body: currentBody,
         redirect: "manual",
         signal: controller.signal,
@@ -112,10 +200,11 @@ export async function executeHttpRequest(
       const location = attempt.headers.get("location")
       if (attempt.status >= 300 && attempt.status < 400 && location) {
         if (hop === NODE_HTTP_MAX_REDIRECTS) {
-          throw new NodeExecutionError("HTTP_STATUS_ERROR", `http request exceeded ${NODE_HTTP_MAX_REDIRECTS} redirects: ${config.method} ${target.host}${target.pathname}`, false)
+          throw new NodeExecutionError("HTTP_STATUS_ERROR", `http request exceeded ${NODE_HTTP_MAX_REDIRECTS} redirects`, false)
         }
-        currentUrl = new URL(location, currentUrl).toString()
-        // 301/302/303 downgrade POST to GET per fetch semantics; 307/308 keep method+body.
+        const next = new URL(location, currentUrl)
+        if (isCrossOriginOrDowngrade(new URL(currentUrl), next)) hopHeaders = stripCredentials(hopHeaders)
+        currentUrl = next.toString()
         if (attempt.status === 301 || attempt.status === 302 || attempt.status === 303) {
           if (currentMethod !== "GET" && currentMethod !== "HEAD") { currentMethod = "GET"; currentBody = undefined }
         }
@@ -124,23 +213,35 @@ export async function executeHttpRequest(
       response = attempt
       break
     }
-    if (!response) throw new NodeExecutionError("HTTP_NETWORK_ERROR", `http request produced no response: ${config.method} ${target.host}${target.pathname}`, true)
+    if (!response) throw new NodeExecutionError("HTTP_NETWORK_ERROR", `http request produced no response: ${config.method}`, true)
   } catch (error) {
     if (error instanceof NodeExecutionError) throw error
     if (error instanceof Error && error.name === "AbortError") {
-      throw new NodeExecutionError("HTTP_TIMEOUT", `http request timed out after ${config.timeoutMs}ms: ${config.method} ${target.host}${target.pathname}`, true)
+      throw new NodeExecutionError("HTTP_TIMEOUT", `http request timed out after ${timeoutMs}ms`, true)
     }
-    throw new NodeExecutionError("HTTP_NETWORK_ERROR", `http request failed: ${error instanceof Error ? error.message : String(error)}`, true)
+    const code = causeCode(error)
+    if (code !== undefined && NEVER_DISPATCHED_CAUSE_CODES.has(code)) {
+      throw new NodeExecutionError("HTTP_NETWORK_ERROR", `http request never dispatched`, true)
+    }
+    throw new NodeExecutionError("HTTP_NETWORK_ERROR", `http request failed mid-flight, outcome unknown`, false)
   } finally {
-    clearTimeout(timeout)
+    if (timer !== undefined) clearTimeout(timer)
   }
+  // Body read failures past the headers are mid-flight unknowns (truncation, reset
+  // during streaming): the provider may have committed. Typed non-retryable.
+  let text: string
+  try {
   const contentLength = Number(response.headers.get("content-length") ?? "0")
   if (Number.isFinite(contentLength) && contentLength > NODE_HTTP_RESPONSE_MAX_BYTES) {
-    throw new NodeExecutionError("HTTP_RESPONSE_TOO_LARGE", `http response declares ${contentLength} bytes, limit is ${NODE_HTTP_RESPONSE_MAX_BYTES}`, false)
+    throw new NodeExecutionError("HTTP_RESPONSE_TOO_LARGE", `http response declares over-limit bytes`, false)
   }
-  const text = await response.text()
-  if (text.length > NODE_HTTP_RESPONSE_MAX_BYTES) {
-    throw new NodeExecutionError("HTTP_RESPONSE_TOO_LARGE", `http response body exceeds ${NODE_HTTP_RESPONSE_MAX_BYTES} bytes`, false)
+  // HEAD/204/304 carry no body by spec despite any declared length.
+  const noBody = currentMethod === "HEAD" || response.status === 204 || response.status === 304
+  const expectedBytes = !noBody && Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
+  text = await readBoundedBody(response, () => controller.abort(), expectedBytes)
+  } catch (error) {
+    if (error instanceof NodeExecutionError) throw error
+    throw new NodeExecutionError("HTTP_NETWORK_ERROR", "response body unreadable, outcome unknown", false)
   }
   const contentType = response.headers.get("content-type") ?? ""
   let body: unknown = text
@@ -158,7 +259,7 @@ export async function executeHttpRequest(
   if (!response.ok) {
     throw new NodeExecutionError(
       "HTTP_STATUS_ERROR",
-      `http request failed with status ${response.status}: ${config.method} ${target.host}${target.pathname}`,
+      `http request failed with status`,
       isRetryableStatus(response.status),
     )
   }

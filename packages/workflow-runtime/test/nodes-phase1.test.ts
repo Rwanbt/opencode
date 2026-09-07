@@ -117,3 +117,99 @@ describe("http executor against a real local server", () => {
     }
   })
 })
+
+describe("http executor hardening (Phase 1 review)", () => {
+  test("cross-origin redirect strips authorization; same-origin keeps it", async () => {
+    let attackerAuth: string | null = "unset"
+    const attacker = Bun.serve({ port: 0, fetch: (request) => { attackerAuth = request.headers.get("authorization"); return Response.json({ ok: true }) } })
+    const inner = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        const url = new URL(request.url)
+        if (url.pathname === "/go-evil") return Response.redirect(`http://127.0.0.1:${attacker.port}/collect`, 302)
+        if (url.pathname === "/go-local") return Response.redirect(`/land`, 302)
+        if (url.pathname === "/land") return Response.json({ auth: request.headers.get("authorization") })
+        return new Response("nf", { status: 404 })
+      },
+    })
+    try {
+      const base = `http://127.0.0.1:${inner.port}`
+      const evil = await executeHttpRequest(parseHttpConfig({ method: "GET", url: `${base}/go-evil`, headers: { authorization: "Bearer s3cret" } }))
+      expect(evil.data.status).toBe(200)
+      expect(attackerAuth).toBeNull()
+      const local = await executeHttpRequest(parseHttpConfig({ method: "GET", url: `${base}/go-local`, headers: { authorization: "Bearer s3cret" } }))
+      expect((local.data.body as { auth: string }).auth).toBe("Bearer s3cret")
+    } finally {
+      inner.stop(true)
+      attacker.stop(true)
+    }
+  })
+
+  test("chunked over-limit body without content-length aborts before materializing", async () => {
+    const big = "z".repeat(64 * 1024)
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => {
+        const enc = new TextEncoder()
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            for (let i = 0; i < 32; i++) controller.enqueue(enc.encode(big))
+            controller.close()
+          },
+        })
+        return new Response(stream, { headers: { "content-type": "text/plain" } })
+      },
+    })
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      try { await executeHttpRequest(parseHttpConfig({ method: "GET", url: `${base}/stream` })); expect.unreachable() } catch (e) { expect((e as NodeExecutionError).code).toBe("HTTP_RESPONSE_TOO_LARGE") }
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("stalled body still times out; timeoutMs 0 disables the timer", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Promise<Response>(() => {}),
+    })
+    const quick = Bun.serve({
+      port: 0,
+      fetch: async () => { await new Promise((r) => setTimeout(r, 150)); return Response.json({ slow: true }) },
+    })
+    try {
+      try { await executeHttpRequest(parseHttpConfig({ method: "GET", url: `http://127.0.0.1:${server.port}/stall`, timeoutMs: 100 })); expect.unreachable() } catch (e) { expect((e as NodeExecutionError).code).toBe("HTTP_TIMEOUT") }
+      const ok = await executeHttpRequest(parseHttpConfig({ method: "GET", url: `http://127.0.0.1:${quick.port}/slow`, timeoutMs: 0 }))
+      expect(ok.data.status).toBe(200)
+      expect((ok.data.body as { slow: boolean }).slow).toBe(true)
+    } finally {
+      server.stop(true)
+      quick.stop(true)
+    }
+  })
+
+  test("connection failures without provable cause codes are UNKNOWN (non-retryable); mid-flight reset is UNKNOWN", async () => {
+    try { await executeHttpRequest(parseHttpConfig({ method: "POST", url: "http://127.0.0.1:1/gone" })); expect.unreachable() } catch (e) {
+      const err = e as NodeExecutionError
+      expect(err.code).toBe("HTTP_NETWORK_ERROR")
+      expect(err.retryable).toBe(false)
+    }
+    const cut = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        data() {},
+        open(socket) { socket.write("HTTP/1.1 200 OK\r\nContent-Length: 100\r\nContent-Type: text/plain\r\n\r\npartial"); socket.end() },
+        error() {},
+      },
+    })
+    try {
+      try { await executeHttpRequest(parseHttpConfig({ method: "GET", url: `http://127.0.0.1:${cut.port}/cut` })); expect.unreachable() } catch (e) {
+        const err = e as NodeExecutionError
+        expect(err.retryable).toBe(false)
+      }
+    } finally {
+      cut.stop(true)
+    }
+  })
+})

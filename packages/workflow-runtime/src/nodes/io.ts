@@ -21,9 +21,11 @@ export type NodeResolvedInput = Record<string, unknown>
 /** Runtime output payload. Must stay JSON-shaped and bounded. */
 export type NodeOutputData = Record<string, unknown>
 
-/** Execution metadata attached to every produced output. */
+/** Execution metadata attached to every produced output. `attemptId` is
+ * null for pure local executions (transform) that mint no attempt; it is
+ * the effect attempt id for side-effecting nodes. */
 export type NodeOutputMeta = {
-  readonly attemptId: string
+  readonly attemptId: string | null
   readonly durationMs: number
   readonly bytes: number
 }
@@ -46,6 +48,7 @@ export class NodeExecutionError extends Error {
       | "TRANSFORM_INVALID"
       | "DRIVER_BUDGET_EXCEEDED"
       | "NODE_EXECUTOR_ERROR"
+      | "NODE_CAPABILITY_DENIED"
       | "NODE_CANCELLED",
     message: string,
     readonly retryable: boolean,

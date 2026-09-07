@@ -207,10 +207,8 @@ describe("Phase 1 vertical slice", () => {
       const base = `http://127.0.0.1:${stub.port}`
       const cases: { name: string; mutate: (def: ReturnType<typeof sliceDef>) => void; code: string }[] = [
         {
-          name: "unknown node", mutate: (def) => { def.steps[1] = { ...def.steps[1], config: { fields: { x: "$node.nope.json.v" } } } },
-          code: "NODE_UNKNOWN_REFERENCE",
-        },
-        {
+        // Unknown ids fail at publish time (HTTP 422), before any dispatch.
+        // Covered by the dedicated test below; not part of the run-failure loop.
           name: "missing field", mutate: (def) => { def.steps[1] = { ...def.steps[1], config: { fields: { x: "$node.httpa.json.nope.deep" } } } },
           code: "NODE_PATH_MISSING",
         },
@@ -305,6 +303,30 @@ describe("Phase 1 vertical slice", () => {
         const stale = await server.fetch(new Request(`http://127.0.0.1/v1/workflows/${workflowId}/run`, { method: "POST", headers: authHeaders(token) }))
         expect(stale.status).toBe(409)
         expect(((await stale.json()) as { error: string }).error).toBe("STALE_AUTHORITY")
+        expect(state.hits["/user"] ?? 0).toBe(0)
+      } finally {
+        port.close()
+      }
+    } finally {
+      stub.stop(true)
+      await removeDir(dir)
+    }
+  })
+  test("unknown node id fails at publish time (HTTP 422) before any dispatch", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "phase1-publish-"))
+    const state: StubState = { hits: {}, lastAuth: null, lastOrderQuery: null }
+    const stub = startStub(state)
+    try {
+      const base = `http://127.0.0.1:${stub.port}`
+      const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
+      const server = makeServer(port)
+      try {
+        const def = sliceDef(base)
+        def.steps[1] = { ...def.steps[1], config: { fields: { x: "$node.nope.json.v" } } }
+        const { workflowId, token } = await startRun(server, def)
+        const ran = await server.fetch(new Request(`http://127.0.0.1/v1/workflows/${workflowId}/run`, { method: "POST", headers: authHeaders(token) }))
+        expect(ran.status).toBe(422)
+        expect(((await ran.json()) as { error: string }).error).toBe("NODE_UNKNOWN_REFERENCE")
         expect(state.hits["/user"] ?? 0).toBe(0)
       } finally {
         port.close()

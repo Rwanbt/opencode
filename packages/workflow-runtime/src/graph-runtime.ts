@@ -731,7 +731,7 @@ export class GraphRuntimeEngine {
 
   /**
    * Phase 1: fenced journal append for external dispatchers (the execution
-   * driver records NODE_DISPATCHED with the redacted resolved input). Same
+   * driver records NODE_DISPATCH_INTENT with the redacted resolved input). Same
    * fence and same journal as every internal transition — no second path.
    */
   journalNodeEvent(runId: string, token: AuthorityToken, nodeId: string, kind: string, detail: unknown): void {

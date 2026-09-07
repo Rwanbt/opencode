@@ -378,6 +378,13 @@ export class NativeAttemptAuthority {
     return rows.map((row) => ({ from: row.from_status, to: row.to_status, occurredAt: row.occurred_at }))
   }
 
+  /** Whether an explicit retry authorization is banked for this effect (recovery read). */
+  hasRetryAuthorization(runId: string, effectKey: string): boolean {
+    const db = this.requireDb()
+    const row = db.query("SELECT effect_key FROM retry_authorizations WHERE run_id = ? AND effect_key = ?").get(runId, effectKey) as { effect_key: string } | null
+    return row !== null
+  }
+
   inspectAttempts(runId: string, liId: string): readonly DurableAttempt[] {
     const db = this.requireDb()
     const rows = db.query("SELECT run_id, li_id, seq, attempt_id, effect_key, outcome, result_json, ack_lost, created_at FROM attempts WHERE run_id = ? AND li_id = ? ORDER BY seq").all(runId, liId) as { run_id: string; li_id: string; seq: number; attempt_id: string; effect_key: string; outcome: string | null; result_json: string | null; ack_lost: number; created_at: number }[]

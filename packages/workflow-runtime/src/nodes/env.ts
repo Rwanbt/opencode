@@ -5,10 +5,13 @@
  * `$node` references (Phase 1) � integrated into the existing bounded
  * expression engine, not a second DSL.
  *
- * Canonical form: `$node["<stable-id>"].json.<path>` (bracket form also
- * carries display names with spaces); `$node.<id>.<path>` works for
- * identifier-safe ids. Both parse with the existing grammar once `$`
- * lexes as an identifier start.
+ * Canonical form: `$node["<stable-id>"].json.<path>`; `$node.<id>.<path>`
+ * works for identifier-safe ids. Brackets do NOT alias display names:
+ * they address the same stable-id map for ids that dot syntax cannot
+ * spell (hyphens, spaces). There is no display-name alias table, by
+ * design — renames never break refs because refs never use names.
+ * Both forms parse with the existing grammar once `$` lexes as an
+ * identifier start.
  *
  * Decisions (explicit):
  * - Canonical keys are STABLE NODE IDS. Display names resolve only via
@@ -154,4 +157,36 @@ export function evaluateNodeRefs(
   }
   for (const chain of distinct) checkChain(chain, outputs, completedIds)
   return evaluateExpression(ast, { $node: Object.fromEntries(outputs) })
+}
+export function extractNodeRefIds(source: string): readonly string[] {
+  const ast = parseExpression(source)
+  const chains: Chain[] = []
+  collectNodeChains(ast.root, chains)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const chain of chains) {
+    if (!seen.has(chain.nodeId)) {
+      seen.add(chain.nodeId)
+      out.push(chain.nodeId)
+    }
+  }
+  return out
+}
+export function collectConfigNodeRefs(config: unknown): string[] {
+  const out: string[] = []
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") {
+      if (value.includes("$node")) out.push(...extractNodeRefIds(value))
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item)
+      return
+    }
+    if (value !== null && typeof value === "object") {
+      for (const item of Object.values(value as Record<string, unknown>)) walk(item)
+    }
+  }
+  walk(config)
+  return [...new Set(out)]
 }
