@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 
-import type { P3Capability } from "@unifia/contracts"
+import type { FailurePolicy, NodeFamily, P3Capability } from "@unifia/contracts"
 import type { AuthorityToken } from "@unifia/workflow-runtime"
 
 export type { AuthorityToken }
@@ -18,6 +18,14 @@ export type WorkflowStepPort = {
   readonly capability: P3Capability
   readonly input: Record<string, unknown>
   readonly requiresApproval?: boolean
+  /** Phase 1: explicit node family. Absent = legacy capability mapping. */
+  readonly family?: NodeFamily
+  /** Phase 1: family config. Absent = legacy {capability, input} shape. */
+  readonly config?: Record<string, unknown>
+  /** Phase 1: per-step failure policy override. */
+  readonly failurePolicy?: FailurePolicy
+  /** Phase 1: per-step timeout override (ms). */
+  readonly timeoutMs?: number
 }
 
 export type WorkflowDefinitionPort = {
@@ -25,6 +33,10 @@ export type WorkflowDefinitionPort = {
   readonly version: number
   readonly workspaceId: string
   readonly steps: readonly WorkflowStepPort[]
+  /** Phase 1: workflow-level failure policy default (toIr fallback: propagate). */
+  readonly defaultFailurePolicy?: FailurePolicy
+  /** Phase 1: workflow-level timeout default in ms (0/absent = executor default). */
+  readonly defaultTimeoutMs?: number
 }
 
 export type WorkflowStatePort = {
@@ -49,4 +61,31 @@ export type WorkflowRuntimePort = {
   history(token: AuthorityToken): Promise<readonly { kind: string; nodeId: string | null; seq: number }[]>
   /** Worker-only boundary for completing the currently surfaced step. */
   complete(token: AuthorityToken, output: unknown): Promise<WorkflowStatePort>
+  /** Phase 1: drive ready nodes through the registry executors to quiescence. */
+  run(token: AuthorityToken, options?: { fetch?: typeof fetch }): Promise<WorkflowStatePort & { drive: { dispatched: readonly { nodeId: string; family: string; attemptId: string | null; status: string }[] } }>
+  /** Phase 1: list runs (principal-scoped; per-run node detail still needs the run token). */
+  listWorkflows(): Promise<readonly WorkflowRunSummary[]>
+  /** Phase 1: per-node execution records reconstructed from the durable journal. */
+  executionNodes(token: AuthorityToken): Promise<readonly NodeExecutionRecord[]>
+}
+
+export type WorkflowRunSummary = {
+  readonly workflowId: string
+  readonly definitionId: string
+  readonly versionId: string
+  readonly status: string
+  readonly createdAt: number
+  readonly updatedAt: number
+}
+
+export type NodeExecutionRecord = {
+  readonly nodeId: string
+  readonly family: string
+  readonly status: string
+  readonly attemptId: string | null
+  readonly startedAt: number | null
+  readonly updatedAt: number | null
+  readonly input: unknown
+  readonly output: unknown
+  readonly error: string | null
 }

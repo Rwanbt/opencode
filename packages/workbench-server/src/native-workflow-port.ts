@@ -10,9 +10,9 @@
  * lives in the durable authorities (restart/rediscover with no
  * in-memory ownership).
  */
-import type { WorkflowDefinitionPort, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
+import type { NodeExecutionRecord, WorkflowDefinitionPort, WorkflowRunSummary, WorkflowRuntimePort, WorkflowStatePort } from "./workflow-port.js"
 import type { Database } from "bun:sqlite"
-import { AuthorityError, GraphRuntimeEngine, GraphRuntimeError, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, takeoverAuthority, type AuthorityToken } from "@unifia/workflow-runtime"
+import { AuthorityError, BUILTIN_NODE_DEFINITIONS, driveToQuiescence, GraphRuntimeEngine, GraphRuntimeError, NativeApprovalAuthority, NativeAttemptAuthority, NativeDurableHistoryAuthority, NodeRegistry, redactNodeData, takeoverAuthority, type AuthorityToken, type DriveReport } from "@unifia/workflow-runtime"
 import type { Node, Edge, WorkflowDefinition, WorkflowRun } from "@unifia/contracts"
 import { promoteToVersion } from "@unifia/workflow-catalog"
 
@@ -29,9 +29,11 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   private approvalsSvc: NativeApprovalAuthority | null = null
   private readonly loaded = new Map<string, { definition: WorkflowDefinitionPort; versionId: string; versionDigest: string }>()
   private readonly options: NativeWorkflowRuntimePortOptions
+  private readonly nodeRegistry = new NodeRegistry()
 
   constructor(options: NativeWorkflowRuntimePortOptions) {
     this.options = options
+    for (const def of BUILTIN_NODE_DEFINITIONS) this.nodeRegistry.register(def)
   }
 
   private now(): number { return this.options.now?.() ?? Date.now() }
@@ -234,7 +236,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     // mark and canonical history transition commit in ONE shared transaction
     // (nested savepoints — a throw anywhere rolls back all, no split-brain).
     db.transaction(() => {
-      engine.completeNode(runId, token, stepNodeId(this.firstActiveStep(runId, definition)), output)
+      engine.completeNode(runId, token, portNodeId(definition, this.firstActiveStep(runId, definition)), output)
       // schedule + surface the successor step (single-pass walk convergence)
       engine.advance(runId, token, { input: {} })
       const terminal = this.graphTerminalStatus(runId, definition, engine)
@@ -268,7 +270,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
   /** Graph-derived terminality, mirroring the state() mapping below. */
   private graphTerminalStatus(runId: string, definition: WorkflowDefinitionPort, engine: GraphRuntimeEngine): "completed" | "failed" | "cancelled" | null {
     for (let i = 0; i < definition.steps.length; i++) {
-      const nodeState = engine.nodeState(runId, stepNodeId(i))
+      const nodeState = engine.nodeState(runId, portNodeId(definition, i))
       if (!nodeState) return null
       if (nodeState.status === "COMPLETED") continue
       if (nodeState.status === "FAILED") {
@@ -285,7 +287,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     const loaded = this.ensureLoaded(runId)
     const engine = this.ensureEngine(definition, loaded.versionId)
     for (let i = 0; i < definition.steps.length; i++) {
-      const nodeState = engine.nodeState(runId, stepNodeId(i))
+      const nodeState = engine.nodeState(runId, portNodeId(definition, i))
       if (!nodeState || nodeState.status === "RUNNING") return i
     }
     throw new Error(`no active step to complete: ${definition.id}`)
@@ -311,7 +313,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     db.transaction(() => {
       // the workbench boundary IS the worker reaction point: the surfaced
       // in-flight step observes the durable cancel flag and fails itself
-      const stepId = stepNodeId(this.firstActiveStep(runId, definition))
+      const stepId = portNodeId(definition, this.firstActiveStep(runId, definition))
       const step = engine.nodeState(runId, stepId)
       if (step && step.status !== "COMPLETED" && step.status !== "FAILED" && step.status !== "SKIPPED") {
         engine.failNode(runId, token, stepId, "cancelled by workbench")
@@ -324,6 +326,86 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     return this.state(runId, definition, loaded.versionId, loaded.versionDigest, token)
   }
 
+  /**
+   * Phase 1: drive ready nodes through the registry executors to quiescence.
+   * Every mutation flows through the certified substrate with the run token
+   * (fencing, journaling, idempotence unchanged); the terminal boundary is
+   * converged afterwards via the certified resume path.
+   */
+  async run(token: AuthorityToken, options?: { fetch?: typeof fetch }): Promise<WorkflowStatePort & { drive: DriveReport }>
+  {
+    requireToken(token)
+    const runId = token.workflowRunId
+    const loaded = this.ensureLoaded(runId)
+    this.ensureServices()
+    const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    const report = await driveToQuiescence({
+      engine,
+      attempts: this.attemptAuthority,
+      history: this.historyAuthority,
+      definition: toIr(loaded.definition),
+      token,
+      registry: this.nodeRegistry,
+      options: { fetchImpl: options?.fetch, now: () => this.now() },
+    })
+    const state = await this.resume(token)
+    return { ...state, drive: { dispatched: report.dispatched, terminal: report.terminal } }
+  }
+
+  /**
+   * Phase 1: list runs (principal-authenticated at HTTP; per-run node
+   * detail still requires the run authority token via executionNodes).
+   */
+  async listWorkflows(): Promise<readonly WorkflowRunSummary[]>
+  {
+    const db = this.ensureDb()
+    const rows = db.query("SELECT r.run_id, r.definition_id, r.version_id, h.status, h.created_at, h.updated_at FROM workflow_runs r LEFT JOIN runs h ON h.run_id = r.run_id ORDER BY h.updated_at DESC LIMIT 100").all() as { run_id: string; definition_id: string; version_id: string; status: string | null; created_at: number | null; updated_at: number | null }[]
+    return rows.map((row) => ({ workflowId: row.run_id, definitionId: row.definition_id, versionId: row.version_id, status: row.status ?? "unknown", createdAt: row.created_at ?? 0, updatedAt: row.updated_at ?? 0 }))
+  }
+
+  /**
+   * Phase 1: per-node execution records reconstructed from the durable
+   * journal (canonical source) plus graph node states. Outputs are
+   * redacted on read; execution facts stay exact.
+   */
+  async executionNodes(token: AuthorityToken): Promise<readonly NodeExecutionRecord[]>
+  {
+    requireToken(token)
+    const runId = token.workflowRunId
+    const loaded = this.ensureLoaded(runId)
+    const engine = this.ensureEngine(loaded.definition, loaded.versionId)
+    engine.assertAuthority(runId, token)
+    const ir = toIr(loaded.definition)
+    const events = engine.inspectEvents(runId)
+    return ir.nodes.map((node) => {
+      const state = engine.nodeState(runId, node.id)
+      const nodeEvents = events.filter((event) => event.nodeId === node.id)
+      const dispatched = nodeEvents.find((event) => event.kind === "NODE_DISPATCHED")
+      const dispatchDetail = dispatched?.detailJson ? (JSON.parse(dispatched.detailJson) as { attemptId?: string; input?: unknown }) : undefined
+      let output: unknown = null
+      if (state?.outputJson) {
+        try { output = redactNodeData(JSON.parse(state.outputJson) as unknown) } catch { output = null }
+      }
+      let error: string | null = null
+      if (state?.status === "FAILED") {
+        try { error = ((JSON.parse(state.outputJson ?? "null") as { reason?: string }).reason ?? "failed") as string } catch { error = "failed" }
+      }
+      let family: string = node.family
+      try { family = `${node.family} (${this.nodeRegistry.get(node.family).metadata.displayName})` } catch { /* unknown family: raw value */ }
+      return {
+        nodeId: node.id,
+        family,
+        status: state?.status ?? "UNKNOWN",
+        attemptId: dispatchDetail?.attemptId ?? null,
+        startedAt: dispatched?.occurredAt ?? null,
+        updatedAt: state?.updatedAt ?? null,
+        input: dispatchDetail?.input ?? null,
+        output,
+        error,
+      }
+    })
+  }
+
   private async state(runId: string, definition: WorkflowDefinitionPort, versionId: string, versionDigest: string, authorityToken: AuthorityToken): Promise<WorkflowStatePort> {
     const engine = this.ensureEngine(definition, versionId)
     const steps = definition.steps
@@ -331,7 +413,7 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     let status: WorkflowStatePort["status"] = "running"
     const outputs: unknown[] = []
     for (let i = 0; i < steps.length; i++) {
-      const nodeState = engine.nodeState(runId, stepNodeId(i))
+      const nodeState = engine.nodeState(runId, portNodeId(definition, i))
       if (!nodeState) { nextStep = i; status = "pending"; break }
       if (nodeState.status === "COMPLETED") { outputs.push(nodeState.outputJson ? (JSON.parse(nodeState.outputJson) as unknown) : null); continue }
       if (nodeState.status === "FAILED") {
@@ -364,7 +446,14 @@ function requireToken(token: AuthorityToken | undefined): asserts token is Autho
   if (!token) throw new AuthorityError("AUTHORITY_TOKEN_REQUIRED")
 }
 
-function stepNodeId(index: number): string {
+/**
+ * Phase 1: node ids are the authored stable step ids (the `$node` canonical
+ * keys). Steps without a usable id (untyped JSON input) fall back to the
+ * legacy positional `step-N` so old definitions keep working.
+ */
+function portNodeId(definition: WorkflowDefinitionPort, index: number): string {
+  const id = definition.steps[index]?.id
+  if (typeof id === "string" && id.length > 0) return id
   return `step-${index}`
 }
 
@@ -376,9 +465,11 @@ function isTerminalHistoryStatus(status: WorkflowRun["status"]): boolean {
 
 function toIr(definition: WorkflowDefinitionPort): WorkflowDefinition {
   const nodes: Node[] = definition.steps.map((step, index) => ({
-    id: stepNodeId(index),
-    family: step.requiresApproval ? "human.approval" : "tool.http",
-    config: { capability: step.capability, input: step.input },
+    id: portNodeId(definition, index),
+    family: step.family ?? (step.requiresApproval ? "human.approval" : "tool.http"),
+    config: step.config ?? { capability: step.capability, input: step.input },
+    ...(step.failurePolicy ? { failurePolicy: step.failurePolicy } : {}),
+    ...(typeof step.timeoutMs === "number" ? { timeoutMs: step.timeoutMs } : {}),
   }))
   const edges: Edge[] = []
   for (let i = 0; i < nodes.length - 1; i++) edges.push({ from: nodes[i]!.id, to: nodes[i + 1]!.id, kind: "flow" })
@@ -388,8 +479,8 @@ function toIr(definition: WorkflowDefinitionPort): WorkflowDefinition {
     displayName: definition.id,
     nodes, edges,
     concurrency: { kind: "single" },
-    defaultFailurePolicy: { kind: "propagate" },
-    defaultTimeoutMs: 0,
+    defaultFailurePolicy: definition.defaultFailurePolicy ?? { kind: "propagate" },
+    defaultTimeoutMs: definition.defaultTimeoutMs ?? 0,
     createdAt: 0, updatedAt: 0,
   }
 }

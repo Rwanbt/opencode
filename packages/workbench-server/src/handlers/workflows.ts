@@ -65,3 +65,36 @@ export async function inspect(ctx: ServerContext, request: Request, id: string):
   const events = await ctx.workflow.history(token)
   return json(200, { ...state, events }) } catch (error) { const stale = staleAuthorityResponse(error); if (stale) return stale; throw error }
 }
+
+export async function runWorkflow(ctx: ServerContext, request: Request, id: string): Promise<Response> {
+  const principal = await ctx.authenticate(request)
+  if (!principal) return ctx.deny(null, "workflow.principal", 401)
+  if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
+  const token = workflowAuthority(request)
+  if (!token || token.workflowRunId !== id) return ctx.deny(principal, "workflow.authority", 400)
+  try {
+    const state = await ctx.workflow.run(token)
+    userAudit(ctx, principal, "workflow.run", "allow", { resource: id, reason: state.status })
+    return json(200, state)
+  } catch (error) { const stale = staleAuthorityResponse(error); if (stale) return stale; throw error }
+}
+
+export async function listWorkflows(ctx: ServerContext, request: Request): Promise<Response> {
+  const principal = await ctx.authenticate(request)
+  if (!principal) return ctx.deny(null, "workflow.principal", 401)
+  if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
+  const workflows = await ctx.workflow.listWorkflows()
+  return json(200, { workflows })
+}
+
+export async function nodeDetails(ctx: ServerContext, request: Request, id: string): Promise<Response> {
+  const principal = await ctx.authenticate(request)
+  if (!principal) return ctx.deny(null, "workflow.principal", 401)
+  if (!ctx.workflow) return ctx.deny(principal, "workflow.unavailable", 501)
+  const token = workflowAuthority(request)
+  if (!token || token.workflowRunId !== id) return ctx.deny(principal, "workflow.authority", 400)
+  try {
+    const nodes = await ctx.workflow.executionNodes(token)
+    return json(200, { nodes })
+  } catch (error) { const stale = staleAuthorityResponse(error); if (stale) return stale; throw error }
+}

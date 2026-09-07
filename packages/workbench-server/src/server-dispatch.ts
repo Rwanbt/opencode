@@ -111,6 +111,15 @@ export async function dispatch(ctx: ServerContext, request: Request): Promise<Re
   if (segments[1] === "workflows" && request.method === "GET" && segments.length === 3) {
     return workflows.inspect(ctx, request, segments[2])
   }
+  if (segments[1] === "workflows" && request.method === "GET" && segments.length === 2) {
+    return workflows.listWorkflows(ctx, request)
+  }
+  if (segments[1] === "workflows" && segments[3] === "run" && request.method === "POST") {
+    return workflows.runWorkflow(ctx, request, segments[2])
+  }
+  if (segments[1] === "workflows" && segments[3] === "nodes" && request.method === "GET") {
+    return workflows.nodeDetails(ctx, request, segments[2])
+  }
   if (segments[1] === "trace" && request.method === "GET") {
     return approvals.auditPage(ctx, request, "trace")
   }

@@ -118,7 +118,7 @@ describe("canonical authority production path", () => {
       expect(tokenA4.generation).toBe(4)
       // #47 literal: owner A ACTS at generation 4 (real graph mutation) before B takes over.
       const engineA4 = port.graphEngineFor(tokenA4)
-      engineA4.setDeadline(runId, tokenA4, "step-0", 19_000)
+      engineA4.setDeadline(runId, tokenA4, "s0", 19_000)
       const tokenB = port.takeover(tokenA4, "owner-b")
       expect(tokenB).toMatchObject({ workflowRunId: runId, generation: 5, authorityOwnerId: "owner-b" })
       const staleA = tokenA4
@@ -126,8 +126,8 @@ describe("canonical authority production path", () => {
       // Graph through the assembly.
       await expectStale(() => port.graphEngineFor(staleA), "graph assembly")
       const engine = port.graphEngineFor(tokenB)
-      await expectStale(() => engine.setDeadline(runId, staleA, "step-0", 20_000), "graph")
-      engine.setDeadline(runId, tokenB, "step-0", 20_000)
+      await expectStale(() => engine.setDeadline(runId, staleA, "s0", 20_000), "graph")
+      engine.setDeadline(runId, tokenB, "s0", 20_000)
 
       // History + timers through the assembly.
       await expectStale(() => history.transition(staleA, runId, { from: "running", to: "waiting", effectSlotId: "slot-a", occurredAt: 9_999, isCompensating: false }), "history transition")
@@ -170,8 +170,8 @@ describe("canonical authority production path", () => {
       const restartedAttempts = restartedPort.attemptAuthority
       const restartedEngine = restartedPort.graphEngineFor(tokenB)
       await expectStale(() => restartedPort.graphEngineFor(staleA), "restarted graph assembly")
-      await expectStale(() => restartedEngine.setDeadline(runId, staleA, "step-0", 21_000), "restarted graph")
-      restartedEngine.setDeadline(runId, tokenB, "step-0", 21_000)
+      await expectStale(() => restartedEngine.setDeadline(runId, staleA, "s0", 21_000), "restarted graph")
+      restartedEngine.setDeadline(runId, tokenB, "s0", 21_000)
       await expectStale(() => restartedAttempts.allocateAttempt(staleA, "li-restart", "effect-restart"), "restarted attempt")
       const restartedAttempt = restartedAttempts.allocateAttempt(tokenB, "li-restart", "effect-restart")
       restartedAttempts.recordAttemptOutcome(tokenB, "li-restart", restartedAttempt.attemptId, "SUCCEEDED", { result: { ok: true } })

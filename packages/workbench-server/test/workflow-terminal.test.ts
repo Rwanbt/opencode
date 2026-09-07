@@ -120,7 +120,8 @@ describe("terminal run boundary (P0-A)", () => {
       const server = makeServer(port)
       const { runId, token } = await startRun(server)
       // Graph-only failure first: the canonical history is still open.
-      port.graphEngineFor(token).failNode(runId, token, "step-0", "provider boom")
+      // Node ids are the authored stable step ids (Phase 1 port mapping), not positional: s0 here.
+      port.graphEngineFor(token).failNode(runId, token, "s0", "provider boom")
       const healed = await port.resume(token)
       expect(healed.status).toBe("failed")
       expect((await port.historyAuthority.getMaterializedProjection(runId))!.status).toBe("failed")

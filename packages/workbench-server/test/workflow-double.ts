@@ -38,6 +38,19 @@ export class WorkflowRuntimeDouble implements WorkflowRuntimePort {
     return []
   }
 
+  async run(token: AuthorityToken): Promise<WorkflowStatePort & { drive: { dispatched: readonly { nodeId: string; family: string; attemptId: string | null; status: string }[] } }> {
+    const state = await this.resume(token)
+    return { ...state, drive: { dispatched: [] } }
+  }
+
+  async listWorkflows(): Promise<readonly import("../src/workflow-port.js").WorkflowRunSummary[]> {
+    return [...this.#states.values()].map((state) => ({ workflowId: state.workflowId, definitionId: state.definition.id, versionId: "test", status: state.status, createdAt: 0, updatedAt: 0 }))
+  }
+
+  async executionNodes(_token: AuthorityToken): Promise<readonly import("../src/workflow-port.js").NodeExecutionRecord[]> {
+    return []
+  }
+
   async complete(token: AuthorityToken, output: unknown): Promise<WorkflowStatePort> {
     const state = await this.resume(token)
     return { ...state, outputs: [...state.outputs, output] }
