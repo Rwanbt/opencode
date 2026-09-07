@@ -16,11 +16,13 @@ checkpoints only.
 
 ## Current Phase
 
-Phase C: Knowledge convergence preflight. Phases A and B are closed.
+Phase D: convergence certification. Phases A, B and C are closed; the Knowledge
+merge is committed on `integration/work-design-knowledge`.
 
 ## Current Branch
 
-`work-design`
+`integration/work-design-knowledge` (merge commit `732ffbb1a6`), branched from
+the assembled `work-design` at `3c8e22e7e6`.
 
 ## Current HEAD
 
@@ -123,23 +125,87 @@ work is owed.
   - `bun turbo typecheck --concurrency=1` 47/47
   - `bunx biome check .` 0 errors, 15 warnings
 
+## Phase C Verdict (2026-09-08)
+
+Merge-base `91daa35a26a8e44d7f35b539c91030ec1e230c54`. Measured before merging:
+Knowledge changed 383 files, the trunk 998, and **only 26 were touched by both**.
+Git auto-resolved 21 of those; five needed a decision.
+
+| Conflict | Decision |
+|---|---|
+| `.gitignore` | union |
+| `packages/contracts/package.json` | union: trunk `main`/`types`/`license`/`scripts`, Knowledge `files` + explicit `zod`, export map merged to five entries |
+| `packages/contracts/src/index.ts` | additive union; contracts typecheck clean, so no export collision |
+| both `unifia-cli.js` bundles | regenerated with `scripts/bundle-mobile.mjs`, never hand-merged |
+
+Knowledge adapted to the trunk, never the reverse:
+
+- `knowledge/parser/frontmatter.ts` called `gray-matter` directly, which only
+  worked on the Knowledge branch because a nested `js-yaml@3.15.1` sat under
+  gray-matter there. The trunk keeps ONE js-yaml (4.3.1) and routes every call
+  site through `util/frontmatter.ts`. After the merge the nested copy is gone,
+  so the parser threw on every note: **229 of 821 Knowledge tests failed**.
+  Routing it through the wrapper restores 821/821, the branch's own baseline.
+- 43 Knowledge files lacked the SPDX header the trunk's pre-commit gate
+  requires. Headers added rather than the gate weakened. The 31 that carry YAML
+  frontmatter take the identifier as a YAML comment inside the frontmatter,
+  because gray-matter only sees frontmatter starting at byte 0.
+
+Generated artifacts regenerated, not merged: `bun.lock` (one missing
+`@unifia/mcp-transport` workspace link recovered, no version change),
+`packages/sdk/openapi.json` and `types.gen.ts` (`script/generate.ts`, enforced
+at zero drift by `observability-sdk-drift`).
+
+Checks that could have hidden a loss:
+
+- i18n union verified arithmetically on `en.ts`: 1660 base + 124 trunk + 22
+  Knowledge = 1806 keys. No duplicate, no dropped key.
+- Knowledge's `memory` settings block survives intact in `config-schema.ts`
+  (merged file byte-identical to the Knowledge side, +42 lines vs the trunk).
+
 ## Current Gate
 
-Phase C preflight: create `integration/work-design-knowledge` from the
-assembled trunk, inventory Knowledge-only domains and shared conflict surfaces,
-then merge `feat/sovereign-knowledge-core` with `--no-ff` and manual conflict
-resolution.
+Phase D certification on `integration/work-design-knowledge`.
+
+Green so far on the merged tree:
+
+- `bun turbo typecheck --concurrency=1`: 47/47, all real executions
+- Knowledge suite: 821/821 (4199 expects), equal to its own branch baseline
+- `crates/unifia-knowledge-core`: 35/35
+- workflow-runtime 154/154, workbench-server 103/103, contracts 695/695,
+  expression-runtime 8/8, workflow-catalog 5/5
+- `bunx biome check .`: 1733 files, 0 errors, 13 pre-existing warnings
+- eval isolation: 11 dev / 11 holdout fixtures, no shared id, no shared 5-gram
+
+Open on the merged tree:
+
+- Exhaustive `packages/unifia` suite: 5077 pass / 10 skip / **47 fail** over
+  462 files in 36 minutes. The same `test/knowledge/` subset passes 821/821 in
+  isolation, and the one captured failure (`knowledge/e2e/cli-process.test.ts`
+  R-0019, an egress-trail assertion around a spawned CLI process) is
+  load-shaped. Attribution is NOT yet established. Do not claim this suite as
+  PASS until each of the 47 is attributed.
+- `bun turbo build --concurrency=1 --continue`: 10/13 packages build.
+  `@unifia/web` fails on `@astrojs/cloudflare@14.2.1` failing to resolve
+  `astro:static-paths` / `astro:assets`. **Pre-existing trunk breakage, proven
+  not convergence damage**: Knowledge never touched `packages/web`, and the
+  merged tree's `packages/web/package.json` and every astro entry in `bun.lock`
+  are byte-identical to the trunk's. The trunk bumped Astro across a major
+  (`@astrojs/cloudflare` 12.6.6 to 14.2.1, starlight 0.34 to 0.41) without the
+  build following. `@unifia/console-app` (exit 1) and `@unifia/storybook`
+  (exit 134, abort, consistent with this machine's OOM pattern) also fail;
+  Knowledge touched neither package, and their attribution is still pending a
+  run on an unloaded machine.
 
 ## Next Exact Action
 
-1. Create `integration/work-design-knowledge` from the assembled `work-design`.
-2. Record merge-base `91daa35a26a8e44d7f35b539c91030ec1e230c54`.
-3. Produce the C2/C3 inventory (Knowledge-only domains vs shared conflict
-   surfaces) BEFORE running the merge.
-4. `git merge --no-ff feat/sovereign-knowledge-core`; resolve by the C4 policy,
-   never by blanket ours/theirs.
-5. Regenerate rather than hand-merge: `bun.lock`, SDK/OpenAPI, embedded mobile
-   runtime.
+1. Attribute the 47 `packages/unifia` failures: capture the full list, then run
+   the same suite on `feat/sovereign-knowledge-core` and on the trunk to
+   separate convergence damage from load-shaped flakiness and pre-existing red.
+2. Confirm `@unifia/console-app` and `@unifia/storybook` build failures on an
+   unloaded machine and file them as trunk issues if they reproduce.
+3. Only then run the remaining Phase D gates (cross-mode journey, reload matrix,
+   responsive pre-check) and consider promoting the integration branch.
 
 ## Tests Baseline
 
@@ -181,18 +247,21 @@ the owner source-of-truth gate is explicit.
 ## Last Checkpoint
 
 ```text
-PHASE:            B closed, C preflight
-STATUS:           GREEN
-CURRENT HEAD:     work-design, local trunk assembled
+PHASE:            C closed, D in progress
+STATUS:           AMBER - merge green on every targeted gate, two open unknowns
+CURRENT HEAD:     integration/work-design-knowledge @ 732ffbb1a6
 WORKTREE:         D:/App/unifia/unifia-work-design
-REMOTE MUTATION:  NO (local only so far)
-COMPLETED:        Phase A (issues closed), Phase B (promotion audited, verdict
-                  "nothing lost"), Phase 1 slice merged, full trunk regression
-OPEN:             Phase C not started
-TESTS:            154 + 103 + 648 + 8 + 5 PASS; typecheck 47/47; Biome 0 errors
-BLOCKERS:         disk 4.2 GB free; tsgo OOM under parallel turbo
-NEXT EXACT ACTION: create integration/work-design-knowledge and run the C2/C3
-                  inventory before merging Knowledge
+REMOTE MUTATION:  NO (everything local so far)
+COMPLETED:        Automate trunk assembled; Knowledge merged with provenance;
+                  five conflicts decided; generated artifacts regenerated;
+                  Knowledge adapted to the trunk's js-yaml and SPDX contracts
+OPEN:             47 unattributed failures in the exhaustive unifia suite;
+                  3 of 13 package builds red (web proven pre-existing trunk)
+TESTS:            typecheck 47/47; knowledge 821/821; rust 35/35;
+                  automate suites unchanged; biome 0 errors
+BLOCKERS:         disk 3.9 GB free; tsgo/storybook OOM under load
+NEXT EXACT ACTION: attribute the 47 failures against the Knowledge branch and
+                  the trunk before claiming Phase D
 ```
 
 ## Master Status Board
@@ -218,14 +287,25 @@ Completed lines are never deleted; they carry their evidence.
 
 ### C - Knowledge Convergence
 
-- [ ] integration branch
-- [ ] merge-base recorded
-- [ ] Knowledge-only domain inventory
-- [ ] shared conflict surface inventory
-- [ ] merge and manual conflict resolution
-- [ ] generated files regenerated (lock, SDK/OpenAPI, mobile runtime)
-- [ ] settings / provider / session / tool registry
-- [ ] desktop/mobile
+- [x] integration branch `integration/work-design-knowledge` from `3c8e22e7e6`
+- [x] merge-base recorded `91daa35a26`
+- [x] Knowledge-only domain inventory (357 files: `packages/unifia`,
+      `tests/knowledge/eval`, `docs/knowledge`, `crates/unifia-knowledge-core`)
+- [x] shared conflict surface inventory (26 files, 5 real conflicts)
+- [x] merge and manual conflict resolution - `732ffbb1a6`, no squash, no rebase
+- [x] generated files regenerated (lock, SDK/OpenAPI, both mobile bundles)
+- [x] settings: Knowledge `memory` block intact in `config-schema.ts`
+- [x] mobile runtime regenerated from the consolidated source
+- [ ] provider / session / tool registry audited against §C10/§C11 in depth
+
+### D - Convergence Certification
+
+- [x] typecheck 47/47, biome 0 errors
+- [x] Automate regression (no suite moved down)
+- [x] Knowledge regression 821/821 + Rust crate 35/35
+- [ ] exhaustive `packages/unifia` suite: 47 failures unattributed
+- [ ] build: 10/13, three failures pending attribution (`web` proven pre-existing)
+- [ ] cross-mode journey, reload matrix, responsive pre-check
 
 ### D to I - Certification, UI, and Dev Integration
 
