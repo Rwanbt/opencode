@@ -12,7 +12,7 @@ const server = new WorkbenchServer({
   tokenIssuer: new ScopedTokenIssuer("x".repeat(32), 60_000, 30_000),
   workspace: { open: async (id: string) => ({ id, token: `runtime-${id}` }), close: async () => undefined } as never,
   runtime: {} as never,
-  audit: { record: (_actor, capability) => { audit.push(capability) } },
+  audit: { record: (context) => { audit.push(context.action) } },
   capability: { check: async () => "allow" },
 })
 

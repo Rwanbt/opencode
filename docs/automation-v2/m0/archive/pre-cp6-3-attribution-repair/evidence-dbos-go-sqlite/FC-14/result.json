@@ -1,0 +1,9 @@
+{
+  "status": "NOT_VALID",
+  "observations": {
+    "reason": "FC-14 requires two real OS processes, same durable store. The in-process methodology (two Database handles in one process) does NOT exercise the multi-process authority boundary. Old in-process evidence preserved at evidence/<candidate>/FC-14/old-in-process.json for traceability.",
+    "requiredMethodology": "spawn two real OS processes, share the same SQLite durable store, observe authority acquisition / dispatch eligibility / locking / fencing / commit. PASS only if a single logical authority can act.",
+    "oldInProcessEvidence": "evidence/unifia-native/FC-14/old-in-process.json"
+  },
+  "note": "FC-14 cannot be PASSED by the in-process methodology. The candidate's contract is multi-process-safe at the SQLite level, but the harness in this M0 run did not exercise the multi-process authority boundary. Real FC-14 is queued behind a real-process spawn harness (see runFC14Multiprocess() — to be implemented post-M0)."
+}

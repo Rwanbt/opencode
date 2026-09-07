@@ -1,0 +1,17 @@
+{
+  "id": "wf-fixture-sequential-http",
+  "version": 1,
+  "workspaceId": "ws-fixture",
+  "steps": [
+    {
+      "id": "fetch-user",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://api.example.com/users/{input.userId}" }
+    },
+    {
+      "id": "log-result",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://logs.example.com/events", "body": { "event": "user_fetched" } }
+    }
+  ]
+}

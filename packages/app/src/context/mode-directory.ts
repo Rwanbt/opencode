@@ -9,6 +9,8 @@ export type ModeLocation =
   | { kind: "mode"; directory: string; mode: Exclude<ShellMode, "code">; sessionId?: string }
   | { kind: "invalid"; directory: string; mode: undefined; reason: "workspace" | "mode" | "session" }
 
+export type AutomateAccess = "unknown" | "allowed" | "denied"
+
 export function routeDirectoryFromPathname(pathname: string): string {
   return pathname.split("/").filter(Boolean)[0] ?? ""
 }
@@ -18,7 +20,7 @@ export function sessionSearchFromLocation(search: string): string {
   return session ? `?session=${encodeURIComponent(session)}` : ""
 }
 
-export function parseModeLocation(pathname: string, search = "", automateAccessible = false): ModeLocation {
+export function parseModeLocation(pathname: string, search = "", automateAccess: AutomateAccess | boolean = "denied"): ModeLocation {
   const segments = pathname.split("/").filter(Boolean)
   if (segments.length === 0) return { kind: "home", directory: "", mode: undefined }
 
@@ -44,7 +46,8 @@ export function parseModeLocation(pathname: string, search = "", automateAccessi
   // ADR-1033: automate is a valid SHELL_MODES entry but an unresolved route
   // outside the dev flag — it must fail closed like an unknown mode, not
   // fall through to a route that only fails later at render time.
-  if (route === "automate" && !automateAccessible) {
+  const automateDenied = automateAccess === false || automateAccess === "denied"
+  if (route === "automate" && automateDenied) {
     return { kind: "invalid", directory, mode: undefined, reason: "mode" }
   }
   if (!SHELL_MODES.includes(route as ShellMode) || route === "code" || segments.length > 2) {

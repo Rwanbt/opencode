@@ -1,0 +1,77 @@
+{
+  "measured": true,
+  "classification": "YES",
+  "invariants": {
+    "replayedCapture": true,
+    "replayedDerive": true,
+    "neverReReadAmbient": true,
+    "observedInitialMatches": true,
+    "stableKey": true,
+    "distinctAttempts": true,
+    "finalStateCanonical": true,
+    "completedEffectNotReexecuted": true
+  },
+  "failedInvariants": [],
+  "ambientIntent": {
+    "initial": {
+      "t": "2026-09-04T10:00:00.000Z",
+      "r": "alpha-4711",
+      "o": "ord-001"
+    },
+    "afterCrash": {
+      "t": "2026-09-04T10:05:00.000Z",
+      "r": "beta-8263",
+      "o": "ord-002"
+    }
+  },
+  "measurement": {
+    "measured": true,
+    "runId": "run-fc32-f2c1a4330935439a8f75e5d6",
+    "logicalInvocationId": "li-fc32-679792c9e97191cd",
+    "attemptIds": [
+      "att:run-fc32-f2c1a4330935439a8f75e5d6:li-fc32-679792c9e97191cd:1",
+      "att:run-fc32-f2c1a4330935439a8f75e5d6:li-fc32-679792c9e97191cd:2"
+    ],
+    "ambientObservedInitial": {
+      "t": "2026-09-04T10:00:00.000Z",
+      "r": "alpha-4711",
+      "o": "ord-001"
+    },
+    "ambientObservedAfterCrash": null,
+    "ambientReadsPerAttempt": [
+      {
+        "execution": 1,
+        "reads": 1
+      }
+    ],
+    "rootWorkflowInvocations": 2,
+    "stepBodyInvocations": {
+      "capture-ambient": 1,
+      "decide-branch": 1,
+      "derive-effect-key": 1,
+      "execute-effect": 2,
+      "materialize": 1
+    },
+    "stepReplays": {
+      "capture-ambient": 1,
+      "derive-effect-key": 1
+    },
+    "effectKeysObserved": [
+      "ek-fc32-2026-09-04T10:00:00.000Z-alpha-4711-ord-001"
+    ],
+    "externalEffectExecutions": 1,
+    "finalMaterializedState": {
+      "branch": "LOW",
+      "effectKey": "ek-fc32-2026-09-04T10:00:00.000Z-alpha-4711-ord-001",
+      "lineage": "attempt-1-capture",
+      "o": "ord-001",
+      "r": "alpha-4711",
+      "t": "2026-09-04T10:00:00.000Z"
+    }
+  },
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "DBOS_GO_SQLITE",
+  "testId": "FC-32",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

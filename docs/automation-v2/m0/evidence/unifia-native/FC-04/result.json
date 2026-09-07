@@ -1,0 +1,19 @@
+{
+  "measured": true,
+  "realExternalProvider": true,
+  "providerCommitted": true,
+  "transportAckLost": true,
+  "recoveryExecuted": true,
+  "blindRetryCount": 0,
+  "transportError": "Error: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+  "recoveryStatus": "RECONCILED",
+  "attemptStatuses": [
+    "UNKNOWN_EXTERNAL_STATE"
+  ],
+  "failedInvariants": [],
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "UNIFIA_NATIVE",
+  "testId": "FC-04",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

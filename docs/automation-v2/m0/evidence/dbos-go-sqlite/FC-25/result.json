@@ -1,0 +1,36 @@
+{
+  "measured": true,
+  "distinctOsProcesses": 2,
+  "oldOwnerAliveDuringTakeover": true,
+  "oldOwnerDidNotReleaseBeforeTakeover": true,
+  "oldOwnerPid": 13928,
+  "newGenerationGreaterThanOld": true,
+  "newOwnerCommitAccepted": true,
+  "staleOwnerCommitRejected": true,
+  "staleOwnerDispatchRejected": true,
+  "takeover": {
+    "previousGeneration": 1,
+    "newGeneration": 2,
+    "previousAuthorityOwnerId": "zombie-A-1788559006207-so60tq",
+    "newAuthorityOwnerId": "zombie-B-1788559006207-x1f3ox"
+  },
+  "newOwnerMutate": {
+    "accepted": true
+  },
+  "staleMutate": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "staleDispatch": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY"
+  },
+  "runId": "run-fc25-zombie-1788559006207-b4zvfx",
+  "ownerA": "zombie-A-1788559006207-so60tq",
+  "ownerB": "zombie-B-1788559006207-x1f3ox",
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "DBOS_GO_SQLITE",
+  "testId": "FC-25",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

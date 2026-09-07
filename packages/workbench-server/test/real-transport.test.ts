@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 
-import { mkdtempSync } from "node:fs"
+import { existsSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 
 import { mkdtemp, rm } from "node:fs/promises"
@@ -86,6 +86,18 @@ test("real Workbench transport exercises client, loopback HTTP, and browser CORS
     // under Bun on Windows (see test/real-transport-browser.mjs for the
     // evidence). Assertions stay here; the child only reports what it observed.
     const runner = fileURLToPath(new URL("./real-transport-browser.mjs", import.meta.url))
+    // `.gitignore:154` excludes this harness, so it exists only on a machine
+    // that built it by hand. Everywhere else `node` exits with
+    // MODULE_NOT_FOUND, stdout is empty, and the parse below reported
+    // "JSON Parse error: Unexpected EOF" — which sends the reader after a
+    // transport bug that is not there. Say what is actually missing.
+    if (!existsSync(runner)) {
+      throw new Error(
+        `browser transport harness is missing: ${runner}\n` +
+          "It is excluded by .gitignore:154, so it is absent from every clone. " +
+          "Either commit it or drop the test — this suite cannot prove the browser half without it.",
+      )
+    }
     const child = Bun.spawn(
       ["node", runner, JSON.stringify({ baseUrl, workspaceId, token: lease.token, instanceId: lease.instanceId, protocolVersion: WIRE_PROTOCOL_VERSION })],
       { stdout: "pipe", stderr: "pipe" },

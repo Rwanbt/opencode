@@ -1,0 +1,13 @@
+{
+  "pass": 21,
+  "fail": 0,
+  "observations": {},
+  "restartObserved": true,
+  "adapterTopology": "in-process",
+  "isChildProcess": false,
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "UNIFIA_NATIVE",
+  "testId": "FC-31A",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

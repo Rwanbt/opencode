@@ -1,0 +1,22 @@
+{
+  "candidate": "native",
+  "iteration": 9,
+  "iterationId": "native-iter-09",
+  "sourceCommit": "134968545a",
+  "payloadDigest": {
+    "bun": "5275293a96fc58610d593fca875ec92a7aa9b517535f40f7a645c56eb6261afb",
+    "fc13-ctrl.js": "863a8b072e52fc768e1bbd3e7b1d87a6ef068793ce5617aab9b53c03823c6cbd",
+    "fc13-native.js": "73fd5f0264c2484e5e5450e36b89d3ff3e32854c15977060473f89aa3e8c360a",
+    "fc13-dbos": "54b9b3e30bb7de73bbd10196f54605b0b1ff710cef7b44876c5a9e2689d2f2e2",
+    "dbos-writer.sh": "52269fae27e54d59df75e06edc849dd8eb2fa120c33a872f00f31c9ace2bb4a7",
+    "sbin/mke2fs": "89055abe8284858094b0573ee349fad3babbea10e1d95ff708697eb587fbb1ec"
+  },
+  "readyObserved": true,
+  "readyAt": 1788611971755,
+  "killAt": 1788611971755,
+  "readyKillLatencyMs": 0,
+  "bootDurationMs": 18828,
+  "readyLine": "FC13-READY native iter=9 attemptId=att-li-fc13-9-1 status=SUCCEEDED runId=run-wf-fc13-1788611971540-ofswh4",
+  "resultLine": "FC13-RESULT native iter=9 PRESENT:1",
+  "verdict": "DURABLE_SURVIVED"
+}

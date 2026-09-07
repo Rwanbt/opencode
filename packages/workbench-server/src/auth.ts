@@ -19,6 +19,7 @@
  */
 
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
+import { P3_CAPABILITIES } from "@unifia/contracts"
 
 export type Principal = {
   readonly id: string
@@ -203,6 +204,42 @@ function readStringArray(value: unknown): readonly string[] | undefined {
 }
 
 /**
+ * Thrown by `HmacTokenAuthenticator.sign` (DA-CAP-03) when a principal carries
+ * a scope that is neither a registered P3 capability nor one of the local
+ * control scopes. The error is typed so call sites can branch on it
+ * specifically without string-matching a generic `Error`.
+ */
+export class UnknownPrincipalScopeError extends Error {
+  readonly #scope: string
+  constructor(scope: string) {
+    super(`unknown scope in principal.scopes: ${JSON.stringify(scope)} (not in P3_CAPABILITIES and not a known control scope)`)
+    this.name = "UnknownPrincipalScopeError"
+    this.#scope = scope
+  }
+  get scope(): string { return this.#scope }
+}
+
+/**
+ * DA-CAP-03: the closure of names that may legally appear in a minted token's
+ * `scopes` claim.
+ *
+ * - P3_CAPABILITIES (ADR-1034, ADR-1038) is the broker's universe; every
+ *   capability gated by `#checkCapability` belongs to this set.
+ * - `workspace.register` / `workspace.open` are the local authority's gating
+ *   strings (see `principalCanRegister` / `principalCanOpen` below). They are
+ *   checked by route handlers, never reach the broker, and have no
+ *   capability-side alias.
+ *
+ * Anything outside this closure is a typo, a stale name from a removed
+ * capability, or an injection — none of which `sign()` should ever honour.
+ */
+const KNOWN_PRINCIPAL_SCOPES: ReadonlySet<string> = new Set([
+  ...P3_CAPABILITIES,
+  "workspace.register",
+  "workspace.open",
+])
+
+/**
  * Verifies detached HS256 bearer tokens minted by a trusted local issuer.
  *
  * @thread-safety stateless after construction; safe for concurrent requests.
@@ -224,6 +261,14 @@ export class HmacTokenAuthenticator implements PrincipalAuthenticator {
 
   /** Mints a token for the given principal. Test and local-bootstrap use only. */
   sign(principal: Principal, expiresAt: number, notBefore = 0): string {
+    // DA-CAP-03 issuance defense: refuse to mint a token whose principal carries
+    // a scope name outside KNOWN_PRINCIPAL_SCOPES. The alternative — silently
+    // embedding an unknown string — lets a misconfigured caller smuggle
+    // arbitrary identifiers into a signed token, and the verifier will hand
+    // them back to whichever route handler later consumes the claim.
+    for (const scope of principal.scopes) {
+      if (!KNOWN_PRINCIPAL_SCOPES.has(scope)) throw new UnknownPrincipalScopeError(scope)
+    }
     const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url")
     const claims = {
       sub: principal.id,

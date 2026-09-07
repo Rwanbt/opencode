@@ -1,0 +1,53 @@
+{
+  "pass": 13,
+  "fail": 0,
+  "observations": {
+    "host-float64-max-safe-plus-one": {
+      "ok": true
+    },
+    "host-integer-max-safe-plus-one": {
+      "ok": true,
+      "code": "NUMBER_OUT_OF_CANONICAL_RANGE"
+    },
+    "host-integer-max-safe": {
+      "ok": true
+    },
+    "host-integer-min-safe": {
+      "ok": true
+    },
+    "host-integer-over-max": {
+      "ok": true,
+      "code": "NUMBER_OUT_OF_CANONICAL_RANGE"
+    },
+    "host-integer-bigint-over-max": {
+      "ok": true,
+      "code": "NUMBER_OUT_OF_CANONICAL_RANGE"
+    },
+    "host-integer-bigint-under-min": {
+      "ok": true,
+      "code": "NUMBER_OUT_OF_CANONICAL_RANGE"
+    },
+    "host-float64-zero": {
+      "ok": true
+    },
+    "host-float64-negative-zero": {
+      "ok": true
+    },
+    "host-float-nan": {
+      "ok": true,
+      "code": "NON_FINITE_NUMBER"
+    },
+    "host-float-positive-infinity": {
+      "ok": true,
+      "code": "NON_FINITE_NUMBER"
+    },
+    "host-integer-float": {
+      "ok": true,
+      "code": "UNSUPPORTED_CANONICAL_VALUE"
+    },
+    "host-string-as-number": {
+      "ok": true,
+      "code": "UNSUPPORTED_HOST_TYPE"
+    }
+  }
+}

@@ -91,6 +91,8 @@ const TEST_ENTRYPOINTS = [
   "packages/workbench-shell/test/design-system.test.ts",
   "packages/workbench-server/test/server.test.ts",
   "packages/workbench-server/test/bootstrap.test.ts",
+  "packages/workbench-server/test/canonical-authority-e2e.test.ts",
+  "packages/workbench-server/test/e2e-full-journey.test.ts",
   "packages/unifia/test/server/workbench-bridge.test.ts",
   "packages/workflow-catalog/test/catalog.test.ts",
   "packages/workflow-runtime/test/workflow-runtime.test.ts",

@@ -1,0 +1,13 @@
+{
+  "pass": 21,
+  "fail": 0,
+  "observations": {},
+  "restartObserved": true,
+  "adapterTopology": "child-process",
+  "isChildProcess": true,
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "CUSTOM_GO_SQLITE_CONTROL",
+  "testId": "FC-31A",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

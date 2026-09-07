@@ -2,6 +2,7 @@
 
 import { test, expect } from "../fixtures"
 import { dirPath } from "../utils"
+import { openSpecTab } from "../design/surface"
 
 // V14 — second and third scenarios of the design journey.
 //
@@ -35,12 +36,17 @@ test("V14 — design mode in web is terminal and non-retryable (F-03 closure)", 
   await expect(page).toHaveURL(new RegExp(`/${slug}/design(?:[/?#]|$)`))
 
   // Banner: "unsupported" phase, no Reconnecter button.
-  await expect(page.locator('[data-workbench-connection="unsupported"]')).toBeVisible()
-  await expect(page.locator("[data-workbench-retry]")).toHaveCount(0)
+  // The Design surface names its own banner: data-workbench-connection is
+  // rendered by Work, so this asserted an attribute this route never emits.
+  await expect(page.locator('[data-design-connection="unsupported"]')).toBeVisible()
+  await expect(page.locator("[data-design-retry]")).toHaveCount(0)
 
   // The spec editor is still usable. An invalid spec raises a
   // single diagnostic line, not the legacy "JSON invalide" double
   // error (F-05 closure).
+  // Fichiers is the default tab; the editor only exists once Spec is
+  // selected. This filled a locator that was never in the DOM.
+  await openSpecTab(page)
   await page.locator("#workbench-design-spec").fill('{"id":"broken"}')
   await expect(page.locator("[data-workbench-diagnostics]")).toBeVisible()
   const diagnosticCount = await page.locator("[data-workbench-diagnostics] p").count()
@@ -54,7 +60,7 @@ test("V14 — design mode renders without horizontal overflow at every plan view
     // The shell fills the viewport; no horizontal overflow.
     // The size guard is the design-split data attribute V06
     // exposes (data-design-split-kind) for the runtime gate.
-    await expect(page.locator("[data-design-split]")).toBeVisible()
+    await expect(page.locator("[data-design-split-kind]")).toBeVisible()
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     )
@@ -91,7 +97,7 @@ test("V14 — desktop design mode keeps assistant and atelier side by side with 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`${dirPath(directory)}/design`)
 
-  await expect(page.locator("[data-design-split]")).toBeVisible()
+  await expect(page.locator("[data-design-split-kind]")).toBeVisible()
   // data-design-split-kind is set by the V06 model; desktop = side
   // by side, no switcher.
   await expect(page.locator("[data-design-split-kind=\"desktop\"]")).toBeVisible()

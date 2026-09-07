@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto"
 import path from "node:path"
 import { createWorkbenchApp, type WorkbenchApp } from "@unifia/workbench-server/bootstrap"
 import { SURFACE_GRANTED_CAPABILITIES } from "@unifia/workbench-server"
-import { P3_CAPABILITIES, type P3Capability } from "@unifia/contracts"
+import { P3_CAPABILITIES, readWorkbenchIpcBearerFromEnv, type P3Capability } from "@unifia/contracts"
 import { Global } from "../global/path"
 import { OpenCodeSessionBackend } from "../unifia/opencode-runtime-backend"
 import { discoverTemplates } from "@unifia/skill-hub/node"
@@ -74,7 +74,14 @@ function readInput(value: unknown): NativeTokenInput {
  */
 export function createWorkbenchBridge(): WorkbenchBridge | undefined {
   const password = process.env.UNIFIA_SERVER_PASSWORD
-  const ipcToken = process.env.UNIFIA_KEYCHAIN_TOKEN
+  // D12 (§9.4 Lane D4) — migration boundary for the Workbench IPC
+  // bearer. The new env var is `UNIFIA_WORKBENCH_BEARER`; the legacy
+  // `UNIFIA_KEYCHAIN_TOKEN` is accepted until 2026-12-31 with a
+  // deprecation warning (see ADR-1042). The `tryDecode*` inside
+  // rejects a 32-byte base64 MobileEncryptionKey, so the bug where
+  // the mobile path exported the encryption key under both names
+  // (server.rs:267, 340-341) can no longer satisfy this call.
+  const ipcToken = readWorkbenchIpcBearerFromEnv(process.env as Record<string, string | undefined>)
   if (!password || !ipcToken) return undefined
 
   const signingKey = createHash("sha256").update(password, "utf8").digest("hex")

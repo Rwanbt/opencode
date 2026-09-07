@@ -1,0 +1,20 @@
+{
+  "name": "@unifia/automate-m0-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Substrate-neutral canonical contract for the ADR-000 M0 qualification. Qualification-only: not a production package.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

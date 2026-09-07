@@ -5,9 +5,10 @@ import { trimTrailingSeparators } from "./path-separators.js"
 
 export const P3_CAPABILITIES = [
   "workspace.read", "workspace.write", "workspace.watch", "artifact.create",
-  "artifact.export", "artifact.preview", "terminal.run", "network.request", "browser.navigate",
-  "desktop.observe", "desktop.control", "remote.receive", "remote.respond",
-  "secret.read", "package.install", "workflow.run",
+  "artifact.export", "artifact.preview", "artifact.render", "designsystem.read",
+  "plugin.apply", "media.generate", "terminal.run", "network.request",
+  "browser.navigate", "desktop.observe", "desktop.control", "remote.receive",
+  "remote.respond", "secret.read", "package.install", "workflow.run",
 ] as const
 export type P3Capability = (typeof P3_CAPABILITIES)[number]
 
@@ -181,12 +182,19 @@ export class SandboxPathDouble {
       : { kind: "deny", ruleId: "C6-command-not-allowlisted", reason: "command-class-not-allowed" }
   }
 }
+// WHY the four Automate-era capabilities carry explicit rows: P3 lot-3 C1
+// requires P3_CAPABILITIES and P3_CAPABILITY_EFFECTS to stay in bijection.
+// Semantics per ADR-1038: designsystem.read is interchangeable with
+// workspace.read; media.generate produces a permanent artifact (hence the
+// write); artifact.render derives without persisting (fail-closed: read
+// only); plugin.apply is hard-403 in v1 so its row is an inert self-named
+// token that future policy code must handle explicitly.
 export const P3_CAPABILITY_EFFECTS: Readonly<Record<string, readonly string[]>> = {
   "workspace.read": ["filesystem.read"], "workspace.write": ["filesystem.write"], "workspace.watch": ["filesystem.watch"],
   "artifact.create": ["artifact.create"], "artifact.export": ["artifact.export", "filesystem.write"], "artifact.preview": ["filesystem.read"],
   "terminal.run": ["process.spawn"], "network.request": ["network.connect"], "browser.navigate": ["network.connect"],
   "desktop.observe": ["desktop.observe"], "desktop.control": ["desktop.control"], "remote.receive": ["remote.receive"],
-  "remote.respond": ["remote.send"], "secret.read": ["secret.read"], "package.install": ["process.spawn", "filesystem.write"], "workflow.run": ["workflow.execute"],
+  "remote.respond": ["remote.send"], "artifact.render": ["artifact.render", "filesystem.read"], "designsystem.read": ["filesystem.read"], "plugin.apply": ["plugin.apply"], "media.generate": ["media.generate", "filesystem.write"], "secret.read": ["secret.read"], "package.install": ["process.spawn", "filesystem.write"], "workflow.run": ["workflow.execute"],
 }
 
 export type PolicyRequestDouble = { capabilities: readonly string[]; resource?: string; tainted?: boolean }
