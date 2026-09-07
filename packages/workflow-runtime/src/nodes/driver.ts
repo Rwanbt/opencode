@@ -26,7 +26,7 @@
  * (retries are immediate), in-flight fetch abort on cancel (cancelled
  * runs break the loop before each dispatch).
  */
-import type { FailurePolicy, WorkflowDefinition } from "@unifia/contracts"
+import type { WorkflowDefinition } from "@unifia/contracts"
 import type { AuthorityToken } from "../authority.js"
 import { AuthorityError } from "../authority.js"
 import type { GraphRuntimeEngine } from "../graph-runtime.js"
@@ -37,7 +37,7 @@ import { executeHttpRequest, parseHttpConfig } from "./http-executor.js"
 import { executeTransform, parseTransformConfig } from "./transform-executor.js"
 import { DefaultSecretRedactor, type SecretRedactor } from "../native-attempts.js"
 import { NodeExecutionError, NODE_OUTPUT_MAX_BYTES, redactNodeData } from "./io.js"
-import { NodeRegistry, type NodeExecutorKind } from "./registry.js"
+import type { NodeExecutorKind, NodeRegistry } from "./registry.js"
 
 export const DRIVER_MAX_DISPATCHES = 1000
 
