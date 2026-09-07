@@ -132,7 +132,13 @@ async function readBoundedBody(response: Response, abort: () => void, expectedBy
         bytes += value.byteLength
         if (bytes > NODE_HTTP_RESPONSE_MAX_BYTES) {
           abort()
-          try { await reader.cancel() } catch { }
+          try {
+            await reader.cancel()
+          } catch {
+            // The abort() above already tore the stream down, so cancel()
+            // may legitimately reject on an ended reader. The over-limit
+            // error below is the outcome that must reach the caller.
+          }
           throw new NodeExecutionError(
             "HTTP_RESPONSE_TOO_LARGE",
             "http response body exceeds limit",

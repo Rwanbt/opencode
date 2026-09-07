@@ -2,7 +2,8 @@
 import { describe, expect, test } from "bun:test"
 import { ExpressionError } from "@unifia/expression-runtime"
 import { NodeRegistry, NodeRegistryError } from "../src/nodes/registry.js"
-import { BUILTIN_NODE_DEFINITIONS } from "../src/nodes/builtins.js"
+import { ALL_FAMILY_MANIFESTS_V1, BUILTIN_NODE_DEFINITIONS } from "../src/nodes/builtins.js"
+import { NodeFamilySchema } from "@unifia/contracts"
 import { evaluateNodeRefs } from "../src/nodes/env.js"
 import { NodeExecutionError, NODE_HTTP_TIMEOUT_MS } from "../src/nodes/io.js"
 import { executeHttpRequest, parseHttpConfig } from "../src/nodes/http-executor.js"
@@ -27,6 +28,28 @@ describe("node registry", () => {
     expect(() => registry.get("tool.http", "v9")).toThrow(NodeRegistryError)
     expect(() => registry.register({ ...BUILTIN_NODE_DEFINITIONS[0]!, metadata: { ...BUILTIN_NODE_DEFINITIONS[0]!.metadata, displayName: "X" } })).toThrow(NodeRegistryError)
     expect(() => registry.register({ type: "", version: "v1" } as never)).toThrow(NodeRegistryError)
+  })
+
+  test("version selection is numeric, not lexical: v10 beats v2 and v9", () => {
+    const registry = new NodeRegistry()
+    for (const def of BUILTIN_NODE_DEFINITIONS) registry.register(def)
+    for (const version of ["v2", "v9", "v10"]) registry.register({ ...BUILTIN_NODE_DEFINITIONS[0]!, version })
+    // Lexical ordering would answer "v9" here; the picker must not drift.
+    expect(registry.get("tool.http").version).toBe("v10")
+    expect(registry.get("tool.http", "v2").version).toBe("v2")
+  })
+
+  test("every family the IR schema admits carries a manifest", () => {
+    const registry = new NodeRegistry()
+    for (const def of [...BUILTIN_NODE_DEFINITIONS, ...ALL_FAMILY_MANIFESTS_V1]) registry.register(def)
+    // WHY this guard: the registry is the SINGLE source the runtime, the API,
+    // the picker and the builder read. A family added to the IR schema without
+    // a manifest would surface as an unknown type at dispatch time instead.
+    const registered = new Set(registry.list().map((def) => def.type))
+    expect([...NodeFamilySchema.options].filter((family) => !registered.has(family))).toEqual([])
+    expect(registry.get("control.if").executor).toBe("internal")
+    expect(registry.get("human.approval").executor).toBe("external")
+    expect(registry.get("trigger.manual").executor).toBe("external")
   })
 })
 

@@ -188,6 +188,9 @@ export async function driveToQuiescence(args: {
       try {
         capabilities = registry.get(node.family).capabilities
       } catch {
+        // An unregistered family declares no capability to gate, and it can
+        // never execute: dispatchNode fails it as NODE_CONFIG_INVALID before
+        // any side effect. Gating it here would deny on a non-existent type.
         continue
       }
       if (capabilities.length > 0) await args.options.authorize(capabilities, `workflow:${runId}:node:${node.id}`)
@@ -277,10 +280,15 @@ async function dispatchNode(args: {
   }
 
   let executor: NodeExecutorKind
+  let definitionVersion: string
   try {
     // Runs pin the exact definition version at first dispatch (deterministic
-    // replay across registry upgrades); resumed dispatches reuse the pin.
-    executor = args.registry.get(node.family, pinnedDefinitionVersion(engine, runId, nodeId)).executor
+    // replay across registry upgrades); resumed dispatches reuse the pin, and
+    // the journalled version IS the resolved one so the pin never drifts to
+    // whatever the registry considers latest at retry time.
+    const nodeDefinition = args.registry.get(node.family, pinnedDefinitionVersion(engine, runId, nodeId))
+    executor = nodeDefinition.executor
+    definitionVersion = nodeDefinition.version
   } catch {
     return failWith(`unknown node family: ${node.family}`, "NODE_CONFIG_INVALID")
   }
@@ -308,14 +316,10 @@ async function dispatchNode(args: {
       const httpConfig = parseHttpConfig({ ...resolved, timeoutMs })
       const effectKey = `node:${nodeId}`
       const maxAttempts = policy.kind === "retry" ? (policy.maxAttempts ?? 1) : 0
-      const definitionVersion = args.registry.get(node.family).version
-      // Retry budget is durable: attempts minted so far minus the initial one,
-      // re-read every iteration so restarts resume the same budget.
-      const usedBefore = (): number => Math.max(0, attempts.inspectAttempts(runId, nodeId).length - 1)
       // Retry budget is durable: attempts minted so far minus the initial one.
-      // The loop re-reads it every iteration, so budget survives restarts.
+      // Re-read on every iteration, so a restart resumes the same budget.
+      const usedBefore = (): number => Math.max(0, attempts.inspectAttempts(runId, nodeId).length - 1)
       for (;;) {
-        const used = Math.max(0, attempts.inspectAttempts(runId, nodeId).length - 1)
         const attempt = attempts.allocateAttempt(token, nodeId, effectKey)
         args.engine.journalNodeEvent(runId, token, nodeId, "NODE_DISPATCH_INTENT", {
           family: node.family,
