@@ -363,6 +363,10 @@ export class NativeWorkflowRuntimePort implements WorkflowRuntimePort {
     // authoring workspaceId, so scoped callers can never see foreign runs.
     // Unknown scope (legacy/test doubles without workspaces) sees everything.
     const scoped = workspaceIds !== undefined
+    // Fail-closed, stated locally: a principal scoped to zero workspaces sees
+    // zero runs. SQLite happens to accept `IN ()` as always-false, but that is
+    // a non-standard extension the contract must not silently depend on.
+    if (scoped && workspaceIds.length === 0) return []
     const placeholders = scoped ? workspaceIds.map(() => "?").join(",") : ""
     const rows = (scoped
       ? db.query(`SELECT r.run_id, r.definition_id, r.version_id, h.status, h.created_at, h.updated_at FROM workflow_runs r LEFT JOIN runs h ON h.run_id = r.run_id LEFT JOIN workflow_versions v ON v.definition_id = r.definition_id AND v.version_id = r.version_id WHERE json_extract(v.definition_json, '$.workspaceId') IN (${placeholders}) ORDER BY h.updated_at DESC LIMIT 100`).all(...workspaceIds)

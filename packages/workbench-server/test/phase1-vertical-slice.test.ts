@@ -58,14 +58,21 @@ function startStub(state: StubState) {
   })
 }
 
-function makeServer(port: NativeWorkflowRuntimePort): WorkbenchServer {
+type ServerOverrides = {
+  /** Authenticated principal (defaults to the unscoped test principal). */
+  readonly principal?: Record<string, unknown>
+  /** P3 capability decision (defaults to allow). */
+  readonly capability?: { check: () => Promise<string> }
+}
+
+function makeServer(port: NativeWorkflowRuntimePort, overrides: ServerOverrides = {}): WorkbenchServer {
   return new WorkbenchServer({
-    auth: { authenticate: async () => principal as never },
+    auth: { authenticate: async () => (overrides.principal ?? principal) as never },
     workspace: {} as never,
     runtime: {} as never,
     workflow: port,
     audit: { record: () => undefined },
-    capability: { check: async () => "allow" },
+    capability: (overrides.capability ?? { check: async () => "allow" }) as never,
   })
 }
 
@@ -328,6 +335,92 @@ describe("Phase 1 vertical slice", () => {
         expect(ran.status).toBe(422)
         expect(((await ran.json()) as { error: string }).error).toBe("NODE_UNKNOWN_REFERENCE")
         expect(state.hits["/user"] ?? 0).toBe(0)
+      } finally {
+        port.close()
+      }
+    } finally {
+      stub.stop(true)
+      await removeDir(dir)
+    }
+  })
+
+  test("capability denial refuses the whole run with 403, no dispatch, and is not a wedge", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "phase1-denied-"))
+    const state: StubState = { hits: {}, lastAuth: null, lastOrderQuery: null }
+    const stub = startStub(state)
+    try {
+      const base = `http://127.0.0.1:${stub.port}`
+      const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
+      const denying = makeServer(port, { capability: { check: async () => "deny" } })
+      try {
+        const { workflowId, token } = await startRun(denying, sliceDef(base))
+        const denied = await denying.fetch(new Request(`http://127.0.0.1/v1/workflows/${workflowId}/run`, { method: "POST", headers: authHeaders(token) }))
+        expect(denied.status).toBe(403)
+        expect(((await denied.json()) as { error: string }).error).toBe("NODE_CAPABILITY_DENIED")
+        // Fail-closed: the decision precedes every side effect and every attempt.
+        expect(state.hits["/user"] ?? 0).toBe(0)
+        expect(state.hits["/order"] ?? 0).toBe(0)
+        const nodes = (await (await denying.fetch(new Request(`http://127.0.0.1/v1/workflows/${workflowId}/nodes`, { headers: authHeaders(token) }))).json()) as {
+          nodes: { nodeId: string; status: string; attemptId: string | null }[]
+        }
+        expect(nodes.nodes.every((n) => n.attemptId === null)).toBe(true)
+        expect(nodes.nodes.some((n) => n.status === "COMPLETED")).toBe(false)
+
+        // A denial must not wedge the run: granting the capability lets the
+        // SAME run drive to completion, dispatching each node exactly once.
+        const allowing = makeServer(port)
+        const ran = await allowing.fetch(new Request(`http://127.0.0.1/v1/workflows/${workflowId}/run`, { method: "POST", headers: authHeaders(token) }))
+        expect(ran.status).toBe(200)
+        expect(((await ran.json()) as { status: string }).status).toBe("completed")
+        expect(state.hits["/user"]).toBe(1)
+        expect(state.hits["/order"]).toBe(1)
+      } finally {
+        port.close()
+      }
+    } finally {
+      stub.stop(true)
+      await removeDir(dir)
+    }
+  })
+
+  test("workspace isolation: a scoped principal lists only its own runs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "phase1-scope-"))
+    const state: StubState = { hits: {}, lastAuth: null, lastOrderQuery: null }
+    const stub = startStub(state)
+    try {
+      const base = `http://127.0.0.1:${stub.port}`
+      const port = new NativeWorkflowRuntimePort({ databasePath: join(dir, "wf.sqlite"), now: () => 1000 })
+      const unscoped = makeServer(port)
+      try {
+        const runA = await startRun(unscoped, { ...sliceDef(base), id: "wf-a", workspaceId: "ws-a" })
+        const runB = await startRun(unscoped, { ...sliceDef(base), id: "wf-b", workspaceId: "ws-b" })
+
+        const listWith = async (server: WorkbenchServer): Promise<string[]> => {
+          const response = await server.fetch(new Request("http://127.0.0.1/v1/workflows", { headers: { authorization: "Bearer t" } }))
+          expect(response.status).toBe(200)
+          const listed = (await response.json()) as { workflows: { workflowId: string }[] }
+          return listed.workflows.map((w) => w.workflowId)
+        }
+
+        // Unconstrained principal (no workspace claim) still sees everything.
+        const all = await listWith(unscoped)
+        expect(all).toContain(runA.workflowId)
+        expect(all).toContain(runB.workflowId)
+
+        // Scoped to ws-a: the foreign run is structurally invisible.
+        const scopedA = makeServer(port, { principal: { id: "u-a", kind: "human", workspaces: new Set(["ws-a"]) } })
+        const onlyA = await listWith(scopedA)
+        expect(onlyA).toContain(runA.workflowId)
+        expect(onlyA).not.toContain(runB.workflowId)
+
+        // Zero workspaces is fail-closed (zero runs), never an SQL error.
+        const scopedNone = makeServer(port, { principal: { id: "u-none", kind: "human", workspaces: new Set<string>() } })
+        expect(await listWith(scopedNone)).toEqual([])
+
+        // Scoping is a LIST filter, not a substitute for run authority: node
+        // detail still demands the run token, which the scoped principal lacks.
+        const noToken = await scopedA.fetch(new Request(`http://127.0.0.1/v1/workflows/${runB.workflowId}/nodes`, { headers: { authorization: "Bearer t" } }))
+        expect(noToken.status).toBe(400)
       } finally {
         port.close()
       }
