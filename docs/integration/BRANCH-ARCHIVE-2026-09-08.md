@@ -48,9 +48,11 @@ and the squash commit `6ba540abf5` have the **same tree**, `1b01dfceb4`. The
 squash preserved content exactly, so every ancestor of the candidate is contained
 in the trunk.
 
-## Not deleted - these carry work the trunk does not have
+## Not deleted - these carried work the trunk did not have
 
-### `integration/rev3m-20260901/work`
+Both were resolved the same day. Their status is recorded below each entry.
+
+### `integration/rev3m-20260901/work` - MERGED, branch now deleted
 
 17 files that do not exist in `work-design` at all - the rev3m review cycle's
 Knowledge hardening:
@@ -68,10 +70,28 @@ and `fix/rev3m-20260901/{w-fs,w-mut,w-run-01}`) are all **ancestors** of this
 branch, so this one branch preserves the entire cycle. They were archived and
 deleted.
 
-This work merges cleanly into `work-design` and is a merge candidate, not archive
-material. It was left as a branch so that it stays visible.
+Landed on the trunk as merge commit `cc2472e2d1` (`--no-ff`, provenance kept).
+The branch forked from the Knowledge tip `b511ea44f4`, which the trunk had since
+absorbed, so from that merge-base the branch changed 38 files against the trunk's
+1045 with only **two shared**: `bun.lock` and `packages/unifia/package.json` -
+the dependency channel the convergence flagged as invisible to `git diff`. It was
+checked first: the lock came out byte-identical, since the one line the branch
+added was already present. Zero conflicts.
 
-### `feat/unifia-rebrand-cli-tui`
+Verified on the merged tree: Knowledge suite **892 pass / 1 skip / 0 fail** (up
+from 821/821), the landed containment + mutation + mcp tests 154/154, e2e 13/13,
+typecheck 47/47, biome 0 errors, and no Automate regression (154/154, 103/103,
+695/695) with the Rust crate at 35/35.
+
+One thing this merge proved about itself: the suite first reported 892 pass with
+the e2e driving a binary built five hours *before* any of these commits - green,
+and evidence of nothing. The branch's own `turbo.json` change makes `unifia#test`
+depend on `unifia#build` for exactly that reason. Rebuilt and re-run, the e2e is
+13/13 against this tree.
+
+The branch was archived and deleted once it was a true ancestor of `work-design`.
+
+### `feat/unifia-rebrand-cli-tui` - KEPT; the spec shipped, the implementation did not
 
 Its committed content adds no file the trunk lacks, but its worktree -
 `D:/App/unifia/unifia`, the primary checkout - holds **40 modified files,
@@ -86,6 +106,20 @@ The uncommitted state was captured, without touching the worktree, at
 `refs/archive/2026-09-08/wip/unifia-rebrand-cli-tui`. A second capture,
 `refs/archive/2026-09-08/wip/automate-a4-workbench`, holds a one-line test edit
 from a worktree that was removed.
+
+Checked against both `dev` and `work-design`, because the rebrand was believed to
+have landed already. What landed is the **specification**, not the code:
+`brand/unifia/` carries the theme, the tokens and `cli/unifia-cli-lockup.json`,
+and the brand colors `#8700FF` / `#0068FF` appear in the tree **only** in that
+lockup file and its README. No source file reads them; the lockup is referenced
+only by `brand-manifest.json`, another spec file. Both refs still ship the older
+`packages/unifia/src/cli/logo.ts` (508 bytes, no `brandColors`, no per-character
+colouring, no compact form), consumed by `cli/ui.ts` and
+`cli/cmd/tui/component/logo.tsx`. The uncommitted worktree holds the 1155-byte
+implementation of that published spec.
+
+So the CLI and the TUI still render the pre-rebrand logo, and porting this work
+to the `packages/unifia/` layout remains open.
 
 ## Deleted branches
 
