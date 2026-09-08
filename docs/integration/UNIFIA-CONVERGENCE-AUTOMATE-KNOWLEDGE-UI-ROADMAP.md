@@ -225,14 +225,12 @@ D8 reload matrix, D9 responsive pre-check. They need a live app and a browser.
 
 ## Next Exact Action
 
-1. Decide whether to publish. Local `work-design` now carries the full
-   convergence at `720a9bc6b3`; nothing has been pushed. `git push origin
-   work-design` is the single outward step remaining, and it moves a shared
-   trunk.
-2. Run D7/D8/D9 (cross-mode journey, reload matrix, responsive pre-check)
+1. Run D7/D8/D9 (cross-mode journey, reload matrix, responsive pre-check)
    before Phase F freezes the UI reference.
-3. Triage the two surfaced findings above as their own issues; keep them out of
+2. Triage the two surfaced findings above as their own issues; keep them out of
    the convergence change.
+3. Rollback anchor, should the trunk ever have to be walked back: `6ba540abf5`
+   is what `origin/work-design` pointed at before publication.
 
 ## Tests Baseline
 
@@ -341,7 +339,10 @@ Completed lines are never deleted; they carry their evidence.
 - [x] `work-design` updated locally to `720a9bc6b3` by fast-forward, so the
       Knowledge merge commit `732ffbb1a6` keeps its provenance
 - [x] safety checkpoint `checkpoint/work-design-automate-knowledge`
-- [ ] published (nothing pushed; owner decision)
+- [x] published: `origin/work-design` fast-forwarded `6ba540abf5 -> e6e88081fc`
+      on owner authorization. The pre-push hook re-ran `turbo typecheck`: 47/47.
+      Re-verified on the exact published tree immediately before the push --
+      workflow-runtime 154/154, workbench-server 103/103, biome 0 errors.
 
 ### D to I - Certification, UI, and Dev Integration
 
