@@ -2,8 +2,8 @@
 
 # Branch Archive - 2026-09-08
 
-The repository carried 55 local and 23 remote branches. It now carries three on
-the remote (`main`, `dev`, `work-design`) and five locally. Nothing was
+The repository carried 55 local and 23 remote branches. It now carries exactly
+three, locally and on the remote: `main`, `dev`, `work-design`. Nothing was
 destroyed: every deleted branch was first written to `refs/archive/2026-09-08/`,
 which is not a branch namespace and so does not appear in branch listings or in
 the GitHub branch UI.
@@ -142,8 +142,25 @@ keeping because "port the whole diff" would have made things worse:
 - The mobile favicon links swap one dangling path for another and label an `.svg`
   as `image/png`; only the `<title>` was corrected.
 
-What remains open on this branch is therefore the console brand page, and it is
-an asset-production task rather than a code port.
+What remains open is therefore the console brand page, and it is an
+asset-production task rather than a code port.
+
+The branch itself is now gone. Its tip is at
+`refs/archive/2026-09-08/feat/unifia-rebrand-cli-tui` (`357ec12229`) and its
+uncommitted state at `refs/archive/2026-09-08/wip/unifia-rebrand-cli-tui`, which
+was verified byte-identical to the working tree immediately before the cleanup
+and additionally stashed in the main repository. `D:/App/unifia/unifia` is the
+main repository rather than a worktree, so it could not be removed; it was moved
+to `main`, which the untracked files did not collide with.
+
+Of the 143 untracked files that checkout left in place, 125 are byte-identical to
+content already tracked on the trunk. The other 18 were checked one by one and
+the trunk is richer or more correct in every case: its `brand-manifest.json` is
+912 lines against 102, its `cli/README.md` points at `drop-in/packages/unifia/`
+where the local copy still said `opencode`, `sprint3.test.ts` already lives at
+`packages/unifia/test/knowledge/`, and the manifest itself classifies
+`.unifia-brand-backup/` as local backup and the icon variants as generated
+output, so the loose local icons are stale artifacts of that pipeline.
 
 ## Deleted branches
 
@@ -200,11 +217,12 @@ an asset-production task rather than a code port.
 | `integration/work-design-knowledge` | `720a9bc6b3` | 2026-09-08 | local-only | CONTAINED | ancestor of work-design |
 | `recovery/unifia-audit-correction-20260803` | `a37f5115dd` | 2026-08-07 | local-only | SUPERSEDED | adds no file the trunk lacks |
 
-## Orphaned directories on disk
+## Orphaned directories on disk - removed
 
 `git worktree remove` unregistered 24 worktrees and freed about 4.2 GB, but
-Windows kept the file trees (EBUSY). They are no longer worktrees and their
-content is fully in git, so removing them is a plain directory delete:
+Windows kept the file trees (EBUSY). Deleting them afterwards freed a further
+~82 GB, because each carried its own `node_modules`. Free space on the volume
+went from 3.7 GB to 90 GB across the whole cleanup. The paths were:
 
 ```
 D:\App\unifia\.worktrees\phase1-20260907
