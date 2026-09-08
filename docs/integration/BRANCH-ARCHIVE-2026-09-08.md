@@ -91,7 +91,7 @@ depend on `unifia#build` for exactly that reason. Rebuilt and re-run, the e2e is
 
 The branch was archived and deleted once it was a true ancestor of `work-design`.
 
-### `feat/unifia-rebrand-cli-tui` - KEPT; the spec shipped, the implementation did not
+### `feat/unifia-rebrand-cli-tui` - CLI/TUI part LANDED; the rest deliberately not ported
 
 Its committed content adds no file the trunk lacks, but its worktree -
 `D:/App/unifia/unifia`, the primary checkout - holds **40 modified files,
@@ -118,8 +118,32 @@ colouring, no compact form), consumed by `cli/ui.ts` and
 `cli/cmd/tui/component/logo.tsx`. The uncommitted worktree holds the 1155-byte
 implementation of that published spec.
 
-So the CLI and the TUI still render the pre-rebrand logo, and porting this work
-to the `packages/unifia/` layout remains open.
+The CLI and TUI part landed as `e6372eed5e`. The built binary now prints the
+approved lockup, in 24-bit colour derived from `brandColors` at the point of use
+so a second copy of the hex values cannot drift from the spec, and honouring
+`NO_COLOR`. `test/cli/logo.test.ts` was rewritten to assert the code against the
+lockup file rather than against copies of its numbers, and mutation-tested.
+
+The rest of that worktree was deliberately left, and the reasons are worth
+keeping because "port the whole diff" would have made things worse:
+
+- `packages/ui/logo.tsx` and `favicon.tsx`: the trunk is **better**. It crops each
+  brand SVG to its own `getBBox` bounding box, and keeps the webmanifest and
+  apple-touch-icon that the worktree version drops for an SVG-only favicon.
+- `app/`, `desktop/`, the three tauri configs: already rebranded on the trunk,
+  with fewer OpenCode references than the worktree has.
+- `desktop/src-tauri/src/windows.rs`: both keep `window.__OPENCODE__`; only the
+  trunk explains in a comment that the JS global is a compatibility contract.
+- `console/app/src/routes/brand/index.tsx`: the worktree version aliases all
+  eight PNG variants to one file and points the brand-assets download at
+  `site.webmanifest`, a JSON manifest. Its targets also resolve against
+  `packages/console/public/` rather than the app's own `public/`, so they 404.
+  That page needs a real Unifia asset set produced before it can be rebranded.
+- The mobile favicon links swap one dangling path for another and label an `.svg`
+  as `image/png`; only the `<title>` was corrected.
+
+What remains open on this branch is therefore the console brand page, and it is
+an asset-production task rather than a code port.
 
 ## Deleted branches
 
