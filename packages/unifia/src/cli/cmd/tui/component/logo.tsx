@@ -1,85 +1,52 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { For, type JSX } from "solid-js"
-import { useTheme, tint } from "@tui/context/theme"
-import { logo, marks } from "@/cli/logo"
+import { createMemo, For, Show } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
+import { brandColors, compactBelowColumns, logo } from "@/cli/logo"
 
-// Shadow markers (rendered chars in parens):
-// _ = full shadow cell (space with bg=shadow)
-// ^ = letter top, shadow bottom (▀ with fg=letter, bg=shadow)
-// ~ = shadow top only (▀ with fg=shadow)
-const SHADOW_MARKER = new RegExp(`[${marks}]`)
+const color = {
+  P: RGBA.fromHex(brandColors.purple),
+  B: RGBA.fromHex(brandColors.blue),
+  O: RGBA.fromHex(brandColors.orange),
+}
+const white = RGBA.fromHex(brandColors.white)
 
 export function Logo() {
-  const { theme } = useTheme()
-
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background, fg, 0.25)
-    const attrs = bold ? TextAttributes.BOLD : undefined
-    const elements: JSX.Element[] = []
-    let i = 0
-
-    while (i < line.length) {
-      const rest = line.slice(i)
-      const markerIndex = rest.search(SHADOW_MARKER)
-
-      if (markerIndex === -1) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest}
-          </text>,
-        )
-        break
-      }
-
-      if (markerIndex > 0) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest.slice(0, markerIndex)}
-          </text>,
-        )
-      }
-
-      const marker = rest[markerIndex]
-      switch (marker) {
-        case "_":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              {" "}
-            </text>,
-          )
-          break
-        case "^":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
-        case "~":
-          elements.push(
-            <text fg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
-      }
-
-      i += markerIndex + 1
-    }
-
-    return elements
-  }
+  const dimensions = useTerminalDimensions()
+  const compact = createMemo(() => dimensions().width < compactBelowColumns)
 
   return (
     <box>
-      <For each={logo.left}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
+      <Show
+        when={!compact()}
+        fallback={
+          <box flexDirection="row">
+            <text fg={color.P} attributes={TextAttributes.BOLD} selectable={false}>{logo.compact.purple}</text>
+            <text fg={color.B} attributes={TextAttributes.BOLD} selectable={false}>{logo.compact.blue}</text>
+            <text fg={color.O} attributes={TextAttributes.BOLD} selectable={false}>{logo.compact.orange}</text>
+            <text fg={white} attributes={TextAttributes.BOLD} selectable={false}> {logo.compact.wordmark}</text>
           </box>
-        )}
-      </For>
+        }
+      >
+        <For each={logo.symbol}>
+          {(row, index) => (
+            <box flexDirection="row">
+              <For each={[...row.text]}>
+                {(char, charIndex) => (
+                  <text
+                    fg={color[row.colors[charIndex()] as keyof typeof color] ?? white}
+                    attributes={TextAttributes.BOLD}
+                    selectable={false}
+                  >
+                    {char}
+                  </text>
+                )}
+              </For>
+              <text selectable={false}>{"  "}</text>
+              <text fg={white} attributes={TextAttributes.BOLD} selectable={false}>{logo.wordmark[index()]}</text>
+            </box>
+          )}
+        </For>
+      </Show>
     </box>
   )
 }
