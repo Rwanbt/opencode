@@ -200,6 +200,19 @@ export interface McpKnowledgeStatusResponse {
   indexVersion: string
   rebuiltAt: string
   candidatesCount: number
+  /**
+   * Coverage of the scan `candidatesCount` was taken from.
+   *
+   * Absent means every mounted source reported a complete walk. When it is
+   * present the count is a floor, not the corpus size, and a client that
+   * prints the number without the caveat is reporting a smaller vault than
+   * the one on disk. Optional so an older client still parses the response.
+   */
+  scan?: {
+    truncated: boolean
+    reason: string | null
+    truncatedPaths: string[]
+  }
   spaces: string[]
   capabilities: {
     name: McpKnowledgeCapability
@@ -213,6 +226,14 @@ export const McpKnowledgeStatusResponseSchema = z
     indexVersion: z.string(),
     rebuiltAt: z.string().datetime({ offset: true }),
     candidatesCount: z.number().int().nonnegative(),
+    scan: z
+      .object({
+        truncated: z.boolean(),
+        reason: z.string().nullable(),
+        truncatedPaths: z.array(z.string()),
+      })
+      .strict()
+      .optional(),
     spaces: z.array(z.string()),
     capabilities: z.array(
       z

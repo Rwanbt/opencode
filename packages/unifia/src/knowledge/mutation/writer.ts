@@ -23,7 +23,7 @@
  * without removing it from the vault.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
 import * as fsp from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
 import { dirname, isAbsolute, join } from "node:path"
@@ -52,6 +52,7 @@ import {
   fsyncDirectory,
   readWalTolerant,
   recover,
+  renameDurable,
   writeFileDurable,
   type RecoveryReport,
 } from "./durability.js"
@@ -264,12 +265,21 @@ export class VaultMutationWriter implements MutationWriter {
    * nothing recorded the replacement and the successor never learned it had
    * one.
    *
-   * V1 has no multi-file transaction. The order is chosen so the recoverable
-   * state is the tolerable one: the successor gains its reference first, then
-   * the target is marked. A crash in between leaves a successor claiming to
-   * replace a still-active note — visible to `doctor` and repairable — rather
-   * than a superseded note nothing points at. Both writes share one auditId
-   * so the WAL identifies them as one operation.
+   * The whole operation runs under a single write lock and re-validates
+   * both notes just before the writes land: the target's CAS hash against
+   * `expectedVersionHash`, and the successor's current content (re-read
+   * inside the lock) for the cycle check and for the bytewise content we
+   * are about to rewrite. A second writer that slips in between the plan
+   * and the apply produces a `cas_mismatch` whose message names both
+   * notes, so the operator can see the conflict instead of having one
+   * supersession silently overwrite another.
+   *
+   * The order is chosen so the recoverable state is the tolerable one: the
+   * successor gains its reference first, then the target is marked. A
+   * crash in between leaves a successor claiming to replace a still-active
+   * note — visible to `doctor` and repairable — rather than a superseded
+   * note nothing points at. Both writes share one auditId so the WAL
+   * identifies them as one operation.
    */
   private async supersede(
     intent: MutationIntent,
@@ -286,57 +296,108 @@ export class VaultMutationWriter implements MutationWriter {
     if (successorId === undefined) {
       throw KnowledgeFailure.mutationRefused("supersede requires successorId")
     }
-    if (successorId === intent.targetId) {
+    const targetIdValue = intent.targetId
+    if (targetIdValue === undefined) {
+      throw KnowledgeFailure.mutationRefused("supersede requires targetId")
+    }
+    if (successorId === targetIdValue) {
       throw KnowledgeFailure.mutationRefused("a note cannot supersede itself")
     }
 
-    const successor = await this.locate(successorId as KnowledgeId)
-    const successorNote = parseFrontmatter(successor.raw)
-
-    // Refuse a cycle: the target must not already supersede the successor.
-    if (target.note.frontmatter.unifia_supersedes.includes(successorId)) {
-      throw KnowledgeFailure.mutationRefused(
-        `supersession cycle: ${intent.targetId} already supersedes ${successorId}`,
-      )
-    }
-
-    const targetId = intent.targetId as string
-    if (!successorNote.frontmatter.unifia_supersedes.includes(targetId)) {
-      const successorNext: NoteFrontmatter = {
-        ...successorNote.frontmatter,
-        unifia_supersedes: [...successorNote.frontmatter.unifia_supersedes, targetId],
-        unifia_updated_at: new Date().toISOString(),
+    // One lock for the whole multi-file write. The plan reads target and
+    // successor outside the lock to keep the slow path off the critical
+    // section; the actual re-validation and the two commits happen under
+    // it, so nothing can change between the checks and the writes.
+    return this.lock.withLock(() => {
+      // Re-read the target inside the lock: it may have moved, been
+      // edited, or been superseded since the plan read it.
+      let lockedTarget: { locator: string; full: string; raw: string }
+      try {
+        lockedTarget = this.locateSync(targetIdValue)
+      } catch (e) {
+        if (e instanceof KnowledgeFailure && e.kind === "source_inconsistent") throw e
+        throw KnowledgeFailure.casMismatch(
+          "target present",
+          `target missing: ${(e as Error).message}`,
+        )
       }
-      const successorRaw = serialiseNote({
-        frontmatter: successorNext,
-        body: successorNote.body,
-        raw: successor.raw,
+      const lockedTargetHash = sha256(lockedTarget.raw)
+      if (lockedTargetHash !== intent.expectedVersionHash) {
+        throw KnowledgeFailure.casMismatch(
+          intent.expectedVersionHash ?? "(unspecified)",
+          lockedTargetHash,
+        )
+      }
+      if (lockedTarget.locator !== target.locator) {
+        throw KnowledgeFailure.casMismatch(
+          target.locator,
+          `target relocated to ${lockedTarget.locator}`,
+        )
+      }
+
+      // Re-read the successor inside the lock: the schema carries no
+      // expected hash for it, so we verify the file still exists, parses,
+      // and has not gained a supersession cycle we are about to create.
+      let lockedSuccessor: { locator: string; full: string; raw: string }
+      try {
+        lockedSuccessor = this.locateSync(successorId as KnowledgeId)
+      } catch (e) {
+        if (e instanceof KnowledgeFailure && e.kind === "source_inconsistent") throw e
+        throw KnowledgeFailure.casMismatch(
+          "successor present",
+          `successor missing: ${(e as Error).message}`,
+        )
+      }
+      const successorNote = parseFrontmatter(lockedSuccessor.raw)
+      const targetId = targetIdValue as string
+      if (successorNote.frontmatter.unifia_supersedes.includes(targetId)) {
+        throw KnowledgeFailure.mutationRefused(
+          `supersession cycle: ${targetId} already in successor ${successorId}.unifia_supersedes`,
+        )
+      }
+      if (target.note.frontmatter.unifia_supersedes.includes(successorId)) {
+        throw KnowledgeFailure.mutationRefused(
+          `supersession cycle: ${targetId} already supersedes ${successorId}`,
+        )
+      }
+
+      if (!successorNote.frontmatter.unifia_supersedes.includes(targetId)) {
+        const successorNext: NoteFrontmatter = {
+          ...successorNote.frontmatter,
+          unifia_supersedes: [...successorNote.frontmatter.unifia_supersedes, targetId],
+          unifia_updated_at: new Date().toISOString(),
+        }
+        const successorRaw = serialiseNote({
+          frontmatter: successorNext,
+          body: successorNote.body,
+          raw: lockedSuccessor.raw,
+        })
+        this.commit(
+          "update",
+          lockedSuccessor.locator,
+          lockedSuccessor.full,
+          successorRaw,
+          sha256(lockedSuccessor.raw),
+          intent,
+          auditId,
+        )
+      }
+
+      const raw = serialiseNote({
+        frontmatter: target.next,
+        body: target.note.body,
+        raw: target.current,
       })
-      this.commit(
-        "update",
-        successor.locator,
-        successor.full,
-        successorRaw,
-        sha256(successor.raw),
+      return this.commit(
+        "supersede",
+        target.locator,
+        target.full,
+        raw,
+        sha256(target.current),
         intent,
         auditId,
       )
-    }
-
-    const raw = serialiseNote({
-      frontmatter: target.next,
-      body: target.note.body,
-      raw: target.current,
     })
-    return this.commit(
-      "supersede",
-      target.locator,
-      target.full,
-      raw,
-      sha256(target.current),
-      intent,
-      auditId,
-    )
   }
 
   /**
@@ -506,6 +567,12 @@ export class VaultMutationWriter implements MutationWriter {
    *
    * Refuses when something already occupies the locator: restoring must not
    * overwrite work done since the deletion.
+   *
+   * The destination commit and the trash cleanup share one lock. The WAL
+   * records `previousLocator` (the trash path) so a crash between the
+   * two is recovered: the trashed copy is removed the next time the
+   * vault is opened, and the restored copy is never overwritten by a
+   * later restore.
    */
   async restoreDeleted(auditId: string): Promise<MutationResult> {
     const trashed = join(this.root, TRASH_DIR, `${auditId}.md`)
@@ -521,6 +588,9 @@ export class VaultMutationWriter implements MutationWriter {
     }
 
     const restoreId = randomUUID()
+    // The trash path, relative to the vault root, is the source the WAL
+    // records. Recovery uses it to clean up after a mid-restore crash.
+    const previousLocator = join(TRASH_DIR, `${auditId}.md`).replace(/\\/g, "/")
     const result = this.commit(
       "restore",
       meta.locator,
@@ -529,12 +599,15 @@ export class VaultMutationWriter implements MutationWriter {
       null,
       { ...({} as MutationIntent), reason: `restore of ${auditId}`, source: "trash" },
       restoreId,
+      { previousLocator, previousFull: trashed },
     )
+    // The sidecar is the trash's bookkeeping, not the note itself. Drop it
+    // best-effort: a leftover sidecar is harmless and will be re-discovered
+    // by `trash()` next time the vault is opened.
     try {
-      unlinkSync(trashed)
       unlinkSync(sidecar)
     } catch {
-      // The note is back; a leftover trash copy is harmless.
+      // Already gone.
     }
     return result
   }
@@ -545,6 +618,10 @@ export class VaultMutationWriter implements MutationWriter {
    * `move` was in the contract and reached `unsupported mutation kind` only
    * after dispatch, so a schema-valid intent failed for a reason the schema
    * could not express.
+   *
+   * The rename is one logical commit: the destination is written and the
+   * previous path is unlinked under the same lock, and the WAL records
+   * `previousLocator` so a crash anywhere in that span is recoverable.
    */
   private async move(intent: MutationIntent, auditId: string): Promise<MutationResult> {
     const destination = intent.targetLocator
@@ -559,9 +636,10 @@ export class VaultMutationWriter implements MutationWriter {
       throw KnowledgeFailure.casMismatch("absent", "present")
     }
 
-    // The content is unchanged; only its locator moves. Record the arrival
-    // first so the WAL names the destination, then remove the old path.
-    const result = this.commit(
+    // The content is unchanged; only its locator moves. Both halves run
+    // under one lock, and the WAL names the source so recovery can finish
+    // the unlink if the process is killed in between.
+    return this.commit(
       "move",
       destination,
       destinationFull,
@@ -569,17 +647,8 @@ export class VaultMutationWriter implements MutationWriter {
       sha256(current),
       intent,
       auditId,
+      destinationFull === full ? undefined : { previousLocator: locator, previousFull: full },
     )
-    if (destinationFull !== full) {
-      try {
-        unlinkSync(full)
-      } catch {
-        // The source is already gone; the note is at its destination either
-        // way, which is the state the WAL recorded.
-      }
-    }
-    void locator
-    return result
   }
 
   // -- shared --------------------------------------------------------------
@@ -589,6 +658,11 @@ export class VaultMutationWriter implements MutationWriter {
    *
    * Order matters: the log records the intent before the rename, so a crash
    * between the two leaves a recoverable trace rather than a silent change.
+   *
+   * For renames (`move`/`restore`) the caller also passes a `cleanup` so the
+   * previous path is unlinked under the same lock — and the WAL records
+   * `previousLocator` so a crash before the unlink can still be recovered
+   * by re-opening the vault.
    */
   private commit(
     kind: WalKind,
@@ -598,6 +672,7 @@ export class VaultMutationWriter implements MutationWriter {
     previousHash: string | null,
     intent: MutationIntent,
     auditId: string,
+    cleanup?: { previousLocator: string; previousFull: string },
   ): MutationResult {
     const newHash = sha256(raw)
     validateEntry({
@@ -620,20 +695,19 @@ export class VaultMutationWriter implements MutationWriter {
       writeFileDurable(tmp, raw)
       try {
         // 2. ...then the intent, durably: this is the commit point.
-        appendLineDurable(
-          join(this.root, WAL_FILE),
-          JSON.stringify({
-            seq: this.nextSeq(),
-            kind,
-            locator,
-            previousHash: previousHash as WalEntry["previousHash"],
-            newHash: newHash as WalEntry["newHash"],
-            auditId,
-            source: intent.source,
-            reason: intent.reason,
-            timestamp: new Date().toISOString(),
-          } satisfies WalEntry),
-        )
+        const entry: WalEntry = {
+          seq: this.nextSeq(),
+          kind,
+          locator,
+          previousHash: previousHash as WalEntry["previousHash"],
+          newHash: newHash as WalEntry["newHash"],
+          auditId,
+          source: intent.source,
+          reason: intent.reason,
+          timestamp: new Date().toISOString(),
+        }
+        if (cleanup !== undefined) entry.previousLocator = cleanup.previousLocator
+        appendLineDurable(join(this.root, WAL_FILE), JSON.stringify(entry))
       } catch (e) {
         // Nothing was recorded, so nothing happened: remove the temporary
         // rather than leaving a write recovery would have to guess about.
@@ -646,8 +720,21 @@ export class VaultMutationWriter implements MutationWriter {
       }
 
       // 3. make it visible, 4. and flush the directory entry.
-      renameSync(tmp, full)
+      renameDurable(tmp, full)
       fsyncDirectory(dirname(full))
+
+      // 5. drop the previous copy under the same lock, so a crash here
+      // cannot leave two silent copies. Recovery also knows about
+      // `previousLocator` and will finish the unlink if the process
+      // crashed earlier in this method.
+      if (cleanup !== undefined) {
+        try {
+          unlinkSync(cleanup.previousFull)
+        } catch {
+          // The previous copy is already gone; the destination has the
+          // recorded hash, which is the state the WAL recorded.
+        }
+      }
     })
 
     // The contract declares ref and newLifecycle; returning only
@@ -737,6 +824,67 @@ export class VaultMutationWriter implements MutationWriter {
         if (parseFrontmatter(raw).frontmatter.unifia_id === id) return { locator, full, raw }
       } catch {
         // A note that does not parse is not the target.
+      }
+    }
+    throw KnowledgeFailure.sourceInconsistent(`no note with id ${id}`)
+  }
+
+  /**
+   * Synchronous version of `locate` for use inside the write lock.
+   *
+   * Multi-file mutations (currently `supersede`) need to re-read both
+   * notes inside one critical section; making that section `async` would
+   * let another writer observe the half-finished state. The walk here
+   * is intentionally tiny — it only enumerates the locators the writer
+   * itself has already written, which `VaultSource.locators()` would
+   * re-discover on every call, so we cache the list in a single
+   * synchronous walk instead.
+   */
+  private locateSync(id: KnowledgeId): { locator: string; full: string; raw: string } {
+    return this.locateSyncInner(id, this.realRoot, this.root)
+  }
+
+  private locateSyncInner(
+    id: KnowledgeId,
+    realRoot: string,
+    root: string,
+  ): { locator: string; full: string; raw: string } {
+    let names: string[]
+    try {
+      names = readdirSync(root)
+    } catch {
+      throw KnowledgeFailure.sourceInconsistent(`no note with id ${id}`)
+    }
+    for (const name of names) {
+      if (name === ".git" || name === "node_modules" || name === ".unifia") continue
+      const full = join(root, name)
+      let stats: ReturnType<typeof statSync>
+      try {
+        stats = statSync(full)
+      } catch {
+        continue
+      }
+      if (stats.isDirectory()) {
+        try {
+          return this.locateSyncInner(id, realRoot, full)
+        } catch {
+          // Not in this subtree; keep looking.
+        }
+      } else if (name.endsWith(".md")) {
+        if (!isContained(realRoot, full)) continue
+        let raw: string
+        try {
+          raw = readFileSync(full, "utf8")
+        } catch {
+          continue
+        }
+        try {
+          if (parseFrontmatter(raw).frontmatter.unifia_id === id) {
+            return { locator: full.slice(realRoot.length + 1).replace(/\\/g, "/"), full, raw }
+          }
+        } catch {
+          // A note that does not parse is not the target.
+        }
       }
     }
     throw KnowledgeFailure.sourceInconsistent(`no note with id ${id}`)

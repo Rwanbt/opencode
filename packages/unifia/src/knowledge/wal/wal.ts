@@ -23,6 +23,21 @@ export interface WalEntry {
   seq: number
   kind: WalKind
   locator: string
+  /**
+   * The path the note used to live at, for `move` and `restore` entries only.
+   *
+   * `move` renames a note: the destination is `locator`, the source is
+   * `previousLocator`. `restore` returns a trashed note to its original
+   * vault location: the destination is `locator`, the trash path is the
+   * `previousLocator`. Other kinds omit the field.
+   *
+   * `previousLocator` is what makes a crash between the commit and the
+   * unlink-of-source recoverable: a re-opened writer looks at every WAL
+   * entry that has one, sees whether the destination already has the
+   * recorded hash, and if it does, removes the source. Without it, a
+   * crash mid-`move` or mid-`restore` would leave two silent copies.
+   */
+  previousLocator?: string
   previousHash: KnowledgeVersionHash | null
   newHash: KnowledgeVersionHash | null
   auditId: string

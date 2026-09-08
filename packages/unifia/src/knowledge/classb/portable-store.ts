@@ -25,8 +25,9 @@
  * before the next mutation.
  */
 
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { resolve, dirname } from "node:path"
+import { renameDurable } from "../mutation/durability.js"
 import { upsertEntry, type ClassBEntry } from "./classb.js"
 
 export const PORTABLE_DIR = ".unifia/portable"
@@ -87,7 +88,7 @@ export function writePortableStore(workspaceRoot: string, store: PortableStore):
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   const text = JSON.stringify(store, null, 2)
   writeFileSync(tmp, text, "utf8")
-  renameSync(tmp, file)
+  renameDurable(tmp, file)
 }
 
 /** Upsert an entry. Returns the new store. */
