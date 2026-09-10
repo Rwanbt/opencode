@@ -3,10 +3,21 @@
 // A8-01 Port Gate skeleton (Wave 0.5). Cartesian smoke: every WAVE05
 // viewport renders with zero console/page errors and zero global
 // overflow; rail exposes the 4 real SHELL_MODES (automate may be grant
-// gated); left panel toggles; navigation reaches work/design/code.
-// Inspector toggles, layout switch and resizers are exercised when
-// present (A2 lands progressively) and recorded when absent.
+// gated); navigation reaches work/design/code. Inspector toggles,
+// layout switch and resizers are exercised when present (A2 lands
+// progressively) and recorded when absent.
 // No LLM, no mocks, no external dependency: real backend + real UI.
+//
+// WHY one shared session for the whole matrix instead of one per case:
+// 16 fresh gotoSession() calls in a single worker (real Linux CI, 1
+// worker per test.yml) reproducibly drove the page/browser to close
+// mid-test past roughly the 10th case, twice, in two different forms
+// (a button-locator wait, then a keyboard toggle) -- the common factor
+// was never the specific action, it was 16 consecutive full session
+// bootstraps piling onto one shared worker-scoped backend over 40+
+// minutes. Nothing here needs a fresh session per viewport: resize,
+// re-check, done. Sidebar toggle is exercised once in the navigation
+// test below, not per viewport -- that already proves mod+B works.
 
 import { test, expect } from "../fixtures"
 import { toggleSidebar } from "../actions"
@@ -16,41 +27,30 @@ import { WAVE05 } from "./matrix"
 import { goto, keys, modes, overflow, panels, shot, track } from "./gate"
 
 test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
-  for (const c of WAVE05) {
-    test(c.name + " renders without errors or overflow", async ({ page, gotoSession }) => {
+  test("every WAVE05 viewport renders without errors or overflow", async ({ page, gotoSession }) => {
+    const t = track(page)
+    await gotoSession()
+    await expect(page.locator(promptSelector).first()).toBeVisible()
+
+    for (const c of WAVE05) {
       await page.setViewportSize({ width: c.width, height: c.height })
-      expect(classify(c.width, c.height), "matrix id drifts from A1 contract").toBe(c.id)
-      const t = track(page)
-      await gotoSession()
-      await expect(page.locator(promptSelector).first()).toBeVisible()
+      expect(classify(c.width, c.height), c.name + ": matrix id drifts from A1 contract").toBe(c.id)
       const over = await overflow(page)
-      expect(over.dx, "global x-overflow " + over.dx + "px exceeds 6px").toBeLessThanOrEqual(6)
+      expect(over.dx, c.name + ": global x-overflow " + over.dx + "px exceeds 6px").toBeLessThanOrEqual(6)
       const got = await modes(page)
-      expect(got).toContain("code")
-      expect(got).toContain("work")
-      expect(got).toContain("design")
-      expect(got.length, "rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
+      expect(got, c.name).toContain("code")
+      expect(got, c.name).toContain("work")
+      expect(got, c.name).toContain("design")
+      expect(got.length, c.name + ": rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
       await panels(page)
-      // WHY mod+B, not the openSidebar/closeSidebar button-locator helpers:
-      // those depend on getByRole("button", { name: /toggle sidebar|toggle
-      // menu/i }), which reproducibly time out (90s x 3 attempts, every
-      // WAVE05 case, real Linux CI, see task_ prior finding) even though
-      // the shell itself has already rendered and the rail passed modes()
-      // above. mod+B calls layout.sidebar.toggle() directly
-      // (commands.ts:119) regardless of which toggle button the current
-      // viewport shows, so this still proves the left panel opens and
-      // closes without depending on that locator race.
-      await toggleSidebar(page)
-      await expect(page.locator(promptSelector).first()).toBeVisible()
-      await toggleSidebar(page)
-      await expect(page.locator(promptSelector).first()).toBeVisible()
       await keys(page)
       await shot(page, c.name)
-      t.stop()
-      expect(t.pages, "pageerrors: " + t.pages.join(" | ")).toEqual([])
-      expect(t.logs, "console errors: " + t.logs.join(" | ")).toEqual([])
-    })
-  }
+    }
+
+    t.stop()
+    expect(t.pages, "pageerrors: " + t.pages.join(" | ")).toEqual([])
+    expect(t.logs, "console errors: " + t.logs.join(" | ")).toEqual([])
+  })
 
   test("navigation reaches work design and back to code", async ({ page, gotoSession }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -61,6 +61,12 @@ test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
     await goto(page, "design")
     if (got.includes("automate")) await goto(page, "automate")
     await goto(page, "code")
+    // mod+B calls layout.sidebar.toggle() directly (commands.ts:119),
+    // independent of which toggle button the viewport renders.
+    await toggleSidebar(page)
+    await expect(page.locator(promptSelector).first()).toBeVisible()
+    await toggleSidebar(page)
+    await expect(page.locator(promptSelector).first()).toBeVisible()
     // Inspector equivalents (review + file tree) toggle when rendered.
     for (const sel of ['[aria-controls="review-panel"]', '[aria-controls="file-tree-panel"]']) {
       const toggle = page.locator(sel).first()
