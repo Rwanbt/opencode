@@ -1,0 +1,105 @@
+/* SPDX-License-Identifier: MIT */
+
+/* A1 Wave 0 — v110 canonical shell contract (build v110-port-ready-r1).
+ *
+ * Additive layer only. Colors stay owned by @unifia/ui theme plus
+ * unifia-brand.css; this sheet owns geometry, motion, focus and the
+ * animation kill-switch. Source values: docs/ui-reference/v110 plus the
+ * manifest authorities LayoutControllerV98 / ResponsiveV98 / CanonicalV110.
+ */
+:root {
+  /* Shell geometry (maquette --topbar/--rail/--context/--inspector/--chat). */
+  --v110-topbar: 48px;
+  --v110-rail: 78px;
+  --v110-rail-compact: 62px;
+  --v110-context: 248px;
+  --v110-inspector: 300px;
+  --v110-chat: 348px;
+  --v110-chat-min: 280px;
+  --v110-chat-max: 620px;
+  --v110-shell-gap: 10px;
+  --v110-shell-pad: 10px;
+
+  /* Radius (maquette --radius-sm/md/lg/xl). */
+  --v110-radius-sm: 10px;
+  --v110-radius-md: 12px;
+  --v110-radius-lg: 15px;
+  --v110-radius-xl: 18px;
+
+  /* Touch targets: 31px square desktop toggles, 44px touch. */
+  --v110-target: 31px;
+  --v110-target-touch: 44px;
+
+  /* Focus ring (maquette --focus-ring, mapped on theme tokens). */
+  --v110-focus: 0 0 0 2px var(--background-base), 0 0 0 4px var(--border-focus);
+
+  /* Motion (maquette micro 120-180ms, layout 540-760ms, split 680ms). */
+  --v110-fast: 150ms;
+  --v110-layout: 650ms;
+  --v110-split: 680ms;
+  --v110-ease: cubic-bezier(0.16, 0.84, 0.2, 1);
+}
+
+/* Narrow-desktop panel overrides (maquette media max-width 1360px). */
+@media (max-width: 1360px) {
+  :root {
+    --v110-context: 220px;
+    --v110-chat: 330px;
+    --v110-inspector: 280px;
+  }
+}
+
+/* Shell rhythm helper (maquette shell gap and padding). */
+.v110-shell {
+  gap: var(--v110-shell-gap);
+  padding: var(--v110-shell-pad);
+}
+
+/* Separator handle geometry per axis (primitive primitives/separator). */
+[data-component="separator"][data-axis="x"] {
+  width: 8px;
+  cursor: col-resize;
+}
+
+[data-component="separator"][data-axis="y"] {
+  height: 8px;
+  cursor: row-resize;
+}
+
+/* Default focus system. :where keeps specificity at zero so component
+ * rules always win; this only covers bare controls. */
+:where(button, input, textarea, select, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--v110-focus);
+}
+
+/* Contract v110: reduced-motion and data-ui-animations off stop motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --v110-fast: 0ms;
+    --v110-layout: 0ms;
+    --v110-split: 0ms;
+  }
+}
+
+html[data-ui-animations="off"] {
+  --v110-fast: 0ms;
+  --v110-layout: 0ms;
+  --v110-split: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    transition-duration: 0.01ms;
+  }
+}
+
+html[data-ui-animations="off"] *,
+html[data-ui-animations="off"] *::before,
+html[data-ui-animations="off"] *::after {
+  animation: none;
+  transition: none;
+}
