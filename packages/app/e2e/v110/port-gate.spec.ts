@@ -9,7 +9,7 @@
 // No LLM, no mocks, no external dependency: real backend + real UI.
 
 import { test, expect } from "../fixtures"
-import { closeSidebar, openSidebar } from "../actions"
+import { toggleSidebar } from "../actions"
 import { promptSelector } from "../selectors"
 import { classify } from "../../src/tokens/viewport"
 import { WAVE05 } from "./matrix"
@@ -31,9 +31,18 @@ test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
       expect(got).toContain("design")
       expect(got.length, "rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
       await panels(page)
-      await closeSidebar(page)
+      // WHY mod+B, not the openSidebar/closeSidebar button-locator helpers:
+      // those depend on getByRole("button", { name: /toggle sidebar|toggle
+      // menu/i }), which reproducibly time out (90s x 3 attempts, every
+      // WAVE05 case, real Linux CI, see task_ prior finding) even though
+      // the shell itself has already rendered and the rail passed modes()
+      // above. mod+B calls layout.sidebar.toggle() directly
+      // (commands.ts:119) regardless of which toggle button the current
+      // viewport shows, so this still proves the left panel opens and
+      // closes without depending on that locator race.
+      await toggleSidebar(page)
       await expect(page.locator(promptSelector).first()).toBeVisible()
-      await openSidebar(page)
+      await toggleSidebar(page)
       await expect(page.locator(promptSelector).first()).toBeVisible()
       await keys(page)
       await shot(page, c.name)
