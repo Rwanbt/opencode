@@ -25,7 +25,7 @@ import { Separator } from "@/primitives/separator"
 import { Tabs } from "@unifia/ui/tabs"
 import { createSessionScroll } from "@/pages/session/session-scroll"
 import { showToast } from "@unifia/ui/toast"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
@@ -81,6 +81,7 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const navigate = useNavigate()
   const workbench = useWorkspaceWorkbench()
   const [artifactDocument, setArtifactDocument] = createSignal<{ filename: string; content: string }>()
   const [artifactError, setArtifactError] = createSignal<string>()
@@ -792,6 +793,7 @@ export default function Page() {
     userMessages,
     revertMessageID,
     language,
+    navigate,
   })
 
   const {
