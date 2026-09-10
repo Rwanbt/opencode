@@ -1014,7 +1014,7 @@ export default function Layout(props: ParentProps) {
               aria-label={language.t("sidebar.nav.projectsAndSessions")}
               data-component="sidebar-nav-desktop"
               classList={{
-                "hidden xl:block": true,
+                "hidden shell:block": true,
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
               }}
@@ -1037,7 +1037,7 @@ export default function Layout(props: ParentProps) {
 
             <Show when={layout.sidebar.opened()}>
               <div
-                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                class="hidden shell:block absolute inset-y-0 z-30 w-0 overflow-visible"
                 style={{ left: `${side()}px` }}
                 onPointerDown={() => setState("sizing", true)}
               >
@@ -1059,11 +1059,11 @@ export default function Layout(props: ParentProps) {
             </Show>
 
             <div
-              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
+              class="hidden shell:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
               style={{ left: "calc(var(--v110-rail, 78px) + 12px)" }}
             />
 
-            <div class="xl:hidden">
+            <div class="shell:hidden">
               <div
                 classList={{
                   "fixed inset-x-0 top-12 bottom-0 z-40 transition-opacity duration-200": true,
@@ -1101,7 +1101,7 @@ export default function Layout(props: ParentProps) {
             <div
               classList={{
                 "absolute inset-0": true,
-                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "shell:inset-y-0 shell:right-0 shell:left-[var(--main-left)]": true,
                 "z-20": true,
                 "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
                   !state.sizing,
@@ -1114,7 +1114,7 @@ export default function Layout(props: ParentProps) {
                 data-v110="workspace"
                 data-workbench-mode={mode.active()}
                 classList={{
-                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base shell:border-l shell:rounded-tl-[12px]": true,
                 }}
               >
                 <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
@@ -1125,7 +1125,7 @@ export default function Layout(props: ParentProps) {
 
             <div
               classList={{
-                "hidden xl:flex absolute inset-y-0 z-30 left-[var(--v110-rail,78px)]": true,
+                "hidden shell:flex absolute inset-y-0 z-30 left-[var(--v110-rail,78px)]": true,
                 "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
                 "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
@@ -1149,7 +1149,7 @@ export default function Layout(props: ParentProps) {
 
             <div
               classList={{
-                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "hidden shell:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
                 "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
                 "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,

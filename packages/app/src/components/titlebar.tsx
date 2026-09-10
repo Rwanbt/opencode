@@ -177,7 +177,7 @@ export function Titlebar() {
       >
         <Show when={mac()}>
           <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
-          <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
+          <div class="shell:hidden w-10 shrink-0 flex items-center justify-center">
             <IconButton
               icon="menu"
               variant="ghost"
@@ -189,7 +189,7 @@ export function Titlebar() {
           </div>
         </Show>
         <Show when={!mac()}>
-          <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
+          <div class="shell:hidden w-[48px] shrink-0 flex items-center justify-center">
             <IconButton
               icon="menu"
               variant="ghost"
@@ -202,7 +202,7 @@ export function Titlebar() {
         </Show>
         <div class="flex items-center gap-1 shrink-0">
           <TooltipKeybind
-            class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
+            class={web() ? "hidden shell:flex shrink-0 ml-14" : "hidden shell:flex shrink-0 ml-2"}
             placement="bottom"
             title={language.t("command.sidebar.toggle")}
             keybind={command.keybind("sidebar.toggle")}
@@ -217,7 +217,7 @@ export function Titlebar() {
               <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
             </Button>
           </TooltipKeybind>
-          <div class="hidden xl:flex items-center shrink-0">
+          <div class="hidden shell:flex items-center shrink-0">
             <Show when={params.dir}>
               <div
                 class="flex items-center shrink-0 w-8 mr-1"
