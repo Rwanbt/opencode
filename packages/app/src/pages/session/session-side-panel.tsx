@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@unifia/ui/tabs"
 import { IconButton } from "@unifia/ui/icon-button"
 import { TooltipKeybind } from "@unifia/ui/tooltip"
-import { ResizeHandle } from "@unifia/ui/resize-handle"
+import { Separator } from "@/primitives/separator"
 import { Mark } from "@unifia/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -284,7 +284,10 @@ export function SessionSidePanel(props: {
   })
 
   return (
+    // Shell owns the inspector frame (A2), modes own content (A3+): this
+    // aside stays the single inspector content (no second FileTree).
     <aside
+        data-v110="inspector-content"
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
@@ -654,9 +657,11 @@ export function SessionSidePanel(props: {
             </div>
             <Show when={fileOpen()}>
               <div onPointerDown={() => props.size.start()}>
-                <ResizeHandle
-                  direction="horizontal"
+                <Separator
+                  axis="x"
                   edge="start"
+                  label={language.t("inspector.resize")}
+                  data-v110="resize-inspector"
                   size={layout.fileTree.width()}
                   min={200}
                   max={480}

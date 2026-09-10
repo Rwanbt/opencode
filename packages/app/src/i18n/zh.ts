@@ -621,6 +621,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "项目和会话",
   "sidebar.settings": "设置",
   "sidebar.help": "帮助",
+  "sidebar.resize": "调整侧边栏宽度",
+  "inspector.resize": "调整检查器宽度",
   "sidebar.workspaces.enable": "启用工作区",
   "sidebar.workspaces.disable": "禁用工作区",
   "sidebar.gettingStarted.title": "入门",
