@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@unifia/ui/tabs"
 import { IconButton } from "@unifia/ui/icon-button"
 import { TooltipKeybind } from "@unifia/ui/tooltip"
-import { ResizeHandle } from "@unifia/ui/resize-handle"
+import { Separator } from "@/primitives/separator"
 import { Mark } from "@unifia/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -35,6 +35,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useShell, useViewport } from "@/shell/v110-store"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -68,6 +69,25 @@ export function SessionSidePanel(props: {
   const fileOpen = createMemo(() => layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
   const bothOpen = createMemo(() => reviewOpen() && fileOpen())
+
+  // RESPONSIVE-MATRIX.md desktop-compact invariant: opening the left panel
+  // closes the Inspector and inversely (single-utility side, per the A1
+  // viewport contract's exclusive()). Two effects instead of one shared
+  // toggle so each side stays the source of truth for its own open state;
+  // the `if` guards make both idempotent, so a close triggered by the
+  // other side never bounces back.
+  const shell = useShell(useViewport())
+  createEffect(() => {
+    if (!shell.single()) return
+    if (!layout.sidebar.opened()) return
+    if (fileOpen()) layout.fileTree.close()
+    if (reviewOpen()) view().reviewPanel.close()
+  })
+  createEffect(() => {
+    if (!shell.single()) return
+    if (!open()) return
+    if (layout.sidebar.opened()) layout.sidebar.close()
+  })
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (isMobileDevice()) return "50%"
@@ -284,7 +304,10 @@ export function SessionSidePanel(props: {
   })
 
   return (
+    // Shell owns the inspector frame (A2), modes own content (A3+): this
+    // aside stays the single inspector content (no second FileTree).
     <aside
+        data-v110="inspector-content"
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
@@ -654,9 +677,11 @@ export function SessionSidePanel(props: {
             </div>
             <Show when={fileOpen()}>
               <div onPointerDown={() => props.size.start()}>
-                <ResizeHandle
-                  direction="horizontal"
+                <Separator
+                  axis="x"
                   edge="start"
+                  label={language.t("inspector.resize")}
+                  data-v110="resize-inspector"
                   size={layout.fileTree.width()}
                   min={200}
                   max={480}
