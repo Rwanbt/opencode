@@ -58,6 +58,7 @@ import type {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarPanel, type SidebarPanelContext } from "./layout/sidebar-panel"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { MobileNav } from "@/shell/v110-mobile-nav"
 import { useMode } from "@/context/mode"
 import { DialogDeleteWorkspace, DialogResetWorkspace } from "./layout/dialog-workspace"
 import { createPrefetchSystem } from "./layout/prefetch"
@@ -1086,6 +1087,16 @@ export default function Layout(props: ParentProps) {
                 {sidebarContent(true)}
               </nav>
             </div>
+
+            <MobileNav
+              modes={mode.modes}
+              active={mode.active}
+              onMode={mode.select}
+              onSettings={openSettings}
+              navLabel={language.t("workbench.modes.railLabel")}
+              modeLabel={(m) => language.t(`workbench.modes.${m}`)}
+              settingsLabel={language.t("sidebar.settings")}
+            />
 
             <div
               classList={{
