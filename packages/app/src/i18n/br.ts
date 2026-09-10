@@ -493,6 +493,7 @@ export const dict = {
   "session.messages.loadEarlier": "Carregar mensagens anteriores",
   "session.messages.loading": "Carregando mensagens...",
   "session.messages.jumpToLatest": "Ir para a mais recente",
+  "session.promptIndex.label": "Navegar entre os prompts",
   "session.context.addToContext": "Adicionar {{selection}} ao contexto",
   "session.todo.title": "Tarefas",
   "session.todo.collapse": "Recolher",

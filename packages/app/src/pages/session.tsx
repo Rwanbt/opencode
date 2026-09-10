@@ -41,6 +41,7 @@ import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+import { PromptIndex } from "@/pages/session/prompt-index"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -84,6 +85,11 @@ export default function Page() {
   const navigate = useNavigate()
   const workbench = useWorkspaceWorkbench()
   const [artifactDocument, setArtifactDocument] = createSignal<{ filename: string; content: string }>()
+  // Read-only capture of the message-timeline scroll viewport for
+  // PromptIndex (A3-01). Wraps setScrollRef below rather than reaching
+  // into createSessionScroll/createAutoScroll internals: this signal
+  // has no write path back into the existing scroll machinery.
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
   const [artifactError, setArtifactError] = createSignal<string>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
@@ -957,7 +963,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div class="flex-1 min-h-0 overflow-hidden">
+          <div class="relative flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
@@ -976,7 +982,10 @@ export default function Page() {
                     actions={actions}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
+                    setScrollRef={(el) => {
+                      setScrollRef(el)
+                      setScrollEl(el)
+                    }}
                     onScheduleScrollState={scheduleScrollState}
                     onAutoScrollHandleScroll={autoScroll.handleScroll}
                     onMarkScrollGesture={markScrollGesture}
@@ -996,6 +1005,7 @@ export default function Page() {
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
                   />
+                  <PromptIndex messages={visibleUserMessages} scrollEl={scrollEl} />
                 </Show>
               </Match>
               <Match when={true}>
