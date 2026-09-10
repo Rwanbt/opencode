@@ -569,6 +569,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
   "sidebar.help": "Помощь",
+  "sidebar.resize": "Изменить ширину боковой панели",
+  "inspector.resize": "Изменить ширину инспектора",
   "sidebar.workspaces.enable": "Включить рабочие пространства",
   "sidebar.workspaces.disable": "Отключить рабочие пространства",
   "sidebar.gettingStarted.title": "Начало работы",
