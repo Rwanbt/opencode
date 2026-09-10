@@ -564,6 +564,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "プロジェクトとセッション",
   "sidebar.settings": "設定",
   "sidebar.help": "ヘルプ",
+  "sidebar.resize": "サイドバーの幅を変更",
+  "inspector.resize": "インスペクターの幅を変更",
   "sidebar.workspaces.enable": "ワークスペースを有効化",
   "sidebar.workspaces.disable": "ワークスペースを無効化",
   "sidebar.gettingStarted.title": "はじめに",

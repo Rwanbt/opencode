@@ -15,7 +15,7 @@ import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
-import { ResizeHandle } from "@unifia/ui/resize-handle"
+import { Separator } from "@/primitives/separator"
 import type { Session } from "../types/sdk-shim"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -1040,8 +1040,10 @@ export default function Layout(props: ParentProps) {
                 style={{ left: `${side()}px` }}
                 onPointerDown={() => setState("sizing", true)}
               >
-                <ResizeHandle
-                  direction="horizontal"
+                <Separator
+                  axis="x"
+                  label={language.t("sidebar.resize")}
+                  data-v110="resize-context"
                   size={layout.sidebar.width()}
                   min={244}
                   max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}

@@ -560,6 +560,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "المشاريع والجلسات",
   "sidebar.settings": "الإعدادات",
   "sidebar.help": "مساعدة",
+  "sidebar.resize": "تغيير حجم الشريط الجانبي",
+  "inspector.resize": "تغيير حجم لوحة الفحص",
   "sidebar.workspaces.enable": "تمكين مساحات العمل",
   "sidebar.workspaces.disable": "تعطيل مساحات العمل",
   "sidebar.gettingStarted.title": "البدء",
