@@ -2,6 +2,7 @@
 
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 import { createQuery } from "@tanstack/solid-query"
+import { NodeFamilySchema } from "@unifia/contracts"
 import { useLanguage } from "@/context/language"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
@@ -32,6 +33,11 @@ export function AutomateSurface(): JSX.Element {
   const [workflowError, setWorkflowError] = createSignal<string>()
   const [approvalId, setApprovalId] = createSignal<string>()
   const [pendingDefinition, setPendingDefinition] = createSignal<Record<string, unknown>>()
+  const [nodeFilter, setNodeFilter] = createSignal("")
+  const visibleNodeFamilies = createMemo(() => {
+    const term = nodeFilter().trim().toLocaleLowerCase()
+    return term ? NodeFamilySchema.options.filter((family) => family.includes(term)) : NodeFamilySchema.options
+  })
   const definitionFileQueryOptions = createMemo(() => {
     const current = connection()
     const selectedPath = selectedDefinition()
@@ -112,6 +118,10 @@ export function AutomateSurface(): JSX.Element {
           description={t("workbench.automate.chatDescription")}
         />
         <ConnectionBanner dataAttr="automate-connection" dataRetryAttr="automate-retry" />
+        <section class="rounded-lg border border-border-base bg-background-stronger p-4" data-automate-node-library>
+          <div class="flex flex-wrap items-baseline justify-between gap-3"><div><h2 class="text-14-medium">Node library</h2><p class="mt-1 text-12-regular text-text-weak">Families available in the connected workflow runtime.</p></div><input class="rounded border border-border-base bg-background-base px-2 py-1 text-12-regular" value={nodeFilter()} onInput={(event) => setNodeFilter(event.currentTarget.value)} placeholder="Search nodes" aria-label="Search workflow nodes" /></div>
+          <div class="mt-3 flex flex-wrap gap-2"><For each={visibleNodeFamilies()}>{(family) => <span class="rounded border border-border-base bg-background-base px-2 py-1 text-12-regular">{family}</span>}</For></div>
+        </section>
         <Show when={definitions.error}>
           <p data-automate-definitions="failed" class="text-14-regular text-text-danger">{definitions.error instanceof Error ? definitions.error.message : String(definitions.error)}</p>
         </Show>
