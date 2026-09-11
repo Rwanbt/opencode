@@ -142,7 +142,17 @@ async function readContainedByHandle(
     // stable, so a replacement cannot redirect the bytes we will read, but it
     // must still be surfaced as an identity change.
     const after = await identityOf(real)
-    if (after === null || !sameIdentity(st, after)) {
+    // A hostile replacement can happen immediately after the first
+    // directory-entry check. A second observation turns that narrow race into
+    // an explicit identity transition while the descriptor remains pinned.
+    const settled = await identityOf(real)
+    if (
+      after === null ||
+      settled === null ||
+      !sameIdentity(st, after) ||
+      !sameIdentity(st, settled) ||
+      !sameIdentity(after, settled)
+    ) {
       throw KnowledgeFailure.pathUnresolved(
         `locator identity changed after validation: ${locator}`,
       )
