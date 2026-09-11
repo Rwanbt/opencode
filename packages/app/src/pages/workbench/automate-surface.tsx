@@ -182,7 +182,7 @@ export function AutomateSurface(): JSX.Element {
             <p class="text-12-regular text-text-weak">{t("workbench.automate.selectedDescription")}</p>
             <Show when={definitionFile.data?.results[0]}>
               {(file) => {
-                const parsed = parseWorkflowDefinition(decodeFile(file()))
+                const parsed = parseWorkflowDefinition(draftSource() || decodeFile(file()))
                 return (
                   <div class="mt-3 rounded border border-border-weaker-base bg-background-base p-3" data-automate-definition-preview={parsed.kind}>
                     <Show when={parsed.kind === "ok"} fallback={<p class="text-12-regular text-text-danger">{t("workbench.automate.invalidDefinition")}</p>}>
