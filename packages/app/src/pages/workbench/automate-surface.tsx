@@ -10,7 +10,7 @@ import { workbenchQueryKey } from "@/context/workbench/query-keys"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
 import { decodeFile, parseWorkflowDefinition } from "./automate-decode"
-import { summarizeWorkflowSteps } from "./automate-workflow-model"
+import { publishedDraftPath, summarizeWorkflowSteps } from "./automate-workflow-model"
 
 export function AutomateSurface(): JSX.Element {
   const language = useLanguage()
@@ -84,6 +84,27 @@ export function AutomateSurface(): JSX.Element {
         setDraftStatus("Local draft saved")
       }).catch(() => setDraftStatus("Local draft conflict — reload before editing"))
     }, 700)
+  }
+
+  async function publishDraft(): Promise<void> {
+    const current = connection()
+    const path = selectedDefinition()
+    if (!current || !path) return
+    const parsed = parseWorkflowDefinition(draftSource())
+    if (parsed.kind === "error") {
+      setWorkflowError(t("workbench.automate.invalidDefinition"))
+      return
+    }
+    const targetPath = publishedDraftPath(path, new Date())
+    try {
+      await current.client.createFiles(current.workspaceId, [{ path: targetPath, content: draftSource() }])
+      setSelectedDefinition(targetPath)
+      setDraftStatus("Published as a new workflow file")
+      setWorkflowError(undefined)
+      await definitions.refetch()
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : t("workbench.automate.startFailed"))
+    }
   }
   async function startDefinition(definition: Record<string, unknown>): Promise<void> {
     const current = connection()
@@ -201,7 +222,7 @@ export function AutomateSurface(): JSX.Element {
               }}
             </Show>
             <Show when={definitionFile.data?.results[0]}>
-              {(file) => <details class="mt-3 rounded border border-border-base bg-background-base p-3"><summary class="cursor-pointer text-12-medium">Local draft</summary><p class="mt-2 text-11-regular text-text-weak">{draftStatus()}</p><textarea class="mt-3 h-48 w-full resize-y rounded border border-border-base bg-background-stronger p-2 font-mono text-11-regular leading-5" value={draftSource()} onInput={(event) => updateDraftSource(event.currentTarget.value)} aria-label="Edit local workflow draft" /><button type="button" class="mt-2 rounded border border-border-base px-2 py-1 text-11-medium" onClick={() => updateDraftSource(decodeFile(file()))}>Reset to published</button></details>}
+              {(file) => <details class="mt-3 rounded border border-border-base bg-background-base p-3"><summary class="cursor-pointer text-12-medium">Local draft</summary><p class="mt-2 text-11-regular text-text-weak">{draftStatus()}</p><textarea class="mt-3 h-48 w-full resize-y rounded border border-border-base bg-background-stronger p-2 font-mono text-11-regular leading-5" value={draftSource()} onInput={(event) => updateDraftSource(event.currentTarget.value)} aria-label="Edit local workflow draft" /><div class="mt-2 flex flex-wrap gap-2"><button type="button" class="rounded border border-border-base px-2 py-1 text-11-medium" onClick={() => updateDraftSource(decodeFile(file()))}>Reset to published</button><button type="button" class="rounded border border-border-base px-2 py-1 text-11-medium" onClick={() => void publishDraft()}>Publish as new file</button></div></details>}
             </Show>
             <button type="button" class="mt-3 rounded border border-border-base px-3 py-2 text-12-medium" disabled={definitionFile.isLoading || !definitionFile.data} onClick={() => void startSelectedWorkflow()}>{t("workbench.automate.startWithApproval")}</button>
             <Show when={approvalId()}>

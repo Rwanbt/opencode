@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { summarizeWorkflowSteps } from "./automate-workflow-model"
+import { publishedDraftPath, summarizeWorkflowSteps } from "./automate-workflow-model"
 
 describe("summarizeWorkflowSteps", () => {
   test("renders the persisted family or capability without inventing a node kind", () => {
@@ -17,4 +17,8 @@ describe("summarizeWorkflowSteps", () => {
       { id: "step-3", label: "untyped step", requiresApproval: false },
     ])
   })
+})
+
+test("publishes a draft under a new immutable workflow file path", () => {
+  expect(publishedDraftPath(".unifia/workflows/release.json", new Date("2026-09-12T08:30:45.123Z"))).toBe(".unifia/workflows/release.draft-20260912083045123.json")
 })

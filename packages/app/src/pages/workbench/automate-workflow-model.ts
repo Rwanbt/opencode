@@ -27,6 +27,12 @@ export function summarizeWorkflowSteps(definition: ParsedWorkflowDefinition): re
   })
 }
 
+/** Publication is append-only until the workspace protocol gains write CAS. */
+export function publishedDraftPath(definitionPath: string, now: Date): string {
+  const suffix = now.toISOString().replace(/[-:.TZ]/g, "")
+  return definitionPath.replace(/(\.json)?$/i, `.draft-${suffix}.json`)
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
