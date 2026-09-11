@@ -4,7 +4,7 @@ import { For, Show, createEffect, createMemo, createSignal, type JSX } from "sol
 import { createQuery } from "@tanstack/solid-query"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
-import { decodeFile } from "@/pages/workbench/automate-decode"
+import { decodeWorkbenchFile } from "@/context/workbench/file-content"
 import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote } from "./memory-panel-model"
 
 const MEMORY_ROOT = ".unifia/memory"
@@ -48,7 +48,7 @@ export function MemoryPanel(): JSX.Element {
   const note = createMemo(() => {
     const path = selectedPath()
     const file = noteFile.data?.results[0]
-    return path && file ? parseMemoryNote(path, decodeFile(file)) : undefined
+    return path && file ? parseMemoryNote(path, decodeWorkbenchFile(file)) : undefined
   })
   const linked = createMemo(() => note() ? linkedMemoryNotes(note()!.links, notes()) : [])
   const graph = createMemo(() => note() ? localMemoryGraph(note()!, linked()) : [])
