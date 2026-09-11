@@ -236,6 +236,15 @@ interface GateRow {
   verdict: string
 }
 
+export interface EventRow {
+  eventId: string
+  runId: string
+  sequence: number
+  kind: string
+  payload: unknown
+  occurredAt: string
+}
+
 interface Store {
   runs: Page<RunRow>
   models: Page<ModelRow>
@@ -244,6 +253,8 @@ interface Store {
   selectedRunId?: string
   tasks: TaskRow[]
   gates: GateRow[]
+  events: Page<EventRow>
+  eventsReachability: Reachability
   detailsReachability: Reachability
 }
 
@@ -253,6 +264,7 @@ interface PersistedState {
 
 const RUN_PAGE_SIZE = 50
 const MODEL_PAGE_SIZE = 200
+const EVENT_PAGE_SIZE = 50
 
 export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
   name: "Team",
@@ -274,6 +286,8 @@ export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
       modelsReachability: "ok",
       tasks: [],
       gates: [],
+      events: EMPTY_PAGE,
+      eventsReachability: "ok",
       detailsReachability: "ok",
     })
 
@@ -327,6 +341,32 @@ export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
       await advanceModels(store.models.nextCursor)
     }
 
+    async function loadEvents(runID: string, cursor: string | null) {
+      const response = await sdk.client.team.listEvents({ runID, limit: EVENT_PAGE_SIZE, cursor: cursor ?? undefined })
+      if (response.error) throw response.error
+      const body = response.data as { items: EventRow[]; nextCursor: string | null }
+      return { items: body.items, nextCursor: body.nextCursor }
+    }
+
+    const eventId = (event: EventRow) => event.eventId
+
+    async function advanceEvents(runID: string, cursor: string | null) {
+      const result = await fetchPage({
+        current: store.events,
+        load: (pageCursor) => loadEvents(runID, pageCursor),
+        idOf: eventId,
+        cursor,
+      })
+      setStore("events", result.page)
+      setStore("eventsReachability", result.reachability)
+    }
+
+    const moreEvents = async () => {
+      const runID = store.selectedRunId
+      if (!runID || store.events.nextCursor === null) return
+      await advanceEvents(runID, store.events.nextCursor)
+    }
+
     async function selectRun(runID: string) {
       try {
         const [tasks, gates] = await Promise.all([
@@ -338,7 +378,9 @@ export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
         setStore("selectedRunId", runID)
         setStore("tasks", (tasks.data as { items: TaskRow[] }).items)
         setStore("gates", (gates.data as { items: GateRow[] }).items)
+        setStore("events", EMPTY_PAGE)
         setStore("detailsReachability", "ok")
+        await advanceEvents(runID, null)
       } catch (error) {
         setStore("detailsReachability", classifyFailure(error))
         throw error
@@ -385,6 +427,13 @@ export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
           setStore("selectedRunId", undefined)
           setStore("tasks", [])
           setStore("gates", [])
+          setStore("events", EMPTY_PAGE)
+        },
+        events: {
+          page: () => store.events,
+          reachability: () => store.eventsReachability,
+          stale: () => isStale(store.eventsReachability, store.events.items.length),
+          more: moreEvents,
         },
       },
       health: {
