@@ -20,6 +20,7 @@ export function AutomateSurface(): JSX.Element {
     return { queryKey: workbenchQueryKey(current, "files", { prefix: ".unifia/workflows" }), enabled: !!current, queryFn: () => current!.client.listFiles(current!.workspaceId, ".unifia/workflows") }
   })
   const definitions = createQuery(definitionsQueryOptions)
+  const workflowFiles = createMemo(() => definitions.data?.entries.filter((entry) => entry.kind === "file") ?? [])
   const [selectedDefinition, setSelectedDefinition] = createSignal<string>()
   const [workflowState, setWorkflowState] = createSignal<string>()
   const [workflowError, setWorkflowError] = createSignal<string>()
@@ -107,9 +108,9 @@ export function AutomateSurface(): JSX.Element {
         <Show when={definitions.error}>
           <p data-automate-definitions="failed" class="text-14-regular text-text-danger">{definitions.error instanceof Error ? definitions.error.message : String(definitions.error)}</p>
         </Show>
-        <Show when={definitions.data?.entries.length}>
-          <ul class="space-y-2" data-automate-definition-count={definitions.data!.entries.length}>
-            <For each={definitions.data!.entries.filter((entry) => entry.kind === "file")}>
+        <Show when={workflowFiles().length > 0}>
+          <ul class="space-y-2" data-automate-definition-count={workflowFiles().length}>
+            <For each={workflowFiles()}>
               {(entry) => (
                 <li class="rounded-lg border border-border-base bg-background-stronger p-4" data-automate-definition={entry.path}>
                   <div class="flex items-center justify-between gap-3"><span>{entry.path}</span><button type="button" class="rounded border border-border-base px-2 py-1 text-12-medium" onClick={() => { setSelectedDefinition(entry.path); setWorkflowError(undefined) }}>{t("workbench.automate.inspect")}</button></div>
@@ -121,6 +122,19 @@ export function AutomateSurface(): JSX.Element {
         <Show when={selectedDefinition()}>
           <div class="rounded-lg border border-border-base bg-background-stronger p-4" data-automate-selected={selectedDefinition()}>
             <p class="text-12-regular text-text-weak">{t("workbench.automate.selectedDescription")}</p>
+            <Show when={definitionFile.data?.results[0]}>
+              {(file) => {
+                const parsed = parseWorkflowDefinition(decodeFile(file()))
+                return (
+                  <div class="mt-3 rounded border border-border-weaker-base bg-background-base p-3" data-automate-definition-preview={parsed.kind}>
+                    <Show when={parsed.kind === "ok"} fallback={<p class="text-12-regular text-text-danger">{t("workbench.automate.invalidDefinition")}</p>}>
+                      <p class="text-12-medium">{parsed.kind === "ok" ? parsed.definition.id : ""}</p>
+                      <p class="text-12-regular text-text-weak">v{parsed.kind === "ok" ? parsed.definition.version : ""} · {parsed.kind === "ok" ? parsed.definition.steps.length : 0} steps</p>
+                    </Show>
+                  </div>
+                )
+              }}
+            </Show>
             <button type="button" class="mt-3 rounded border border-border-base px-3 py-2 text-12-medium" disabled={definitionFile.isLoading || !definitionFile.data} onClick={() => void startSelectedWorkflow()}>{t("workbench.automate.startWithApproval")}</button>
             <Show when={approvalId()}>
               <div class="mt-3 flex flex-wrap gap-2" data-automate-approval={approvalId()}>
@@ -133,7 +147,7 @@ export function AutomateSurface(): JSX.Element {
             <Show when={workflowError()}><p class="mt-2 text-12-regular text-text-danger">{workflowError()}</p></Show>
           </div>
         </Show>
-        <Show when={!definitions.isLoading && !definitions.error && definitions.data?.entries.length === 0}>
+        <Show when={!definitions.isLoading && !definitions.error && workflowFiles().length === 0}>
           <p data-automate-definitions="empty" class="text-14-regular text-text-weak">{t("workbench.automate.noDefinitions")}</p>
         </Show>
       </div>
