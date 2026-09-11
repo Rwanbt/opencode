@@ -18,7 +18,14 @@ import { WorkPlanPanel } from "@/pages/workbench/work-plan-panel"
 import { WorkProgressPanel } from "@/pages/workbench/work-progress-panel"
 import { WorkRunsPanel } from "@/pages/workbench/work-runs-panel"
 import { pickActiveRun, taskProgress } from "@/pages/workbench/work-team"
+import type { WorkView } from "@/pages/workbench/work-view"
+import { WorkViewSwitcher } from "@/pages/workbench/work-view-switcher"
 import { createMobileNavigationModel, WORK_V1_FUNCTIONS, type WorkFunction } from "@unifia/workbench-shell"
+
+// A5-03: views ship incrementally as their real content lands (Board in
+// A5-04, Timeline/Activity in A5-05) — a tab only appears once it opens onto
+// something real, never onto a placeholder.
+const AVAILABLE_WORK_VIEWS: readonly WorkView[] = ["overview", "tasks", "runs"]
 
 const OPERATION_I18N_KEY: Record<WorkFunction, string> = {
   "workspace-switcher": "workbench.operations.workspaceSwitcher",
@@ -61,6 +68,7 @@ export function WorkSurface(): JSX.Element {
   const gatesReadyCount = createMemo(
     () => team.details.gates().filter((gate) => gate.verdict !== "CHANGES_REQUESTED").length,
   )
+  const [activeView, setActiveView] = createSignal<WorkView>("overview")
   const [activeOperation, setActiveOperation] = createSignal<WorkFunction>("documents")
   const [exportState, setExportState] = createSignal<"idle" | "running" | "success" | "error">("idle")
   const [exportMessage, setExportMessage] = createSignal("")
@@ -130,16 +138,27 @@ export function WorkSurface(): JSX.Element {
           <p class="max-w-2xl text-14-regular text-text-weak">{t("workbench.work.description")}</p>
           <ConnectionBanner dataAttr="workbench-connection" dataRetryAttr="workbench-retry" />
         </header>
-        <div class="grid gap-3 sm:grid-cols-2" data-v110="work-grid">
-          <WorkPlanPanel tasks={planTasks()} percent={planProgress().percent} canRead={team.capabilities().canRead} />
-          <WorkRunsPanel />
-          <WorkProgressPanel
-            percent={planProgress().percent}
-            taskCount={planProgress().total}
-            runCount={team.runs.page().items.length}
-            gatesReadyCount={gatesReadyCount()}
-          />
-          <WorkNextActionPanel tasks={planTasks()} />
+        <div data-v110="work-view-shell">
+          <WorkViewSwitcher views={AVAILABLE_WORK_VIEWS} active={activeView()} onSelect={setActiveView} />
+          <div class="mt-4" data-v110="work-view-content" data-work-view-content={activeView()}>
+            <Show when={activeView() === "overview"}>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <WorkProgressPanel
+                  percent={planProgress().percent}
+                  taskCount={planProgress().total}
+                  runCount={team.runs.page().items.length}
+                  gatesReadyCount={gatesReadyCount()}
+                />
+                <WorkNextActionPanel tasks={planTasks()} />
+              </div>
+            </Show>
+            <Show when={activeView() === "tasks"}>
+              <WorkPlanPanel tasks={planTasks()} percent={planProgress().percent} canRead={team.capabilities().canRead} />
+            </Show>
+            <Show when={activeView() === "runs"}>
+              <WorkRunsPanel />
+            </Show>
+          </div>
         </div>
         <WorkbenchChat
           mode="work"
