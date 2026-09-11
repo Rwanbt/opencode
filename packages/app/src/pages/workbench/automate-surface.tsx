@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: MIT */
 
-import { For, Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { createQuery } from "@tanstack/solid-query"
 import { NodeFamilySchema } from "@unifia/contracts"
+import { createIndexedDbWorkflowDraftStore } from "@unifia/workbench-shell"
 import { useLanguage } from "@/context/language"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
@@ -34,6 +35,13 @@ export function AutomateSurface(): JSX.Element {
   const [approvalId, setApprovalId] = createSignal<string>()
   const [pendingDefinition, setPendingDefinition] = createSignal<Record<string, unknown>>()
   const [nodeFilter, setNodeFilter] = createSignal("")
+  const [draftSource, setDraftSource] = createSignal("")
+  const [draftRevision, setDraftRevision] = createSignal<number>()
+  const [draftStatus, setDraftStatus] = createSignal("Published definition")
+  const draftStore = createIndexedDbWorkflowDraftStore()
+  let draftTimer: ReturnType<typeof setTimeout> | undefined
+  let draftLoadEpoch = 0
+  onCleanup(() => { if (draftTimer) clearTimeout(draftTimer) })
   const visibleNodeFamilies = createMemo(() => {
     const term = nodeFilter().trim().toLocaleLowerCase()
     return term ? NodeFamilySchema.options.filter((family) => family.includes(term)) : NodeFamilySchema.options
@@ -44,6 +52,39 @@ export function AutomateSurface(): JSX.Element {
     return { queryKey: workbenchQueryKey(current, "file", { path: selectedPath ?? "" }), enabled: !!current && !!selectedPath, queryFn: () => current!.client.readFiles(current!.workspaceId, [selectedPath!]) }
   })
   const definitionFile = createQuery(definitionFileQueryOptions)
+  createEffect(() => {
+    const current = connection()
+    const path = selectedDefinition()
+    const file = definitionFile.data?.results[0]
+    if (!current || !path || !file) return
+    const epoch = ++draftLoadEpoch
+    const published = decodeFile(file)
+    setDraftSource(published)
+    setDraftRevision(undefined)
+    setDraftStatus("Published definition")
+    void draftStore.load(current.workspaceId, path).then((draft) => {
+      if (epoch !== draftLoadEpoch || !draft) return
+      setDraftSource(draft.source)
+      setDraftRevision(draft.revision)
+      setDraftStatus("Local draft restored")
+    }).catch(() => {
+      if (epoch === draftLoadEpoch) setDraftStatus("Local drafts unavailable")
+    })
+  })
+
+  function updateDraftSource(source: string): void {
+    const current = connection()
+    const path = selectedDefinition()
+    setDraftSource(source)
+    if (!current || !path) return
+    if (draftTimer) clearTimeout(draftTimer)
+    draftTimer = setTimeout(() => {
+      void draftStore.save(current.workspaceId, path, source, draftRevision()).then((draft) => {
+        setDraftRevision(draft.revision)
+        setDraftStatus("Local draft saved")
+      }).catch(() => setDraftStatus("Local draft conflict — reload before editing"))
+    }, 700)
+  }
   async function startDefinition(definition: Record<string, unknown>): Promise<void> {
     const current = connection()
     if (!current) return
@@ -67,7 +108,7 @@ export function AutomateSurface(): JSX.Element {
     const file = definitionFile.data?.results[0]
     if (!current || !file) return
     try {
-      const parsed = parseWorkflowDefinition(decodeFile(file))
+      const parsed = parseWorkflowDefinition(draftSource() || decodeFile(file))
       if (parsed.kind === "error") throw new Error(t("workbench.automate.invalidDefinition"))
       const definition = { id: parsed.definition.id, version: parsed.definition.version, steps: parsed.definition.steps } as Record<string, unknown>
       await startDefinition(definition)
@@ -158,6 +199,9 @@ export function AutomateSurface(): JSX.Element {
                   </div>
                 )
               }}
+            </Show>
+            <Show when={definitionFile.data?.results[0]}>
+              {(file) => <details class="mt-3 rounded border border-border-base bg-background-base p-3"><summary class="cursor-pointer text-12-medium">Local draft</summary><p class="mt-2 text-11-regular text-text-weak">{draftStatus()}</p><textarea class="mt-3 h-48 w-full resize-y rounded border border-border-base bg-background-stronger p-2 font-mono text-11-regular leading-5" value={draftSource()} onInput={(event) => updateDraftSource(event.currentTarget.value)} aria-label="Edit local workflow draft" /><button type="button" class="mt-2 rounded border border-border-base px-2 py-1 text-11-medium" onClick={() => updateDraftSource(decodeFile(file()))}>Reset to published</button></details>}
             </Show>
             <button type="button" class="mt-3 rounded border border-border-base px-3 py-2 text-12-medium" disabled={definitionFile.isLoading || !definitionFile.data} onClick={() => void startSelectedWorkflow()}>{t("workbench.automate.startWithApproval")}</button>
             <Show when={approvalId()}>
