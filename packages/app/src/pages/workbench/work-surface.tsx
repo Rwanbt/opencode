@@ -1,15 +1,21 @@
 /* SPDX-License-Identifier: MIT */
 
-import { For, Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onMount, type JSX } from "solid-js"
 import { createQuery } from "@tanstack/solid-query"
+import type { TeamGraphTask } from "@unifia/ui/team-graph"
 import { useMode } from "@/context/mode"
 import { useLanguage } from "@/context/language"
+import { useTeam } from "@/context/team"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
 import { base64Encode } from "@unifia/util/encode"
 import { useNavigate } from "@solidjs/router"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
+import { WorkHero } from "@/pages/workbench/work-hero"
+import { WorkPlanPanel } from "@/pages/workbench/work-plan-panel"
+import { WorkProgressPanel } from "@/pages/workbench/work-progress-panel"
+import { pickActiveRun, taskProgress } from "@/pages/workbench/work-team"
 import { createMobileNavigationModel, WORK_V1_FUNCTIONS, type WorkFunction } from "@unifia/workbench-shell"
 
 const OPERATION_I18N_KEY: Record<WorkFunction, string> = {
@@ -35,7 +41,24 @@ export function WorkSurface(): JSX.Element {
   const workbench = useWorkspaceWorkbench()
   const connection = workbench.connection
   const navigate = useNavigate()
+  const team = useTeam()
   createEffect(() => { void workbench.ensureConnected().catch(() => undefined) })
+  onMount(() => {
+    void Promise.all([team.runs.refresh(), team.models.refresh()])
+  })
+  const activeRun = createMemo(() => pickActiveRun(team.runs.page().items))
+  createEffect(() => {
+    const run = activeRun()
+    if (run && team.details.runId() !== run.runId) {
+      void team.details.select(run.runId).catch(() => undefined)
+    }
+  })
+  const planTasks = createMemo<TeamGraphTask[]>(() => [...team.details.tasks()])
+  const planProgress = createMemo(() => taskProgress(planTasks()))
+  const activeRunCount = createMemo(() => team.runs.page().items.filter((run) => run.status === "running").length)
+  const gatesReadyCount = createMemo(
+    () => team.details.gates().filter((gate) => gate.verdict !== "CHANGES_REQUESTED").length,
+  )
   const [activeOperation, setActiveOperation] = createSignal<WorkFunction>("documents")
   const [exportState, setExportState] = createSignal<"idle" | "running" | "success" | "error">("idle")
   const [exportMessage, setExportMessage] = createSignal("")
@@ -95,11 +118,25 @@ export function WorkSurface(): JSX.Element {
     <section class="size-full overflow-auto p-6 md:p-10" data-workbench-surface="work">
       <div class="mx-auto max-w-5xl space-y-8">
         <header class="space-y-2">
-          <p class="text-12-medium uppercase tracking-wide text-text-weak">{t("workbench.work.title")}</p>
-          <h1 class="text-24-medium">{t("workbench.work.heading")}</h1>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-12-medium uppercase tracking-wide text-text-weak">{t("workbench.work.title")}</p>
+              <h1 class="text-24-medium">{t("workbench.work.heading")}</h1>
+            </div>
+            <WorkHero activeRunCount={activeRunCount()} />
+          </div>
           <p class="max-w-2xl text-14-regular text-text-weak">{t("workbench.work.description")}</p>
           <ConnectionBanner dataAttr="workbench-connection" dataRetryAttr="workbench-retry" />
         </header>
+        <div class="grid gap-3 sm:grid-cols-2" data-v110="work-grid">
+          <WorkPlanPanel tasks={planTasks()} percent={planProgress().percent} canRead={team.capabilities().canRead} />
+          <WorkProgressPanel
+            percent={planProgress().percent}
+            taskCount={planProgress().total}
+            runCount={team.runs.page().items.length}
+            gatesReadyCount={gatesReadyCount()}
+          />
+        </div>
         <WorkbenchChat
           mode="work"
           prompt={t("workbench.work.chatPrompt")}
