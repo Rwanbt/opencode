@@ -21,6 +21,7 @@ import FileTree from "@/components/file-tree"
 import { requestAutoEdit } from "@/pages/session/file-tabs"
 import { SourceControl } from "@/components/source-control"
 import { TaskPanel } from "@/components/task-panel"
+import { SettingsObservabilityTimeline } from "@/components/settings-observability-timeline"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
@@ -50,6 +51,7 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  sessionId?: string
 }) {
   const layout = useLayout()
   const guard = useEditorCloseGuard()
@@ -250,11 +252,11 @@ export function SessionSidePanel(props: {
   })
 
   // Inspector tab's own sub-view: files (review/context/opened files, the
-  // existing DragDropProvider+Tabs block below) vs Git (SourceControl,
-  // moved in from the old file-tree pane). Local/unpersisted — matches the
-  // mockup's own Inspector "tool" switch (showCodeInspector), just not
-  // worth a persisted preference for a two-way toggle.
-  const [inspectorView, setInspectorView] = createSignal<"files" | "git">("files")
+  // existing DragDropProvider+Tabs block below), Git (SourceControl) or
+  // Tasks (TaskPanel) — both moved in from the old file-tree pane.
+  // Local/unpersisted — matches the mockup's own Inspector "tool" switch
+  // (showCodeInspector), just not worth a persisted preference here.
+  const [inspectorView, setInspectorView] = createSignal<"files" | "git" | "tasks">("files")
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -453,14 +455,15 @@ export function SessionSidePanel(props: {
               </div>
             </Match>
 
-            {/* Inspector: opened files, Review diff, Context, and Git — the
-                mockup's own Inspector "tool" switch (showCodeInspector in
-                the v110 reference) groups these the same way. Git is a
-                local toggle above the file-tabs strip rather than a fifth
-                entry in the persisted session-tabs system: helpers.ts's
-                createSessionTabs already hardcodes "review"/"context" by
-                name, and adding a third special tab there is a bigger,
-                riskier change than this content move needs. */}
+            {/* Inspector: opened files, Review diff, Context, Git and Tasks —
+                the mockup's own Inspector "tool" switch (showCodeInspector
+                in the v110 reference) groups these the same way. Git/Tasks
+                are a local toggle above the file-tabs strip rather than
+                extra entries in the persisted session-tabs system:
+                helpers.ts's createSessionTabs already hardcodes
+                "review"/"context" by name, and adding more special tabs
+                there is a bigger, riskier change than this content move
+                needs. */}
             <Match when={layout.inspector.tab() === "inspector"}>
               <div class="size-full min-w-0 h-full bg-background-base flex flex-col">
                 <div class="shrink-0 flex items-center gap-1 px-2 pt-2">
@@ -480,10 +483,35 @@ export function SessionSidePanel(props: {
                   >
                     Git
                   </Button>
+                  <Button
+                    type="button"
+                    variant={inspectorView() === "tasks" ? "primary" : "ghost"}
+                    size="small"
+                    onClick={() => setInspectorView("tasks")}
+                  >
+                    Tasks
+                  </Button>
                 </div>
-                <Show
-                  when={inspectorView() === "git"}
-                  fallback={
+                <Switch>
+                  <Match when={inspectorView() === "git"}>
+                    <div class="flex-1 min-h-0 overflow-y-auto">
+                      <SourceControl directory={sdk.directory} onOpenFile={(path) => openTab(file.tab(path))} />
+                    </div>
+                  </Match>
+                  {/* FORK: ADR-0005 Phase 4 — task runner, moved in alongside Git. */}
+                  <Match when={inspectorView() === "tasks"}>
+                    <div class="flex-1 min-h-0 overflow-y-auto">
+                      <TaskPanel
+                        directory={sdk.directory}
+                        onRunTask={(command, title) => {
+                          const id = terminal.newWithCommand(command, title)
+                          view().terminal.open()
+                          return id
+                        }}
+                      />
+                    </div>
+                  </Match>
+                  <Match when={true}>
                     <DragDropProvider
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
@@ -677,25 +705,24 @@ export function SessionSidePanel(props: {
                         </Show>
                       </DragOverlay>
                     </DragDropProvider>
-                  }
-                >
-                  <div class="flex-1 min-h-0 overflow-y-auto">
-                    <SourceControl directory={sdk.directory} onOpenFile={(path) => openTab(file.tab(path))} />
-                  </div>
-                </Show>
+                  </Match>
+                </Switch>
               </div>
             </Match>
 
-            {/* Execution: task runner (ADR-0005 Phase 4). The only existing
-                real content that matches "execution" — no fabricated log view. */}
+            {/* Execution: v110 names this tab "Trajectory/Observability"
+                (OWNERSHIP.md, RESPONSIVE-MATRIX.md — "onglet Execution de
+                l'inspector natif" IS the trajectory/observability tab, not
+                a task runner). The real backend already exists and is
+                session-scoped (sdk.client.observability.events/trace),
+                already wired into Settings > Observability's timeline —
+                reused here as-is rather than rebuilt. */}
             <Match when={layout.inspector.tab() === "execution"}>
-              <TaskPanel
-                directory={sdk.directory}
-                onRunTask={(command, title) => {
-                  const id = terminal.newWithCommand(command, title)
-                  view().terminal.open()
-                  return id
-                }}
+              <SettingsObservabilityTimeline
+                sessions={[{ id: props.sessionId ?? "", title: props.sessionId ?? "" }]}
+                sessionId={props.sessionId}
+                scope="project"
+                onSelectSession={() => {}}
               />
             </Match>
           </Switch>

@@ -56,7 +56,7 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   // that was open before it closed. The toggle buttons only open/close (see
   // e2e/commands/panels.spec.ts); switch tabs via InspectorFrame's own
   // tablist to verify the file itself is still there, open and unmodified.
-  await page.getByRole("tab", { name: "Inspector" }).click()
+  await page.getByRole("tab", { name: "Inspector", exact: true }).click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
