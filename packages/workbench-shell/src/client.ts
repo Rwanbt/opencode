@@ -109,6 +109,8 @@ export type AcceptedOperation = { accepted: true; operationId: string; approvalI
 export type ApprovalDecision = { decision: { kind: "allow" | "deny" | "approval_required"; [key: string]: unknown } }
 export type WorkflowState = { workflowId: string; status: string; [key: string]: unknown }
 export type WorkflowStartResult = { state: WorkflowState } | { approvalRequired: true; approvalId: string; capability: string }
+/** A durable, principal-scoped workflow run returned by the debug run list. */
+export type WorkflowRunSummary = { workflowId: string; definitionId: string; versionId: string; status: string; createdAt: number; updatedAt: number }
 export type DesignSpecValidation = { valid: boolean; spec: unknown; capabilities: { granted: readonly string[]; denied: readonly string[] } }
 export type AuditEvent = { sequence: number; timestamp: number; actor: string; capability: string; decision: "allow" | "deny" | "approval_required"; previousHash: string; hash: string }
 export type AuditPage = { kind: "trace" | "activity"; events: readonly AuditEvent[]; nextCursor: number | null }
@@ -385,6 +387,10 @@ export class WorkbenchClient {
 
   async startWorkflow(workspaceId: string, definition: Record<string, unknown>, signal?: AbortSignal): Promise<WorkflowStartResult> {
     return this.request(`/v1/workflows/start`, { method: "POST", body: { workspaceId, definition }, idempotencyKey: newRequestId(), signal })
+  }
+
+  async listWorkflows(signal?: AbortSignal): Promise<{ workflows: readonly WorkflowRunSummary[] }> {
+    return this.request(`/v1/workflows`, { signal })
   }
 
   async validateSpec(workspaceId: string, spec: string | Record<string, unknown>, signal?: AbortSignal): Promise<DesignSpecValidation> {

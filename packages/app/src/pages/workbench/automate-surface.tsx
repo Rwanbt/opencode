@@ -22,6 +22,11 @@ export function AutomateSurface(): JSX.Element {
   })
   const definitions = createQuery(definitionsQueryOptions)
   const workflowFiles = createMemo(() => definitions.data?.entries.filter((entry) => entry.kind === "file") ?? [])
+  const workflowRunsQueryOptions = createMemo(() => {
+    const current = connection()
+    return { queryKey: workbenchQueryKey(current, "workflow-runs"), enabled: !!current, queryFn: () => current!.client.listWorkflows() }
+  })
+  const workflowRuns = createQuery(workflowRunsQueryOptions)
   const [selectedDefinition, setSelectedDefinition] = createSignal<string>()
   const [workflowState, setWorkflowState] = createSignal<string>()
   const [workflowError, setWorkflowError] = createSignal<string>()
@@ -48,6 +53,7 @@ export function AutomateSurface(): JSX.Element {
     setPendingDefinition(undefined)
     setWorkflowState(result.state.status)
     setWorkflowError(undefined)
+    void workflowRuns.refetch()
   }
 
   async function startSelectedWorkflow(): Promise<void> {
@@ -158,6 +164,12 @@ export function AutomateSurface(): JSX.Element {
         <Show when={!definitions.isLoading && !definitions.error && workflowFiles().length === 0}>
           <p data-automate-definitions="empty" class="text-14-regular text-text-weak">{t("workbench.automate.noDefinitions")}</p>
         </Show>
+        <section class="rounded-lg border border-border-base bg-background-stronger p-4" data-automate-runs>
+          <div class="flex items-baseline justify-between gap-3"><h2 class="text-14-medium">Recent runs</h2><button type="button" class="text-12-regular text-text-weak underline" disabled={workflowRuns.isFetching} onClick={() => void workflowRuns.refetch()}>Refresh</button></div>
+          <Show when={workflowRuns.error}><p class="mt-2 text-12-regular text-text-danger">Unable to load run history.</p></Show>
+          <Show when={!workflowRuns.isLoading && !workflowRuns.error && workflowRuns.data?.workflows.length === 0}><p class="mt-2 text-12-regular text-text-weak">No durable workflow run for this workspace.</p></Show>
+          <ul class="mt-3 space-y-2"><For each={workflowRuns.data?.workflows ?? []}>{(run) => <li class="flex items-center justify-between gap-3 rounded border border-border-weaker-base bg-background-base px-3 py-2 text-12-regular"><span class="min-w-0 truncate">{run.definitionId}</span><span class="shrink-0 text-text-weak">{run.status}</span></li>}</For></ul>
+        </section>
       </div>
     </section>
   )
