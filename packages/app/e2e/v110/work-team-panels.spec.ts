@@ -15,8 +15,18 @@ import { dirPath } from "../utils"
 test("work surface's view-switcher gates the real Team-backed panels, empty state included", async ({
   page,
   directory,
+  sdk,
 }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
+  // The backend is worker-scoped and another v110 test may have created a
+  // run already. Cancel those runs so this empty-state assertion remains
+  // about the fixture's state, not test execution order.
+  const existing = await sdk.client.team.listRuns({ limit: 50 })
+  for (const run of existing.data?.items ?? []) {
+    if (run.status === "pending" || run.status === "running") {
+      await sdk.client.team.cancelRun({ runID: run.runId })
+    }
+  }
   await page.goto(`${dirPath(directory)}/session`)
   await page.getByRole("button", { name: "work mode" }).click()
   await expect(page.locator('[data-workbench-surface="work"]')).toBeVisible()
