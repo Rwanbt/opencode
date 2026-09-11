@@ -8,6 +8,7 @@ import { workbenchQueryKey } from "@/context/workbench/query-keys"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
 import { decodeFile, parseWorkflowDefinition } from "./automate-decode"
+import { summarizeWorkflowSteps } from "./automate-workflow-model"
 
 export function AutomateSurface(): JSX.Element {
   const language = useLanguage()
@@ -130,6 +131,13 @@ export function AutomateSurface(): JSX.Element {
                     <Show when={parsed.kind === "ok"} fallback={<p class="text-12-regular text-text-danger">{t("workbench.automate.invalidDefinition")}</p>}>
                       <p class="text-12-medium">{parsed.kind === "ok" ? parsed.definition.id : ""}</p>
                       <p class="text-12-regular text-text-weak">v{parsed.kind === "ok" ? parsed.definition.version : ""} · {parsed.kind === "ok" ? parsed.definition.steps.length : 0} steps</p>
+                      <Show when={parsed.kind === "ok" && parsed.definition.steps.length > 0}>
+                        <ol class="mt-3 space-y-2 border-l border-border-base pl-3" aria-label="Workflow steps">
+                          <For each={parsed.kind === "ok" ? summarizeWorkflowSteps(parsed.definition) : []}>
+                            {(step, index) => <li class="relative rounded border border-border-base bg-background-stronger px-3 py-2 text-12-regular before:absolute before:-left-[18px] before:top-4 before:size-2 before:rounded-full before:bg-accent-base"><div class="flex items-center justify-between gap-3"><span class="font-medium">{index() + 1}. {step.id}</span><Show when={step.requiresApproval}><span class="rounded bg-background-base px-2 py-0.5 text-11-regular">Approval</span></Show></div><p class="mt-1 text-11-regular text-text-weak">{step.label}</p></li>}
+                          </For>
+                        </ol>
+                      </Show>
                     </Show>
                   </div>
                 )
