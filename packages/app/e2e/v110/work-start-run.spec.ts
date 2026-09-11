@@ -17,7 +17,7 @@ test("start-run form submits a real run and it appears in the Runs tab", async (
   // Team execution is intentionally fail-closed unless two distinct models
   // are configured. The isolated E2E provider exposes both; seed the same
   // server-owned selection the settings surface would persist.
-  const selection = await sdk.client.team.config({
+  const selection = await sdk.team.config({
     models: [
       { providerID: "e2e", modelID: "test-model" },
       { providerID: "e2e", modelID: "review-model" },
