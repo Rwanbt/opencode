@@ -3,6 +3,7 @@
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 import { createQuery } from "@tanstack/solid-query"
 import { showToast } from "@unifia/ui/toast"
+import { Markdown } from "@unifia/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
@@ -101,7 +102,7 @@ export function MemoryPanel(): JSX.Element {
           <div class="h-[calc(100%-43px)] overflow-y-auto p-5">
             <Show when={noteFile.isLoading}><p class="text-12-regular text-text-weak">Loading note…</p></Show>
             <Show when={noteFile.error}><p class="text-12-regular text-text-danger">Unable to read this note.</p></Show>
-            <Show when={note()}>{(current) => <><p class="text-11-regular text-text-weak">{current().path}</p><Show when={view() === "preview"} fallback={<textarea class="mt-3 h-[calc(100%-28px)] min-h-72 w-full resize-none rounded border border-border-base bg-background-base p-3 font-mono text-12-regular leading-5" value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} aria-label="Edit memory note" />}><h1 class="mt-2 text-20-medium">{current().title}</h1><Show when={current().tags.length > 0}><div class="mt-3 flex flex-wrap gap-1"><For each={current().tags}>{(tag) => <span class="rounded bg-background-base px-2 py-1 text-11-regular">#{tag}</span>}</For></div></Show><pre class="mt-5 whitespace-pre-wrap break-words font-sans text-13-regular leading-6 text-text-base">{current().body}</pre></Show></>}</Show>
+            <Show when={note()}>{(current) => <><p class="text-11-regular text-text-weak">{current().path}</p><Show when={view() === "preview"} fallback={<textarea class="mt-3 h-[calc(100%-28px)] min-h-72 w-full resize-none rounded border border-border-base bg-background-base p-3 font-mono text-12-regular leading-5" value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} aria-label="Edit memory note" />}><h1 class="mt-2 text-20-medium">{current().title}</h1><Show when={current().tags.length > 0}><div class="mt-3 flex flex-wrap gap-1"><For each={current().tags}>{(tag) => <span class="rounded bg-background-base px-2 py-1 text-11-regular">#{tag}</span>}</For></div></Show><Markdown text={current().body} class="mt-5 text-13-regular leading-6 text-text-base" /></Show></>}</Show>
             <Show when={!note() && !noteFile.isLoading && !noteFile.error}><p class="text-12-regular text-text-weak">Choose a note from the vault.</p></Show>
           </div>
         </article>
