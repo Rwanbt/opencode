@@ -2,8 +2,11 @@
 /// <reference lib="dom" />
 
 const DATABASE_NAME = "unifia-workbench"
-const DATABASE_VERSION = 1
+// Shared with workflow drafts. Each opener creates its own store when a
+// version upgrade occurs, so either surface may initialize the database.
+const DATABASE_VERSION = 2
 const STORE_NAME = "design-drafts"
+const WORKFLOW_DRAFT_STORE_NAME = "workflow-drafts"
 const RECORD_VERSION = 1
 
 export type DesignDraftRecord = {
@@ -44,7 +47,10 @@ function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") return Promise.reject(new Error("versioned design draft storage is unavailable"))
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME, { keyPath: "key" })
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) request.result.createObjectStore(STORE_NAME, { keyPath: "key" })
+      if (!request.result.objectStoreNames.contains(WORKFLOW_DRAFT_STORE_NAME)) request.result.createObjectStore(WORKFLOW_DRAFT_STORE_NAME, { keyPath: "key" })
+    }
     request.onerror = () => reject(request.error ?? new Error("could not open design draft storage"))
     request.onsuccess = () => resolve(request.result)
   })

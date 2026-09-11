@@ -13,6 +13,7 @@ export { buildFileTree, deserializeTreeExpansion, designFilesTreeStorageKey, EMP
 export { createDesignSystemPickerRows, migrateWorkspaceManifest, parseDesignSystemCatalog, type DesignSystemCatalog, type DesignSystemPickerRow, type DesignSystemTokens } from "./design-system.js"
 export { createArtifactVersionPanelState, diffArtifactVersions, type ArtifactDiff, type ArtifactVersionPanelState, type ArtifactVersionSummary } from "./artifact-version.js"
 export { createDesignDraftRecord, createIndexedDbDesignDraftStore, designDraftKey, DesignDraftConflictError, type DesignDraftRecord, type DesignDraftStore } from "./design-draft.js"
+export { createIndexedDbWorkflowDraftStore, workflowDraftKey, WorkflowDraftConflictError, type WorkflowDraftRecord, type WorkflowDraftStore } from "./workflow-draft.js"
 export { createIndexedDbCommentStore, type CommentStore } from "./design-comment-store.js"
 export { EMPTY_ANNOTATION_STATE, addStroke, clearStrokes, newStrokeId, undoStroke, type AnnotationPoint, type AnnotationState, type AnnotationStroke } from "./design-annotation.js"
 export { createIndexedDbAnnotationStore, type AnnotationStore } from "./design-annotation-store.js"
