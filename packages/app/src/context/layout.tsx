@@ -15,7 +15,7 @@ import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_SIDEBAR_WIDTH = 344
-const DEFAULT_FILE_TREE_WIDTH = 200
+const DEFAULT_INSPECTOR_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -57,6 +57,12 @@ type TabHandoff = {
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
+
+// v110 InspectorFrame (shell/v110-inspector-frame.tsx): one pane visible at
+// a time, never the old fileTree+review dual-pane. Kept as a plain union
+// (not re-exported from the frame file) so this context stays the single
+// owner of persisted state; the frame only consumes the value.
+export type InspectorTab = "explorer" | "inspector" | "execution"
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)
@@ -160,33 +166,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
+      // v110: fileTree + review.panelOpened (two independently-toggleable
+      // panes, sometimes both open at once) collapse into one inspector
+      // pane (open flag + active tab, one visible at a time). Only runs
+      // once: a value already carrying `inspector` skips straight through.
       const review = value.review
       const fileTree = value.fileTree
-      const migratedFileTree = (() => {
-        if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all" || fileTree.tab === "git" || fileTree.tab === "tasks") return fileTree
+      const inspector = value.inspector
+      const migratedInspector = (() => {
+        if (isRecord(inspector)) return inspector
 
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
+        const fileTreeOpened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : false
+        const reviewOpened = isRecord(review) && typeof review.panelOpened === "boolean" ? review.panelOpened : false
+        const width =
+          isRecord(fileTree) && typeof fileTree.width === "number" && fileTree.width !== 260
+            ? fileTree.width
+            : DEFAULT_INSPECTOR_WIDTH
+        const oldFileTreeTab = isRecord(fileTree) ? fileTree.tab : undefined
+
         return {
-          ...fileTree,
-          opened: true,
-          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
-          tab: "changes",
+          opened: fileTreeOpened || reviewOpened,
+          // Review held richer content (opened files, diffs) than the tree
+          // alone, so a session that had both open lands on Inspector, not
+          // Explorer, matching what the user was actually looking at.
+          tab: reviewOpened ? "inspector" : "explorer",
+          width,
+          // Git/Tasks moved out of the old fileTree sub-tabs (now their own
+          // v110 Inspector/Execution top-level tabs); only "all" carries
+          // forward, everything else (including "changes" itself) falls
+          // back to the "changed" default.
+          explorerView: oldFileTreeTab === "all" ? "all" : "changed",
         }
       })()
 
       const migratedReview = (() => {
         if (!isRecord(review)) return review
-        if (typeof review.panelOpened === "boolean") return review
-
-        // Falls back closed, like the live default: a user migrating from a
-        // state file with no fileTree flag should land on the chat, not on a
-        // panel they never opened.
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : false
-        return {
-          ...review,
-          panelOpened: opened,
-        }
+        if (!("panelOpened" in review)) return review
+        const { panelOpened: _panelOpened, ...rest } = review
+        return rest
       })()
 
       const sessionTabs = value.sessionTabs
@@ -217,17 +234,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (
         migratedSidebar === sidebar &&
         migratedReview === review &&
-        migratedFileTree === fileTree &&
+        migratedInspector === inspector &&
         migratedSessionTabs === sessionTabs
       ) {
         return value
       }
 
+      const { fileTree: _fileTree, ...rest } = value
       return {
-        ...value,
+        ...rest,
         sidebar: migratedSidebar,
         review: migratedReview,
-        fileTree: migratedFileTree,
+        inspector: migratedInspector,
         sessionTabs: migratedSessionTabs,
       }
     }
@@ -248,12 +266,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: false,
         },
-        fileTree: {
+        inspector: {
           opened: false,
-          width: DEFAULT_FILE_TREE_WIDTH,
-          tab: "changes" as "changes" | "all" | "git" | "tasks",
+          width: DEFAULT_INSPECTOR_WIDTH,
+          tab: "explorer" as InspectorTab,
+          explorerView: "changed" as "changed" | "all",
         },
         session: {
           width: DEFAULT_SESSION_WIDTH,
@@ -642,52 +660,66 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       review: {
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
-          if (!store.review) {
-            // Picking a diff style must not open the panel as a side effect.
-            setStore("review", { diffStyle, panelOpened: false })
-            return
-          }
           setStore("review", "diffStyle", diffStyle)
         },
       },
-      fileTree: {
-        opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
-        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
-        setTab(tab: "changes" | "all" | "git" | "tasks") {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
+      // v110 InspectorFrame: one pane (Explorer/Inspector/Execution), one
+      // tab visible at a time. Replaces the old fileTree + review.panelOpened
+      // dual-pane pair (see migrate() above). `open()`/`toggle()` never touch
+      // `tab` on their own — the caller sets the tab it wants to land on
+      // (matches session-header.tsx's two toggle buttons each opening on a
+      // different tab, and file-open call sites always landing on "inspector").
+      inspector: {
+        opened: createMemo(() => store.inspector?.opened ?? false),
+        width: createMemo(() => store.inspector?.width ?? DEFAULT_INSPECTOR_WIDTH),
+        tab: createMemo(() => store.inspector?.tab ?? "explorer"),
+        explorerView: createMemo(() => store.inspector?.explorerView ?? "changed"),
+        setTab(tab: InspectorTab) {
+          if (!store.inspector) {
+            setStore("inspector", { opened: false, width: DEFAULT_INSPECTOR_WIDTH, tab, explorerView: "changed" })
             return
           }
-          setStore("fileTree", "tab", tab)
+          setStore("inspector", "tab", tab)
+        },
+        setExplorerView(view: "changed" | "all") {
+          if (!store.inspector) {
+            setStore("inspector", {
+              opened: false,
+              width: DEFAULT_INSPECTOR_WIDTH,
+              tab: "explorer",
+              explorerView: view,
+            })
+            return
+          }
+          setStore("inspector", "explorerView", view)
         },
         open() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          if (!store.inspector) {
+            setStore("inspector", { opened: true, width: DEFAULT_INSPECTOR_WIDTH, tab: "explorer", explorerView: "changed" })
             return
           }
-          setStore("fileTree", "opened", true)
+          setStore("inspector", "opened", true)
         },
         close() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          if (!store.inspector) {
+            setStore("inspector", { opened: false, width: DEFAULT_INSPECTOR_WIDTH, tab: "explorer", explorerView: "changed" })
             return
           }
-          setStore("fileTree", "opened", false)
+          setStore("inspector", "opened", false)
         },
         toggle() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          if (!store.inspector) {
+            setStore("inspector", { opened: true, width: DEFAULT_INSPECTOR_WIDTH, tab: "explorer", explorerView: "changed" })
             return
           }
-          setStore("fileTree", "opened", (x) => !x)
+          setStore("inspector", "opened", (x) => !x)
         },
         resize(width: number) {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width, tab: "changes" })
+          if (!store.inspector) {
+            setStore("inspector", { opened: true, width, tab: "explorer", explorerView: "changed" })
             return
           }
-          setStore("fileTree", "width", width)
+          setStore("inspector", "width", width)
         },
       },
       session: {
@@ -772,11 +804,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        // Closed until the user asks for it: opening on the chat with nothing
-        // else in the way is what people want on launch. It used to default to
-        // open, which on a phone left the conversation unreachable because the
-        // toggle is only in the header (see session-header.tsx).
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -788,22 +815,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.opened ?? false
           if (value === next) return
           setStore("terminal", "opened", next)
-        }
-
-        function setReviewPanelOpened(next: boolean) {
-          const current = store.review
-          if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
-            return
-          }
-
-          // Must match the `?? false` default read by reviewPanelOpened above:
-          // if this said `?? true`, the first toggle from the closed default
-          // would compare true === true and return without storing anything,
-          // so the button would appear dead on first press.
-          const value = current.panelOpened ?? false
-          if (value === next) return
-          setStore("review", "panelOpened", next)
         }
 
         return {
@@ -823,18 +834,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
-            },
-          },
-          reviewPanel: {
-            opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
-            },
-            close() {
-              setReviewPanelOpened(false)
-            },
-            toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
             },
           },
           // FORK: Stretch Phase 6 — split pane editor

@@ -67,9 +67,11 @@ test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
     await expect(page.locator(promptSelector).first()).toBeVisible()
     await toggleSidebar(page)
     await expect(page.locator(promptSelector).first()).toBeVisible()
-    // Inspector equivalents (review + file tree) toggle when rendered.
-    for (const sel of ['[aria-controls="review-panel"]', '[aria-controls="file-tree-panel"]']) {
-      const toggle = page.locator(sel).first()
+    // Inspector equivalents (review + file tree) toggle when rendered. Both
+    // now drive the same shared InspectorFrame pane (aria-controls is
+    // identical for both), so distinguish them by accessible name instead.
+    for (const name of ["Toggle review", "Toggle file tree"]) {
+      const toggle = page.getByRole("button", { name }).first()
       if (await toggle.isVisible().catch(() => false)) {
         const before = await toggle.getAttribute("aria-expanded")
         await toggle.click()
