@@ -277,7 +277,7 @@ export function DialogSelectFile(props: {
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
-  const { params, tabs, view } = useSessionLayout()
+  const { params, tabs } = useSessionLayout()
   const filesOnly = () => props.mode === "files"
   const state = { cleanup: undefined as (() => void) | undefined, committed: false }
   const [grouped, setGrouped] = createSignal(false)
@@ -358,8 +358,8 @@ export function DialogSelectFile(props: {
     const value = file.tab(path)
     tabs().open(value)
     file.load(path)
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.setTab("all")
+    layout.inspector.setTab("inspector")
+    if (!layout.inspector.opened()) layout.inspector.open()
     props.onOpenFile?.(path)
     tabs().setActive(value)
   }

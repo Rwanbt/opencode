@@ -91,8 +91,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const showAllFiles = () => {
-    if (layout.fileTree.tab() !== "changes") return
-    layout.fileTree.setTab("all")
+    if (layout.inspector.explorerView() !== "changed") return
+    layout.inspector.setExplorerView("all")
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
@@ -559,13 +559,30 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
+      // Mirrors the review toggle button in session-header.tsx: close if
+      // already open (regardless of tab), otherwise open on "inspector".
+      onSelect: () => {
+        if (layout.inspector.opened()) {
+          layout.inspector.close()
+          return
+        }
+        layout.inspector.setTab("inspector")
+        layout.inspector.open()
+      },
     }),
     viewCommand({
       id: "fileTree.toggle",
       title: language.t("command.fileTree.toggle"),
       keybind: "mod+\\",
-      onSelect: () => layout.fileTree.toggle(),
+      // Mirrors the file-tree toggle button in session-header.tsx.
+      onSelect: () => {
+        if (layout.inspector.opened()) {
+          layout.inspector.close()
+          return
+        }
+        layout.inspector.setTab("explorer")
+        layout.inspector.open()
+      },
     }),
     viewCommand({
       id: "input.focus",

@@ -178,18 +178,20 @@ export default function Page() {
   const platformCtx = usePlatform()
   const isMobileDevice = createMemo(() => platformCtx.platform === "mobile")
   const size = createSizing()
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const desktopInspectorOpen = createMemo(() => isDesktop() && layout.inspector.opened())
+  // "inspector" tab (opened files, diffs) is the old review pane's wide
+  // content; "explorer"/"execution" are the old file-tree pane's narrow
+  // browsing width.
+  const desktopInspectorWide = createMemo(() => desktopInspectorOpen() && layout.inspector.tab() === "inspector")
   const sessionPanelWidth = createMemo(() => {
     // FORK: Stretch Phase 6 — editor focus mode collapses the chat panel
-    if (isDesktop() && layout.editorFocus.enabled() && desktopSidePanelOpen()) return "0px"
-    if (!desktopSidePanelOpen()) return "100%"
+    if (isDesktop() && layout.editorFocus.enabled() && desktopInspectorOpen()) return "0px"
+    if (!desktopInspectorOpen()) return "100%"
     if (isMobileDevice()) return "50%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    if (desktopInspectorWide()) return `${layout.session.width()}px`
+    return `calc(100% - ${layout.inspector.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => isDesktop() && !desktopInspectorWide())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -209,7 +211,8 @@ export default function Page() {
   }
 
   const openReviewPanel = () => {
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    layout.inspector.setTab("inspector")
+    if (!layout.inspector.opened()) layout.inspector.open()
   }
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -358,7 +361,7 @@ export default function Page() {
   }
 
   createComputed((prev) => {
-    const open = desktopReviewOpen()
+    const open = desktopInspectorWide()
     if (prev === undefined || prev === open) return open
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
@@ -368,7 +371,7 @@ export default function Page() {
       setUi("reviewSnap", false)
     })
     return open
-  }, desktopReviewOpen())
+  }, desktopInspectorWide())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const changesOptions = createMemo<ChangeMode[]>(() => {
@@ -628,7 +631,8 @@ export default function Page() {
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      ? (desktopInspectorOpen() && layout.inspector.tab() === "explorer") ||
+        (desktopInspectorWide() && activeTab() === "review")
       : store.mobileTab === "changes",
   )
 
@@ -640,8 +644,7 @@ export default function Page() {
     setStore("changes", next)
   })
 
-  const fileTreeTab = () => layout.fileTree.tab()
-  const setFileTreeTab = (value: "changes" | "all" | "git" | "tasks") => layout.fileTree.setTab(value)
+  const explorerView = () => layout.inspector.explorerView()
 
   createSessionSyncEffects({
     sdk,
@@ -657,7 +660,7 @@ export default function Page() {
     loadVcs,
     refreshVcs,
     activeFileTab,
-    fileTreeTab,
+    explorerView,
     isVcsReady: (mode) => vcs.ready[mode],
   })
 
@@ -682,8 +685,8 @@ export default function Page() {
   )
 
   const showAllFiles = () => {
-    if (fileTreeTab() !== "changes") return
-    setFileTreeTab("all")
+    if (explorerView() !== "changed") return
+    layout.inspector.setExplorerView("all")
   }
 
   const focusInput = () => inputRef?.focus()
@@ -736,7 +739,7 @@ export default function Page() {
       activeFileTab,
       (active) => {
         if (!active) return
-        if (fileTreeTab() !== "changes") return
+        if (explorerView() !== "changed") return
         showAllFiles()
       },
       { defer: true },
@@ -1064,7 +1067,7 @@ export default function Page() {
             }}
           />
 
-          <Show when={desktopReviewOpen()}>
+          <Show when={desktopInspectorWide()}>
             <div onPointerDown={() => size.start()}>
               <Separator
                 axis="x"

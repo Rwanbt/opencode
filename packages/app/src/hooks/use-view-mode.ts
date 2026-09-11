@@ -16,14 +16,15 @@ export function useViewMode() {
       settings.general.viewMode,
       (mode, prev) => {
         if (mode === "ide") {
-          // IDE mode: open the file tree and show all files.
-          layout.fileTree.open()
-          layout.fileTree.setTab("all")
+          // IDE mode: open the Explorer tab and show all files.
+          layout.inspector.setTab("explorer")
+          layout.inspector.open()
+          layout.inspector.setExplorerView("all")
         } else if (prev === "ide") {
-          // Returning from IDE to Agent: close the tree (agent-centric layout
-          // defaults to full-width chat) and restore the changes tab.
-          layout.fileTree.close()
-          layout.fileTree.setTab("changes")
+          // Returning from IDE to Agent: close the inspector (agent-centric
+          // layout defaults to full-width chat) and restore the changed-files view.
+          layout.inspector.close()
+          layout.inspector.setExplorerView("changed")
         }
       },
       { defer: true },

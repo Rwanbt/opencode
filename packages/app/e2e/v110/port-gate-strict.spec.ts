@@ -104,7 +104,9 @@ test.describe("v110 port gate — A8-02 strict (Wave 0.5 hardening)", () => {
     await page.setViewportSize(DESKTOP_COMPACT)
     await gotoSession()
 
-    const inspectorToggle = page.locator('[aria-controls="review-panel"]').first()
+    // v110: both toggle buttons share one InspectorFrame pane and the same
+    // aria-controls value now (session-side-panel.tsx) — either works here.
+    const inspectorToggle = page.getByRole("button", { name: "Toggle review" }).first()
     await inspectorToggle.click()
     await expect(inspectorToggle).toHaveAttribute("aria-expanded", "true")
 

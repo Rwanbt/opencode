@@ -18,6 +18,7 @@ import { List } from "@unifia/ui/list"
 import { createMemo, createResource, Show, type JSXElement } from "solid-js"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -97,7 +98,8 @@ export function DialogSelectSymbol(props: { sdk?: ReturnType<typeof useSDK>; fil
   const file = props.file ?? useFile()
   const language = useLanguage()
   const dialog = useDialog()
-  const { tabs, view } = useSessionLayout()
+  const { tabs } = useSessionLayout()
+  const layout = useLayout()
 
   const tabState = createSessionTabs({
     tabs,
@@ -135,7 +137,8 @@ export function DialogSelectSymbol(props: { sdk?: ReturnType<typeof useSDK>; fil
     tabs().open(tab)
     file.load(p)
     tabs().setActive(tab)
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    layout.inspector.setTab("inspector")
+    if (!layout.inspector.opened()) layout.inspector.open()
 
     // Set selection range to the symbol's start line. pierre auto-scrolls via
     // its file-find bridge when `selectedLines` changes (see pierre/file-find.ts).

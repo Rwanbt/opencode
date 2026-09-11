@@ -4,7 +4,8 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await gotoSession()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
-  const panel = page.locator("#file-tree-panel")
+  // v110: Explorer and Inspector share one InspectorFrame pane now (session-side-panel.tsx).
+  const panel = page.locator('[data-v110="inspector-content"]')
   const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
 
   await expect(toggle).toBeVisible()
@@ -49,6 +50,14 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(allTab).toHaveAttribute("aria-selected", "true")
+
+  // v110: Explorer and Inspector are one pane, one tab at a time — reopening
+  // via the file-tree toggle lands back on Explorer (the tree), not the file
+  // that was open before it closed. The toggle buttons only open/close (see
+  // e2e/commands/panels.spec.ts); switch tabs via InspectorFrame's own
+  // tablist to verify the file itself is still there, open and unmodified.
+  await page.getByRole("tab", { name: "Inspector" }).click()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
   await expect(viewer).toBeVisible()

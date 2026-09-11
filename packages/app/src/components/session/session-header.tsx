@@ -442,6 +442,11 @@ export function SessionHeader() {
                     toggle above is already visible at this width and opens the
                     same kind of overlay, so showing these two is consistent. */}
                 <div class="flex items-center gap-1 shrink-0">
+                  {/* v110 InspectorFrame is one shared pane (session-side-panel.tsx):
+                      each button below closes it if already open, otherwise opens
+                      it on its own tab — never just switches tab while open, so a
+                      second press of either always reads as "off" (verified by
+                      e2e/commands/panels.spec.ts and e2e/files/file-tree.spec.ts). */}
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}
@@ -449,12 +454,26 @@ export function SessionHeader() {
                     <Button
                       variant="ghost"
                       class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().reviewPanel.toggle()}
+                      onClick={() => {
+                        if (layout.inspector.opened()) {
+                          layout.inspector.close()
+                          return
+                        }
+                        layout.inspector.setTab("inspector")
+                        layout.inspector.open()
+                      }}
                       aria-label={language.t("command.review.toggle")}
-                      aria-expanded={view().reviewPanel.opened()}
-                      aria-controls="review-panel"
+                      aria-expanded={layout.inspector.opened() && layout.inspector.tab() === "inspector"}
+                      aria-controls="v110-inspector-panel"
                     >
-                      <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
+                      <Icon
+                        size="small"
+                        name={
+                          layout.inspector.opened() && layout.inspector.tab() === "inspector"
+                            ? "review-active"
+                            : "review"
+                        }
+                      />
                     </Button>
                   </TooltipKeybind>
 
@@ -465,18 +484,29 @@ export function SessionHeader() {
                     <Button
                       variant="ghost"
                       class="titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => layout.fileTree.toggle()}
+                      onClick={() => {
+                        if (layout.inspector.opened()) {
+                          layout.inspector.close()
+                          return
+                        }
+                        layout.inspector.setTab("explorer")
+                        layout.inspector.open()
+                      }}
                       aria-label={language.t("command.fileTree.toggle")}
-                      aria-expanded={layout.fileTree.opened()}
-                      aria-controls="file-tree-panel"
+                      aria-expanded={layout.inspector.opened() && layout.inspector.tab() === "explorer"}
+                      aria-controls="v110-inspector-panel"
                     >
                       <div class="relative flex items-center justify-center size-4">
                         <Icon
                           size="small"
-                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                          name={
+                            layout.inspector.opened() && layout.inspector.tab() === "explorer"
+                              ? "file-tree-active"
+                              : "file-tree"
+                          }
                           classList={{
-                            "text-icon-strong": layout.fileTree.opened(),
-                            "text-icon-weak": !layout.fileTree.opened(),
+                            "text-icon-strong": layout.inspector.opened() && layout.inspector.tab() === "explorer",
+                            "text-icon-weak": !(layout.inspector.opened() && layout.inspector.tab() === "explorer"),
                           }}
                         />
                       </div>
@@ -487,7 +517,7 @@ export function SessionHeader() {
                       sessionPanelWidth (session.tsx) only reacts to this when
                       isDesktop(), so on mobile the button toggles state with
                       no visible effect — hide it there. */}
-                  <Show when={platform.platform !== "mobile" && (layout.fileTree.opened() || view().reviewPanel.opened())}>
+                  <Show when={platform.platform !== "mobile" && layout.inspector.opened()}>
                     <TooltipKeybind
                       title={layout.editorFocus.enabled() ? language.t("session.header.restoreChat") : language.t("session.header.editorFocus")}
                       keybind=""

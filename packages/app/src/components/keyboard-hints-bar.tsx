@@ -45,11 +45,11 @@ export function KeyboardHintsBar() {
   const language = useLanguage()
   const { view } = useSessionLayout()
 
-  // Terminal open → terminal hints; side panel (file tree/review) open → editor hints; else chat.
+  // Terminal open → terminal hints; inspector (file tree/review) open → editor hints; else chat.
   const hints = createMemo<Hint[]>(() => {
     const v = view()
     if (v.terminal.opened()) return TERMINAL_HINTS
-    if (layout.fileTree.opened() || v.reviewPanel.opened()) return EDITOR_HINTS
+    if (layout.inspector.opened()) return EDITOR_HINTS
     return CHAT_HINTS
   })
 

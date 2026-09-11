@@ -20,6 +20,7 @@ import { getDirectory, getFilename } from "@unifia/util/path"
 import type { JSXElement } from "solid-js"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
@@ -63,7 +64,8 @@ export function DialogSelectSearch(props: { sdk?: ReturnType<typeof useSDK>; fil
   const file = props.file ?? useFile()
   const language = useLanguage()
   const dialog = useDialog()
-  const { tabs, view } = useSessionLayout()
+  const { tabs } = useSessionLayout()
+  const layout = useLayout()
 
   // Token to discard stale responses when the user types faster than ripgrep
   // returns. Each `search()` invocation captures the token at start; only the
@@ -97,7 +99,8 @@ export function DialogSelectSearch(props: { sdk?: ReturnType<typeof useSDK>; fil
     tabs().open(tab)
     file.load(item.path)
     tabs().setActive(tab)
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    layout.inspector.setTab("inspector")
+    if (!layout.inspector.opened()) layout.inspector.open()
 
     // pierre auto-scrolls to the selected line via the file-find bridge
     // when `selectedLines` changes (see pierre/file-find.ts).
