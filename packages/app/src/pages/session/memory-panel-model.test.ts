@@ -12,6 +12,7 @@ describe("Memory inspector model", () => {
     const note = parseMemoryNote(".unifia/memory/Architecture.md", "---\nproject: unifia\n---\n# Architecture\n\n#platform [[Vision|product vision]]")
     expect(note.title).toBe("Architecture")
     expect(note.body).not.toContain("project: unifia")
+    expect(note.body).not.toContain("# Architecture")
     expect(note.tags).toEqual(["platform"])
     expect(note.links).toEqual(["Vision"])
   })

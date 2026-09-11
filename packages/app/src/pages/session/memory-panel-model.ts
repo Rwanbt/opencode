@@ -31,10 +31,12 @@ export function memoryTitle(path: string): string {
 
 export function parseMemoryNote(path: string, raw: string): MemoryNoteDocument {
   const withoutFrontmatter = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
-  const heading = withoutFrontmatter.match(/^#\s+(.+)$/m)?.[1]?.trim()
+  const headingMatch = withoutFrontmatter.match(/^#\s+(.+)(?:\r?\n|$)/)
+  const heading = headingMatch?.[1]?.trim()
   const tags = [...new Set([...withoutFrontmatter.matchAll(/(^|\s)#([\p{L}\p{N}_-]+)/gu)].map((match) => match[2]))]
   const links = [...new Set([...withoutFrontmatter.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g)].map((match) => match[1].trim()).filter(Boolean))]
-  return { path, title: heading || memoryTitle(path), body: withoutFrontmatter, tags, links }
+  const body = headingMatch ? withoutFrontmatter.slice(headingMatch[0].length) : withoutFrontmatter
+  return { path, title: heading || memoryTitle(path), body, tags, links }
 }
 
 export function linkedMemoryNotes(
