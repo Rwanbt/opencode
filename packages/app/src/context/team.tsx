@@ -455,6 +455,16 @@ export const { use: useTeam, provider: TeamProvider } = createSimpleContext({
       },
 
       lifecycle: {
+        async start(input: {
+          description: string
+          tasks: Parameters<typeof sdk.client.team.startRun>[0]["tasks"]
+          budget?: Parameters<typeof sdk.client.team.startRun>[0]["budget"]
+        }) {
+          const response = await sdk.client.team.startRun(input)
+          if (response.error) throw response.error
+          await refreshRuns()
+          return response.data as { runId: string; sessionId: string }
+        },
         async pause(runID: string) {
           const response = await sdk.client.team.pauseRun({ runID })
           if (response.error) throw response.error
