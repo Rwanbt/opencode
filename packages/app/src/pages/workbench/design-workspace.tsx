@@ -80,35 +80,34 @@ export function DesignWorkspace(props: {
           <div class="flex items-center gap-1" role="tablist" aria-label={t("design.workspace.tabsLabel")} data-design-workspace-tablist>
             <For each={state().tabs}>
               {(item) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={item.id === state().activeId}
-                  class="flex h-7 items-center gap-2 rounded px-3 text-12-medium transition-colors"
-                  classList={{
-                    "bg-background-base text-text-base": item.id === state().activeId,
-                    "text-text-weak hover:bg-background-base": item.id !== state().activeId,
-                  }}
-                  data-design-workspace-tab={item.id}
-                  data-design-workspace-tab-kind={item.kind}
-                  onClick={() => setState("activeId", activateTab(state(), item.id).activeId ?? undefined)}
-                >
-                  <span>{item.title}</span>
+                <div class="flex h-7 items-center gap-1 rounded" data-design-workspace-tab-group={item.id}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={item.id === state().activeId}
+                    class="flex h-7 items-center rounded px-3 text-12-medium transition-colors"
+                    classList={{
+                      "bg-background-base text-text-base": item.id === state().activeId,
+                      "text-text-weak hover:bg-background-base": item.id !== state().activeId,
+                    }}
+                    data-design-workspace-tab={item.id}
+                    data-design-workspace-tab-kind={item.kind}
+                    onClick={() => setState("activeId", activateTab(state(), item.id).activeId ?? undefined)}
+                  >
+                    <span>{item.title}</span>
+                  </button>
                   <Show when={item.closable}>
                     <button
                       type="button"
                       aria-label={t("design.workspace.closeTab", { title: item.title })}
                       class="rounded p-1 text-12-regular text-text-weak hover:bg-border-base hover:text-text-base"
                       data-design-workspace-tab-close={item.id}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setState(closeTab(state(), item.id))
-                      }}
+                      onClick={() => setState(closeTab(state(), item.id))}
                     >
                       ×
                     </button>
                   </Show>
-                </button>
+                </div>
               )}
             </For>
           </div>
