@@ -23,6 +23,7 @@ const bootstrapLevels = new Map<string, "light" | "full">()
 const promotions = new Map<string, Promise<void>>()
 /** Last time each directory was handed to `provide`, for LRU eviction. */
 const lastUsed = new Map<string, number>()
+let usageSequence = 0
 
 /**
  * How many project instances stay resident.
@@ -158,7 +159,8 @@ export const Instance = {
       bootstrapLevels.set(directory, input.initKind ?? "full")
     }
     activeCounts.set(directory, (activeCounts.get(directory) ?? 0) + 1)
-    lastUsed.set(directory, Date.now())
+    // A monotonic sequence avoids ties when requests arrive in one millisecond.
+    lastUsed.set(directory, ++usageSequence)
     let ctx: InstanceContext
     try {
       ctx = await existing
