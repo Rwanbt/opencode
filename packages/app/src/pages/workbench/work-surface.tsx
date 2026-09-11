@@ -13,8 +13,10 @@ import { useNavigate } from "@solidjs/router"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
 import { WorkHero } from "@/pages/workbench/work-hero"
+import { WorkNextActionPanel } from "@/pages/workbench/work-next-action-panel"
 import { WorkPlanPanel } from "@/pages/workbench/work-plan-panel"
 import { WorkProgressPanel } from "@/pages/workbench/work-progress-panel"
+import { WorkRunsPanel } from "@/pages/workbench/work-runs-panel"
 import { pickActiveRun, taskProgress } from "@/pages/workbench/work-team"
 import { createMobileNavigationModel, WORK_V1_FUNCTIONS, type WorkFunction } from "@unifia/workbench-shell"
 
@@ -130,12 +132,14 @@ export function WorkSurface(): JSX.Element {
         </header>
         <div class="grid gap-3 sm:grid-cols-2" data-v110="work-grid">
           <WorkPlanPanel tasks={planTasks()} percent={planProgress().percent} canRead={team.capabilities().canRead} />
+          <WorkRunsPanel />
           <WorkProgressPanel
             percent={planProgress().percent}
             taskCount={planProgress().total}
             runCount={team.runs.page().items.length}
             gatesReadyCount={gatesReadyCount()}
           />
+          <WorkNextActionPanel tasks={planTasks()} />
         </div>
         <WorkbenchChat
           mode="work"

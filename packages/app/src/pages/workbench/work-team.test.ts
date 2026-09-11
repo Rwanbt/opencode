@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 
 import { describe, expect, test } from "bun:test"
-import { pickActiveRun, taskProgress, type WorkRun } from "./work-team"
+import type { TeamGraphTask } from "@unifia/ui/team-graph"
+import { nextActionableTask, pickActiveRun, taskProgress, type WorkRun } from "./work-team"
 
 // Unit coverage for A5-01's Work-surface decisions: which run is "the" active
 // one, and how complete its tasks are. Pure and Solid-free, like team.test.ts.
@@ -42,5 +43,32 @@ describe("taskProgress — an honest completed/total percentage", () => {
   test("all tasks completed is 100%", () => {
     const tasks = [{ taskId: "t1", status: "completed" }, { taskId: "t2", status: "completed" }]
     expect(taskProgress(tasks)).toEqual({ completed: 2, total: 2, percent: 100 })
+  })
+})
+
+describe("nextActionableTask — the earliest incomplete task in DAG order", () => {
+  const task = (taskId: string, status: string, dependsOn: string[] = []): TeamGraphTask => ({
+    taskId,
+    status,
+    dependsOn,
+  })
+
+  test("a task with no dependencies and not yet completed is next", () => {
+    const tasks = [task("t1", "completed"), task("t2", "running")]
+    expect(nextActionableTask(tasks)?.taskId).toBe("t2")
+  })
+
+  test("a task blocked on an incomplete dependency is not next — its dependency is", () => {
+    const tasks = [task("t1", "running"), task("t2", "pending", ["t1"])]
+    expect(nextActionableTask(tasks)?.taskId).toBe("t1")
+  })
+
+  test("once every wave is completed, there is no next task", () => {
+    const tasks = [task("t1", "completed"), task("t2", "completed", ["t1"])]
+    expect(nextActionableTask(tasks)).toBeUndefined()
+  })
+
+  test("no tasks means no next task", () => {
+    expect(nextActionableTask([])).toBeUndefined()
   })
 })
