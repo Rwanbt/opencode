@@ -7,6 +7,7 @@
  */
 import { batch, createMemo } from "solid-js"
 import { useMutation } from "@tanstack/solid-query"
+import type { useNavigate } from "@solidjs/router"
 import { showToast } from "@unifia/ui/toast"
 import type { UserMessage } from "../../types/sdk-shim"
 import type { useSDK } from "@/context/sdk"
@@ -32,10 +33,11 @@ export interface SessionMutationsDeps {
   userMessages: () => UserMessage[]
   revertMessageID: () => string | undefined
   language: ReturnType<typeof useLanguage>
+  navigate: ReturnType<typeof useNavigate>
 }
 
 export function createSessionMutations(deps: SessionMutationsDeps) {
-  const { sdk, sync, params, info, prompt, userMessages, revertMessageID, language } = deps
+  const { sdk, sync, params, info, prompt, userMessages, revertMessageID, language, navigate } = deps
 
   // ── Draft / display helpers ──────────────────────────────────────────────
 
@@ -162,10 +164,32 @@ export function createSessionMutations(deps: SessionMutationsDeps) {
     },
   }))
 
+  // ── Fork mutation ───────────────────────────────────────────────────────────
+  // Branches a new session from a past user message (message-level entry
+  // point to the same sdk.client.session.fork() that dialog-fork.tsx's
+  // message picker already uses). No optimistic roll(): fork does not
+  // mutate the current session, it navigates away to a new one.
+
+  const forkMutation = useMutation(() => ({
+    mutationFn: async (input: { sessionID: string; messageID: string }) => {
+      const dir = params.dir
+      if (!dir) return
+      const restored = draft(input.messageID)
+      const result = await sdk.client.session.fork(input)
+      if (!result.data) {
+        fail(new Error(language.t("common.requestFailed")))
+        return
+      }
+      prompt.set(restored, undefined, { dir, id: result.data.id })
+      navigate(`/${dir}/session/${result.data.id}`)
+    },
+  }))
+
   // ── Derived state ─────────────────────────────────────────────────────────
 
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
+  const forking = createMemo(() => forkMutation.isPending)
 
   const revert = (input: { sessionID: string; messageID: string }) => {
     if (reverting()) return
@@ -177,6 +201,11 @@ export function createSessionMutations(deps: SessionMutationsDeps) {
     return restoreMutation.mutateAsync(id)
   }
 
+  const fork = (input: { sessionID: string; messageID: string }) => {
+    if (forking()) return
+    return forkMutation.mutateAsync(input)
+  }
+
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
@@ -185,7 +214,7 @@ export function createSessionMutations(deps: SessionMutationsDeps) {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = { revert, fork }
 
-  return { fail, busy, reverting, restoring, revert, restore, rolled, actions }
+  return { fail, busy, reverting, restoring, forking, revert, restore, fork, rolled, actions }
 }

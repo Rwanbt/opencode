@@ -1,0 +1,67 @@
+/* SPDX-License-Identifier: MIT */
+
+/* A3-01 prompt index (v110 "prompt graduation ticks"). Desktop/tablet
+ * only: hover/proximity reveal has no touch equivalent, and the ticks
+ * would just crowd a phone-width thread. Breakpoint authority is the
+ * `shell:` variant A2 introduced (tokens/viewport.ts COMPACT, 900px),
+ * not a second responsive taxonomy.
+ */
+.prompt-index {
+  display: none;
+}
+
+@media (min-width: 56.25rem) {
+  .prompt-index {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px;
+    z-index: 5;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease-out;
+  }
+
+  .prompt-index.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.prompt-index-tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.prompt-index-tick-line {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border-weaker-base);
+  transition:
+    width 140ms ease-out,
+    background 140ms ease-out;
+}
+
+.prompt-index-tick:hover .prompt-index-tick-line,
+.prompt-index-tick:focus-visible .prompt-index-tick-line {
+  width: 16px;
+  background: var(--text-weak);
+}
+
+.prompt-index-tick.active .prompt-index-tick-line {
+  width: 16px;
+  background: var(--icon-interactive-base);
+}

@@ -539,6 +539,7 @@ export const dict = {
   "session.messages.loading": "正在載入訊息...",
 
   "session.messages.jumpToLatest": "跳到最新",
+  "session.promptIndex.label": "在提示之間導覽",
   "session.context.addToContext": "將 {{selection}} 新增到上下文",
   "session.todo.title": "待辦事項",
   "session.todo.collapse": "折疊",

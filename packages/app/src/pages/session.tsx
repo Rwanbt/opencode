@@ -25,7 +25,7 @@ import { Separator } from "@/primitives/separator"
 import { Tabs } from "@unifia/ui/tabs"
 import { createSessionScroll } from "@/pages/session/session-scroll"
 import { showToast } from "@unifia/ui/toast"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
@@ -41,6 +41,7 @@ import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+import { PromptIndex } from "@/pages/session/prompt-index"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -81,8 +82,14 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const navigate = useNavigate()
   const workbench = useWorkspaceWorkbench()
   const [artifactDocument, setArtifactDocument] = createSignal<{ filename: string; content: string }>()
+  // Read-only capture of the message-timeline scroll viewport for
+  // PromptIndex (A3-01). Wraps setScrollRef below rather than reaching
+  // into createSessionScroll/createAutoScroll internals: this signal
+  // has no write path back into the existing scroll machinery.
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
   const [artifactError, setArtifactError] = createSignal<string>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
@@ -792,6 +799,7 @@ export default function Page() {
     userMessages,
     revertMessageID,
     language,
+    navigate,
   })
 
   const {
@@ -955,7 +963,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div class="flex-1 min-h-0 overflow-hidden">
+          <div class="relative flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
@@ -974,7 +982,10 @@ export default function Page() {
                     actions={actions}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
+                    setScrollRef={(el) => {
+                      setScrollRef(el)
+                      setScrollEl(el)
+                    }}
                     onScheduleScrollState={scheduleScrollState}
                     onAutoScrollHandleScroll={autoScroll.handleScroll}
                     onMarkScrollGesture={markScrollGesture}
@@ -994,6 +1005,7 @@ export default function Page() {
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
                   />
+                  <PromptIndex messages={visibleUserMessages} scrollEl={scrollEl} />
                 </Show>
               </Match>
               <Match when={true}>

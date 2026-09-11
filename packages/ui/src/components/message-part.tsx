@@ -935,9 +935,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const [state, setState] = createStore({
     copied: false,
     busy: false,
+    forking: false,
   })
   const copied = () => state.copied
   const busy = () => state.busy
+  const forking = () => state.forking
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -1000,6 +1002,20 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         }),
       )
       .finally(() => setState("busy", false))
+  }
+
+  const fork = () => {
+    const act = props.actions?.fork
+    if (!act || forking()) return
+    setState("forking", true)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => setState("forking", false))
   }
 
   return (
@@ -1078,6 +1094,22 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                     revert()
                   }}
                   aria-label={i18n.t("ui.message.revertMessage")}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={props.actions?.fork}>
+              <Tooltip value={i18n.t("command.session.fork")} placement="top" gutter={4}>
+                <IconButton
+                  icon="fork"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!forking()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    fork()
+                  }}
+                  aria-label={i18n.t("command.session.fork")}
                 />
               </Tooltip>
             </Show>
