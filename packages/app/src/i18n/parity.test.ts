@@ -139,6 +139,14 @@ const TECHNICAL_ALLOWLIST = new Set([
   // unit are typographic constants shared across all locales, so the
   // string itself is intentionally identical to the English source.
   "workbench.design.previewCaption",
+  // 2026-09-11: Team event fallback for an unrecognized event kind. "{{kind}}"
+  // is a pure template placeholder — every character is the interpolation
+  // variable, so there is no translatable text for any locale to render
+  // differently. Never used in practice today (the five kinds the DAG
+  // executor actually emits — team.started/budget_handoff/task_finished/
+  // final_validation/runtime_failed — all have dedicated translated labels),
+  // this only fires if a sixth kind is added server-side later.
+  "workbench.work.event.unknown",
   // 2026-08-16: International technical loan-words. "Design" (fr/de/ja/ko
   // surface forms may differ, but pt-BR/bs/da/keep the English token as a
   // lexical borrowing), "Trace" (used in de/no/ru as an engineering
