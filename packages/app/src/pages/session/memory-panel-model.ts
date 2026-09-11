@@ -13,6 +13,11 @@ export type MemoryNoteDocument = MemoryNoteSummary & {
   readonly links: readonly string[]
 }
 
+export type MemoryGraphNode = MemoryNoteSummary & {
+  readonly x: number
+  readonly y: number
+}
+
 const MEMORY_PREFIX = ".unifia/memory/"
 
 export function isMemoryMarkdown(path: string): boolean {
@@ -38,4 +43,19 @@ export function linkedMemoryNotes(
 ): readonly MemoryNoteSummary[] {
   const normalized = new Set(links.map((link) => link.replace(/\.md$/i, "").toLocaleLowerCase()))
   return notes.filter((note) => normalized.has(memoryTitle(note.path).toLocaleLowerCase()))
+}
+
+/** A deterministic local graph: the selected note and its resolved neighbours. */
+export function localMemoryGraph(
+  selected: MemoryNoteSummary,
+  linked: readonly MemoryNoteSummary[],
+): readonly MemoryGraphNode[] {
+  if (linked.length === 0) return [{ ...selected, x: 50, y: 50 }]
+  return [
+    { ...selected, x: 50, y: 50 },
+    ...linked.map((note, index) => {
+      const angle = (Math.PI * 2 * index) / linked.length - Math.PI / 2
+      return { ...note, x: 50 + Math.cos(angle) * 34, y: 50 + Math.sin(angle) * 34 }
+    }),
+  ]
 }

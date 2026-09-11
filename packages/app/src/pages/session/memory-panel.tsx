@@ -5,7 +5,7 @@ import { createQuery } from "@tanstack/solid-query"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
 import { decodeFile } from "@/pages/workbench/automate-decode"
-import { isMemoryMarkdown, linkedMemoryNotes, memoryTitle, parseMemoryNote } from "./memory-panel-model"
+import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote } from "./memory-panel-model"
 
 const MEMORY_ROOT = ".unifia/memory"
 
@@ -15,6 +15,7 @@ export function MemoryPanel(): JSX.Element {
   const [selectedPath, setSelectedPath] = createSignal<string>()
   const [query, setQuery] = createSignal("")
   const [view, setView] = createSignal<"preview" | "source">("preview")
+  const [contextView, setContextView] = createSignal<"links" | "graph">("links")
 
   createEffect(() => { void workbench.ensureConnected().catch(() => undefined) })
   const filesQueryOptions = createMemo(() => {
@@ -50,6 +51,7 @@ export function MemoryPanel(): JSX.Element {
     return path && file ? parseMemoryNote(path, decodeFile(file)) : undefined
   })
   const linked = createMemo(() => note() ? linkedMemoryNotes(note()!.links, notes()) : [])
+  const graph = createMemo(() => note() ? localMemoryGraph(note()!, linked()) : [])
 
   return (
     <section class="size-full min-w-0 bg-background-base p-3" data-v110="memory-panel">
@@ -72,8 +74,8 @@ export function MemoryPanel(): JSX.Element {
           </div>
         </article>
         <aside class="min-h-0 overflow-hidden rounded-lg border border-border-base bg-background-stronger" data-memory-links>
-          <header class="border-b border-border-base p-3"><h2 class="text-14-medium">Links &amp; context</h2></header>
-          <div class="overflow-y-auto p-3"><Show when={note() && linked().length > 0} fallback={<p class="text-12-regular text-text-weak">No resolved links for this note.</p>}><For each={linked()}>{(item) => <button type="button" class="mb-2 block w-full rounded border border-border-base p-2 text-left text-12-regular hover:bg-background-base" onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For></Show></div>
+          <header class="border-b border-border-base p-3"><h2 class="text-14-medium">Links &amp; context</h2><div class="mt-2 flex gap-1"><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": contextView() === "links" }} onClick={() => setContextView("links")}>Links</button><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": contextView() === "graph" }} onClick={() => setContextView("graph")}>Local graph</button></div></header>
+          <div class="overflow-y-auto p-3"><Show when={contextView() === "links"} fallback={<Show when={graph().length > 0} fallback={<p class="text-12-regular text-text-weak">Choose a note to inspect its graph.</p>}><svg class="h-56 w-full" viewBox="0 0 100 100" role="img" aria-label="Local memory graph"> <For each={graph().slice(1)}>{(node) => <line x1="50" y1="50" x2={node.x} y2={node.y} stroke="currentColor" opacity="0.35" />}</For><For each={graph()}>{(node, index) => <g class="cursor-pointer" role="button" tabindex="0" onClick={() => setSelectedPath(node.path)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPath(node.path) }}><circle cx={node.x} cy={node.y} r={index() === 0 ? 8 : 6} class={index() === 0 ? "fill-accent-base" : "fill-background-strong"} stroke="currentColor" /><text x={node.x} y={node.y + 13} text-anchor="middle" class="fill-text-base text-[5px]">{node.title.slice(0, 16)}</text></g>}</For></svg></Show>}><Show when={note() && linked().length > 0} fallback={<p class="text-12-regular text-text-weak">No resolved links for this note.</p>}><For each={linked()}>{(item) => <button type="button" class="mb-2 block w-full rounded border border-border-base p-2 text-left text-12-regular hover:bg-background-base" onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For></Show></Show></div>
         </aside>
       </div>
     </section>
