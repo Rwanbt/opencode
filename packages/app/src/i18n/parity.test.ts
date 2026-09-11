@@ -147,6 +147,22 @@ const TECHNICAL_ALLOWLIST = new Set([
   // final_validation/runtime_failed — all have dedicated translated labels),
   // this only fires if a sixth kind is added server-side later.
   "workbench.work.event.unknown",
+  // 2026-09-11: Start-run form (A5-06). Genuine cross-language loanwords/
+  // cognates for this exact technical domain, not untranslated laziness —
+  // every OTHER key in this same form (task.id, budget.maxCostUsd, the
+  // validation messages, etc.) got a real, distinct translation per locale.
+  // "Prompt" (an LLM-specific term) is borrowed as-is in Portuguese-BR,
+  // Bosnian, Danish, German, Spanish, French, Norwegian, Polish and Turkish.
+  // "Agent" is a native cognate spelled identically in Bosnian, Danish,
+  // German, French, Norwegian and Polish. "Start" (the submit button) is the
+  // same imperative in Danish and Norwegian. French "Description" is an
+  // identical English/French cognate. German "Budget (optional)" pairs two
+  // loanwords already spelled the same way in German.
+  "workbench.work.startRun.task.prompt",
+  "workbench.work.startRun.task.agent",
+  "workbench.work.startRun.submit",
+  "workbench.work.startRun.task.description",
+  "workbench.work.startRun.budget.title",
   // 2026-08-16: International technical loan-words. "Design" (fr/de/ja/ko
   // surface forms may differ, but pt-BR/bs/da/keep the English token as a
   // lexical borrowing), "Trace" (used in de/no/ru as an engineering
