@@ -7,9 +7,17 @@ import { Markdown } from "@unifia/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
-import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote } from "./memory-panel-model"
+import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote, type MemoryNoteDocument } from "./memory-panel-model"
 
 const MEMORY_ROOT = ".unifia/memory"
+
+function MemoryPreview(props: { note: MemoryNoteDocument }): JSX.Element {
+  return <><h1 class="mt-2 text-20-medium">{props.note.title}</h1><Show when={props.note.tags.length > 0}><div class="mt-3 flex flex-wrap gap-1"><For each={props.note.tags}>{(tag) => <span class="rounded bg-background-base px-2 py-1 text-11-regular">#{tag}</span>}</For></div></Show><Markdown text={props.note.body} class="mt-5 text-13-regular leading-6 text-text-base" /></>
+}
+
+function MemoryEditor(props: { value: string; onInput: (value: string) => void }): JSX.Element {
+  return <textarea class="h-full min-h-72 w-full resize-none rounded border border-border-base bg-background-base p-3 font-mono text-12-regular leading-5" value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} aria-label="Edit memory note" />
+}
 
 export function MemoryPanel(): JSX.Element {
   const workbench = useWorkspaceWorkbench()
@@ -17,7 +25,7 @@ export function MemoryPanel(): JSX.Element {
   const connection = workbench.connection
   const [selectedPath, setSelectedPath] = createSignal<string>()
   const [query, setQuery] = createSignal("")
-  const [view, setView] = createSignal<"preview" | "source">("preview")
+  const [view, setView] = createSignal<"preview" | "source" | "split">("preview")
   const [contextView, setContextView] = createSignal<"links" | "graph">("links")
   const [draft, setDraft] = createSignal("")
   const [saving, setSaving] = createSignal(false)
@@ -98,11 +106,11 @@ export function MemoryPanel(): JSX.Element {
           </div>
         </aside>
         <article class="min-h-0 overflow-hidden rounded-lg border border-border-base bg-background-stronger" data-memory-note-pane>
-          <header class="flex items-center gap-2 border-b border-border-base px-3 py-2"><span class="text-12-medium">Memory</span><span class="ml-auto text-11-regular text-text-weak">CAS-protected</span><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": view() === "preview" }} onClick={() => setView("preview")}>Preview</button><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": view() === "source" }} onClick={() => setView("source")}>Edit</button><button type="button" class="rounded bg-accent-base px-2 py-1 text-11-medium text-text-on-accent disabled:opacity-50" disabled={saving() || draft() === noteFile.data?.content} onClick={() => void saveNote()}>{saving() ? "Saving…" : "Save"}</button></header>
+          <header class="flex items-center gap-2 border-b border-border-base px-3 py-2"><span class="text-12-medium">Memory</span><span class="ml-auto text-11-regular text-text-weak">CAS-protected</span><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": view() === "preview" }} onClick={() => setView("preview")}>Preview</button><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": view() === "source" }} onClick={() => setView("source")}>Edit</button><button type="button" class="rounded px-2 py-1 text-11-medium max-[620px]:hidden" classList={{ "bg-background-base": view() === "split" }} onClick={() => setView("split")}>Split</button><button type="button" class="rounded bg-accent-base px-2 py-1 text-11-medium text-text-on-accent disabled:opacity-50" disabled={saving() || draft() === noteFile.data?.content} onClick={() => void saveNote()}>{saving() ? "Saving…" : "Save"}</button></header>
           <div class="h-[calc(100%-43px)] overflow-y-auto p-5">
             <Show when={noteFile.isLoading}><p class="text-12-regular text-text-weak">Loading note…</p></Show>
             <Show when={noteFile.error}><p class="text-12-regular text-text-danger">Unable to read this note.</p></Show>
-            <Show when={note()}>{(current) => <><p class="text-11-regular text-text-weak">{current().path}</p><Show when={view() === "preview"} fallback={<textarea class="mt-3 h-[calc(100%-28px)] min-h-72 w-full resize-none rounded border border-border-base bg-background-base p-3 font-mono text-12-regular leading-5" value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} aria-label="Edit memory note" />}><h1 class="mt-2 text-20-medium">{current().title}</h1><Show when={current().tags.length > 0}><div class="mt-3 flex flex-wrap gap-1"><For each={current().tags}>{(tag) => <span class="rounded bg-background-base px-2 py-1 text-11-regular">#{tag}</span>}</For></div></Show><Markdown text={current().body} class="mt-5 text-13-regular leading-6 text-text-base" /></Show></>}</Show>
+            <Show when={note()}>{(current) => <><p class="text-11-regular text-text-weak">{current().path}</p><Show when={view() === "source"} fallback={<Show when={view() === "split"} fallback={<MemoryPreview note={current()} />}><div class="mt-3 grid min-h-[calc(100%-28px)] grid-cols-2 gap-3"><MemoryEditor value={draft()} onInput={setDraft} /><div class="min-w-0 overflow-y-auto rounded border border-border-base bg-background-base p-3"><MemoryPreview note={parseMemoryNote(current().path, draft())} /></div></div></Show>}><div class="mt-3 h-[calc(100%-28px)]"><MemoryEditor value={draft()} onInput={setDraft} /></div></Show></>}</Show>
             <Show when={!note() && !noteFile.isLoading && !noteFile.error}><p class="text-12-regular text-text-weak">Choose a note from the vault.</p></Show>
           </div>
         </article>
