@@ -17,6 +17,7 @@ import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
 import { SettingsObservability } from "./settings-observability"
 import { SettingsMemory } from "./settings-memory"
+import { SettingsRemoteAccess } from "./settings-remote-access"
 
 export const DialogSettings: Component = () => {
   const mobileLayout = useMobileLayout()
@@ -73,6 +74,10 @@ const DialogSettingsDesktop: Component = () => {
                     <Icon name="console" />
                     {language.t("settings.localConfig.title")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="remote">
+                    <Icon name="globe" />
+                    {language.t("settings.desktop.section.remote")}
+                  </Tabs.Trigger>
                   <Tabs.Trigger value="benchmark">
                     <Icon name="speedometer" />
                     {language.t("settings.fork.benchmark.title")}
@@ -122,6 +127,9 @@ const DialogSettingsDesktop: Component = () => {
       </Tabs.Content>
       <Tabs.Content value="configuration" class="no-scrollbar">
         <SettingsConfiguration />
+      </Tabs.Content>
+      <Tabs.Content value="remote" class="no-scrollbar">
+        <SettingsRemoteAccess />
       </Tabs.Content>
       <Tabs.Content value="benchmark" class="no-scrollbar">
         <SettingsBenchmark />
