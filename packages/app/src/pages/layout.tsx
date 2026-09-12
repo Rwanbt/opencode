@@ -61,7 +61,11 @@ import { SidebarContent } from "./layout/sidebar-shell"
 import { MobileNav } from "@/shell/v110-mobile-nav"
 import { useMode } from "@/context/mode"
 import { DialogDeleteWorkspace, DialogResetWorkspace } from "./layout/dialog-workspace"
-import { createWorkspaceSidebarContext } from "./layout/layout-contexts"
+import {
+  createProjectSidebarContext,
+  createSidebarPanelContext,
+  createWorkspaceSidebarContext,
+} from "./layout/layout-contexts"
 import { createPrefetchSystem } from "./layout/prefetch"
 import { useUpdatePolling, useSDKNotificationToasts } from "./layout/notifications"
 import { createWorkspaceOps, createWorkspaceCreate } from "./layout/workspace-ops"
@@ -914,20 +918,17 @@ export default function Layout(props: ParentProps) {
     dialog,
   })
 
-  const projectSidebarCtx: ProjectSidebarContext = {
+  const projectSidebarCtx: ProjectSidebarContext = createProjectSidebarContext({
     currentDir,
     currentProject,
-    sidebarOpened: () => layout.sidebar.opened(),
+    layout,
     sidebarHovering,
-    hoverProject: () => state.hoverProject,
-    nav: () => state.nav,
-    onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
-    onProjectMouseLeave: (worktree) => aim.leave(worktree),
-    onProjectFocus: (worktree) => aim.activate(worktree),
-    onHoverOpenChanged: (worktree, hoverOpen) => {
-      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
-      setState("hoverProject", hoverOpen ? worktree : undefined)
+    aim,
+    state: {
+      hoverProject: () => state.hoverProject,
+      nav: () => state.nav,
     },
+    setState: (key, value) => setState(key as "hoverProject", value),
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -936,22 +937,18 @@ export default function Layout(props: ParentProps) {
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
     workspaceLabel,
-    sessionProps: {
-      navList: currentSessions,
-      sidebarExpanded,
-      sidebarHovering,
-      nav: () => state.nav,
-      hoverSession: () => state.hoverSession,
-      setHoverSession,
-      clearHoverProjectSoon,
-      prefetchSession,
-      archiveSession,
-    },
+    currentSessions,
+    sidebarExpanded,
+    nav: () => state.nav,
+    hoverSession: () => state.hoverSession,
     setHoverSession,
-  }
+    clearHoverProjectSoon,
+    prefetchSession,
+    archiveSession,
+  })
 
 
-  const sidebarPanelCtx: SidebarPanelContext = {
+  const sidebarPanelCtx: SidebarPanelContext = createSidebarPanelContext({
     sidebarHovering,
     workspaceIds,
     workspaceName,
@@ -966,14 +963,14 @@ export default function Layout(props: ParentProps) {
     closeProject,
     workspaceSidebarCtx,
     sortNow,
-    sidebarProject,
-    gettingStartedDismissed: () => store.gettingStartedDismissed,
-    setGettingStartedDismissed: (v) => setStore('gettingStartedDismissed', v),
+    sidebarProject: () => sidebarProject(),
+    store: { gettingStartedDismissed: store.gettingStartedDismissed },
+    setStore: (key, value) => setStore(key, value ?? false),
     activeWorkspace: () => store.activeWorkspace,
-    onWorkspaceDragStart: handleWorkspaceDragStart,
-    onWorkspaceDragEnd: handleWorkspaceDragEnd,
-    onWorkspaceDragOver: handleWorkspaceDragOver,
-  }
+    handleWorkspaceDragStart: handleWorkspaceDragStart as (event: unknown) => void,
+    handleWorkspaceDragEnd,
+    handleWorkspaceDragOver: handleWorkspaceDragOver as (event: unknown) => void,
+  })
 
   const projects = () => layout.projects.list()
   const mode = useMode()
