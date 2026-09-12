@@ -1994,4 +1994,20 @@ export const dict = {
   "design.github.state.disconnected": "GitHub: ยังไม่เชื่อมต่อ",
   "design.github.state.connected": "GitHub: {{login}}",
   "design.github.state.hint": "เชื่อมต่อบัญชี GitHub จากการตั้งค่า",
+
+  // 2026-09-12: A6 D02-D06 MVP labels (ADR-034/035). Identical English
+  // fallback across locales — proper nouns in allowlist.
+  "workbench.design.layers.title": "Layers",
+  "workbench.design.layers.toggleVisibility": "Toggle layer visibility",
+  "workbench.design.layers.toggleLock": "Toggle layer lock",
+  "workbench.design.layers.rename": "Rename layer",
+  "workbench.design.layers.moveUp": "Move layer up",
+  "workbench.design.layers.moveDown": "Move layer down",
+  "workbench.design.tools.label": "Design vector tools",
+  "workbench.design.tools.select": "Select",
+  "workbench.design.tools.rect": "Rectangle",
+  "workbench.design.tools.line": "Line",
+  "workbench.design.tools.ellipse": "Ellipse",
+  "workbench.design.tools.bezier": "Bezier",
+
 }

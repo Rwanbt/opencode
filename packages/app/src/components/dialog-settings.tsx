@@ -1,10 +1,10 @@
-import { type Component, Show } from "solid-js"
+import { type Component, Show, createMemo } from "solid-js"
 import { Dialog } from "@unifia/ui/dialog"
 import { Tabs } from "@unifia/ui/tabs"
 import { Icon } from "@unifia/ui/icon"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useMobileLayout } from "@/hooks/use-mobile-layout"
+import { useViewport } from "@/shell/v110-store"
 import { SettingsMobileNav } from "./settings-mobile-nav"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsAudio } from "./settings-audio"
@@ -21,11 +21,17 @@ import { SettingsRemoteAccess } from "./settings-remote-access"
 import { SettingsCollaborativeAuth } from "./settings-collaborative-auth"
 
 export const DialogSettings: Component = () => {
-  const mobileLayout = useMobileLayout()
+  const platform = usePlatform()
+  const viewport = useViewport()
+  const isMobile = createMemo(() => {
+    const v = viewport()
+    if (platform.os === "ios" || platform.os === "android") return true
+    return v === "phone-portrait" || v === "tablet-portrait" || v === "compact-landscape"
+  })
 
   return (
     <Dialog size="x-large" transition>
-      <Show when={mobileLayout().isMobile} fallback={<DialogSettingsDesktop />}>
+      <Show when={isMobile()} fallback={<DialogSettingsDesktop />}>
         <SettingsMobileNav />
       </Show>
     </Dialog>

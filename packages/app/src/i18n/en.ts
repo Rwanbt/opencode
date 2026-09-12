@@ -1925,4 +1925,20 @@ export const dict = {
   "design.github.state.disconnected": "GitHub: not connected",
   "design.github.state.connected": "GitHub: {{login}}",
   "design.github.state.hint": "Connect a GitHub account from Settings.",
+
+  // A6 D02-D06 MVP (ADR-034, ADR-035): layers panel + vector toolbar labels.
+  // Loanwords: identical across locales (design tool proper nouns, same
+  // rationale as `workbench.design.title` already in the allowlist).
+  "workbench.design.layers.title": "Layers",
+  "workbench.design.layers.toggleVisibility": "Toggle layer visibility",
+  "workbench.design.layers.toggleLock": "Toggle layer lock",
+  "workbench.design.layers.rename": "Rename layer",
+  "workbench.design.layers.moveUp": "Move layer up",
+  "workbench.design.layers.moveDown": "Move layer down",
+  "workbench.design.tools.label": "Design vector tools",
+  "workbench.design.tools.select": "Select",
+  "workbench.design.tools.rect": "Rectangle",
+  "workbench.design.tools.line": "Line",
+  "workbench.design.tools.ellipse": "Ellipse",
+  "workbench.design.tools.bezier": "Bezier",
 }

@@ -25,6 +25,11 @@ export function resolveMobileLayout(width: number, height: number, isMobilePlatf
 /**
  * Hook providing mobile layout information.
  * Returns reactive signals for responsive design.
+ *
+ * @deprecated Migrate to `useViewport()` from `@/shell/v110-store`
+ * for new code. This shim remains for backward compat (test files
+ * still use it). P1-1 cleanup: components/dialog-settings.tsx now
+ * uses `useViewport()` + `createMemo()` directly.
  */
 export function useMobileLayout(): () => MobileLayout {
   const platform = usePlatform()

@@ -159,6 +159,21 @@ const TECHNICAL_ALLOWLIST = new Set([
   // identical English/French cognate. German "Budget (optional)" pairs two
   // loanwords already spelled the same way in German.
   "workbench.work.startRun.task.prompt",
+  // 2026-09-12: A6 D02-D06 MVP labels (ADR-034/035). Design tool proper
+  // nouns and short action verbs, identical across locales — same
+  // rationale as `workbench.design.title` already in this list.
+  "workbench.design.layers.title",
+  "workbench.design.layers.toggleVisibility",
+  "workbench.design.layers.toggleLock",
+  "workbench.design.layers.rename",
+  "workbench.design.layers.moveUp",
+  "workbench.design.layers.moveDown",
+  "workbench.design.tools.label",
+  "workbench.design.tools.select",
+  "workbench.design.tools.rect",
+  "workbench.design.tools.line",
+  "workbench.design.tools.ellipse",
+  "workbench.design.tools.bezier",
   "workbench.work.startRun.task.agent",
   "workbench.work.startRun.submit",
   "workbench.work.startRun.task.description",
