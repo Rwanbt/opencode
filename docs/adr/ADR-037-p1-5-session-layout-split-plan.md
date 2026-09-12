@@ -3,7 +3,11 @@
 
 # ADR-037 — P1-5 split plan for `session.tsx` (1011 LOC) + `layout.tsx` (1069 LOC)
 
-> **Statut** : PROPOSED (2026-09-12)
+> **Statut** : PARTIAL (2026-09-12, 2/5 vagues livrees)
+> **Progression** :
+> - session.tsx : 1011 -> 993 LOC (-18, Vagues 1+2 livrees)
+> - layout.tsx : 1069 LOC (intact, Vague 5 pas livree)
+> - **Reste** : ~180 LOC a extraire (Vagues 3, 4, 5) — plan ci-dessous, sessions dediees
 > **Source** : A1-CONTRACT §4 P1-5 ("`session.tsx` (1096 lignes) /
 >   `layout.tsx` (1163 lignes) > budget ; PR > 400 LOC doit être split"),
 >   QA/PORT-GATE-CERTIFICATION-2026-09-12.md §7 Wave 4.
@@ -32,18 +36,23 @@ Plan de split en 5 vagues. Chaque vague isole une responsabilité
 distincte, passe sous 800 LOC pour le fichier cible, et est livrée
 avec une vérification stricte Port Gate.
 
-### Vague 1 — artifact loader (livré dans ce commit)
+### Vague 1 — artifact loader (LIVREE, commit `34b96f1387`)
 Extraire `createEffect()` (session.tsx:98-112) en hook
 `useArtifactLoader()` dans `pages/session/use-artifact-loader.ts`.
 Le hook garde la même signature de retour (`{ artifactDocument,
 artifactError }`). Pattern : signature explicite, pas d'effet de bord
 caché, testé séparément.
+**Statut reel** : -15 LOC sur session.tsx. Strict gate 5/5 PASS
+post-commit (verification v7).
 
-### Vague 2 — prompt initializer
+### Vague 2 — prompt initializer (LIVREE, commit `b34f424ffd`)
 Extraire `createEffect()` (session.tsx:114-150) en hook
 `usePromptInitializer(searchParams, params, setSearchParams)`. Ce
 hook gate l'initialisation du prompt depuis les query params et
 appelle `prompt.submit()` au montage.
+**Statut reel** : -3 LOC sur session.tsx. Le gain LOC est limite
+parce que l'inline effect etait court ; le benefice reel est la
+separation des responsabilites.
 
 ### Vague 3 — message timeline section
 Extraire le JSX `<MessageTimeline ...>` et son wrapper dans
@@ -86,6 +95,29 @@ fichier sous 400 LOC.
   test.todo (pattern Wave 2 Phase 17)
 - Port Gate strict reste 5/5 PASS post chaque vague
 - Aucun nouveau warning TypeScript
+
+## Vagues restantes (non livrees a la date du 2026-09-12)
+
+| Vague | LOC a extraire | Effort | Risque | Statut |
+|---|---|---|---|---|
+| 3 — message timeline section | ~150 | 1-2 h | moyen (JSX move + state) | PROPOSED, non livree |
+| 4 — composer + sidebar section | ~200 | 2-3 h | moyen (composition root) | PROPOSED, non livree |
+| 5 — layout.tsx orchestrateur | ~700 | 4-5 h | eleve (4 sous-composants) | PROPOSED, non livree |
+
+**Note** : Vagues 3+4 sont les plus risquees car elles deplacent du
+JSX dans des sous-composants, ce qui peut casser la propagation
+d'events DOM (delegation, focus, keyboard). Vague 5 est la plus
+grosse (700 LOC) et devrait etre executee dans une session dediee
+avec playwright pour valider le focus management.
+
+**Recommandation** : faire ces vagues dans une session dediee avec
+Playwright comme filet de securite, pas dans la session courante.
+Le ratio effort/risque est eleve (3-10 h pour gagner 1050 LOC).
+
+## Definition of Done (updated)
+
+- session.tsx : 993 LOC -> cible 800 LOC, reste 193 a extraire (Vagues 3-4)
+- layout.tsx : 1069 LOC -> cible 400 LOC, reste 669 a extraire (Vague 5)
 
 ## References
 
