@@ -28,6 +28,7 @@
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
     "@playwright/test": "1.57.0",
+    "@solidjs/testing-library": "0.8.10",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",
