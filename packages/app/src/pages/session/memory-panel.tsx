@@ -83,7 +83,8 @@ export function MemoryPanel(): JSX.Element {
     }
   })
   const backlinks = createQuery(backlinksQueryOptions)
-  const graph = createMemo(() => note() ? localMemoryGraph(note()!, linked()) : [])
+  const relatedNotes = createMemo(() => [...new Map([...linked(), ...(backlinks.data ?? [])].map((related) => [related.path, related])).values()])
+  const graph = createMemo(() => note() ? localMemoryGraph(note()!, relatedNotes()) : [])
   createEffect(() => {
     const content = noteFile.data?.content
     if (content !== undefined) setDraft(content)
