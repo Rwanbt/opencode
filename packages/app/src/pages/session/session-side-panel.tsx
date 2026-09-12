@@ -1,6 +1,5 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@unifia/ui/tabs"
 import { Button } from "@unifia/ui/button"
 import { IconButton } from "@unifia/ui/icon-button"
@@ -64,8 +63,8 @@ export function SessionSidePanel(props: {
   const terminal = useTerminal()
   const { sessionKey, tabs, view } = useSessionLayout()
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
-  const isMobile = createMemo(() => !isDesktop())
+  const shell = useShell(useViewport())
+  const isOverlay = createMemo(() => shell.kind() === "overlay")
 
   // Explorer/Execution are narrow browsing panels (the old file-tree pane's
   // resizable width); Inspector holds opened files/diffs and needs the old
@@ -81,7 +80,6 @@ export function SessionSidePanel(props: {
   // viewport contract's exclusive()). One inspector pane now (v110
   // InspectorFrame), so this collapses to one pair of effects on the
   // shared opened() flag instead of two panes' worth.
-  const shell = useShell(useViewport())
   createEffect(() => {
     if (!shell.single()) return
     if (!layout.sidebar.opened()) return
@@ -313,20 +311,20 @@ export function SessionSidePanel(props: {
       class="relative min-w-0 flex shrink-0 overflow-hidden bg-background-base"
       classList={{
         // Desktop: side panel with horizontal width transition
-        "h-full": !isMobile(),
+        "h-full": !isOverlay(),
         "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-          !isMobile() && !props.size.active() && !props.reviewSnap,
-        // Mobile: vertical panel that slides down from the top
-        "mobile-side-panel w-full": isMobile(),
+          !isOverlay() && !props.size.active() && !props.reviewSnap,
+        // Overlay viewports use a full-height inspector over session content.
+        "mobile-side-panel w-full": isOverlay(),
         "pointer-events-none": !layout.inspector.opened(),
       }}
       style={
-        isMobile()
+        isOverlay()
           ? {
               // Full height (not a half-sheet): browsing files/reviewing
               // changes is a primary mobile task, not a quick peek — the
               // panel is `position: absolute` over the session content (see
-              // mobile.css .mobile-side-panel), so covering the composer
+              // v110.css .mobile-side-panel), so covering the composer
               // underneath is the intended behavior while it's open.
               height: layout.inspector.opened() ? "100%" : "0px",
               transition: "height 240ms cubic-bezier(0.22,1,0.36,1)",
@@ -748,7 +746,7 @@ export function SessionSidePanel(props: {
           "resize-chat" handle on the chat column instead — only
           Explorer/Execution (narrow, self-driven width) get this handle,
           same split as the old fileOpen()-only gate. */}
-      <Show when={layout.inspector.opened() && layout.inspector.tab() !== "inspector" && !isMobile()}>
+      <Show when={layout.inspector.opened() && layout.inspector.tab() !== "inspector" && !isOverlay()}>
         <div onPointerDown={() => props.size.start()}>
           <Separator
             axis="x"

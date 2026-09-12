@@ -76,6 +76,19 @@
   }
 }
 
+/* Inspector and terminal panels opt into this class only when the canonical
+ * viewport contract resolves to an overlay. Keep the overlay bounded by the
+ * session workspace, so its composer cannot remain above the panel. */
+.mobile-side-panel {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important;
+}
+
+.mobile-side-panel:not([aria-hidden="true"]) {
+  height: auto !important;
+}
+
 /* Default focus system. :where keeps specificity at zero so component
  * rules always win; this only covers bare controls. */
 :where(button, input, textarea, select, [tabindex]):focus-visible {
