@@ -24,6 +24,9 @@
 // instead assembles the same public Kobalte + Dialog + TeamPanel pieces
 // DialogOutlet itself uses, but locally, inside this component's own render
 // tree — which already sits inside TeamProvider.
+//
+// A5-06: "Start run" lives here too (same local-dialog-owner reasoning) so
+// both entry points into Team's lifecycle stay in one place.
 // =============================================================================
 
 import { createSignal, type JSX } from "solid-js"
@@ -34,25 +37,37 @@ import { TeamPanel } from "@/components/team/team-panel"
 import { useLanguage } from "@/context/language"
 import { useTeam } from "@/context/team"
 import { teamLabels } from "@/i18n/team-labels"
+import { WorkStartRunDialog } from "@/pages/workbench/work-start-run"
 
 export function WorkRunsPanel(): JSX.Element {
   const language = useLanguage()
   const t = language.t
   const team = useTeam()
   const [open, setOpen] = createSignal(false)
+  const [startRunOpen, setStartRunOpen] = createSignal(false)
 
   return (
     <div class="rounded-lg border border-border-base bg-background-stronger p-4" data-v110="work-runs-panel">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-14-medium">{t("workbench.work.runsTitle")}</h2>
-        <button
-          type="button"
-          class="text-12-medium text-text-weak hover:underline"
-          data-v110="work-open-team"
-          onClick={() => setOpen(true)}
-        >
-          {t("workbench.work.openTeam")}
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="text-12-medium text-text-weak hover:underline"
+            data-v110="work-start-run"
+            onClick={() => setStartRunOpen(true)}
+          >
+            {t("workbench.work.startRun.button")}
+          </button>
+          <button
+            type="button"
+            class="text-12-medium text-text-weak hover:underline"
+            data-v110="work-open-team"
+            onClick={() => setOpen(true)}
+          >
+            {t("workbench.work.openTeam")}
+          </button>
+        </div>
       </div>
       <div class="mt-3">
         <CollectionView
@@ -82,6 +97,7 @@ export function WorkRunsPanel(): JSX.Element {
           </Dialog>
         </Kobalte.Portal>
       </Kobalte>
+      <WorkStartRunDialog open={startRunOpen()} onOpenChange={setStartRunOpen} />
     </div>
   )
 }
