@@ -11,7 +11,7 @@ const source = readFileSync(SPLIT, "utf-8")
 // render the three regimes. Static tests assert the structural
 // contract: the resolver is wired, the resize is gated on
 // `resizable`, the switcher is rendered only on mobile, and the
-// hidden surface is not focusable.
+// exactly one mobile surface is exposed.
 describe("V06 — DesignSplit consumes the responsive model", () => {
   test("imports the V05 resolver and viewport-aware clamp", () => {
     expect(source).toMatch(/resolveLayout/)

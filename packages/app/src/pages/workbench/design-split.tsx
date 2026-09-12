@@ -36,11 +36,6 @@ export function DesignSplit(props: { chat: JSX.Element; workspace: JSX.Element }
     Persist.workspace(directory() ?? "", "design-split.v1"),
     createStore<{ chatWidth: number; mobileSurface: Surface }>({ chatWidth: DEFAULT_CHAT_WIDTH, mobileSurface: "assistant" }),
   )
-  // WHY unused setter: `focused` is read for the workspace-focus layout
-  // (grid collapse, chat hidden) but nothing calls the setter yet — no UI
-  // trigger toggles focus mode. Kept as a stub so the layout branch stays
-  // exercised; see the spawned task for wiring a real trigger.
-  const [focused, _setFocused] = createSignal(false)
   const [resizing, setResizing] = createSignal(false)
   // V06 — track the current viewport size. Read once on mount, then
   // resize. The split is a small island inside the workbench shell; a
@@ -102,7 +97,6 @@ export function DesignSplit(props: { chat: JSX.Element; workspace: JSX.Element }
   }
 
   const gridTemplate = createMemo(() => {
-    if (focused()) return "minmax(0, 1fr)"
     if (layout().kind === "mobile") return "minmax(0, 1fr)"
     if (layout().kind === "tablet") {
       return `${layout().chatWidth}px 8px minmax(0, 1fr)`
@@ -130,7 +124,6 @@ export function DesignSplit(props: { chat: JSX.Element; workspace: JSX.Element }
         "--design-chat-width": `${clampChatWidthForViewport(preferences.chatWidth, viewport().width)}px`,
         ...safeAreaStyle,
       }}
-      data-design-split-focused={focused() ? "true" : "false"}
       data-design-split-kind={layout().kind}
     >
       <Show when={layout().kind === "mobile"}>
@@ -151,10 +144,10 @@ export function DesignSplit(props: { chat: JSX.Element; workspace: JSX.Element }
         </div>
       </Show>
       <Show when={layout().kind !== "mobile"}>
-        <div class="flex h-full min-w-0 flex-col overflow-hidden" hidden={focused()} data-design-split-chat>
+        <div class="flex h-full min-w-0 flex-col overflow-hidden" data-design-split-chat>
           {props.chat}
         </div>
-        <Show when={!focused() && layout().resizable}>
+        <Show when={layout().resizable}>
           <div
             role="separator"
             aria-orientation="vertical"
