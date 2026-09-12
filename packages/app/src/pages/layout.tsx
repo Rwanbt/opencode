@@ -1037,7 +1037,8 @@ export default function Layout(props: ParentProps) {
 
             <Show when={layout.sidebar.opened()}>
               <div
-                class="hidden shell:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                class="absolute inset-y-0 z-30 w-0 overflow-visible"
+                data-v110="resize-context-wrapper"
                 style={{ left: `${side()}px` }}
                 onPointerDown={() => setState("sizing", true)}
               >

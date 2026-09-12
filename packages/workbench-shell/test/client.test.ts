@@ -68,6 +68,8 @@ await client.createArtifact({ workspaceId: "workspace-1", kind: "text", filename
 check(requests.at(-1)?.url === "/v1/artifacts", "artifact create client route was not selected")
 await client.startWorkflow("workspace-1", { kind: "test" })
 check(requests.at(-1)?.url === "/v1/workflows/start", "workflow start client route was not selected")
+await client.listWorkflows()
+check(requests.at(-1)?.url === "/v1/workflows", "workflow run list client route was not selected")
 await client.validateSpec("workspace-1", { kind: "design" })
 check(requests.at(-1)?.url === "/v1/specs/validate", "spec validation client route was not selected")
 await client.resolveApproval("approval-1", "allow")

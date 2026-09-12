@@ -16,26 +16,7 @@
  * importable from a sibling test file.
  */
 
-export type WorkbenchFileEncoding = "utf-8" | "base64"
-
-export type WorkbenchFilePayload = {
-  readonly content: string
-  readonly encoding: WorkbenchFileEncoding
-}
-
-/**
- * Decodes a file payload fetched from the Workbench server.
- *
- * - `utf-8` is returned as-is.
- * - `base64` is decoded into UTF-8 bytes via `TextDecoder`. The current
- *   `atob` path is the legacy decoder; ADR-001 (canonicalization) will
- *   require a `Buffer` round-trip for the substrate-grade path.
- */
-export function decodeFile(value: WorkbenchFilePayload): string {
-  if (value.encoding === "utf-8") return value.content
-  const bytes = Uint8Array.from(atob(value.content), (char) => char.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
-}
+export { decodeWorkbenchFile as decodeFile, type WorkbenchFilePayload } from "@/context/workbench/file-content"
 
 /**
  * Parses a JSON-encoded workflow definition body and validates the

@@ -66,6 +66,16 @@
   cursor: row-resize;
 }
 
+/* The context separator is mounted only while the desktop sidebar is open.
+ * Keep the wrapper in the layout flow so the shell breakpoint cannot lose the
+ * handle to Tailwind's base `hidden` utility; hide it explicitly below the
+ * certified desktop-compact boundary instead. */
+@media (max-width: 899px) {
+  [data-v110="resize-context-wrapper"] {
+    display: none;
+  }
+}
+
 /* Default focus system. :where keeps specificity at zero so component
  * rules always win; this only covers bare controls. */
 :where(button, input, textarea, select, [tabindex]):focus-visible {

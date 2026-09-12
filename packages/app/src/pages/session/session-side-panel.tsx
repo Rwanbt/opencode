@@ -22,6 +22,7 @@ import { requestAutoEdit } from "@/pages/session/file-tabs"
 import { SourceControl } from "@/components/source-control"
 import { TaskPanel } from "@/components/task-panel"
 import { SettingsObservabilityTimeline } from "@/components/settings-observability-timeline"
+import { MemoryPanel } from "@/pages/session/memory-panel"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
@@ -256,7 +257,7 @@ export function SessionSidePanel(props: {
   // Tasks (TaskPanel) — both moved in from the old file-tree pane.
   // Local/unpersisted — matches the mockup's own Inspector "tool" switch
   // (showCodeInspector), just not worth a persisted preference here.
-  const [inspectorView, setInspectorView] = createSignal<"files" | "git" | "tasks">("files")
+  const [inspectorView, setInspectorView] = createSignal<"files" | "git" | "tasks" | "memory">("files")
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -491,6 +492,14 @@ export function SessionSidePanel(props: {
                   >
                     Tasks
                   </Button>
+                  <Button
+                    type="button"
+                    variant={inspectorView() === "memory" ? "primary" : "ghost"}
+                    size="small"
+                    onClick={() => setInspectorView("memory")}
+                  >
+                    Memory
+                  </Button>
                 </div>
                 <Switch>
                   <Match when={inspectorView() === "git"}>
@@ -509,6 +518,11 @@ export function SessionSidePanel(props: {
                           return id
                         }}
                       />
+                    </div>
+                  </Match>
+                  <Match when={inspectorView() === "memory"}>
+                    <div class="flex-1 min-h-0 overflow-hidden">
+                      <MemoryPanel />
                     </div>
                   </Match>
                   <Match when={true}>
