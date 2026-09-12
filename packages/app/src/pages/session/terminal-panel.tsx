@@ -424,6 +424,7 @@ export function TerminalPanel() {
     <div
       ref={root}
       id="terminal-panel"
+      data-v110="code-terminal"
       role="region"
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}

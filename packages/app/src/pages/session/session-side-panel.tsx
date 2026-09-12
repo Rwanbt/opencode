@@ -523,6 +523,7 @@ export function SessionSidePanel(props: {
                       <Tabs value={activeTab()} onChange={openTab} class="flex-1 min-h-0">
                         <div class="sticky top-0 shrink-0 flex">
                           <Tabs.List
+                            data-v110="code-tabs"
                             ref={(el: HTMLDivElement) => {
                               const stop = createFileTabListSync({ el, contextOpen })
                               onCleanup(stop)
