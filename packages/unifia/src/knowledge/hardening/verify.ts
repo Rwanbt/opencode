@@ -85,11 +85,11 @@ export interface VerifyReport {
 
 /** Run all V1 sovereignty checks. */
 export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
-  const t0 = Date.now()
+  const t0 = performance.now()
   const checks: VerifyCheck[] = []
 
   // 1. Sovereignty.
-  const t1 = Date.now()
+  const t1 = performance.now()
   const sov: SovereigntyReport = await runSovereigntyProbes({
     vaultRoot: input.vaultRoot,
     derivedDbPath: input.derivedDbPath,
@@ -105,14 +105,14 @@ export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
     check(
       "sovereignty",
       sov.ok ? "PASS" : "FAIL",
-      Date.now() - t1,
+      performance.now() - t1,
       `${measured.length} probed, ${sov.probes.length - measured.length} operator_asserted; verdict=${sov.ok ? "OK" : "FAIL"}`,
       sov.probes.filter((p) => !p.ok).map((p) => p.kind),
     ),
   )
 
   // 2. Disaster recovery.
-  const t2 = Date.now()
+  const t2 = performance.now()
   // classBReachable was hardcoded true. Derive it from the actual scan.
   let classBReachable = false
   try {
@@ -142,14 +142,14 @@ export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
       sim.ok && plan.steps.every((st) => st.kind !== "stop-and-ask-operator")
         ? "NOT_EXECUTED"
         : "FAIL",
-      Date.now() - t2,
+      performance.now() - t2,
       `${plan.steps.length} step(s) planned; plan validated in simulation only (no real recovery executed); missing=[${plan.missing.join(",")}]`,
       plan.missing,
     ),
   )
 
   // 3. Reachability.
-  const t3 = Date.now()
+  const t3 = performance.now()
   let reach: ReachabilityScan | null = null
   let reachStatus: VerifyStatus = "PASS"
   let reachFindings: string[] = []
@@ -169,10 +169,12 @@ export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
     reachStatus = "FAIL"
     reachDetails = `scan failed: ${(e as Error).message}`
   }
-  checks.push(check("reachability", reachStatus, Date.now() - t3, reachDetails, reachFindings))
+  checks.push(
+    check("reachability", reachStatus, performance.now() - t3, reachDetails, reachFindings),
+  )
 
   // 4. Classify.
-  const t4 = Date.now()
+  const t4 = performance.now()
   let cls: CorpusReport | null = null
   let clsStatus: VerifyStatus = "PASS"
   let clsFindings: string[] = []
@@ -192,7 +194,7 @@ export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
     clsStatus = "FAIL"
     clsDetails = `classify failed: ${(e as Error).message}`
   }
-  checks.push(check("classify", clsStatus, Date.now() - t4, clsDetails, clsFindings))
+  checks.push(check("classify", clsStatus, performance.now() - t4, clsDetails, clsFindings))
 
   return {
     vaultRoot: input.vaultRoot,
@@ -203,6 +205,6 @@ export async function runVerify(input: VerifyInput): Promise<VerifyReport> {
     // being absorbed into a green verdict.
     ok: checks.every((c) => c.status !== "FAIL"),
     allPassed: checks.every((c) => c.status === "PASS"),
-    totalMs: Date.now() - t0,
+    totalMs: performance.now() - t0,
   }
 }

@@ -86,7 +86,7 @@ type SeedModel = E2EModel
  * isolated per-worker backend started by `e2e/backend.ts`. Asked what it
  * serves, that backend answers one hermetic provider:
  *
- *     provider=e2e models=1 test-model
+ *     provider=e2e models=2 test-model, review-model
  *
  * No `opencode` provider, no `gpt-5-nano` — the Zen provider is dropped for
  * having zero models without credentials. The isolated backend owns this

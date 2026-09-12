@@ -7,6 +7,7 @@ export type E2EModel = { providerID: string; modelID: string }
 
 export const E2E_PROVIDER_ID = "e2e"
 export const E2E_MODEL_ID = "test-model"
+export const E2E_REVIEW_MODEL_ID = "review-model"
 
 type ProviderResponse = {
   providers?: Array<{ id: string; models?: Record<string, unknown> }>
@@ -22,6 +23,11 @@ export function createE2EProviderConfig(baseURL: string) {
         models: {
           [E2E_MODEL_ID]: {
             name: "E2E Test Model",
+            tool_call: true,
+            limit: { context: 131_072, output: 4_096 },
+          },
+          [E2E_REVIEW_MODEL_ID]: {
+            name: "E2E Review Model",
             tool_call: true,
             limit: { context: 131_072, output: 4_096 },
           },

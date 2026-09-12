@@ -4,7 +4,7 @@
 // Original work. No upstream derivation.
 
 import { describe, expect, test } from "bun:test"
-import { createE2EProviderConfig, E2E_MODEL_ID, E2E_PROVIDER_ID, resolveE2ESeedModel } from "./e2e-provider"
+import { createE2EProviderConfig, E2E_MODEL_ID, E2E_PROVIDER_ID, E2E_REVIEW_MODEL_ID, resolveE2ESeedModel } from "./e2e-provider"
 
 describe("E2E provider", () => {
   const response = {
@@ -15,7 +15,7 @@ describe("E2E provider", () => {
     const config = createE2EProviderConfig("http://127.0.0.1:1234/v1")
     const provider = config.provider[E2E_PROVIDER_ID]
     expect(provider.options.baseURL).toBe("http://127.0.0.1:1234/v1")
-    expect(Object.keys(provider.models)).toEqual([E2E_MODEL_ID])
+    expect(Object.keys(provider.models)).toEqual([E2E_MODEL_ID, E2E_REVIEW_MODEL_ID])
   })
 
   test("selects the first served model without an override", () => {
