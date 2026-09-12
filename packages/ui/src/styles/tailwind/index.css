@@ -15,6 +15,14 @@
   --breakpoint-sm: 40rem;
   --breakpoint-md: 48rem;
   --breakpoint-lg: 64rem;
+  /* Shell chrome (desktop sidebar vs mobile drawer) switches at the v110
+   * COMPACT threshold (900px, tokens/viewport.ts), not at `xl`. `xl` (1280px)
+   * used to gate it, leaving desktop-compact (900-1199px) and part of
+   * desktop-wide (1200-1279px) rendering the mobile drawer even though
+   * classify() certifies them desktop — a second responsive authority
+   * RESPONSIVE-MATRIX.md rules out. `xl` itself is untouched; other call
+   * sites keep their own meaning. */
+  --breakpoint-shell: 56.25rem;
   --breakpoint-xl: 80rem;
   --breakpoint-2xl: 96rem;
   --breakpoint-3xl: 112rem;

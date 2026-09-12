@@ -21,7 +21,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
 import { useFile } from "@/context/file"
 import { createStore, produce } from "solid-js/store"
-import { ResizeHandle } from "@unifia/ui/resize-handle"
+import { Separator } from "@/primitives/separator"
 import { Tabs } from "@unifia/ui/tabs"
 import { createSessionScroll } from "@/pages/session/session-scroll"
 import { showToast } from "@unifia/ui/toast"
@@ -1054,8 +1054,10 @@ export default function Page() {
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
-              <ResizeHandle
-                direction="horizontal"
+              <Separator
+                axis="x"
+                label={language.t("design.split.handle")}
+                data-v110="resize-chat"
                 size={layout.session.width()}
                 min={450}
                 max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
