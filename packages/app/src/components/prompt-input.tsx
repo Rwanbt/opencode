@@ -65,6 +65,7 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { EXAMPLES } from "./prompt-input/examples"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@unifia/ui/image-preview"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 interface PromptInputProps {
   class?: string
@@ -1249,6 +1250,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   }}
                 />
               </Tooltip>
+              {/* v110 composer footer: context-meter ring sits directly left of send (COMPONENT-MAP.md, context-meter). */}
+              <SessionContextUsage placement="top" />
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"

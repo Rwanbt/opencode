@@ -493,6 +493,7 @@ export const dict = {
   "session.messages.loadEarlier": "이전 메시지 로드",
   "session.messages.loading": "메시지 로드 중...",
   "session.messages.jumpToLatest": "최신으로 이동",
+  "session.promptIndex.label": "프롬프트 간 이동",
   "session.context.addToContext": "컨텍스트에 {{selection}} 추가",
   "session.todo.title": "할 일",
   "session.todo.collapse": "접기",
