@@ -35,7 +35,7 @@ Legende: KEEP = reutiliser tel quel, REFACTOR = garder contrat + changer represe
 |---|---|---|
 | editor tabs, terminal integre, diff, diagnostics, tests, Git, LSP, autocomplete | editor-panel, file-tabs, terminal-panel, lsp-*, session-vcs, review-tab | KEEP contrat + REFACTOR representation |
 | explorer (doit rester dans Inspector uniquement) | file-tree, explorer existant | KEEP, interdiction de dupliquer |
-| browser tabs, Brave/home, GitHub demo, Computer use, AI Activity | PAS DE RUNTIME BROWSER DETECTE comme equivalent | GAP P0: ne pas simuler; soit brancher sur runtime reel si decouvert en Wave 0.5, soit porte UI en lecture seule derriere feature-flag, jamais de fausse navigation |
+| browser tabs, Brave/home, GitHub demo, Computer use, AI Activity | `design-browser-tab` + WebView Tauri (`open_design_browser`, navigation native) | KEEP contrat reel : navigateur accessible comme onglet Design, jamais comme faux shell mode ni navigation simulee |
 
 ## 4. Work + Team (A5)
 
@@ -67,6 +67,6 @@ Legende: KEEP = reutiliser tel quel, REFACTOR = garder contrat + changer represe
 
 ## Gaps documentes (runtime gagne)
 
-1. GAP-01 Browser: aucun runtime equivalent evident; investigation A4 obligatoire avant UI.
+1. GAP-01 Browser: resolu — `DesignBrowserTab` pilote une WebView Tauri reelle. Il reste une destination Design, pas un shell mode.
 2. GAP-02 Registry: 4 vs ~10; mapping ci-dessus fait foi, pas de nouveau shell mode sans ADR.
 3. GAP-03 Automate grant-gated (workflow.run): respecter automate-flag.ts, ne pas exposer le rail si refuse.

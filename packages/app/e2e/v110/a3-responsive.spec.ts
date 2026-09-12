@@ -5,14 +5,6 @@
 // reasoning as port-gate.spec.ts's WAVE05 loop: a fresh gotoSession() per
 // case is what caused the CI hang tracked at #71, not anything specific to
 // these viewports.
-//
-// tablet-portrait (768x1024) is deliberately NOT asserted as overlay here:
-// session.tsx/session-side-panel.tsx use a legacy 768px breakpoint instead
-// of the certified classify() authority (tracked at #74, pre-existing, not
-// introduced by this work) and render the desktop/grid branch instead of
-// the required overlay at that exact viewport. This spec still visits it
-// to confirm no overflow/crash, just without asserting the overlay contract
-// that #74 tracks separately.
 
 import { test, expect } from "../fixtures"
 import { withSession } from "../actions"
@@ -80,21 +72,11 @@ test("composer context-meter and Inspector tabs render without overflow across t
   })
 })
 
-// Desktop-wide and desktop-compact only, not phone-portrait: at phone
-// width the Inspector is supposed to render as a full-screen overlay via
-// the `mobile-side-panel` CSS class, but that class has no rule anywhere
-// in packages/app (the only mobile.css in the repo belongs to the native
-// Android Tauri app, not this web/desktop build) — the panel renders in
-// normal document flow instead of overlaying, so the chat composer stays
-// on top and intercepts clicks meant for the tabs underneath. Confirmed
-// pre-existing (the class and the gap both predate this refactor; no
-// prior e2e test opened the panel specifically at a mobile viewport) and
-// tracked at #75 rather than fixed here.
-test("Inspector Explorer/Inspector/Execution tabs reachable at desktop widths", async ({ page, gotoSession }) => {
+test("Inspector Explorer/Inspector/Execution tabs reachable across viewport modes", async ({ page, gotoSession }) => {
   await page.setViewportSize({ width: CASES[0].width, height: CASES[0].height })
   await gotoSession()
 
-  for (const c of [CASES[0], CASES[1]]) {
+  for (const c of CASES) {
     await page.setViewportSize({ width: c.width, height: c.height })
     // A real reflow tick past the 240ms panel-width transition, not a
     // race workaround: the toggle button's own aria-expanded is

@@ -122,21 +122,9 @@ test.describe("v110 port gate — A8-02 strict (Wave 0.5 hardening)", () => {
     page,
     gotoSession,
   }) => {
-    // FINDING (P1, open): packages/ui/src/styles/theme.css pins Tailwind's
-    // `xl` to 80rem/1280px, and titlebar.tsx gates the two sidebar-toggle
-    // buttons on `xl:hidden` / `hidden xl:flex`. tokens/viewport.ts's
-    // classify() — the single certified responsive authority — puts 900
-    // to 1199px in "desktop-compact" (single-utility DESKTOP chrome per
-    // RESPONSIVE-MATRIX.md) and 1200-1279 in "desktop-wide". Neither
-    // range reaches the 1280px Tailwind cutoff, so the real desktop
-    // sidebar toggle (layout.sidebar) is CSS-hidden and the mobile
-    // hamburger + slide-out drawer (layout.mobileSidebar,
-    // data-component="sidebar-nav-mobile") renders instead, for the
-    // entire 900-1279px band. This is the "two competing responsive
-    // authorities" RESPONSIVE-MATRIX.md rules out (breakpoints must come
-    // from the A1 contract): the UI takes the mobile branch at widths
-    // classify() certifies as desktop. This test hard-fails today; it
-    // stays here (not deleted) so the fix removes exactly one red case.
+    // The titlebar uses the dedicated `shell` breakpoint (900px), matching
+    // tokens/viewport.ts's certified desktop-compact boundary rather than
+    // Tailwind's unrelated 1280px `xl` breakpoint.
     await page.setViewportSize(DESKTOP_COMPACT)
     await gotoSession()
 
