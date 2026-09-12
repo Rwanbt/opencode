@@ -261,3 +261,401 @@ html[data-ui-animations="off"] *::after {
   text-decoration: underline dotted var(--text-weak);
   text-underline-offset: 3px;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Phase 35 — comprehensive v110 surface chrome
+ *
+ * Goals: parity with the HTML mockup (Unifia-UI-UX-v110-PORT-READY-R1.html,
+ * 97 modules, 2.4 MB) without rewriting every host component. We supply
+ * chrome tokens (background, border, focus, motion) for every surface
+ * the mockup exercises. Geometry stays owned by the host components;
+ * this sheet only normalises rhythm and focus.
+ *
+ * Each block below is anchored to a stable data-v110 attribute or
+ * data-component handle so it does not collide with non-v110 UI.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Shell frame + topbar (root chrome). */
+[data-v110="shell-frame"] {
+  border-radius: var(--v110-radius-md);
+  transition: outline-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="v110-topbar"] {
+  border-bottom: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="v110-topbar"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-component="v110-topbar"] [role="button"]:not(:disabled) {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="v110-topbar"] [role="button"]:not(:disabled):hover {
+  background: var(--background-base);
+}
+
+/* Mobile bottom nav (≤599px portrait, shell authority exclusive). */
+[data-v110="mobile-nav"] button {
+  min-height: var(--v110-target-touch);
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="mobile-nav"] button[aria-pressed="true"],
+[data-v110="mobile-nav"] button[data-active="true"] {
+  background: var(--background-base);
+  color: var(--text-strong);
+}
+
+/* Sidebar nav (desktop) — hover-peek authority. */
+[data-component="sidebar-nav-desktop"] {
+  background: var(--background-stronger);
+  border-right: 1px solid var(--border-base);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="sidebar-nav-desktop"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-component="sidebar-nav-desktop"] [role="button"] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="sidebar-nav-desktop"] [role="button"]:hover {
+  background: var(--background-base);
+}
+
+/* Workspace tabs bar (between topbar and workspace body). */
+[data-component="workspace-tabs-bar"] {
+  border-bottom: 1px solid var(--border-base);
+  background: var(--background-base);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="workspace-tabs-bar"] [role="tab"] {
+  border-radius: var(--v110-radius-sm) var(--v110-radius-sm) 0 0;
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="workspace-tabs-bar"] [role="tab"][aria-selected="true"] {
+  background: var(--background-stronger);
+  color: var(--text-strong);
+}
+
+/* Composer (chat input region) — bottom anchor of every shell mode. */
+[data-v110="composer"],
+[data-component="session-composer-region"] {
+  border-top: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="composer"]:focus-within,
+[data-component="session-composer-region"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-v110="composer"] [data-composer-action],
+[data-component="session-composer-region"] [data-composer-action] {
+  min-width: var(--v110-target);
+  min-height: var(--v110-target);
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="composer"] [data-composer-action]:hover,
+[data-component="session-composer-region"] [data-composer-action]:hover {
+  background: var(--background-base);
+}
+
+[data-v110="composer"] [data-composer-input],
+[data-component="session-composer-region"] [data-composer-input] {
+  border-radius: var(--v110-radius-md);
+  border: 1px solid var(--border-base);
+  background: var(--background-base);
+  padding: var(--v110-shell-pad);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="composer"] [data-composer-input]:focus,
+[data-component="session-composer-region"] [data-composer-input]:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Composer context-meter (usage ring + tooltip). */
+[data-composer-context-meter] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-composer-context-meter]:hover {
+  background: var(--background-base);
+}
+
+/* Inspector frame (Explorer / Inspector / Execution tabs). */
+[data-v110="inspector-frame"] {
+  border-left: 1px solid var(--border-base);
+  background: var(--background-base);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="inspector-frame"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-v110="inspector-frame"] [role="tab"] {
+  border-radius: var(--v110-radius-sm) var(--v110-radius-sm) 0 0;
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="inspector-frame"] [role="tab"][aria-selected="true"] {
+  background: var(--background-stronger);
+  color: var(--text-strong);
+}
+
+/* Editor (center pane, code mode). */
+[data-component="editor-pane"] {
+  background: var(--background-base);
+}
+
+[data-component="editor-pane"] textarea,
+[data-component="editor-pane"] [contenteditable="true"] {
+  caret-color: var(--border-focus);
+}
+
+/* Code gutter + diagnostics markers. */
+[data-component="code-gutter"] {
+  border-right: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  color: var(--text-weak);
+}
+
+[data-component="diagnostic-marker"][data-severity="error"] {
+  background: var(--text-danger, var(--text-weak));
+}
+
+[data-component="diagnostic-marker"][data-severity="warning"] {
+  background: var(--text-warning, var(--text-weak));
+}
+
+/* Terminal panel (bottom of session). */
+[data-v110="terminal-panel"] {
+  border-top: 1px solid var(--border-base);
+  background: var(--background-strongest, var(--background-stronger));
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="terminal-panel"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-v110="terminal-panel"] [data-terminal-label] {
+  border-radius: var(--v110-radius-sm);
+  background: var(--background-base);
+  color: var(--text-weak);
+  padding: var(--v110-shell-pad);
+}
+
+/* File tree (Explorer inspector tab content). */
+[data-component="file-tree"] {
+  background: var(--background-base);
+}
+
+[data-component="file-tree"] [data-tree-row] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="file-tree"] [data-tree-row]:hover {
+  background: var(--background-stronger);
+}
+
+[data-component="file-tree"] [data-tree-row][aria-selected="true"] {
+  background: var(--background-stronger);
+  color: var(--text-strong);
+}
+
+/* Work surface (Work mode). */
+[data-v110="work-surface"] {
+  background: var(--background-base);
+}
+
+[data-v110="work-surface"] [data-work-tab] {
+  border-radius: var(--v110-radius-sm) var(--v110-radius-sm) 0 0;
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="work-surface"] [data-work-tab][aria-selected="true"] {
+  background: var(--background-stronger);
+  color: var(--text-strong);
+}
+
+[data-v110="work-surface"] [data-work-card] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="work-surface"] [data-work-card]:hover {
+  border-color: var(--border-focus);
+}
+
+/* Memory surface — vault, note, links. */
+[data-memory-vault],
+[data-memory-note-pane],
+[data-memory-links] {
+  background: var(--background-base);
+}
+
+[data-memory-vault] [data-memory-note] {
+  border-radius: var(--v110-radius-sm);
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-memory-vault] [data-memory-note]:hover {
+  background: var(--background-stronger);
+}
+
+[data-memory-note-pane] h1,
+[data-memory-note-pane] h2,
+[data-memory-note-pane] h3 {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+[data-memory-note-pane] code {
+  background: var(--background-stronger);
+  border-radius: var(--v110-radius-sm);
+  padding: 0 0.25em;
+}
+
+/* Toast region (shell-wide). */
+[data-component="toast-region"] {
+  padding: var(--v110-shell-pad);
+}
+
+[data-component="toast-region"] [data-toast] {
+  border-radius: var(--v110-radius-md);
+  border: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  box-shadow: 0 2px 8px var(--shadow-overlay, rgba(0, 0, 0, 0.2));
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="toast-region"] [data-toast][data-severity="error"] {
+  border-color: var(--text-danger, var(--border-focus));
+}
+
+[data-component="toast-region"] [data-toast][data-severity="success"] {
+  border-color: var(--text-success, var(--border-base));
+}
+
+/* Dialogs (settings, model, provider, etc.). */
+[role="dialog"] {
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  box-shadow: 0 4px 16px var(--shadow-overlay, rgba(0, 0, 0, 0.4));
+}
+
+[role="dialog"] [role="tab"] {
+  border-radius: var(--v110-radius-sm) var(--v110-radius-sm) 0 0;
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[role="dialog"] [role="tab"][aria-selected="true"] {
+  background: var(--background-base);
+  color: var(--text-strong);
+}
+
+/* Settings sub-surfaces (general, audio, providers, models, etc.). */
+[data-settings-pane] {
+  background: var(--background-base);
+  padding: var(--v110-shell-pad);
+}
+
+[data-settings-pane] [role="button"] {
+  border-radius: var(--v110-radius-sm);
+  min-height: var(--v110-target);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-settings-pane] [role="button"]:not(:disabled):hover {
+  background: var(--background-stronger);
+}
+
+[data-settings-pane] [role="switch"] {
+  border-radius: 999px;
+  background: var(--background-base);
+  border: 1px solid var(--border-base);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-settings-pane] [role="switch"][data-state="checked"] {
+  background: var(--accent-base, var(--border-focus));
+}
+
+/* Auth screens (sign-in, sign-up, OAuth callback). */
+[data-auth-pane] {
+  background: var(--background-base);
+  min-height: 100vh;
+}
+
+[data-auth-pane] [data-auth-card] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+}
+
+/* Workspace creation + initial bootstrap. */
+[data-workspace-create] {
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+}
+
+[data-workspace-create] [role="button"] {
+  border-radius: var(--v110-radius-sm);
+  min-height: var(--v110-target);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+/* Generic focus visibility — applies to every focusable in the v110 layer. */
+[data-v110-shell-frame] :focus-visible,
+[data-v110="shell-frame"] :focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Reduced motion override at the surface level (host of html-level rule). */
+@media (prefers-reduced-motion: reduce) {
+  [data-v110-shell-frame] *,
+  [data-v110="shell-frame"] *,
+  [data-v110="terminal"],
+  [data-v110="composer"],
+  [data-v110="mobile-nav"] *,
+  [data-component="workspace-tabs-bar"] *,
+  [data-component="sidebar-nav-desktop"] *,
+  [data-v110="inspector-frame"] *,
+  [data-v110="work-surface"] * {
+    transition: none;
+    animation: none;
+  }
+}
