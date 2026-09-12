@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { usePlatform } from "../context/platform"
+import { classify, side } from "@/tokens/viewport"
 
 export interface MobileLayout {
   isMobile: boolean
@@ -9,6 +10,18 @@ export interface MobileLayout {
   safeAreaBottom: number
 }
 
+export function resolveMobileLayout(width: number, height: number, isMobilePlatform: boolean): Pick<MobileLayout, "isMobile" | "isTablet" | "orientation"> {
+  const viewport = classify(width, height)
+  return {
+    // Native mobile keeps its dedicated compact controls. Desktop/web follows
+    // the same overlay authority as the shell, including tablet portrait and
+    // compact landscape, rather than its old independent 768px breakpoint.
+    isMobile: isMobilePlatform || side(viewport) === "overlay",
+    isTablet: viewport === "tablet-portrait",
+    orientation: width > height ? "landscape" : "portrait",
+  }
+}
+
 /**
  * Hook providing mobile layout information.
  * Returns reactive signals for responsive design.
@@ -16,27 +29,16 @@ export interface MobileLayout {
 export function useMobileLayout(): () => MobileLayout {
   const platform = usePlatform()
   const isMobilePlatform = platform.platform === "mobile"
-
-  const [layout, setLayout] = createSignal<MobileLayout>({
-    isMobile: isMobilePlatform || window.innerWidth < 768,
-    isTablet: window.innerWidth >= 768 && window.innerWidth < 1024,
-    orientation: window.innerWidth > window.innerHeight ? "landscape" : "portrait",
+  const readLayout = (): MobileLayout => ({
+    ...resolveMobileLayout(window.innerWidth, window.innerHeight, isMobilePlatform),
     safeAreaTop: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area-top") || "0"),
     safeAreaBottom: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area-bottom") || "0"),
   })
 
+  const [layout, setLayout] = createSignal<MobileLayout>(readLayout())
+
   onMount(() => {
-    const update = () => {
-      setLayout({
-        isMobile: isMobilePlatform || window.innerWidth < 768,
-        isTablet: window.innerWidth >= 768 && window.innerWidth < 1024,
-        orientation: window.innerWidth > window.innerHeight ? "landscape" : "portrait",
-        safeAreaTop: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area-top") || "0"),
-        safeAreaBottom: parseInt(
-          getComputedStyle(document.documentElement).getPropertyValue("--safe-area-bottom") || "0",
-        ),
-      })
-    }
+    const update = () => setLayout(readLayout())
 
     window.addEventListener("resize", update)
     // Also listen for orientation change (mobile)
