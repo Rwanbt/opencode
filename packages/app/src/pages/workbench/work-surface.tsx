@@ -12,6 +12,7 @@ import { base64Encode } from "@unifia/util/encode"
 import { useNavigate } from "@solidjs/router"
 import { WorkbenchChat } from "@/pages/workbench-chat"
 import { ConnectionBanner } from "@/pages/workbench/connection-banner"
+import { WorkBoardPanel } from "@/pages/workbench/work-board-panel"
 import { WorkHero } from "@/pages/workbench/work-hero"
 import { WorkNextActionPanel } from "@/pages/workbench/work-next-action-panel"
 import { WorkPlanPanel } from "@/pages/workbench/work-plan-panel"
@@ -22,10 +23,10 @@ import type { WorkView } from "@/pages/workbench/work-view"
 import { WorkViewSwitcher } from "@/pages/workbench/work-view-switcher"
 import { createMobileNavigationModel, WORK_V1_FUNCTIONS, type WorkFunction } from "@unifia/workbench-shell"
 
-// A5-03: views ship incrementally as their real content lands (Board in
-// A5-04, Timeline/Activity in A5-05) — a tab only appears once it opens onto
+// A5-03/04: views ship incrementally as their real content lands
+// (Timeline/Activity in A5-05) — a tab only appears once it opens onto
 // something real, never onto a placeholder.
-const AVAILABLE_WORK_VIEWS: readonly WorkView[] = ["overview", "tasks", "runs"]
+const AVAILABLE_WORK_VIEWS: readonly WorkView[] = ["overview", "tasks", "board", "runs"]
 
 const OPERATION_I18N_KEY: Record<WorkFunction, string> = {
   "workspace-switcher": "workbench.operations.workspaceSwitcher",
@@ -154,6 +155,9 @@ export function WorkSurface(): JSX.Element {
             </Show>
             <Show when={activeView() === "tasks"}>
               <WorkPlanPanel tasks={planTasks()} percent={planProgress().percent} canRead={team.capabilities().canRead} />
+            </Show>
+            <Show when={activeView() === "board"}>
+              <WorkBoardPanel tasks={planTasks()} />
             </Show>
             <Show when={activeView() === "runs"}>
               <WorkRunsPanel />
