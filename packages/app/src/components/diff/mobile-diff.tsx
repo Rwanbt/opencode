@@ -49,7 +49,7 @@ export function MobileDiff(props: MobileDiffProps) {
   }
 
   return (
-    <div class="flex flex-col h-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div class="flex flex-col h-full" data-v110="mobile-diff" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* File navigation header */}
       <div class="flex items-center justify-between px-3 py-2 border-b bg-surface">
         <button

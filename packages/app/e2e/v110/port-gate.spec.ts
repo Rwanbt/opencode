@@ -27,6 +27,11 @@ import { WAVE05 } from "./matrix"
 import { goto, keys, modes, overflow, panels, shot, track } from "./gate"
 
 test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
+  // A8-01 cartesian: 16 viewports in a single worker; bump timeout so
+  // the loop survives the warm-backend phase without the page/browser
+  // closing mid-test past roughly the 10th case (the failure mode
+  // documented in the file header).
+  test.setTimeout(180_000)
   test("every WAVE05 viewport renders without errors or overflow", async ({ page, gotoSession }) => {
     const t = track(page)
     await gotoSession()

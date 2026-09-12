@@ -1025,6 +1025,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      data-v110="terminal"
       {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
