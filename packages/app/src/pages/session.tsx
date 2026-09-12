@@ -64,6 +64,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { useViewMode } from "@/hooks/use-view-mode"
 import { useShell, useViewport } from "@/shell/v110-store"
 import { useArtifactLoader } from "@/pages/session/use-artifact-loader"
+import { usePromptInitializer } from "@/pages/session/use-prompt-initializer"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -96,15 +97,11 @@ export default function Page() {
 
   const { artifactDocument, artifactError } = useArtifactLoader(() => (searchParams as { artifact?: string }).artifact)
 
-  createEffect(() => {
-    if (!prompt.ready()) return
-    untrack(() => {
-      if (params.id) return
-      const text = searchParams.prompt
-      if (!text) return
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      setSearchParams({ ...searchParams, prompt: undefined })
-    })
+  usePromptInitializer({
+    prompt,
+    hasSessionId: () => Boolean(params.id),
+    searchParams: () => searchParams as { prompt?: string },
+    setSearchParams: (next) => setSearchParams(next as Parameters<typeof setSearchParams>[0]),
   })
 
   const [ui, setUi] = createStore({
