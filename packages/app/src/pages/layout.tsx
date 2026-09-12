@@ -61,6 +61,7 @@ import { SidebarContent } from "./layout/sidebar-shell"
 import { MobileNav } from "@/shell/v110-mobile-nav"
 import { useMode } from "@/context/mode"
 import { DialogDeleteWorkspace, DialogResetWorkspace } from "./layout/dialog-workspace"
+import { createWorkspaceSidebarContext } from "./layout/layout-contexts"
 import { createPrefetchSystem } from "./layout/prefetch"
 import { useUpdatePolling, useSDKNotificationToasts } from "./layout/notifications"
 import { createWorkspaceOps, createWorkspaceCreate } from "./layout/workspace-ops"
@@ -868,9 +869,9 @@ export default function Layout(props: ParentProps) {
     openTeam,
   })
 
-  const workspaceSidebarCtx: WorkspaceSidebarContext = {
+  const workspaceSidebarCtx: WorkspaceSidebarContext = createWorkspaceSidebarContext({
     currentDir,
-    navList: currentSessions,
+    currentSessions,
     sidebarExpanded,
     sidebarHovering,
     nav: () => state.nav,
@@ -904,7 +905,14 @@ export default function Layout(props: ParentProps) {
     setScrollContainerRef: (el, mobile) => {
       if (!mobile) scrollContainerRef = el
     },
-  }
+    store,
+    setStore: (key, directory, value) => setStore(key, directory, value),
+    resetWorkspace,
+    deleteWorkspace,
+    currentDirValue: currentDir(),
+    navigateWithSidebarReset,
+    dialog,
+  })
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
