@@ -10,7 +10,8 @@ const expanded = async (el: { getAttribute: (name: string) => Promise<string | n
 test("review panel can be toggled via keybind", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  const reviewPanel = page.locator("#review-panel")
+  // v110: review and file-tree share one InspectorFrame pane now (session-side-panel.tsx).
+  const reviewPanel = page.locator('[data-v110="inspector-content"]')
 
   const treeToggle = page.getByRole("button", { name: "Toggle file tree" }).first()
   await expect(treeToggle).toBeVisible()

@@ -18,12 +18,11 @@ interface SessionContextUsageProps {
 }
 
 function openSessionContext(args: {
-  view: ReturnType<ReturnType<typeof useLayout>["view"]>
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
-  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
-  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+  args.layout.inspector.setTab("inspector")
+  if (!args.layout.inspector.opened()) args.layout.inspector.open()
   args.tabs.open("context")
   args.tabs.setActive("context")
 }
@@ -34,7 +33,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const layout = useLayout()
   const language = useLanguage()
   const providers = useProviders()
-  const { params, tabs, view } = useSessionLayout()
+  const { params, tabs } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
   const tabState = createSessionTabs({
@@ -66,7 +65,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       return
     }
     openSessionContext({
-      view: view(),
       layout,
       tabs: tabs(),
     })

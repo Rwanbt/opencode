@@ -31,7 +31,7 @@ export interface SessionSyncEffectsDeps {
   loadVcs: (mode: VcsMode, force?: boolean) => Promise<void>
   refreshVcs: () => void
   activeFileTab: () => string | undefined
-  fileTreeTab: () => "changes" | "all" | "git" | "tasks"
+  explorerView: () => "changed" | "all"
   /** Returns whether the vcs diff for the given mode is already loaded */
   isVcsReady: (mode: VcsMode) => boolean
 }
@@ -51,7 +51,7 @@ export function createSessionSyncEffects(deps: SessionSyncEffectsDeps) {
     loadVcs,
     refreshVcs,
     activeFileTab,
-    fileTreeTab,
+    explorerView,
     isVcsReady,
   } = deps
 
@@ -238,10 +238,10 @@ export function createSessionSyncEffects(deps: SessionSyncEffectsDeps) {
   let treeDir: string | undefined
   createEffect(() => {
     const dir = sdk.directory
-    if (!layout.fileTree.opened()) return
+    if (!layout.inspector.opened() || layout.inspector.tab() !== "explorer") return
     if (sync.status === "loading") return
 
-    fileTreeTab()
+    explorerView()
     const refresh = treeDir !== dir
     treeDir = dir
     void (refresh ? file.tree.refresh("") : file.tree.list(""))

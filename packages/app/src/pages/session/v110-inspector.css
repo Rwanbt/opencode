@@ -1,0 +1,31 @@
+/* SPDX-License-Identifier: MIT */
+
+/* A3-03 v110 Inspector content layer.
+ *
+ * WHY this file exists: shell/v110-inspector-frame.tsx (A2, frame-only) lays
+ * its tablist and tabpanel out in plain block flow -- the aside itself is
+ * not a flex column, and its tabpanel div (#v110-inspector-panel) carries no
+ * sizing of its own. Every real content tree A3 mounts inside it (the file
+ * tree, the review/file-tabs Tabs, TaskPanel) is written the same way as
+ * every other panel in this app: `h-full`/`size-full` descendants that
+ * expect a definite-height flex ancestor to fill. Against a block, auto-
+ * height parent those percentages collapse to the content's own size (found
+ * by measuring: the tabpanel came out ~80px tall against an 813px-tall
+ * frame), which pushed "Expand all" and other controls outside the actually
+ * hit-testable area -- a real, reproduced click-interception bug, not a
+ * cosmetic gap. This file is the additive fix: geometry only, no colors, no
+ * component structure -- it does not touch shell/v110-inspector-frame.tsx.
+ */
+
+[data-v110="inspector-frame"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#v110-inspector-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

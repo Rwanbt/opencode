@@ -3,6 +3,7 @@
 @import '@/styles/v110.css';
 @import '@/shell/v110-shell.css';
 @import '@/pages/session/v110-chat.css';
+@import '@/pages/session/v110-inspector.css';
 
 @layer components {
   [data-component="getting-started"] {
