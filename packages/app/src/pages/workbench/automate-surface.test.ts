@@ -47,9 +47,9 @@ describe("C-PRE1-01 automate-surface smoke test (static)", () => {
     expect(source).toMatch(/approvalRequired/)
   })
 
-  test("still uses decodeFile on the file body before parsing", () => {
-    // The decoded file body is what we parse. Pin the call order:
-    // parseWorkflowDefinition(decodeFile(file)).
-    expect(source).toMatch(/parseWorkflowDefinition\(decodeFile\(/)
+  test("parses the editable draft and falls back to the decoded file body", () => {
+    // A restored local draft is the authoritative editor value. Before it
+    // exists, the decoded server file remains the safe fallback.
+    expect(source).toMatch(/parseWorkflowDefinition\(draftSource\(\) \|\| decodeFile\(file\)\)/)
   })
 })
