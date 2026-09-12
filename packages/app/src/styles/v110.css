@@ -55,9 +55,14 @@
   padding: var(--v110-shell-pad);
 }
 
-/* Separator handle geometry per axis (primitive primitives/separator). */
+/* Separator handle geometry per axis (primitive primitives/separator).
+ * The x-axis Separator sits inside an `absolute inset-y-0 w-0` wrapper, so
+ * it must inherit the wrapper's height (100%) to render a non-zero
+ * bounding box — the previous omission made the A8-02 separator check
+ * fail because the handle was 8px wide but 0px tall. */
 [data-component="separator"][data-axis="x"] {
   width: 8px;
+  height: 100%;
   cursor: col-resize;
 }
 
