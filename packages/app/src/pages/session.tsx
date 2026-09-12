@@ -26,6 +26,7 @@ import { createSessionScroll } from "@/pages/session/session-scroll"
 import { showToast } from "@unifia/ui/toast"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { SessionMobileTabsSection } from "@/pages/session/session-mobile-tabs"
 import { SessionTimelineSection } from "@/pages/session/session-timeline-section"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
@@ -915,28 +916,14 @@ export default function Page() {
       <div data-component="session-workspace" class="relative flex-1 min-h-0 flex flex-col">
         <div data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col shell:flex-row">
         <Show when={!isDesktop() && !!params.id}>
-          <Tabs value={store.mobileTab} class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="!w-1/2 !max-w-none"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                {language.t("session.tab.session")}
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="changes"
-                class="!w-1/2 !max-w-none !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
-              >
-                {hasReview()
-                  ? language.t("session.review.filesChanged", { count: reviewCount() })
-                  : language.t("session.review.change.other")}
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
+          <SessionMobileTabsSection
+            mobileTab={store.mobileTab}
+            hasReview={hasReview()}
+            reviewCount={reviewCount()}
+            language={language}
+            setMobileTab={(next) => setStore("mobileTab", next)}
+            visible={true}
+          />
         </Show>
 
         {/* Session panel */}
