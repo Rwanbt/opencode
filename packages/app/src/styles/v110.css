@@ -677,3 +677,256 @@ html[data-ui-animations="off"] *::after {
     animation: none;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Phase 41 — additional surfaces (auth, panels, dialogs secondaires)
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Auth screens (sign-in, sign-up, OAuth callback). */
+[data-auth-pane] {
+  background: var(--background-base);
+  min-height: 100vh;
+}
+
+[data-auth-pane] [data-auth-card] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+}
+
+[data-auth-pane] button {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-auth-pane] button:hover:not(:disabled) {
+  background: var(--background-base);
+}
+
+[data-auth-pane] input {
+  border-radius: var(--v110-radius-sm);
+  border: 1px solid var(--border-base);
+  background: var(--background-base);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-auth-pane] input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Error page. */
+[data-error-pane],
+[data-component="error-page"] {
+  background: var(--background-base);
+  min-height: 100vh;
+  padding: var(--v110-shell-pad);
+}
+
+[data-error-pane] [data-error-card] {
+  border: 1px solid var(--border-danger, var(--text-danger, var(--border-base)));
+  border-radius: var(--v110-radius-md);
+  background: var(--bg-danger, var(--background-stronger));
+  padding: var(--v110-shell-pad);
+}
+
+/* Connection banner (workspace offline, retry, etc.). */
+[data-component="connection-banner"] {
+  border-radius: var(--v110-radius-sm);
+  border: 1px solid var(--border-warning, var(--text-warning, var(--border-base)));
+  background: var(--bg-warning, var(--background-stronger));
+  padding: var(--v110-shell-pad);
+}
+
+[data-component="connection-banner"] [role="button"] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="connection-banner"] [role="button"]:hover {
+  background: var(--background-base);
+}
+
+/* Comment panel (right side in design mode, threaded comments). */
+[data-component="comment-panel"] {
+  background: var(--background-base);
+  border-left: 1px solid var(--border-base);
+}
+
+[data-component="comment-panel"] [data-comment-thread] {
+  border-radius: var(--v110-radius-md);
+  border: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+}
+
+[data-component="comment-panel"] [data-comment-thread]:hover {
+  border-color: var(--border-focus);
+}
+
+[data-component="comment-panel"] [data-comment-action] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="comment-panel"] [data-comment-action]:hover {
+  background: var(--background-base);
+}
+
+/* Source control panel. */
+[data-component="source-control"] {
+  background: var(--background-base);
+}
+
+[data-component="source-control"] [data-status] {
+  border-radius: var(--v110-radius-sm);
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="source-control"] [data-status="clean"] {
+  color: var(--text-success);
+}
+
+[data-component="source-control"] [data-status="dirty"] {
+  background: var(--bg-warning);
+  color: var(--text-warning);
+}
+
+[data-component="source-control"] [data-status="conflict"] {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+/* Model selector + team panel. */
+[data-component="model-selector"] {
+  background: var(--background-stronger);
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+}
+
+[data-component="model-selector"] button {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="model-selector"] button:hover:not(:disabled) {
+  background: var(--background-base);
+}
+
+[data-component="team-panel"] {
+  background: var(--background-base);
+}
+
+[data-component="team-panel"] [data-team-member] {
+  border-radius: var(--v110-radius-md);
+  border: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+}
+
+/* Workbench chat + thread (Work mode surfaces). */
+[data-component="workbench-chat"] {
+  background: var(--background-base);
+}
+
+[data-component="workbench-thread-list"] {
+  background: var(--background-stronger);
+  border-right: 1px solid var(--border-base);
+}
+
+[data-component="workbench-thread-list"] [data-thread-row] {
+  border-radius: var(--v110-radius-sm);
+  padding: var(--v110-shell-pad);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="workbench-thread-list"] [data-thread-row]:hover {
+  background: var(--background-base);
+}
+
+[data-component="workbench-thread-list"] [data-thread-row][aria-selected="true"] {
+  background: var(--background-base);
+  color: var(--text-strong);
+}
+
+[data-component="workbench-thread"] {
+  background: var(--background-base);
+}
+
+/* Design split (split between canvas and inspector in design mode). */
+[data-v110="design-split"] {
+  background: var(--border-base);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-split"]:hover,
+[data-v110="design-split"]:focus-within {
+  background: var(--border-focus);
+}
+
+/* Skill picker (modal). */
+[data-component="skill-picker"] {
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+}
+
+[data-component="skill-picker"] [data-skill-card] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  padding: var(--v110-shell-pad);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="skill-picker"] [data-skill-card]:hover {
+  border-color: var(--border-focus);
+}
+
+[data-component="skill-picker"] [data-skill-card][aria-selected="true"] {
+  border-color: var(--accent-strong);
+  background: var(--background-base);
+}
+
+/* Artifact preview + spec editor. */
+[data-component="artifact-preview"] {
+  background: var(--background-base);
+  border-radius: var(--v110-radius-md);
+}
+
+[data-component="design-spec-editor"] {
+  background: var(--background-base);
+}
+
+[data-component="design-spec-editor"] textarea {
+  border-radius: var(--v110-radius-sm);
+  border: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  padding: var(--v110-shell-pad);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-component="design-spec-editor"] textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Reduce motion override at the surface level (extended). */
+@media (prefers-reduced-motion: reduce) {
+  [data-auth-pane] *,
+  [data-component="connection-banner"] *,
+  [data-component="comment-panel"] *,
+  [data-component="source-control"] *,
+  [data-component="model-selector"] *,
+  [data-component="team-panel"] *,
+  [data-component="workbench-chat"] *,
+  [data-component="workbench-thread-list"] *,
+  [data-component="workbench-thread"] *,
+  [data-v110="design-split"] *,
+  [data-component="skill-picker"] *,
+  [data-component="artifact-preview"] *,
+  [data-component="design-spec-editor"] * {
+    transition: none;
+    animation: none;
+  }
+}

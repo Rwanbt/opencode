@@ -78,6 +78,19 @@ Les éléments suivants restent **hors scope de Phase 35** :
   design system les expose ailleurs, ils prennent ; sinon, ils
   tombent en fallback `--text-weak` (acceptable mais à raffiner).
 
+**Phase 38 update (commit `db703d0183`)** : les tokens sémantiques
+sont maintenant définis dans `tokens/semantic.ts` (testé 5/5 PASS)
+et enregistrés dans le bloc `:root { ... }` de `v110.css`. Le
+fallback `--text-weak` n'est plus nécessaire pour les surfaces
+couvertes par Phase 35. La dette "semantic tokens absents" est
+**fermée**. Restent à raffiner (post-Phase 38) :
+- `tokens/semantic.ts` n'est pas encore consommé par
+  `tokens/viewport.ts` — un futur ADR-039 pourrait unifier.
+- Les couleurs sémantiques actuelles sont des RGB triplets fixes ;
+  le design system theme (`@unifia/ui/theme`) n'est pas encore
+  consulté. Une fois le thème exposé, on basculera les valeurs sur
+  `var(--text-danger)` côté theme plutôt que RGB direct.
+
 ### Tests de vérification
 
 Pas de test Playwright snapshot ajouté (infra `@solidjs/testing-library`
