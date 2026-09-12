@@ -277,6 +277,35 @@ manuellement après 6 min d'inactivité au lieu de 60 s). Conclusion :
 le problème n'est pas le timeout mais le browser lui-même — flakiness
 documentée par l'auteur du test (lignes 11-20 du fichier), inchangée.
 
+### Phases 10-12 — Memory hover preview + cartesian split ⚠️ amélioration partielle
+
+Commit `2b1eaf7977` ajoute :
+
+- **Memory hover preview** (Phase 10) : `memoryExcerpt(body, max)` au
+  model, strippe le markdown inline, collapse les whitespace, tronque
+  avec une ellipse sur boundary de mot. 2 tests unitaires (stripping
+  + short-body passthrough). Wire dans `memory-panel.tsx` comme
+  attribut `title=` natif sur linked/backlinks/vault items (HTML
+  tooltip accessible, pas de nouveau composant).
+
+- **Cartesian split** (Phase 11) : `port-gate.spec.ts` découpé en
+  4 sous-tests de 4 viewports chacun (mission / wide / narrow /
+  landscape+tablet), chacun avec une `page` fixture fresh. Le
+  commentaire original (lignes 11-20) est conservé dans la nouvelle
+  structure pour expliciter le rationale.
+
+**Phase 12 verdict** : test 1/5 (mission viewports) a échoué après
+~3 min avec `Test timeout of 180000ms exceeded` + `Target page,
+context or browser has been closed` au même endroit qu'avant (gate.ts:97
+dans `keys()`). Le split a amélioré la situation (le browser meurt
+maintenant après ~4 viewports au lieu de ~10) mais le problème de
+fond (mémoire browser Chromium) reste non résolu — relève de la
+stabilisation CI Playwright (workers multiples, isolation browser
+par test, screenshots conditionnels), pas du produit.
+
+Tests restants 2-5 non exécutés — abort manuel après le test 1 pour
+éviter de consumer 10+ min supplémentaires sans nouveau signal.
+
 ### Phase 8 — Port Gate post-toutes-phases ✅ strict, ⚠️ cartesian
 
 | Run | Verdict |
@@ -301,7 +330,7 @@ Ce rapport est commité en tant que dernier artifact de la session.
 | **Couverture fonctionnelle A1-A8** | 8.5/10 | **9/10** | Tous les merges consolidés, MVP A4/A6 livrés |
 | **Contrat A2 respecté** | 6/10 | **9/10** | 5/5 invariants A2 testés OK |
 | **Tests passants (strict)** | 6/10 | **9/10** | 5/5 stable post-toutes-phases |
-| **Tests passants (cartesian)** | 0/10 | **0/10** | infra hang persiste malgré timeout bump |
+| **Tests passants (cartesian)** | 0/10 | **2/10** | split 4×4 a amélioré (browser meurt après ~4 viewports au lieu de ~10) mais hang fondamental persiste |
 | **Memory surface** | 5/10 | **9/10** | était déjà à 95 %, audit corrigé |
 | **OWNERSHIP cohérence** | 5/10 | **9/10** | `new-ui` acté branche canonique |
 | **A4 Code markers** | 5/10 | **7/10** | 3 markers, refonte visuelle toujours absente |
