@@ -47,6 +47,16 @@ export function linkedMemoryNotes(
   return notes.filter((note) => normalized.has(memoryTitle(note.path).toLocaleLowerCase()))
 }
 
+export function memoryBacklinks(
+  selected: MemoryNoteSummary,
+  documents: readonly MemoryNoteDocument[],
+): readonly MemoryNoteSummary[] {
+  const target = memoryTitle(selected.path).replace(/\.md$/i, "").toLocaleLowerCase()
+  return documents
+    .filter((document) => document.path !== selected.path && document.links.some((link) => link.replace(/\.md$/i, "").toLocaleLowerCase() === target))
+    .map(({ path, title }) => ({ path, title }))
+}
+
 /** A deterministic local graph: the selected note and its resolved neighbours. */
 export function localMemoryGraph(
   selected: MemoryNoteSummary,

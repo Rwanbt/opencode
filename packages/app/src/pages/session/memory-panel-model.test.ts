@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote } from "./memory-panel-model"
+import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryBacklinks, memoryTitle, parseMemoryNote } from "./memory-panel-model"
 
 describe("Memory inspector model", () => {
   test("only exposes Markdown notes from the configured workspace vault", () => {
@@ -20,6 +20,12 @@ describe("Memory inspector model", () => {
   test("resolves links by note identity, independent of the extension", () => {
     const notes = [{ path: ".unifia/memory/Vision.md", title: memoryTitle(".unifia/memory/Vision.md") }]
     expect(linkedMemoryNotes(["Vision.md"], notes)).toEqual(notes)
+  })
+
+  test("finds backlinks from parsed notes without using a second index", () => {
+    const target = { path: ".unifia/memory/Vision.md", title: "Vision" }
+    const architecture = parseMemoryNote(".unifia/memory/Architecture.md", "# Architecture\n[[Vision]]")
+    expect(memoryBacklinks(target, [architecture])).toEqual([{ path: architecture.path, title: "Architecture" }])
   })
 
   test("keeps a local graph stable around the selected note", () => {

@@ -7,7 +7,7 @@ import { Markdown } from "@unifia/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
-import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryTitle, parseMemoryNote, type MemoryNoteDocument } from "./memory-panel-model"
+import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryBacklinks, memoryTitle, parseMemoryNote, type MemoryNoteDocument } from "./memory-panel-model"
 
 const MEMORY_ROOT = ".unifia/memory"
 
@@ -67,6 +67,22 @@ export function MemoryPanel(): JSX.Element {
     return path && file ? parseMemoryNote(path, file.content) : undefined
   })
   const linked = createMemo(() => note() ? linkedMemoryNotes(note()!.links, notes()) : [])
+  const backlinksQueryOptions = createMemo(() => {
+    const selected = selectedPath()
+    const candidates = notes()
+    return {
+      queryKey: ["memory-backlinks", sdk.directory, selected ?? "", candidates.map((candidate) => candidate.path).join("|")] as const,
+      enabled: !!selected && candidates.length > 0,
+      queryFn: async () => {
+        const documents = await Promise.all(candidates.map(async (candidate) => {
+          const result = await sdk.client.file.readRaw({ path: candidate.path })
+          return result.data ? parseMemoryNote(candidate.path, result.data.content) : undefined
+        }))
+        return memoryBacklinks({ path: selected!, title: memoryTitle(selected!) }, documents.filter((document): document is MemoryNoteDocument => !!document))
+      },
+    }
+  })
+  const backlinks = createQuery(backlinksQueryOptions)
   const graph = createMemo(() => note() ? localMemoryGraph(note()!, linked()) : [])
   createEffect(() => {
     const content = noteFile.data?.content
@@ -116,7 +132,7 @@ export function MemoryPanel(): JSX.Element {
         </article>
         <aside class="min-h-0 overflow-hidden rounded-lg border border-border-base bg-background-stronger" data-memory-links>
           <header class="border-b border-border-base p-3"><h2 class="text-14-medium">Links &amp; context</h2><div class="mt-2 flex gap-1"><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": contextView() === "links" }} onClick={() => setContextView("links")}>Links</button><button type="button" class="rounded px-2 py-1 text-11-medium" classList={{ "bg-background-base": contextView() === "graph" }} onClick={() => setContextView("graph")}>Local graph</button></div></header>
-          <div class="overflow-y-auto p-3"><Show when={contextView() === "links"} fallback={<Show when={graph().length > 0} fallback={<p class="text-12-regular text-text-weak">Choose a note to inspect its graph.</p>}><svg class="h-56 w-full" viewBox="0 0 100 100" role="img" aria-label="Local memory graph"> <For each={graph().slice(1)}>{(node) => <line x1="50" y1="50" x2={node.x} y2={node.y} stroke="currentColor" opacity="0.35" />}</For><For each={graph()}>{(node, index) => <g class="cursor-pointer" role="button" tabindex="0" onClick={() => setSelectedPath(node.path)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPath(node.path) }}><circle cx={node.x} cy={node.y} r={index() === 0 ? 8 : 6} class={index() === 0 ? "fill-accent-base" : "fill-background-strong"} stroke="currentColor" /><text x={node.x} y={node.y + 13} text-anchor="middle" class="fill-text-base text-[5px]">{node.title.slice(0, 16)}</text></g>}</For></svg></Show>}><Show when={note() && linked().length > 0} fallback={<p class="text-12-regular text-text-weak">No resolved links for this note.</p>}><For each={linked()}>{(item) => <button type="button" class="mb-2 block w-full rounded border border-border-base p-2 text-left text-12-regular hover:bg-background-base" onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For></Show></Show></div>
+          <div class="overflow-y-auto p-3"><Show when={contextView() === "links"} fallback={<Show when={graph().length > 0} fallback={<p class="text-12-regular text-text-weak">Choose a note to inspect its graph.</p>}><svg class="h-56 w-full" viewBox="0 0 100 100" role="img" aria-label="Local memory graph"> <For each={graph().slice(1)}>{(node) => <line x1="50" y1="50" x2={node.x} y2={node.y} stroke="currentColor" opacity="0.35" />}</For><For each={graph()}>{(node, index) => <g class="cursor-pointer" role="button" tabindex="0" onClick={() => setSelectedPath(node.path)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPath(node.path) }}><circle cx={node.x} cy={node.y} r={index() === 0 ? 8 : 6} class={index() === 0 ? "fill-accent-base" : "fill-background-strong"} stroke="currentColor" /><text x={node.x} y={node.y + 13} text-anchor="middle" class="fill-text-base text-[5px]">{node.title.slice(0, 16)}</text></g>}</For></svg></Show>}><Show when={note() && linked().length > 0} fallback={<p class="text-12-regular text-text-weak">No resolved links for this note.</p>}><For each={linked()}>{(item) => <button type="button" class="mb-2 block w-full rounded border border-border-base p-2 text-left text-12-regular hover:bg-background-base" onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For></Show><Show when={backlinks.data?.length}><h3 class="mt-4 text-12-medium">Backlinks</h3><For each={backlinks.data}>{(item) => <button type="button" class="mt-2 block w-full rounded border border-border-base p-2 text-left text-12-regular hover:bg-background-base" onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For></Show></Show></div>
         </aside>
       </div>
     </section>
