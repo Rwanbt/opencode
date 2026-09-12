@@ -7,6 +7,7 @@ import { Markdown } from "@unifia/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { workbenchQueryKey } from "@/context/workbench/query-keys"
+import { ConnectionBanner } from "@/pages/workbench/connection-banner"
 import { isMemoryMarkdown, linkedMemoryNotes, localMemoryGraph, memoryBacklinks, memoryTitle, parseMemoryNote, type MemoryNoteDocument } from "./memory-panel-model"
 
 const MEMORY_ROOT = ".unifia/memory"
@@ -112,14 +113,15 @@ export function MemoryPanel(): JSX.Element {
   }
 
   return (
-    <section class="size-full min-w-0 bg-background-base p-3" data-v110="memory-panel">
-      <div class="grid size-full min-h-0 grid-cols-[minmax(180px,0.8fr)_minmax(0,1.7fr)_minmax(180px,0.8fr)] gap-3 max-[900px]:grid-cols-[minmax(160px,0.75fr)_minmax(0,1.25fr)] max-[900px]:[&>[data-memory-links]]:hidden max-[620px]:grid-cols-1 max-[620px]:[&>[data-memory-vault]]:hidden">
+    <section class="flex size-full min-w-0 flex-col gap-2 bg-background-base p-3" data-v110="memory-panel">
+      <ConnectionBanner dataAttr="memory-connection" dataRetryAttr="memory-retry" />
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(180px,0.8fr)_minmax(0,1.7fr)_minmax(180px,0.8fr)] gap-3 max-[900px]:grid-cols-[minmax(160px,0.75fr)_minmax(0,1.25fr)] max-[900px]:[&>[data-memory-links]]:hidden max-[620px]:grid-cols-1 max-[620px]:[&>[data-memory-vault]]:hidden">
         <aside class="min-h-0 overflow-hidden rounded-lg border border-border-base bg-background-stronger" data-memory-vault>
           <div class="border-b border-border-base p-3"><h2 class="text-14-medium">Vault</h2><input class="mt-2 w-full rounded border border-border-base bg-background-base px-2 py-1 text-12-regular" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} aria-label="Search memory notes" placeholder="Search notes" /></div>
           <div class="h-[calc(100%-76px)] overflow-y-auto p-2">
             <Show when={files.error}><p class="text-12-regular text-text-danger">Unable to load the workspace vault.</p></Show>
             <For each={visibleNotes()}>{(item) => <button type="button" class="mb-1 block w-full rounded px-2 py-2 text-left text-12-regular hover:bg-background-base" classList={{ "bg-background-base text-text-strong": selectedPath() === item.path }} data-memory-note={item.path} onClick={() => setSelectedPath(item.path)}>{item.title}</button>}</For>
-            <Show when={!files.isLoading && !files.error && notes().length === 0}><p class="p-2 text-12-regular text-text-weak">No Markdown note in {MEMORY_ROOT}.</p></Show>
+            <Show when={!!connection() && !files.isLoading && !files.error && notes().length === 0}><p class="p-2 text-12-regular text-text-weak">No Markdown note in {MEMORY_ROOT}.</p></Show>
           </div>
         </aside>
         <article class="min-h-0 overflow-hidden rounded-lg border border-border-base bg-background-stronger" data-memory-note-pane>

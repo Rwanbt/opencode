@@ -4,7 +4,7 @@ import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 
-export function ConnectionBanner(props: { dataAttr: "workbench-connection" | "design-connection" | "automate-connection"; dataRetryAttr: "workbench-retry" | "design-retry" | "automate-retry" }): JSX.Element {
+export function ConnectionBanner(props: { dataAttr: "workbench-connection" | "design-connection" | "automate-connection" | "memory-connection"; dataRetryAttr: "workbench-retry" | "design-retry" | "automate-retry" | "memory-retry" }): JSX.Element {
   const language = useLanguage()
   const workbench = useWorkspaceWorkbench()
   const t = language.t
@@ -46,6 +46,7 @@ export function ConnectionBanner(props: { dataAttr: "workbench-connection" | "de
         data-workbench-connection={props.dataAttr === "workbench-connection" ? phase() : undefined}
         data-design-connection={props.dataAttr === "design-connection" ? phase() : undefined}
         data-automate-connection={props.dataAttr === "automate-connection" ? phase() : undefined}
+        data-memory-connection={props.dataAttr === "memory-connection" ? phase() : undefined}
         class="text-12-regular text-text-weak"
       >
         {phaseText()}
@@ -67,6 +68,7 @@ export function ConnectionBanner(props: { dataAttr: "workbench-connection" | "de
           data-workbench-retry={props.dataRetryAttr === "workbench-retry" ? "" : undefined}
           data-design-retry={props.dataRetryAttr === "design-retry" ? "" : undefined}
           data-automate-retry={props.dataRetryAttr === "automate-retry" ? "" : undefined}
+          data-memory-retry={props.dataRetryAttr === "memory-retry" ? "" : undefined}
           class="rounded border border-border-base px-3 py-2 text-12-medium"
           aria-label={t("workbench.connection.retryHint")}
           onClick={() => workbench.retryConnection()}
