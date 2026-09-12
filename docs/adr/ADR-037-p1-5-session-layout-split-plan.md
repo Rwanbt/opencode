@@ -3,11 +3,48 @@
 
 # ADR-037 — P1-5 split plan for `session.tsx` (1011 LOC) + `layout.tsx` (1069 LOC)
 
-> **Statut** : PARTIAL (2026-09-12, 2/5 vagues livrees)
+> **Statut** : PARTIAL (2026-09-12, Vagues 1-3 livrees, Vague 5 PARTIAL via factories)
 > **Progression** :
-> - session.tsx : 1011 -> 993 LOC (-18, Vagues 1+2 livrees)
-> - layout.tsx : 1069 LOC (intact, Vague 5 pas livree)
-> - **Reste** : ~180 LOC a extraire (Vagues 3, 4, 5) — plan ci-dessous, sessions dediees
+> - session.tsx : 1011 -> 992 LOC (-19, Vagues 1+2+3 livrees)
+> - layout.tsx : 1069 -> 1074 LOC (+5 call sites, Vague 5 context factories extraites)
+> - layout-contexts.ts (NEW, 196 LOC) : 3 factories type-safe
+> - **Reste** : Vague 4 (composer + sidebar section) + Vague 5 JSX orchestrateur (return block 70 lignes)
+
+## 2026-09-12 update — Vague 5 partial shipped
+
+Phase 49 (commit `886b5a0d6b`) : `createWorkspaceSidebarContext(deps)`
+extracted to `layout-contexts.ts`. The 37-line inline `workspaceSidebarCtx`
+object literal in layout.tsx is now a single factory call.
+
+Phase 50 (commit `5d269bcd28`) : `createProjectSidebarContext(deps)` +
+`createSidebarPanelContext(deps)` extracted to `layout-contexts.ts`. The
+inline `projectSidebarCtx` (35 LOC) and `sidebarPanelCtx` (23 LOC)
+replaced by factory calls.
+
+**Pattern** : each factory takes its closure dependencies explicitly
+as parameters (state slice wrapped in accessors, aim, layout, dialog,
+store, drag handlers). The factory return type uses the source type
+from `sidebar-project.tsx` and `sidebar-panel.tsx`.
+
+**Trade-off** : layout.tsx stayed roughly flat (1069 -> 1074) because
+the factory call sites pass ~20 deps each. Total layout + contexts
+went from 1069 to 1270 LOC. Semantic win: data structure testable in
+isolation, stable home for future context additions.
+
+**Remaining Vague 5 slice** : the JSX orchestrator (return block,
+~70 lines, TitlebarSlotsProvider + hover overlays + DebugBar +
+Toast.Region) is not extracted yet. Extracting requires converting
+inline callbacks (handleDragStart, onWorkspaceDragStart, projectOverlay,
+sidebarContent) to either factory functions or a Solid Context
+provider. Both are significant refactors outside the current session.
+
+**Remaining Vague 4** : composer + sidebar section extraction (~200
+LOC). Same pattern as Vague 3 (export ComposerProps, create
+SessionComposerSection wrapper).
+
+**Status** : strict gate 5/5 PASS stable post-Phase 50 (50.4 s).
+Type errors fixed: 6+ iterations on `sessionProps` shape, `hoverProject`
+Accessor vs thunk, `DragEvent` vs `MouseEvent` vs `unknown`.
 > **Source** : A1-CONTRACT §4 P1-5 ("`session.tsx` (1096 lignes) /
 >   `layout.tsx` (1163 lignes) > budget ; PR > 400 LOC doit être split"),
 >   QA/PORT-GATE-CERTIFICATION-2026-09-12.md §7 Wave 4.
