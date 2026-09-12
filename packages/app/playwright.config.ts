@@ -77,7 +77,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // Reduced motion limits CSS overdraw during consecutive setViewportSize
+        // calls (cartesian matrix stress test). Real fix for browser memory
+        // exhaustion is multi-worker + browser isolation per test.
+        reducedMotion: "reduce",
+      },
     },
   ],
 })

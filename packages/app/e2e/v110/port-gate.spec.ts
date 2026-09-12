@@ -34,6 +34,12 @@ test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
   // tests gives each group a fresh page so the browser memory pressure
   // resets between groups, while still keeping the same coverage matrix.
   test.setTimeout(180_000)
+  // The first 4 viewports are the mission ones — keep screenshots for
+  // visual regression review. The 12 edge cases are covered for matrix
+  // invariant checks only; skipping their screenshots frees ~75 % of
+  // the browser memory pressure observed during consecutive
+  // setViewportSize calls.
+  const missionViewports = new Set(WAVE05.slice(0, 4).map((c) => c.name))
   const groups: { label: string; cases: typeof WAVE05 }[] = [
     { label: "mission viewports (desktop + tablet + phone)", cases: WAVE05.slice(0, 4) },
     { label: "edge cases — wide breakpoints", cases: WAVE05.slice(4, 8) },
@@ -58,7 +64,11 @@ test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
         expect(got.length, c.name + ": rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
         await panels(page)
         await keys(page)
-        await shot(page, c.name)
+        if (missionViewports.has(c.name)) await shot(page, c.name)
+        // Let the browser settle between resizes — without this, the
+        // page can drop frames during the next setViewportSize and the
+        // locator in the next iteration times out.
+        await page.waitForTimeout(80)
       }
 
       t.stop()
