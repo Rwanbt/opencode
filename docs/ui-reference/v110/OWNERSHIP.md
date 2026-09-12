@@ -1,7 +1,17 @@
 ﻿# OWNERSHIP — portage v110 (read everywhere, write only in owned surfaces)
 
-Integration: feat/ui-v110-port (depuis work-design @ d212bc80).
-Interdiction: ne jamais merger directement vers work-design/dev/main. PR courtes vers feat/ui-v110-port, ~400 LOC logiques.
+Integration: **new-ui** (depuis work-design @ d212bc8098). Le worktree
+`_a7-automate-memory` est l'environnement de developpement actif (un seul
+worktree dedie, pas de fork supplementaire).
+Interdiction: ne jamais merger directement vers work-design/dev/main. PR
+courtes vers new-ui, ~400 LOC logiques. Promotion vers work-design via
+fast-forward depuis new-ui une fois la certification Port Gate obtenue.
+
+Historique: feat/ui-v110-port (PR #72-#85) servait initialement de
+branche d'integration ; la complexite operationnelle (worktree dedie,
+flakiness de la certification en parallele) a conduit a la promotion de
+new-ui au rang de branche d'integration canonique le 2026-09-12. Cette
+decision est documentee dans QA/PORT-GATE-CERTIFICATION-2026-09-12.md.
 
 ## A1 — FOUNDATION / ARCHITECTURE UI (branche ui-v110/a1-foundation)
 
