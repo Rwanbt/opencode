@@ -16,7 +16,7 @@ export function createMenu(deps: Deps) {
 
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: "OpenCode",
+      label: "Unifia",
       submenu: [
         { role: "about" },
         {
@@ -120,18 +120,18 @@ export function createMenu(deps: Deps) {
     {
       label: "Help",
       submenu: [
-        { label: "OpenCode Documentation", click: () => shell.openExternal("https://opencode.ai/docs") },
-        { label: "Support Forum", click: () => shell.openExternal("https://github.com/Rwanbt/opencode") },
+        { label: "Unifia Documentation", click: () => shell.openExternal("https://github.com/Rwanbt/unifia#readme") },
+        { label: "Support Forum", click: () => shell.openExternal("https://github.com/Rwanbt/unifia") },
         { type: "separator" },
         { type: "separator" },
         {
           label: "Share Feedback",
           click: () =>
-            shell.openExternal("https://github.com/Rwanbt/opencode/issues/new?template=feature-request.yml"),
+          shell.openExternal("https://github.com/Rwanbt/unifia/issues/new?template=feature-request.yml"),
         },
         {
           label: "Report a Bug",
-          click: () => shell.openExternal("https://github.com/Rwanbt/opencode/issues/new?template=bug-report.yml"),
+          click: () => shell.openExternal("https://github.com/Rwanbt/unifia/issues/new?template=bug-report.yml"),
         },
       ],
     },

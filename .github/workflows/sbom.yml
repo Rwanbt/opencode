@@ -25,8 +25,8 @@ jobs:
         with:
           path: .
           format: spdx-json
-          artifact-name: opencode-sbom.spdx.json
-          output-file: opencode-sbom.spdx.json
+          artifact-name: unifia-sbom.spdx.json
+          output-file: unifia-sbom.spdx.json
           upload-artifact: true
           upload-release-assets: false
 
@@ -35,7 +35,7 @@ jobs:
         with:
           path: .
           format: cyclonedx-json
-          artifact-name: opencode-sbom.cyclonedx.json
-          output-file: opencode-sbom.cyclonedx.json
+          artifact-name: unifia-sbom.cyclonedx.json
+          output-file: unifia-sbom.cyclonedx.json
           upload-artifact: true
           upload-release-assets: false

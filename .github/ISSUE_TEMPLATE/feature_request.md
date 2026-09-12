@@ -1,23 +1,43 @@
----
 name: Feature Request
-about: Suggest a new feature or enhancement
-title: "[Feature] "
-labels: enhancement
-assignees: ''
----
 
-## Problem / Motivation
+**À propos de Unifia Workbench**
 
-What problem does this feature solve? What's the current limitation?
+- **Version** : `unifia --version`
 
-## Proposed Solution
+## Description
 
-Describe the feature you'd like. Be as specific as possible.
+<!-- Décrire la fonctionnalité souhaitée -->
 
-## Alternatives Considered
+## Use case
 
-Other approaches you've thought of and why you rejected them.
+<!-- Quel problème cela résout-il ? Qui en bénéficie ? -->
 
-## Additional Context
+## Solution proposée
 
-Any mockups, references, or prior art that might help.
+<!-- Comment voyez-vous la solution ? -->
+
+## Alternatives considérées
+
+<!-- Quelles autres approches avez-vous envisagées ? -->
+
+## Liens
+
+- **Plan V3** : si la feature est dans la roadmap, mentionner la phase
+- **ADRs** : si des décisions architecturales sont impactées
+- **Discussion** : lien vers une discussion préalable
+
+## Acceptance criteria
+
+<!-- Comment savoir si la feature est terminée ? -->
+
+- [ ] AC-1 : 
+- [ ] AC-2 : 
+
+## Effort estimé
+
+<!-- Optionnel : rough estimate -->
+
+- [ ] Petit (< 1 jour)
+- [ ] Moyen (1-5 jours)
+- [ ] Grand (> 5 jours)
+- [ ] Épique (> 1 mois)

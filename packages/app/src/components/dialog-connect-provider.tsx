@@ -1,14 +1,14 @@
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "../types/sdk-shim"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { List, type ListRef } from "@opencode-ai/ui/list"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@unifia/ui/button"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { Dialog } from "@unifia/ui/dialog"
+import { Icon } from "@unifia/ui/icon"
+import { IconButton } from "@unifia/ui/icon-button"
+import { List, type ListRef } from "@unifia/ui/list"
+import { ProviderIcon } from "@unifia/ui/provider-icon"
+import { Spinner } from "@unifia/ui/spinner"
+import { TextField } from "@unifia/ui/text-field"
+import { showToast } from "@unifia/ui/toast"
 import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
@@ -333,7 +333,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   // Auto-finalisation on OAuth callback deep link. When the user authorises
   // the provider in their browser, the provider redirects to
-  // `opencode://oauth/callback?providerID=...&code=...&state=...`. The
+  // `unifia://oauth/callback?providerID=...&code=...&state=...`. The
   // layout dispatches a CustomEvent on `window`; if the dialog is still
   // open and the providerID matches, we finish the token exchange without
   // the user copy-pasting a code.
@@ -457,7 +457,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     return (
       <div class="flex flex-col gap-6">
         <Switch>
-          <Match when={provider().id === "opencode"}>
+          <Match when={provider().id === "unifia"}>
             <div class="flex flex-col gap-4">
               <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line1")}</div>
               <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
@@ -515,6 +515,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
+      if (store.methodIndex === undefined) return
       const result = await globalSDK.client.provider.oauth
         .callback({
           providerID: props.provider,
@@ -568,6 +569,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
+        if (store.methodIndex === undefined) return
         const result = await globalSDK.client.provider.oauth
           .callback({
             providerID: props.provider,

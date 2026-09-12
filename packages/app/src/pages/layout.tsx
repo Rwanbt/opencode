@@ -15,30 +15,34 @@ import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { ResizeHandle } from "@unifia/ui/resize-handle"
 import type { Session } from "../types/sdk-shim"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce } from "solid-js/store"
+import { TitlebarSlotsProvider } from "@/context/titlebar-slots"
 
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { showToast, Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast } from "@unifia/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@unifia/util/path"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { useTheme, type ColorScheme } from "@unifia/ui/theme/context"
 import { useCommand } from "@/context/command"
+import { useWorkspaceTabs } from "@/context/workspace-tabs-provider"
 import { getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
+import { e2eActive } from "@/testing/active"
 import { Titlebar } from "@/components/titlebar"
+import { WorkspaceTabsBar } from "@/components/workspace-tabs-bar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import {
@@ -54,6 +58,7 @@ import type {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarPanel, type SidebarPanelContext } from "./layout/sidebar-panel"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { useMode } from "@/context/mode"
 import { DialogDeleteWorkspace, DialogResetWorkspace } from "./layout/dialog-workspace"
 import { createPrefetchSystem } from "./layout/prefetch"
 import { useUpdatePolling, useSDKNotificationToasts } from "./layout/notifications"
@@ -94,6 +99,7 @@ export default function Layout(props: ParentProps) {
   const permission = usePermission()
   const navigate = useNavigate()
   setNavigate(navigate)
+  const workspaceTabs = useWorkspaceTabs()
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
@@ -535,6 +541,14 @@ export default function Layout(props: ParentProps) {
     })
   }
 
+  function openTeam() {
+    const run = ++dialogRef.run
+    void import("@/components/dialog-team").then((x) => {
+      if (dialogRef.dead || dialogRef.run !== run) return
+      dialog.show(() => <x.DialogTeam />)
+    })
+  }
+
   function projectRoot(directory: string) {
     const key = workspaceKey(directory)
     const project = layout.projects
@@ -577,6 +591,7 @@ export default function Layout(props: ParentProps) {
     navigateWithSidebarReset,
     currentProject,
     currentDir,
+    activeMode: useMode().active,
     prefetchSession,
     warm,
     currentSessions,
@@ -834,6 +849,8 @@ export default function Layout(props: ParentProps) {
     availableThemeEntries,
     colorSchemeOrder,
     colorSchemeLabel,
+    workspaceTabs,
+    navigateToHref: navigate,
     chooseProject,
     navigateProjectByOffset,
     navigateSessionByOffset,
@@ -847,6 +864,7 @@ export default function Layout(props: ParentProps) {
     connectProvider,
     openServer,
     openSettings,
+    openTeam,
   })
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
@@ -949,6 +967,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const projects = () => layout.projects.list()
+  const mode = useMode()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
@@ -970,16 +989,23 @@ export default function Layout(props: ParentProps) {
       settingsKeybind={() => command.keybind("settings.open")}
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openLink("https://github.com/Rwanbt/opencode")}
+      onOpenHelp={() => platform.openLink("https://github.com/Rwanbt/unifia")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} ctx={sidebarPanelCtx} mobile /> : <SidebarPanel project={currentProject} ctx={sidebarPanelCtx} merged />
       }
+      modes={mode.modes}
+      activeMode={mode.active}
+      onMode={mode.select}
+      modesLabel={language.t("workbench.modes.railLabel")}
+      modeLabel={(m) => language.t(`workbench.modes.${m}`)}
     />
   )
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <TitlebarSlotsProvider>
+      <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
+      <WorkspaceTabsBar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
@@ -1072,6 +1098,7 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <main
+                data-workbench-mode={mode.active()}
                 classList={{
                   "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
                 }}
@@ -1121,9 +1148,16 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && <DebugBar />}
+        {/* Not rendered under the e2e harness. The bar is `fixed bottom-3
+            right-3 z-50 pointer-events-auto` and 324px wide, which puts it
+            squarely on top of the composer's Send button: Playwright logged
+            "208 × retrying click action" against it, so every fallback click
+            on Send burned the whole test timeout. It is a dev-only telemetry
+            HUD, never shipped, and nothing in the suite exercises it. */}
+        {import.meta.env.DEV && !e2eActive() && <DebugBar />}
       </div>
       <Toast.Region />
-    </div>
+      </div>
+    </TitlebarSlotsProvider>
   )
 }

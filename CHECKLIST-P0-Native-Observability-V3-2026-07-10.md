@@ -1,4 +1,4 @@
-# CHECKLIST-P0 — Observabilité native OpenCode V3
+# CHECKLIST-P0 — Observabilité native Unifia V3
 
 Cette checklist est le gate avant le premier commit applicatif durable de Phase 1.
 

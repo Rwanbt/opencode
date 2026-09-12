@@ -1,0 +1,17 @@
+card_id: TEAM-E03
+base_sha: efe059b5e7675f88c9d5cd0d9a2411e5ef9c12ec
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/graph-validator.ts
+  - packages/unifia/docs/team/scope-manifest/TEAM-E03.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/intake.ts
+  - packages/unifia/src/team/task-planner.ts
+  - packages/unifia/src/team/checkpoint-manager.ts
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/model-intelligence/**
+  - main
+  - dev
+  - opti-ui

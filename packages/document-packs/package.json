@@ -1,0 +1,11 @@
+{
+  "name": "@unifia/document-packs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts", "./zip": "./src/zip.ts" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "bun test/packs.test.ts" },
+  "dependencies": { "@unifia/artifact-runtime": "workspace:*" },
+  "devDependencies": { "@types/bun": "catalog:", "@types/node": "catalog:", "typescript": "catalog:" }
+}

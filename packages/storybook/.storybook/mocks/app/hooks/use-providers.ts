@@ -1,3 +1,7 @@
+// Mirrors src/hooks/use-providers.ts's export of the same name — components
+// like team-model-selector.tsx import it directly (not just via useProviders()).
+export const popularProviders = ["anthropic"]
+
 const model_id = "claude-3-7-sonnet"
 
 const provider = {

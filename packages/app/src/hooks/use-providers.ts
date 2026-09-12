@@ -5,8 +5,8 @@ import { createMemo } from "solid-js"
 
 export const popularProviders = [
   "local-llm",
-  "opencode",
-  "opencode-go",
+  "unifia",
+  "unifia-go",
   "anthropic",
   "github-copilot",
   "openai",
@@ -45,7 +45,7 @@ export function useProviders() {
       const p = providers()
       const connected = new Set(p?.connected ?? [])
       return (p?.all ?? []).filter(
-        (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
+        (p) => connected.has(p.id) && (p.id !== "unifia" || Object.values(p.models).some((m) => m.cost?.input)),
       )
     },
   }

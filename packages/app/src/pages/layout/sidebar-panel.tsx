@@ -8,12 +8,12 @@
  */
 import { createMemo, For, Show, type Accessor } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
-import { Button } from "@opencode-ai/ui/button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { base64Encode } from "@unifia/util/encode"
+import { getFilename } from "@unifia/util/path"
+import { Button } from "@unifia/ui/button"
+import { DropdownMenu } from "@unifia/ui/dropdown-menu"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Tooltip } from "@unifia/ui/tooltip"
 import { closestCenter, DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, type DragEvent } from "@thisbeyond/solid-dnd"
 import type { LocalProject } from "@/context/layout"
 import { useLayout } from "@/context/layout"
@@ -284,15 +284,22 @@ export function SidebarPanel(props: SidebarPanelProps) {
                       {language.t("command.session.new")}
                     </Button>
                   </div>
-                  <div class="flex-1 min-h-0">
-                    <LocalWorkspace
-                      ctx={ctx.workspaceSidebarCtx}
-                      project={project()!}
-                      sortNow={ctx.sortNow}
-                      mobile={props.mobile}
-                      popover={popover()}
-                    />
-                  </div>
+                  <Show
+                    when={project()}
+                    fallback={<div class="flex-1 min-h-0 px-4 py-6 text-12-regular text-text-weak">Loading workspace…</div>}
+                  >
+                    {(item) => (
+                      <div class="flex-1 min-h-0">
+                        <LocalWorkspace
+                          ctx={ctx.workspaceSidebarCtx}
+                          project={item()}
+                          sortNow={ctx.sortNow}
+                          mobile={props.mobile}
+                          popover={popover()}
+                        />
+                      </div>
+                    )}
+                  </Show>
                 </>
               }
             >

@@ -1,0 +1,912 @@
+{
+  "schemaVersion": 2,
+  "name": "Unifia Brand Assets",
+  "sourceDirectory": "brand/unifia/masters",
+  "classification": {
+    "source": [
+      "brand/unifia/masters/",
+      "brand/unifia/source-user-approved/",
+      "brand/unifia/cli/",
+      "brand/unifia/unifia.tokens.json",
+      "brand/unifia/unifia.css",
+      "brand/unifia/unifia.theme.ts",
+      "brand/unifia/unifia.tailwind.ts"
+    ],
+    "generated": [
+      "brand/unifia/variants/"
+    ],
+    "localBackup": [
+      ".unifia-brand-backup/"
+    ]
+  },
+  "masters": [
+    {
+      "stem": "unifia-app-icon-dark",
+      "svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+      "png": "e9eb02ec68f30b2b55c34f25a59c95a7436b354eeead6588a60cc2c1996b9cdc",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-app-icon-light",
+      "svg": "a1f5d68b94b75ce9e4e1444e75e64d9ca5dd8794a5947352d09801ffbe6187ee",
+      "png": "9e0e29c156c2445dcf4d681ddfbf78b785220f662cd8ebbb20414f12fada8daf",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-app-icon-monochrome-dark",
+      "svg": "7f004651e63208317411c031e73805a6ae03041cc0534d48f0b69431b31e04fd",
+      "png": "cea9833dd9ed743f1e2c49811c06a5c6cead0f7acea27cd3b4849a01e1268f55",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-app-icon-monochrome-light",
+      "svg": "0926a43e94cc283b965dd705251e299b870afea71302438ff07087826d3c6a77",
+      "png": "bd2ac19e539a0ce41ef7bcf02d8d1c28110b3e158ddbdcd9e4c59eba7ebfec72",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-lockup-dark",
+      "svg": "efacec5cf489df03ae806c3d278d183b69f9785ae45beec74ad19adfa00f6e5d",
+      "png": "466455e6bb3355a16b6222a444815a7f594a69934694657a47e46de2969898f6",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-lockup-light",
+      "svg": "c7213e6b0cb5e2e62bfd91207afc5ab31a39418b312aa60ce3f09635ee25ca47",
+      "png": "e912f20238431d52231f2906d8b28691c0e3286291f32657389871992d9773f5",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-lockup-monochrome-dark",
+      "svg": "a53870cd866205b3fcabc958ba75675fd4f92ebf010c05b385cf76add534513b",
+      "png": "b9dfe3769ae4734f24f16cc4384f78937c4706d907bd36b851991ea0788d71d0",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-lockup-monochrome-light",
+      "svg": "6c33e6ebd6afc6fa267026271821ca21baea28d54fb930258d26e82b1b0774a0",
+      "png": "ca11be220880ccfd9c5a646894d0f11aab03acb9851f660ea63f8c5bbd346bdc",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-logotype-dark",
+      "svg": "9733690383cadca37cb2dc545456e4b076cc9ee62e68394258ea92149863e240",
+      "png": "395058775513ff9502fe7c5681eb730bd2e80186cbd06133f7081eb980152a7e",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-logotype-light",
+      "svg": "61f02e1d299f2469f9e063a4ad336c367f696449f8dcc7fd9c99f765a0846c6f",
+      "png": "791c0abf8b78901c257c6a361840189bcccaf2cb100705cfce6ac1ed258edd08",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-logotype-monochrome-dark",
+      "svg": "00da4a18db85050d013b731ed224f2cdd7e0b98a7c9c16a5c993c8c4648e37b7",
+      "png": "78567538bea2319e2b0305d0d8f5bad6116a720ac0ff716e9ed18aab1bc5d9b3",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-logotype-monochrome-light",
+      "svg": "d104df1896bf28b06fbdfaf0af02e69e57413df9c8536c70a5b663916329848b",
+      "png": "af5037136c66115b038fe8e1a33c6c5ac8f436509361b201546f58bc038643c5",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-symbol-black",
+      "svg": "54b6d4bfac25555ffbfc5bbf8e6d70cce4d94444c13785ab02e6904c6369bdb0",
+      "png": "26b52f693be3172dc6544bfe50ee8b4fca46f9cb6648be796ecad022afa50b48",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-symbol-color",
+      "svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+      "png": "12efa17d73a3eba992267d9c595bb9c891ef053462dca5d04632e3e9a6682fc4",
+      "pngPixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "stem": "unifia-symbol-white",
+      "svg": "0d7feefbb7e50b8c7dfe52dd7eb31315a3fb43b58132cbef2f8a7c862fff06a8",
+      "png": "2cde91e51b1af23503a0d5aba64b2b8a16315b378c3063b2965bd1d956c3a529",
+      "pngPixels": [
+        400,
+        400
+      ]
+    }
+  ],
+  "aliases": {
+    "unifia-app-icon-midnight": "unifia-app-icon-dark",
+    "unifia-symbol-color-flat": "unifia-symbol-color",
+    "unifia-symbol-color-shadow": "unifia-symbol-color"
+  },
+  "platformDefaults": {
+    "darkIcon": "unifia-app-icon-dark",
+    "androidForeground": "unifia-symbol-color",
+    "fontMono": "Roboto Mono"
+  },
+  "cliTui": {
+    "specification": "cli/unifia-cli-lockup.json",
+    "preview": "cli/unifia-cli-lockup.txt",
+    "reference": "cli/reference/unifia-lockup-dark-ascii.png",
+    "widthColumns": 38,
+    "heightRows": 5,
+    "compactBelowColumns": 42
+  },
+  "generatedBy": "scripts/brand/generate.py",
+  "generated": {
+    "brand/unifia/variants/unifia-app-icon-dark.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "brand/unifia/variants/unifia-app-icon-light.svg": "a1f5d68b94b75ce9e4e1444e75e64d9ca5dd8794a5947352d09801ffbe6187ee",
+    "brand/unifia/variants/unifia-app-icon-midnight.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "brand/unifia/variants/unifia-app-icon-monochrome-dark.svg": "7f004651e63208317411c031e73805a6ae03041cc0534d48f0b69431b31e04fd",
+    "brand/unifia/variants/unifia-app-icon-monochrome-light.svg": "0926a43e94cc283b965dd705251e299b870afea71302438ff07087826d3c6a77",
+    "brand/unifia/variants/unifia-lockup-dark.svg": "efacec5cf489df03ae806c3d278d183b69f9785ae45beec74ad19adfa00f6e5d",
+    "brand/unifia/variants/unifia-lockup-light.svg": "c7213e6b0cb5e2e62bfd91207afc5ab31a39418b312aa60ce3f09635ee25ca47",
+    "brand/unifia/variants/unifia-lockup-monochrome-dark.svg": "a53870cd866205b3fcabc958ba75675fd4f92ebf010c05b385cf76add534513b",
+    "brand/unifia/variants/unifia-lockup-monochrome-light.svg": "6c33e6ebd6afc6fa267026271821ca21baea28d54fb930258d26e82b1b0774a0",
+    "brand/unifia/variants/unifia-logotype-dark.svg": "9733690383cadca37cb2dc545456e4b076cc9ee62e68394258ea92149863e240",
+    "brand/unifia/variants/unifia-logotype-light.svg": "61f02e1d299f2469f9e063a4ad336c367f696449f8dcc7fd9c99f765a0846c6f",
+    "brand/unifia/variants/unifia-logotype-monochrome-dark.svg": "00da4a18db85050d013b731ed224f2cdd7e0b98a7c9c16a5c993c8c4648e37b7",
+    "brand/unifia/variants/unifia-logotype-monochrome-light.svg": "d104df1896bf28b06fbdfaf0af02e69e57413df9c8536c70a5b663916329848b",
+    "brand/unifia/variants/unifia-symbol-black.svg": "54b6d4bfac25555ffbfc5bbf8e6d70cce4d94444c13785ab02e6904c6369bdb0",
+    "brand/unifia/variants/unifia-symbol-color-flat.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "brand/unifia/variants/unifia-symbol-color-shadow.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "brand/unifia/variants/unifia-symbol-color.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "brand/unifia/variants/unifia-symbol-white.svg": "0d7feefbb7e50b8c7dfe52dd7eb31315a3fb43b58132cbef2f8a7c862fff06a8",
+    "packages/app/public/brand/unifia/favicon.ico": "58e88aa38297c40cc1ace574cab262d8d7da13a3d929466894e495f3f9406fc6",
+    "packages/app/public/brand/unifia/unifia-192.png": [
+      "f3785832162f23a2a5a5460c137ee070cf136ac40cfb3a0362806d3e944133d5",
+      192,
+      192
+    ],
+    "packages/app/public/brand/unifia/unifia-512.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/app/public/brand/unifia/unifia-app-icon-dark.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "packages/app/src/assets/brand/unifia/unifia-app-icon-dark.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "packages/app/src/assets/brand/unifia/unifia-app-icon-light.svg": "a1f5d68b94b75ce9e4e1444e75e64d9ca5dd8794a5947352d09801ffbe6187ee",
+    "packages/app/src/assets/brand/unifia/unifia-app-icon-midnight.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "packages/app/src/assets/brand/unifia/unifia-app-icon-monochrome-dark.svg": "7f004651e63208317411c031e73805a6ae03041cc0534d48f0b69431b31e04fd",
+    "packages/app/src/assets/brand/unifia/unifia-app-icon-monochrome-light.svg": "0926a43e94cc283b965dd705251e299b870afea71302438ff07087826d3c6a77",
+    "packages/app/src/assets/brand/unifia/unifia-lockup-dark.svg": "efacec5cf489df03ae806c3d278d183b69f9785ae45beec74ad19adfa00f6e5d",
+    "packages/app/src/assets/brand/unifia/unifia-lockup-light.svg": "c7213e6b0cb5e2e62bfd91207afc5ab31a39418b312aa60ce3f09635ee25ca47",
+    "packages/app/src/assets/brand/unifia/unifia-lockup-monochrome-dark.svg": "a53870cd866205b3fcabc958ba75675fd4f92ebf010c05b385cf76add534513b",
+    "packages/app/src/assets/brand/unifia/unifia-lockup-monochrome-light.svg": "6c33e6ebd6afc6fa267026271821ca21baea28d54fb930258d26e82b1b0774a0",
+    "packages/app/src/assets/brand/unifia/unifia-logotype-dark.svg": "9733690383cadca37cb2dc545456e4b076cc9ee62e68394258ea92149863e240",
+    "packages/app/src/assets/brand/unifia/unifia-logotype-light.svg": "61f02e1d299f2469f9e063a4ad336c367f696449f8dcc7fd9c99f765a0846c6f",
+    "packages/app/src/assets/brand/unifia/unifia-logotype-monochrome-dark.svg": "00da4a18db85050d013b731ed224f2cdd7e0b98a7c9c16a5c993c8c4648e37b7",
+    "packages/app/src/assets/brand/unifia/unifia-logotype-monochrome-light.svg": "d104df1896bf28b06fbdfaf0af02e69e57413df9c8536c70a5b663916329848b",
+    "packages/app/src/assets/brand/unifia/unifia-symbol-black.svg": "54b6d4bfac25555ffbfc5bbf8e6d70cce4d94444c13785ab02e6904c6369bdb0",
+    "packages/app/src/assets/brand/unifia/unifia-symbol-color-flat.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/app/src/assets/brand/unifia/unifia-symbol-color-shadow.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/app/src/assets/brand/unifia/unifia-symbol-color.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/app/src/assets/brand/unifia/unifia-symbol-white.svg": "0d7feefbb7e50b8c7dfe52dd7eb31315a3fb43b58132cbef2f8a7c862fff06a8",
+    "packages/app/src/styles/unifia-brand.css": "5e58a9676386020512e052afcadfad191444023d53c721f694949b2a7584613b",
+    "packages/desktop-electron/icons/beta/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop-electron/icons/beta/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop-electron/icons/beta/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop-electron/icons/beta/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop-electron/icons/beta/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop-electron/icons/beta/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop-electron/icons/beta/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop-electron/icons/beta/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop-electron/icons/beta/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop-electron/icons/beta/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop-electron/icons/beta/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop-electron/icons/beta/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop-electron/icons/beta/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop-electron/icons/beta/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop-electron/icons/beta/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop-electron/icons/beta/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop-electron/icons/dev/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop-electron/icons/dev/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop-electron/icons/dev/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop-electron/icons/dev/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop-electron/icons/dev/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop-electron/icons/dev/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop-electron/icons/dev/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop-electron/icons/dev/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop-electron/icons/dev/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop-electron/icons/dev/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop-electron/icons/dev/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop-electron/icons/dev/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop-electron/icons/dev/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop-electron/icons/dev/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop-electron/icons/dev/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop-electron/icons/dev/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop-electron/icons/prod/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop-electron/icons/prod/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop-electron/icons/prod/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop-electron/icons/prod/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop-electron/icons/prod/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop-electron/icons/prod/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop-electron/icons/prod/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop-electron/icons/prod/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop-electron/icons/prod/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop-electron/icons/prod/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop-electron/icons/prod/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop-electron/icons/prod/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop-electron/icons/prod/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop-electron/icons/prod/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop-electron/icons/prod/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop-electron/icons/prod/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop/src-tauri/icons/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop/src-tauri/icons/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop/src-tauri/icons/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop/src-tauri/icons/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop/src-tauri/icons/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop/src-tauri/icons/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop/src-tauri/icons/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop/src-tauri/icons/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop/src-tauri/icons/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop/src-tauri/icons/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop/src-tauri/icons/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop/src-tauri/icons/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop/src-tauri/icons/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop/src-tauri/icons/beta/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop/src-tauri/icons/beta/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop/src-tauri/icons/beta/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop/src-tauri/icons/beta/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop/src-tauri/icons/beta/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop/src-tauri/icons/beta/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop/src-tauri/icons/beta/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop/src-tauri/icons/beta/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop/src-tauri/icons/dev/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop/src-tauri/icons/dev/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop/src-tauri/icons/dev/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop/src-tauri/icons/dev/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop/src-tauri/icons/dev/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop/src-tauri/icons/dev/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop/src-tauri/icons/dev/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop/src-tauri/icons/dev/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop/src-tauri/icons/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop/src-tauri/icons/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop/src-tauri/icons/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/desktop/src-tauri/icons/prod/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/desktop/src-tauri/icons/prod/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/desktop/src-tauri/icons/prod/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/desktop/src-tauri/icons/prod/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/desktop/src-tauri/icons/prod/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/desktop/src-tauri/icons/prod/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/desktop/src-tauri/icons/prod/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/desktop/src-tauri/icons/prod/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": [
+      "4f384b467b1a05c5b295a9d9787476f22cfc9abd8b1b0738cebe7821bcf2cd38",
+      49,
+      49
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": [
+      "63c4c9a7b83e15db0c46c66b69f92c0d786c81facd036cb643f9d31f8f24286b",
+      162,
+      162
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png": [
+      "4f384b467b1a05c5b295a9d9787476f22cfc9abd8b1b0738cebe7821bcf2cd38",
+      49,
+      49
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-mdpi/ic_launcher.png": [
+      "9ef0f9a286be618c34fdb977509b944102d41aecca3820ae0c5ad52956495946",
+      48,
+      48
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": [
+      "114c5966b7ebbe75bc12ccb1a34f646f600d42d9314b3236c5c8773bb2eecb8e",
+      108,
+      108
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png": [
+      "9ef0f9a286be618c34fdb977509b944102d41aecca3820ae0c5ad52956495946",
+      48,
+      48
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": [
+      "c583e3382905f5f14bef0becf60f1de8d2aeb052c77fb8b1b445399c51ebf1a8",
+      96,
+      96
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": [
+      "5b6b225786c4fbcf2627b7a356f523d7d91a35aac600c45b92bf7365ae9aeb1d",
+      216,
+      216
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png": [
+      "c583e3382905f5f14bef0becf60f1de8d2aeb052c77fb8b1b445399c51ebf1a8",
+      96,
+      96
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": [
+      "cd43a83045bc35597e719f029d329aab517ea1a3ee8f1078f3464660468f92fd",
+      144,
+      144
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": [
+      "4d94a5b840b76abffc6a76f51baf7dbc17638e57ae23747055f5f7a2a60607b1",
+      324,
+      324
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": [
+      "cd43a83045bc35597e719f029d329aab517ea1a3ee8f1078f3464660468f92fd",
+      144,
+      144
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": [
+      "f3785832162f23a2a5a5460c137ee070cf136ac40cfb3a0362806d3e944133d5",
+      192,
+      192
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": [
+      "3b17852fceeba479d804fe437d2e94a8d36ec782c460882fd8b63a75505e83cb",
+      432,
+      432
+    ],
+    "packages/mobile/src-tauri/gen/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": [
+      "f3785832162f23a2a5a5460c137ee070cf136ac40cfb3a0362806d3e944133d5",
+      192,
+      192
+    ],
+    "packages/mobile/src-tauri/icons/128x128.png": [
+      "1e1e6420b1c279c020d9b00bf07eed2d9f7a7facabdc0a508f3be33b31313836",
+      128,
+      128
+    ],
+    "packages/mobile/src-tauri/icons/128x128@2x.png": [
+      "b46ae815263f4422e0a5fb0b54b4e6110eaa86c755d9719e7b5a605f7ca8ff00",
+      256,
+      256
+    ],
+    "packages/mobile/src-tauri/icons/32x32.png": [
+      "b803aa3158f5881b11b6df431ca98d63e727f6a47e03d4d91b6dec8312fbcdfc",
+      32,
+      32
+    ],
+    "packages/mobile/src-tauri/icons/Square107x107Logo.png": [
+      "619ae4c245f5a99a577a0e2a62b3810756531cf45993fca5dff6c01ddb3f50dd",
+      107,
+      107
+    ],
+    "packages/mobile/src-tauri/icons/Square142x142Logo.png": [
+      "12114190033fd6970bd40659045cbe54c33b4d4655d9fb04a8edb888d56ef383",
+      142,
+      142
+    ],
+    "packages/mobile/src-tauri/icons/Square150x150Logo.png": [
+      "c9a7837e9bdf64df1124767eafe125c671ac823bccdc1f7f8ae79d69506ce26e",
+      150,
+      150
+    ],
+    "packages/mobile/src-tauri/icons/Square284x284Logo.png": [
+      "79340ca17964a5555b4c5c96af81043ac0a43b1b826895a676337e8634fd7ba6",
+      284,
+      284
+    ],
+    "packages/mobile/src-tauri/icons/Square30x30Logo.png": [
+      "aad34cc73b70c17768e9167d9b44fbe470fa280ae4023c4d47c2ad6c910e6003",
+      30,
+      30
+    ],
+    "packages/mobile/src-tauri/icons/Square310x310Logo.png": [
+      "00a1a00454d443fe795ccb5d72d472a918f36dd76aa8d5c5a8c6c0263ccdcb6c",
+      310,
+      310
+    ],
+    "packages/mobile/src-tauri/icons/Square44x44Logo.png": [
+      "0450a87bb8b03244db20ae6c1803ac41d8a7241e9da5e3ea848d4876e3636853",
+      44,
+      44
+    ],
+    "packages/mobile/src-tauri/icons/Square71x71Logo.png": [
+      "b6641e3654134a89b16f2e315d5e5d56c1d79485f969755050f1335de30e06ba",
+      71,
+      71
+    ],
+    "packages/mobile/src-tauri/icons/Square89x89Logo.png": [
+      "e103161cf6b58cebd48c3297b3ad9e06943f11aada4b0f5130b542f8f8f874d1",
+      89,
+      89
+    ],
+    "packages/mobile/src-tauri/icons/StoreLogo.png": [
+      "c238f617e037d85ea5be79667e56677827ca61091c2cb2c133c8efe97cb0a708",
+      50,
+      50
+    ],
+    "packages/mobile/src-tauri/icons/icon.icns": "9280d8f134991763c93783711c4f7092d01e4f602d1062dde7850bf46ce0c9db",
+    "packages/mobile/src-tauri/icons/icon.ico": "1ecfbbd1d245a11dfe7ad88ca64720f188fba9c6b4605c455201be1b2e56aaaa",
+    "packages/mobile/src-tauri/icons/icon.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/ui/src/assets/brand/unifia/unifia-logotype-dark.svg": "9733690383cadca37cb2dc545456e4b076cc9ee62e68394258ea92149863e240",
+    "packages/ui/src/assets/brand/unifia/unifia-logotype-light.svg": "61f02e1d299f2469f9e063a4ad336c367f696449f8dcc7fd9c99f765a0846c6f",
+    "packages/ui/src/assets/brand/unifia/unifia-symbol-color.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/web/public/brand/unifia/favicon.ico": "58e88aa38297c40cc1ace574cab262d8d7da13a3d929466894e495f3f9406fc6",
+    "packages/web/public/brand/unifia/unifia-192.png": [
+      "f3785832162f23a2a5a5460c137ee070cf136ac40cfb3a0362806d3e944133d5",
+      192,
+      192
+    ],
+    "packages/web/public/brand/unifia/unifia-512.png": [
+      "d9f926d94d7f87b03df476977df849f1d550417dbbb2c27354a850994acaa893",
+      512,
+      512
+    ],
+    "packages/web/public/brand/unifia/unifia-app-icon-dark.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "packages/web/public/brand/unifia/unifia-app-icon-light.svg": "a1f5d68b94b75ce9e4e1444e75e64d9ca5dd8794a5947352d09801ffbe6187ee",
+    "packages/web/public/brand/unifia/unifia-app-icon-midnight.svg": "9c71feee37fe87ce074e6f7ddb2cca9ed5308e591005f05ee6190f45859d8bd6",
+    "packages/web/public/brand/unifia/unifia-app-icon-monochrome-dark.svg": "7f004651e63208317411c031e73805a6ae03041cc0534d48f0b69431b31e04fd",
+    "packages/web/public/brand/unifia/unifia-app-icon-monochrome-light.svg": "0926a43e94cc283b965dd705251e299b870afea71302438ff07087826d3c6a77",
+    "packages/web/public/brand/unifia/unifia-lockup-dark.svg": "efacec5cf489df03ae806c3d278d183b69f9785ae45beec74ad19adfa00f6e5d",
+    "packages/web/public/brand/unifia/unifia-lockup-light.svg": "c7213e6b0cb5e2e62bfd91207afc5ab31a39418b312aa60ce3f09635ee25ca47",
+    "packages/web/public/brand/unifia/unifia-lockup-monochrome-dark.svg": "a53870cd866205b3fcabc958ba75675fd4f92ebf010c05b385cf76add534513b",
+    "packages/web/public/brand/unifia/unifia-lockup-monochrome-light.svg": "6c33e6ebd6afc6fa267026271821ca21baea28d54fb930258d26e82b1b0774a0",
+    "packages/web/public/brand/unifia/unifia-logotype-dark.svg": "9733690383cadca37cb2dc545456e4b076cc9ee62e68394258ea92149863e240",
+    "packages/web/public/brand/unifia/unifia-logotype-light.svg": "61f02e1d299f2469f9e063a4ad336c367f696449f8dcc7fd9c99f765a0846c6f",
+    "packages/web/public/brand/unifia/unifia-logotype-monochrome-dark.svg": "00da4a18db85050d013b731ed224f2cdd7e0b98a7c9c16a5c993c8c4648e37b7",
+    "packages/web/public/brand/unifia/unifia-logotype-monochrome-light.svg": "d104df1896bf28b06fbdfaf0af02e69e57413df9c8536c70a5b663916329848b",
+    "packages/web/public/brand/unifia/unifia-symbol-black.svg": "54b6d4bfac25555ffbfc5bbf8e6d70cce4d94444c13785ab02e6904c6369bdb0",
+    "packages/web/public/brand/unifia/unifia-symbol-color-flat.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/web/public/brand/unifia/unifia-symbol-color-shadow.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/web/public/brand/unifia/unifia-symbol-color.svg": "7a061444e24129a86730ab27a4575be8681d063fb748d93d76f3342b52cd6a93",
+    "packages/web/public/brand/unifia/unifia-symbol-white.svg": "0d7feefbb7e50b8c7dfe52dd7eb31315a3fb43b58132cbef2f8a7c862fff06a8"
+  }
+}

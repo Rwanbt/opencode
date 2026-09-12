@@ -1,8 +1,11 @@
 [package]
-name = "opencode-desktop"
+name = "unifia-desktop"
 version = "0.0.0"
-description = "The open source AI coding agent"
-authors = ["Anomaly Innovations"]
+description = "Unifia — open source AI coding agent"
+# The fork's own crate metadata. Upstream authorship and copyright are recorded
+# in LICENSE, which is where the attribution obligation lives; leaving them here
+# would credit this fork's changes to a project that did not make them.
+authors = ["Rwanbt"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +14,7 @@ edition = "2024"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "opencode_lib"
+name = "unifia_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
@@ -49,7 +52,6 @@ futures = "0.3.31"
 semver = "1.0.27"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "multipart"] }
 uuid = { version = "1.19.0", features = ["v4"] }
-tauri-plugin-decorum = "1.1.1"
 comrak = { version = "0.50", default-features = false }
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
@@ -75,7 +77,12 @@ rcgen = { version = "0.13", features = ["pem"] }
 sha2 = "0.10"
 base64 = "0.21"
 url = "2"
-opencode-kokoro-shared = { path = "../../../crates/opencode-kokoro-shared" }
+unifia-kokoro-shared = { path = "../../../crates/unifia-kokoro-shared" }
+unifia-supervisor = { version = "0.0.0", path = "../../../crates/unifia-supervisor" }
+# Brand-prefixed keyring helpers (carte C8-B). Isolated from the Tauri
+# runtime so the migration logic can be unit-tested on a workstation
+# without WebView2 / DirectML installed.
+unifia-keyring-shim = { path = "../keyring-shim" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading", "Win32_System_Registry"] }

@@ -1,9 +1,9 @@
 import { MetaProvider } from "@solidjs/meta"
 import { render } from "solid-js/web"
-import "@opencode-ai/app/index.css"
-import { Font } from "@opencode-ai/ui/font"
-import { Splash } from "@opencode-ai/ui/logo"
-import { Progress } from "@opencode-ai/ui/progress"
+import "@unifia/app/index.css"
+import { Font } from "@unifia/ui/font"
+import { Splash } from "@unifia/ui/logo"
+import { Progress } from "@unifia/ui/progress"
 import "./styles.css"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import type { InitStep, SqliteMigrationProgress } from "../preload/types"
@@ -64,7 +64,7 @@ render(() => {
       <div class="w-screen h-screen bg-background-base flex items-center justify-center">
         <Font />
         <div class="flex flex-col items-center gap-11">
-          <Splash class="w-20 h-25 opacity-15" />
+          <Splash class="w-40 h-50 opacity-15" />
           <div class="w-60 flex flex-col items-center gap-4" aria-live="polite">
             <span class="w-full overflow-hidden text-center text-ellipsis whitespace-nowrap text-text-strong text-14-normal">
               {status()}

@@ -1,0 +1,41 @@
+name: work-design-integrity
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "packages/**"
+      - "work_design/**"
+      - "INTEGRATION.md"
+      - "scripts/check-pr-size.sh"
+      - "scripts/check-workbench-test-boundary.mjs"
+      - ".github/workflows/work-design-integrity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  merge-and-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base
+        run: git fetch origin dev --depth=1
+
+      - name: Check mergeability without mutating the checkout
+        run: git merge-tree --write-tree origin/dev HEAD
+
+      - name: Check card size
+        run: bash scripts/check-pr-size.sh dev
+
+      - name: Check whitespace
+        run: git diff --check origin/dev...HEAD
+
+      - name: Check Workbench security policy
+        run: node scripts/check-workbench-security.mjs
+
+      - name: Check Workbench test boundary
+        run: node scripts/check-workbench-test-boundary.mjs

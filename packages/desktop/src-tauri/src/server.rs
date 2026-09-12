@@ -33,6 +33,13 @@ pub struct RemoteConfig {
     pub tls_enabled: bool,
 }
 
+/// HTTP basic-auth username for remote access.
+///
+/// Left as-is deliberately. It is a credential, not an identity string: it is
+/// persisted in the user's remote config and typed into whatever client they
+/// connect with. Changing the default silently invalidates every saved pairing,
+/// and a username mismatch on this exact field has already cost a debugging
+/// session once.
 fn default_username() -> String {
     "opencode".to_string()
 }
@@ -237,7 +244,7 @@ pub fn export_tls_cert(app: AppHandle) -> Result<String, String> {
 
     let downloads = dirs::download_dir()
         .ok_or_else(|| "Could not locate Downloads folder".to_string())?;
-    let dest = downloads.join("opencode-cert.pem");
+    let dest = downloads.join("unifia-cert.pem");
 
     std::fs::write(&dest, pem).map_err(|e| format!("Failed to export certificate: {e}"))?;
 

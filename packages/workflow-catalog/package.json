@@ -1,0 +1,25 @@
+{
+  "name": "@unifia/workflow-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/catalog.test.ts"
+  },
+  "dependencies": {
+    "@unifia/digest-runtime": "workspace:*",
+    "@unifia/contracts": "workspace:*",
+    "@unifia/workflow-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

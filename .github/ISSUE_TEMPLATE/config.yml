@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 GitHub Repository
-    url: https://github.com/Rwanbt/opencode
-    about: For quick questions or real-time discussion. Note that issues are searchable and help others with the same question.
+  - name: Unifia Documentation
+    url: https://unifia.dev/docs
+    about: Read the docs first
+  - name: GitHub Discussions
+    url: https://github.com/Rwanbt/unifia/discussions
+    about: Ask the community
+  - name: Discord
+    url: https://discord.gg/unifia
+    about: Real-time chat

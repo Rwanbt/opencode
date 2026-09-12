@@ -1,17 +1,10 @@
 <p align="center">
-  <img src="Bannière OpencodeX.png" alt="RBannière OpencodeX" >
-  <a href="https://github.com/Rwanbt/opencode">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo OpenCode">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Bannière Unifia Workbench">
 </p>
 <p align="center">L'agent de codage IA open source.</p>
 <p align="center">
-  <a href="https://github.com/Rwanbt/opencode/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/opencode?display_name=tag&style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -41,7 +34,7 @@
 
 
 > [!WARNING]
-> **Avis de fork non officiel :** ce dépôt est un fork indépendant et non officiel d'[OpenCode](https://github.com/anomalyco/opencode), maintenu par [Rwanbt/opencode](https://github.com/Rwanbt/opencode). Il n'est ni construit, ni opéré, ni approuvé, ni supporté par l'équipe OpenCode amont. Les releases, binaires, issues, roadmap et le support de ce fork sont maintenus ici.
+> **Avis de fork non officiel :** ce dépôt est un fork indépendant et non officiel d'[Unifia Workbench](https://github.com/anomalyco/opencode), maintenu par [Rwanbt/unifia](https://github.com/Rwanbt/unifia). Il n'est ni construit, ni opéré, ni approuvé, ni supporté par l'équipe Unifia Workbench amont. Les releases, binaires, issues, roadmap et le support de ce fork sont maintenus ici.
 <!-- WHY-FORK-MATRIX -->
 ## Pourquoi ce fork ?
 
@@ -55,7 +48,7 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 #### Orchestration, API surface, governance
 
-| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | unifia (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
 | -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
 | Open source                            |       ✅       |      ❌      |  partial  |      ✅     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |    ❌    |     ✅     |   ✅   |     ✅     |
 | BYOM (bring your own model)            |       ✅       |      ❌      |     ❌     |      ❌     |          ✅          |   ✅   |   ✅   |   ✅   |    ✅     |  partial |     ✅     |   ✅   |   partial  |
@@ -74,7 +67,7 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 #### Intelligence, context, developer UX
 
-| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | unifia (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
 | -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
 | LSP integration (go-to-def, diagnostics) | ✅           |   partial    |  partial  |   partial   |          ✅          | partial | partial | ✅   |    ✅     |    ✅    |     ✅     | partial |  partial  |
 | Plugin SDK (`@opencode/plugin`)        |       ✅       |   partial    |     ❌     |      ❌     |          ✅          |   ❌   |   ✅   |   ✅   |    ✅     |    ✅    |     ✅     |   ❌   |     ❌     |
@@ -87,7 +80,7 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 #### Platform reach & multimodal
 
-| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | opencode (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
+| Capability                             | **This fork** | Claude Code | Codex CLI | Gemini CLI | unifia (upstream) | Aider | Goose | Cline | Roo Code | Cursor | Continue | Crush | Qwen Code |
 | -------------------------------------- | :-----------: | :---------: | :-------: | :--------: | :-----------------: | :---: | :---: | :---: | :------: | :----: | :------: | :---: | :-------: |
 | First-class **Android app**            | ✅ **unique**  |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
 | iOS (remote mode)                      |       ✅       |      ❌      |     ❌     |      ❌     |          ❌          |   ❌   |   ❌   |   ❌   |    ❌     |    ❌    |     ❌     |   ❌   |     ❌     |
@@ -112,16 +105,16 @@ Legend: ✅ shipped · ❌ absent · *partial* limited/incomplete · *plugin* vi
 
 ## ⚡ En un coup d'œil
 
-OpenCode (fork) — un agent de codage IA orchestré qui tourne sur **desktop, serveur et téléphone**, avec des modèles locaux de bout en bout, zéro dépendance cloud, et des primitives de gouvernance de niveau entreprise intégrées. Fork non officiel d'[OpenCode amont](https://github.com/anomalyco/opencode), maintenu par [Rwanbt](https://github.com/Rwanbt).
+Unifia Workbench (fork) — un agent de codage IA orchestré qui tourne sur **desktop, serveur et téléphone**, avec des modèles locaux de bout en bout, zéro dépendance cloud, et des primitives de gouvernance de niveau entreprise intégrées. Fork non officiel d'[Unifia Workbench amont](https://github.com/anomalyco/opencode), maintenu par [Rwanbt](https://github.com/Rwanbt).
 
 ### Install
 
 ```bash
 # CLI (macOS / Linux / Windows)
-Téléchargez un artefact depuis https://github.com/Rwanbt/opencode/releases/latest.
+Téléchargez un artefact depuis https://github.com/Rwanbt/unifia/releases/latest.
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### 8 choses que ce fork regroupe et qu'aucun autre CLI n'offre
@@ -140,8 +133,8 @@ Téléchargez un artefact depuis https://github.com/Rwanbt/opencode/releases/lat
 ### Lancer votre première tâche
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+unifia                                  # TUI
+unifia run "fix the failing test in src/"   # one-shot
 ```
 
 > 💡 Besoin de détails ? Chaque section ci-dessous est repliée — cliquez pour n'ouvrir que ce qui vous intéresse.
@@ -157,12 +150,12 @@ opencode run "fix the failing test in src/"   # one-shot
 
 ## Fonctionnalités du fork
 
-> Ceci est un fork non officiel d'[OpenCode amont](https://github.com/anomalyco/opencode), maintenu par [Rwanbt](https://github.com/Rwanbt).
-> Synchronisé avec l'upstream. Voir la [branche dev](https://github.com/Rwanbt/opencode/tree/dev) pour les dernières modifications.
+> Ceci est un fork non officiel d'[Unifia Workbench amont](https://github.com/anomalyco/opencode), maintenu par [Rwanbt](https://github.com/Rwanbt).
+> Synchronisé avec l'upstream. Voir la [branche dev](https://github.com/Rwanbt/unifia/tree/dev) pour les dernières modifications.
 
 #### IA locale d'abord
 
-OpenCode exécute des modèles IA localement sur du matériel grand public (8 Go VRAM / 16 Go RAM), sans aucune dépendance cloud pour les modèles 4B-7B.
+Unifia Workbench exécute des modèles IA localement sur du matériel grand public (8 Go VRAM / 16 Go RAM), sans aucune dépendance cloud pour les modèles 4B-7B.
 
 **Optimisation des prompts (réduction de 94%)**
 - Prompt système de ~1K tokens pour les modèles locaux (vs ~16K pour le cloud)
@@ -172,11 +165,11 @@ OpenCode exécute des modèles IA localement sur du matériel grand public (8 Go
 
 **Moteur d'inférence (llama.cpp b8731)**
 - Backend GPU Vulkan, téléchargé automatiquement au premier chargement de modèle
-- **Configuration adaptative à l'exécution** (`packages/opencode/src/local-llm-server/auto-config.ts`) :
+- **Configuration adaptative à l'exécution** (`packages/unifia/src/local-llm-server/auto-config.ts`) :
 _gpu_layers`, threads, taille de batch/ubatch, quantification du cache KV et taille du contexte dérivées de la VRAM détectée, de la RAM libre, du découpage CPU big.LITTLE, du backend GPU (CUDA/ROCm/Vulkan/Metal/OpenCL) et de l'état thermique. Remplace l'ancien `--n-gpu-layers 99` codé en dur — un Android 4 Go fonctionne désormais en repli CPU au lieu d'être tué par OOM, les desktops haut de gamme obtiennent un batch ajusté au lieu du 512 par défaut.
 - `--flash-attn on` — Flash Attention pour l'efficacité mémoire
 - `--cache-type-k/v` — palier adaptatif de quantification llama.cpp standard (f16 / q8_0 / q4_0) selon la marge VRAM
-- `--fit on` — ajustement VRAM secondaire exclusif au fork (activation via `OPENCODE_LLAMA_ENABLE_FIT=1`)
+- `--fit on` — ajustement VRAM secondaire exclusif au fork (activation via `UNIFIA_LLAMA_ENABLE_FIT=1`)
 - Décodage spéculatif (`--model-draft`) avec garde VRAM (désactivation automatique si < 4 Go de marge VRAM)
 - Slot unique (`-np 1`) pour minimiser l'empreinte mémoire
 - **Harnais de benchmark** (`bun run bench:llm`) : mesure reproductible de FTL / TPS / RSS de pic / temps mur par modèle, par exécution, sortie JSONL pour archivage CI
@@ -261,7 +254,7 @@ Dialogue avec actions : ouvrir la session de tâche, annuler, reprendre, envoyer
 
 #### Portée MCP par agent
 
-Listes d'autorisation/refus par agent pour les serveurs MCP. Configurez dans `opencode.json` sous le champ `mcp` de chaque agent. La fonction `toolsForAgent()` filtre les outils MCP disponibles en fonction de la portée de l'agent appelant.
+Listes d'autorisation/refus par agent pour les serveurs MCP. Configurez dans `unifia.json` sous le champ `mcp` de chaque agent. La fonction `toolsForAgent()` filtre les outils MCP disponibles en fonction de la portée de l'agent appelant.
 
 ```json
 {
@@ -448,7 +441,7 @@ Pour éviter toute confusion liée aux résumés générés par IA de ce projet 
 
 ## Future Roadmap
 
-La prochaine direction produit est définie par le plan Obsidian Plan directeur V2 — OpenCode Fusion production-ready. Android et le pont de connaissances optionnel sont déjà implémentés ; ils ne sont donc plus présentés comme des travaux futurs.
+La prochaine direction produit est définie par le plan Obsidian Plan directeur V2 — Unifia Workbench Fusion production-ready. Android et le pont de connaissances optionnel sont déjà implémentés ; ils ne sont donc plus présentés comme des travaux futurs.
 
 ### 🎨 Fusion OpenDesign + OpenWork
 
@@ -466,13 +459,13 @@ L'application Android est déjà fonctionnelle. Le prochain chantier mobile est 
 
 ---
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/opencode)
+[![Unifia Workbench Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 ### Installation
 
 ```bash
 # YOLO
-Téléchargez un artefact depuis https://github.com/Rwanbt/opencode/releases/latest.
+Téléchargez un artefact depuis https://github.com/Rwanbt/unifia/releases/latest.
 
 # Gestionnaires de paquets
 Aucun canal npm, Homebrew, Scoop, Chocolatey, pacman, AUR ou mise du fork n'est annoncé pour le moment.
@@ -484,13 +477,13 @@ Téléchargez un artefact depuis les releases du fork ou construisez depuis le d
 
 ### Application de bureau (BETA)
 
-OpenCode est aussi disponible en application de bureau. Téléchargez-la directement depuis la [page des releases du fork](https://github.com/Rwanbt/opencode/releases).
+Unifia Workbench est aussi disponible en application de bureau. Téléchargez-la directement depuis la [page des releases du fork](https://github.com/Rwanbt/unifia/releases).
 
 | Plateforme            | Téléchargement                        |
 | --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
+| macOS (Apple Silicon) | `unifia-desktop-darwin-aarch64.dmg` |
+| macOS (Intel)         | `unifia-desktop-darwin-x64.dmg`     |
+| Windows               | `unifia-desktop-windows-x64.exe`    |
 | Linux                 | `.deb`, `.rpm`, ou AppImage           |
 
 ```bash
@@ -504,15 +497,15 @@ Les paquets Scoop du fork seront ajoutes apres le rebranding.
 
 Le script d'installation respecte l'ordre de priorité suivant pour le chemin d'installation :
 
-1. `$OPENCODE_INSTALL_DIR` - Répertoire d'installation personnalisé
+1. `$UNIFIA_INSTALL_DIR` - Répertoire d'installation personnalisé
 2. `$XDG_BIN_DIR` - Chemin conforme à la spécification XDG Base Directory
 3. `$HOME/bin` - Répertoire binaire utilisateur standard (s'il existe ou peut être créé)
 4. `$HOME/.opencode/bin` - Repli par défaut
 
 ```bash
 # Exemples
-Téléchargez l'artefact depuis https://github.com/Rwanbt/opencode/releases/latest et placez-le dans /usr/local/bin
-Téléchargez l'artefact depuis https://github.com/Rwanbt/opencode/releases/latest et placez-le dans $HOME/.local/bin
+Téléchargez l'artefact depuis https://github.com/Rwanbt/unifia/releases/latest et placez-le dans /usr/local/bin
+Téléchargez l'artefact depuis https://github.com/Rwanbt/unifia/releases/latest et placez-le dans $HOME/.local/bin
 ```
 
 ### Agents
@@ -521,11 +514,11 @@ Consultez le tableau complet du [Système d'agents](#système-d-agents) pour tou
 
 ### Documentation
 
-Pour plus d'informations sur la configuration d'OpenCode, [**consultez notre documentation**](packages/web/src/content/docs).
+Pour plus d'informations sur la configuration d'Unifia Workbench, [**consultez notre documentation**](packages/web/src/content/docs).
 
 ### Contribuer
 
-Si vous souhaitez contribuer à OpenCode, lisez nos [docs de contribution](./CONTRIBUTING.md) avant de soumettre une pull request.
+Si vous souhaitez contribuer à Unifia Workbench, lisez nos [docs de contribution](./CONTRIBUTING.md) avant de soumettre une pull request.
 \n
 
 ### FAQ
@@ -535,10 +528,10 @@ Si vous souhaitez contribuer à OpenCode, lisez nos [docs de contribution](./CON
 C'est très similaire à Claude Code en termes de capacités. Voici les principales différences :
 
 - 100% open source
-- Pas couplé à un fournisseur. Nous recommandons les modèles proposés via [OpenCode Zen](packages/web/src/content/docs/providers.mdx) ; OpenCode peut être utilisé avec Claude, OpenAI, Google ou même des modèles locaux. Au fur et à mesure que les modèles évoluent, les écarts se réduiront et les prix baisseront, donc être agnostique au fournisseur est important.
+- Pas couplé à un fournisseur. Nous recommandons les modèles proposés via [Unifia Workbench Zen](packages/web/src/content/docs/providers.mdx) ; Unifia Workbench peut être utilisé avec Claude, OpenAI, Google ou même des modèles locaux. Au fur et à mesure que les modèles évoluent, les écarts se réduiront et les prix baisseront, donc être agnostique au fournisseur est important.
 - Support LSP prêt à l'emploi
-- Un focus sur la TUI. OpenCode est construit par des utilisateurs de neovim et les créateurs de [terminal.shop](https://terminal.shop) ; nous allons repousser les limites de ce qui est possible dans le terminal.
-- Architecture client/serveur. Cela permet par exemple de faire tourner OpenCode sur votre ordinateur tout en le pilotant à distance depuis une application mobile. Cela signifie que la TUI n'est qu'un des clients possibles.
+- Un focus sur la TUI. Unifia Workbench est construit par des utilisateurs de neovim et les créateurs de [terminal.shop](https://terminal.shop) ; nous allons repousser les limites de ce qui est possible dans le terminal.
+- Architecture client/serveur. Cela permet par exemple de faire tourner Unifia Workbench sur votre ordinateur tout en le pilotant à distance depuis une application mobile. Cela signifie que la TUI n'est qu'un des clients possibles.
 
 ---
 

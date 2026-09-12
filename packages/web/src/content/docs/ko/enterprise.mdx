@@ -6,13 +6,13 @@ description: 조직에서 OpenCode를 안전하게 사용하는 방법입니다.
 import config from "../../../../config.mjs"
 export const email = `mailto:${config.email}`
 
-OpenCode Enterprise는 코드와 데이터가 조직의 인프라 밖으로 나가지 않도록 보장하려는 조직을 위한 기능입니다. SSO 및 내부 AI gateway와 연동되는 중앙 config를 사용해 이를 구현할 수 있습니다.
+Unifia Enterprise는 코드와 데이터가 조직의 인프라 밖으로 나가지 않도록 보장하려는 조직을 위한 기능입니다. SSO 및 내부 AI gateway와 연동되는 중앙 config를 사용해 이를 구현할 수 있습니다.
 
 :::note
 OpenCode는 코드나 context 데이터를 저장하지 않습니다.
 :::
 
-OpenCode Enterprise를 시작하려면 다음 단계를 진행하세요.
+Unifia Enterprise를 시작하려면 다음 단계를 진행하세요.
 
 1. 팀 내부에서 trial을 먼저 진행하세요.
 2. 가격 및 도입 옵션을 논의하려면 **<a href={email}>문의해 주세요</a>**.
@@ -37,13 +37,13 @@ OpenCode는 오픈소스이며 코드나 context 데이터를 저장하지 않�
 
 #### Sharing conversations
 
-사용자가 `/share` 기능을 활성화하면, 대화와 관련 데이터가 opencode.ai의 share 페이지 호스팅 서비스로 전송됩니다.
+사용자가 `/share` 기능을 활성화하면, 대화와 관련 데이터가 unifia.ai의 share 페이지 호스팅 서비스로 전송됩니다.
 
 현재 이 데이터는 CDN edge network를 통해 제공되며, 사용자와 가까운 edge에 캐시됩니다.
 
 trial 단계에서는 이 기능을 비활성화할 것을 권장합니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
@@ -62,7 +62,7 @@ trial 단계에서는 이 기능을 비활성화할 것을 권장합니다.
 
 ## Pricing
 
-OpenCode Enterprise는 seat당 과금 모델을 사용합니다. 자체 LLM gateway를 사용하는 경우에는 사용 token에 대해 별도 과금하지 않습니다. 가격 및 도입 옵션의 자세한 내용은 **<a href={email}>문의해 주세요</a>**.
+Unifia Enterprise는 seat당 과금 모델을 사용합니다. 자체 LLM gateway를 사용하는 경우에는 사용 token에 대해 별도 과금하지 않습니다. 가격 및 도입 옵션의 자세한 내용은 **<a href={email}>문의해 주세요</a>**.
 
 ---
 
@@ -107,14 +107,14 @@ trial을 마치고 조직에서 OpenCode를 본격적으로 사용하려면, 가
 ## FAQ
 
 <details>
-<summary>OpenCode Enterprise란 무엇인가요?</summary>
+<summary>Unifia Enterprise란 무엇인가요?</summary>
 
-OpenCode Enterprise는 코드와 데이터가 조직 인프라 밖으로 나가지 않도록 보장하려는 조직을 위한 기능입니다. SSO 및 내부 AI gateway와 연동되는 중앙 config를 사용해 이를 구현할 수 있습니다.
+Unifia Enterprise는 코드와 데이터가 조직 인프라 밖으로 나가지 않도록 보장하려는 조직을 위한 기능입니다. SSO 및 내부 AI gateway와 연동되는 중앙 config를 사용해 이를 구현할 수 있습니다.
 
 </details>
 
 <details>
-<summary>OpenCode Enterprise는 어떻게 시작하나요?</summary>
+<summary>Unifia Enterprise는 어떻게 시작하나요?</summary>
 
 먼저 팀 내부 trial부터 시작하세요. OpenCode는 기본적으로 코드나 context 데이터를 저장하지 않으므로 도입을 빠르게 시작할 수 있습니다.
 
@@ -130,7 +130,7 @@ seat당 과금 방식의 엔터프라이즈 요금제를 제공합니다. 자체
 </details>
 
 <details>
-<summary>OpenCode Enterprise에서 데이터는 안전한가요?</summary>
+<summary>Unifia Enterprise에서 데이터는 안전한가요?</summary>
 
 네. OpenCode는 코드나 context 데이터를 저장하지 않습니다. 모든 처리는 로컬 또는 AI provider로의 직접 API 호출로 이루어집니다. 중앙 config와 SSO integration을 함께 사용하면 데이터는 조직 인프라 내부에서 안전하게 유지됩니다.
 
@@ -139,7 +139,7 @@ seat당 과금 방식의 엔터프라이즈 요금제를 제공합니다. 자체
 <details>
 <summary>사내 private NPM registry를 사용할 수 있나요?</summary>
 
-OpenCode는 Bun의 기본 `.npmrc` 지원을 통해 private npm registry를 사용할 수 있습니다. 조직에서 JFrog Artifactory, Nexus 등 private registry를 사용한다면 OpenCode 실행 전에 개발자 인증을 완료하세요.
+OpenCode는 Bun의 기본 `.npmrc` 지원을 통해 private npm registry를 사용할 수 있습니다. 조직에서 JFrog Artifactory, Nexus 등 private registry를 사용한다면 Unifia 실행 전에 개발자 인증을 완료하세요.
 
 private registry 인증 예시는 다음과 같습니다.
 
@@ -150,7 +150,7 @@ npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 이 명령은 인증 정보가 포함된 `~/.npmrc`를 생성하며, OpenCode는 이를 자동으로 인식합니다.
 
 :::caution
-OpenCode 실행 전에 private registry 로그인 상태여야 합니다.
+Unifia 실행 전에 private registry 로그인 상태여야 합니다.
 :::
 
 또는 `.npmrc` 파일을 수동으로 구성할 수 있습니다.
@@ -160,6 +160,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-엔터프라이즈 registry에서 패키지를 정상 설치하려면, 개발자는 OpenCode 실행 전에 private registry 인증을 완료해야 합니다.
+엔터프라이즈 registry에서 패키지를 정상 설치하려면, 개발자는 Unifia 실행 전에 private registry 인증을 완료해야 합니다.
 
 </details>

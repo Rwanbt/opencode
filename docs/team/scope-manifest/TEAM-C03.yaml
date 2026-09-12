@@ -1,0 +1,48 @@
+# TEAM-C03 scope manifest — WAVE-POST-T0-004
+card_id: TEAM-C03
+title: "Connecteur HTTP avec snapshot et fallback"
+gate: T2
+risk: medium
+depends_on: [C01, C02]
+depends_on_satisfied: true # C01 + C02 CLOSED+INTEGRATED
+base_sha: 5f73e2639160f11f85e799b8d5f40b81039e1765
+branch: c-C03/d0d2cfd8
+worktree: D:\App\OpenCode\.team-worktrees\C03-d0d2cfd8
+fencing_token_provisional: 151
+
+allowed_create:
+  - packages/unifia/src/model-intelligence/connectors/http-connector.ts
+  - packages/unifia/src/model-intelligence/connectors/snapshot-manager.ts
+  - packages/unifia/test/model-intelligence/connectors/http.test.ts
+  - packages/unifia/test/model-intelligence/connectors/snapshot-manager.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C03.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/registry.ts   # C01 core, figé
+  - packages/unifia/src/model-intelligence/schema.ts     # C01 core, figé
+  - packages/unifia/src/model-intelligence/connectors/types.ts   # C02 contrat, figé — importer seulement
+  - packages/unifia/src/model-intelligence/connectors/registry.ts # C02 contrat, figé — importer seulement
+  - packages/unifia/src/multi-model/**                  # B01/B02/B03 simultanée cette vague
+  - packages/unifia/src/team/**                         # G01/G02 figé
+  - toute branche protégée: main, dev, opti-ui, Team
+
+acceptance_criteria:
+  - "HttpConnector implémente Connector (C02) avec fetch HTTP réel + timeout borné + retry cap + AbortSignal + size limit (10 MB)"
+  - "SnapshotManager persiste le dernier snapshot valide avec hash SHA-256 + restauration offline fail-closed"
+  - "Validation Zod du ProvenanceMeta AVANT tout retour (fail-closed)"
+  - "Anti-SSRF: sourceURL pinné + whitelist optionnelle, validation loopback/link-local"
+  - "Tests sans dépendance réseau non contrôlée (fetch injecté + fixtures déterministes)"
+  - "C01 reste l'autorité unique : HttpConnector DÉCOUVRE et NORMALISE, jamais d'ingestion directe dans le registry"
+  - "0 erreur tsc dans src/model-intelligence/connectors/http-connector.ts + snapshot-manager.ts"
+  - "Tests passent en CI sans réseau réel"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsgo --noEmit"
+    - "bun test test/model-intelligence/connectors/ (baseline 80 tests C02 maintenue + nouveaux tests C03)"
+    - "bunx biome check src/model-intelligence/connectors/"
+    - "git diff --check"
+    - "marker commit : '[PROVISIONAL][UNREVIEWED][TEAM-C03]'"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct"

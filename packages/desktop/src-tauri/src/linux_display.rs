@@ -13,11 +13,19 @@ struct DisplayConfig {
     wayland: Option<bool>,
 }
 
+// WHY the app ID is spelled out instead of read from the AppHandle: read_wayland
+// decides whether to force Wayland before Tauri is initialised, so there is no
+// handle to ask. The constants come from config/identity.json via
+// identity_generated.rs, which is what stops this path drifting from the ID the
+// bundle actually installs under.
+//
+// Beta builds resolve to the prod directory here: this cfg only distinguishes
+// debug from release, and that was already true before the identity fix.
 fn dir() -> Option<PathBuf> {
     Some(dirs::data_dir()?.join(if cfg!(debug_assertions) {
-        "ai.opencode.desktop.dev"
+        crate::identity_generated::TAURI_DESKTOP_DEV_APP_ID
     } else {
-        "ai.opencode.desktop"
+        crate::identity_generated::TAURI_DESKTOP_PROD_APP_ID
     }))
 }
 

@@ -5,7 +5,7 @@
       "entry": ["sst.config.ts", "turbo.json", "script/**/*.{ts,js,sh}"],
       "project": ["*.ts", "*.js"]
     },
-    "packages/opencode": {
+    "packages/unifia": {
       "entry": [
         "src/index.ts",
         "src/cli/**/*.ts",
@@ -87,7 +87,7 @@
   ],
   "ignoreBinaries": [
     "gh",
-    "opencode",
+    "unifia",
     "tar",
     "sha256sum",
     "ulimit",
@@ -102,7 +102,7 @@
     "@tauri-apps/.*",
     "@actions/.*",
     "@parcel/watcher-.*",
-    "@opencode-ai/.*",
+    "@unifia/.*",
     "@aws-sdk/.*",
     "@babel/.*",
     "@solid-primitives/.*",
@@ -134,7 +134,7 @@
     "vite-plugin-icons-spritesheet",
     "semver",
     "storybook",
-    "opencode-web-ui.gen.ts"
+    "unifia-web-ui.gen.ts"
   ],
   "ignoreExportsUsedInFile": true
 }

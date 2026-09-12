@@ -2,7 +2,7 @@
 // Credentials are stored in $XDG_CONFIG/opencode/git-credentials.json via
 // the backend PUT /git/credentials route. Sensitive values are never echoed
 // back to the frontend (GET /git/credentials returns masked info only).
-import { Button } from "@opencode-ai/ui/button"
+import { Button } from "@unifia/ui/button"
 import { createResource, createSignal, Match, Show, Switch } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"

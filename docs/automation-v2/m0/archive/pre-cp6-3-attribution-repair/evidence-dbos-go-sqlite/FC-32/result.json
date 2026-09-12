@@ -1,0 +1,6 @@
+{
+  "replayModel": "PARTIAL",
+  "reason": "DBOS Go upstream Conductor requires deterministic orchestration (workflow replay). M0 surface does not exercise a workflow function through the candidate — replay is EXPECTED_FROM_UPSTREAM but not MEASURED here.",
+  "expectedFromUpstream": "YES",
+  "measured": false
+}

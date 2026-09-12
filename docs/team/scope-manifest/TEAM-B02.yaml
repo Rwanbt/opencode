@@ -1,0 +1,42 @@
+# TEAM-B02 scope manifest — WAVE-POST-T0-003
+card_id: TEAM-B02
+title: "Migrer ProviderDiscovery vers le substrat multi-model"
+gate: T1
+risk: high
+depends_on: [B01]
+depends_on_satisfied: true # B01 CLOSED+INTEGRATED (verdict Claude E2, cherry-pick 7b229eeae7)
+base_sha: 7b229eeae7e404f12efd27368bbaae2ffb9f3af4
+branch: c-B02/d7b7efa5
+worktree: D:\App\OpenCode\.team-worktrees\B02-d7b7efa5
+fencing_token_provisional: 147
+
+allowed_create:
+  - packages/unifia/src/multi-model/provider-discovery.ts
+  - packages/unifia/test/multi-model/provider-discovery.integration.test.ts # tests d'intégration (mock runtime discovery surface)
+  - packages/unifia/test/multi-model/provider-discovery.bench.test.ts # benchmarks + mode offline determinism
+allowed_modify_existing:
+  - packages/unifia/src/collective/provider-discovery.ts # adapter mince uniquement, ne pas changer le comportement Debate
+  - packages/unifia/test/multi-model/provider-discovery.test.ts # tests unitaires du nouveau substrat canonique
+  - docs/team/scope-manifest/TEAM-B02.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/** # scope C01, figé
+  - packages/unifia/src/team/** # scope G01/G02, figé
+  - packages/unifia/src/multi-model/{types,model-ref}.ts # scope B01, figé — consommer, ne jamais réécrire
+  - packages/unifia/src/multi-model/{model-invoker,usage-normalizer,cost-catalog,prompt-registry}.ts # B03/B04 futurs
+  - toute branche protégée: main, dev, opti-ui, Team
+
+acceptance_criteria:
+  - "Zéro duplication logique entre multi-model/provider-discovery.ts et collective/provider-discovery.ts"
+  - "Tests Debate existants verts (aucune régression)"
+  - "Diff comportemental nul côté Debate"
+  - "Aucun fichier hors manifest"
+  - "bunx tsc --noEmit -p . -> 0 erreur dans src/multi-model/** et src/collective/**"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsc --noEmit -p ."
+    - "bun test test/multi-model/ test/collective/ (si présents)"
+    - "git diff --check"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct"

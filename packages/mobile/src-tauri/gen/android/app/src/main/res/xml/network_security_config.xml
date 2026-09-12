@@ -27,7 +27,7 @@
             <certificates src="user"/>
         </trust-anchors>
     </base-config>
-    <!-- Loopback + RFC1918 LAN ranges only. Embedded opencode-cli sidecar
+    <!-- Loopback + RFC1918 LAN ranges only. Embedded unifia-cli sidecar
          listens on 127.0.0.1; 10.0.2.2 is the Android emulator's host alias.
          LAN ranges (10/8, 172.16/12, 192.168/16) are required for "Remote
          Server" pairing over a trusted home/office Wi-Fi. Cleartext outside

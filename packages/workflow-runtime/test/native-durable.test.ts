@@ -1,0 +1,684 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Unifia contributors */
+
+/**
+ * NativeDurableHistoryAuthority + NativeApprovalAuthority durable proofs
+ * (ADR-000 ratified: UNIFIA_NATIVE). These are the D-02 V4 production
+ * durable gate proofs: real SQLite persistence across restart, authority
+ * fencing (stale generation/owner), atomic state+history commit.
+ */
+
+import { describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
+import { mkdtempSync, rmSync } from "node:fs"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
+import { NativeDurableHistoryAuthority } from "../src/native-history"
+import { NativeApprovalAuthority, type NativeApprovalAuthorityOptions } from "../src/native-approval-authority"
+import { AttemptAuthorityError, DefaultSecretRedactor, NativeAttemptAuthority, type AttemptAuthorityErrorCode } from "../src/native-attempts"
+import { ApprovalBrokerV4, ApprovalV4Error, type AuthorityToken, type ApprovalBinding } from "../src/approval-v4"
+import { claimAuthority } from "../src/authority"
+import type { WorkflowRun } from "@unifia/contracts"
+
+const scope = { organizationId: "org", workspaceId: "ws" }
+const deployment = { ownershipScope: scope, environmentId: "test" }
+
+function expectAttemptError(run: () => unknown, code: AttemptAuthorityErrorCode): void {
+  try {
+    run()
+    expect.unreachable()
+  } catch (error) {
+    expect(error).toBeInstanceOf(AttemptAuthorityError)
+    expect((error as AttemptAuthorityError).code).toBe(code)
+  }
+}
+
+const makeRun = (runId: string): WorkflowRun => ({
+  runId, deploymentId: "dep-1", workflowVersionId: "ver-1", deploymentScope: deployment,
+  triggerId: "trig-1", triggerEventId: "evt-1", durableAuthorityId: runId, durableAuthorityKind: "native",
+  status: "running", createdAt: 100, updatedAt: 100,
+})
+
+const fixedNow = { value: 10_000 }
+const clock = () => fixedNow.value
+
+function freshHistory(): { authority: NativeDurableHistoryAuthority; token: AuthorityToken; dir: string; path: string } {
+  const dir = mkdtempSync(join(tmpdir(), "unifia-native-hist-"))
+  const path = join(dir, "history.sqlite")
+  const authority = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
+  authority.initialize()
+  const token = authority.claim("run-1", "owner-a")
+  return { authority, token, dir, path }
+}
+
+describe("NativeDurableHistoryAuthority", () => {
+  test("registers a run and returns a deep copy", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      const run = await ctx.authority.getRun("run-1")
+      expect(run).not.toBeNull(); expect(run!.status).toBe("running")
+      run!.status = "completed"
+      expect((await ctx.authority.getRun("run-1"))!.status).toBe("running")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("applies a legal transition atomically and journals it", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      const run = await ctx.authority.getRun("run-1")
+      expect(run!.status).toBe("waiting"); expect(run!.updatedAt).toBe(1100)
+      const history = ctx.authority.inspectTransitions("run-1")
+      expect(history).toHaveLength(1)
+      expect(history[0]).toMatchObject({ from: "running", to: "waiting", effectSlotId: "slot-1" })
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("rejects illegal transitions and from-mismatches", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "completed", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "completed", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })).rejects.toThrow("Illegal transition")
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "waiting", to: "completed", effectSlotId: "slot-3", occurredAt: 1200, isCompensating: false })).rejects.toThrow("does not match current status")
+      expect((await ctx.authority.getRun("run-1"))!.status).toBe("completed")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("rejects a future occurredAt (substrate obligation)", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      await expect(ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 20_000, isCompensating: false })).rejects.toThrow("future")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("fences protected mutations by run and current authority", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      const wrongRun = { ...ctx.token, workflowRunId: "run-2" }
+      await expect(ctx.authority.enqueueCommand(wrongRun, "run-1", { kind: "tool.http", payload: {} })).rejects.toThrow("authority token")
+      await expect(ctx.authority.transition({ ...ctx.token, generation: 2 }, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })).rejects.toThrow("stale authority")
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("enqueues commands and applies timer overlap policies", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      await ctx.authority.enqueueCommand(ctx.token, "run-1", { kind: "tool.http", payload: { url: "/x" } })
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2000, "allow")
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2500, "forbid")
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 3000, "replace")
+      const timers = ctx.authority.inspectTimers("run-1")
+      expect(timers).toHaveLength(1); expect(timers[0]!.fireAt).toBe(3000)
+      expect(ctx.authority.inspectCommands("run-1")).toHaveLength(1)
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("derives the materialized projection from persisted facts", async () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+      await ctx.authority.enqueueCommand(ctx.token, "run-1", { kind: "tool.http", payload: {} })
+      await ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 2000, "allow")
+      await ctx.authority.transition(ctx.token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      const projection = await ctx.authority.getMaterializedProjection("run-1")
+      expect(projection).toMatchObject({ runId: "run-1", status: "waiting", lastTransitionAt: 1100 })
+      expect(projection!.pendingEffects).toEqual(["tool.http:run-1"])
+      expect(projection!.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("projection on unknown run returns null (contract read)", async () => {
+    const ctx = freshHistory(); try {
+      await expect(ctx.authority.getMaterializedProjection("run-ghost")).resolves.toBeNull()
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: every fact survives close + reopen (no replay ambiguity)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-native-restart-"))
+    const path = join(dir, "history.sqlite")
+    try {
+      const first = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
+      first.initialize()
+      first.register(makeRun("run-1"))
+      const token = first.claim("run-1", "owner-a")
+      await first.transition(token, "run-1", { from: "running", to: "waiting", effectSlotId: "slot-1", occurredAt: 1100, isCompensating: false })
+      await first.enqueueCommand(token, "run-1", { kind: "human.approval", payload: { id: "a-1" } })
+      await first.scheduleTimer(token, "t-1", "run-1", 2000, "allow")
+      first.close()
+
+      const second = new NativeDurableHistoryAuthority({ databasePath: path, now: clock })
+      second.initialize()
+      const run = await second.getRun("run-1")
+      expect(run!.status).toBe("waiting")
+      expect(second.inspectTransitions("run-1")).toHaveLength(1)
+      expect(second.inspectCommands("run-1")).toHaveLength(1)
+      const projection = await second.getMaterializedProjection("run-1")
+      expect(projection!.pendingTimers).toEqual([{ timerId: "t-1", fireAt: 2000 }])
+      await second.transition(token, "run-1", { from: "waiting", to: "running", effectSlotId: "slot-2", occurredAt: 1200, isCompensating: false })
+      expect((await second.getRun("run-1"))!.status).toBe("running")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+const binding = (overrides: Partial<ApprovalBinding> = {}): ApprovalBinding => ({
+  workflowRunId: "run-1", logicalInvocationId: "invoke-1", executionPlanDigest: "plan-a", requesterPrincipalId: "workflow-1",
+  ownershipScope: scope, deploymentScope: deployment, capabilityRefs: ["fs.read"], resourceScope: ["/tmp/a"],
+  policyDecisionRef: "policy-a", policyVersion: "v1", ...overrides,
+})
+
+function freshApproval(): { authority: NativeApprovalAuthority; broker: ApprovalBrokerV4; token: AuthorityToken; dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), "unifia-native-approval-"))
+  const authority = new NativeApprovalAuthority({ databasePath: join(dir, "approvals.sqlite"), now: clock })
+  authority.initialize()
+  authority.claim("run-1", "owner-a")
+  return { authority, broker: new ApprovalBrokerV4(authority), token: { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }, dir }
+}
+
+function freshAttempts(dir: string, redact?: DefaultSecretRedactor): { authority: NativeAttemptAuthority; token: AuthorityToken } {
+  const path = join(dir, "x.sqlite")
+  const authority = new NativeAttemptAuthority({ databasePath: path, now: clock, redact })
+  authority.initialize()
+  const db = new Database(path)
+  const token = claimAuthority(db, "run-1", "owner-a", clock())
+  db.close()
+  return { authority, token }
+}
+
+const approvalInput = (overrides: Record<string, unknown> = {}) => ({ ...binding(), expiresAt: 20_000, requestGeneration: 1, ...overrides })
+
+describe("NativeApprovalAuthority (D-02 V4 durable gate)", () => {
+  test("fencing: stale generation and deposed owner are rejected", async () => {
+    const ctx = freshApproval(); try {
+      const stale: AuthorityToken = { ...ctx.token, generation: 0 }
+      await expect(ctx.authority.transact(stale, async (state) => ({ state, result: 1 }))).rejects.toThrow("STALE_AUTHORITY")
+      const forged: AuthorityToken = { ...ctx.token, authorityOwnerId: "owner-b" }
+      await expect(ctx.authority.read(forged, "x")).rejects.toThrow("STALE_AUTHORITY")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("takeover bumps generation: old token dies, new token rules (exactly one winner)", async () => {
+    const ctx = freshApproval(); try {
+      ctx.authority.takeover(ctx.token, "owner-b")
+      await expect(ctx.authority.transact(ctx.token, async (state) => ({ state, result: 1 }))).rejects.toThrow("STALE_AUTHORITY")
+      const fresh: AuthorityToken = { workflowRunId: "run-1", generation: 2, authorityOwnerId: "owner-b" }
+      const out = await ctx.authority.transact(fresh, async (state) => ({ state, result: state.generation }))
+      expect(out).toBe(2)
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("broker V4 on the durable authority: request -> resolve -> idempotent replay, journal monotonic", async () => {
+    const ctx = freshApproval(); try {
+      const requested = await ctx.broker.request(approvalInput(), ctx.token)
+      expect(requested.state).toBe("PENDING")
+      const resolved = await ctx.broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), ctx.token)
+      expect(resolved.state).toBe("APPROVED")
+      const replay = await ctx.broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), ctx.token)
+      expect(replay.state).toBe("APPROVED")
+      const events = await ctx.broker.history(requested.approvalId, ctx.token)
+      expect(events.map((e) => e.kind)).toEqual(["REQUESTED", "APPROVED", "REPLAYED_RESOLVE"])
+      expect(events.map((e) => e.eventSequence)).toEqual([1, 2, 3])
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: approvals, journal and generation survive close + reopen", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-native-approval-restart-"))
+    try {
+      const first = new NativeApprovalAuthority({ databasePath: join(dir, "approvals.sqlite"), now: clock })
+      first.initialize(); first.claim("run-1", "owner-a")
+      const brokerA = new ApprovalBrokerV4(first)
+      const tokenA: AuthorityToken = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
+      const requested = await brokerA.request(approvalInput(), tokenA)
+      await brokerA.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), tokenA)
+      first.close()
+
+      const second = new NativeApprovalAuthority({ databasePath: join(dir, "approvals.sqlite"), now: clock })
+      second.initialize()
+      const brokerB = new ApprovalBrokerV4(second)
+      const inspected = await brokerB.inspect(requested.approvalId, tokenA)
+      expect(inspected!.state).toBe("APPROVED")
+      const events = await brokerB.history(requested.approvalId, tokenA)
+      expect(events.map((e) => e.kind)).toEqual(["REQUESTED", "APPROVED"])
+      // a resolution replay after restart stays idempotent (REPLAYED_RESOLVE)
+      const replay = await brokerB.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), tokenA)
+      expect(replay.state).toBe("APPROVED")
+      const events2 = await brokerB.history(requested.approvalId, tokenA)
+      expect(events2[events2.length - 1]!.kind).toBe("REPLAYED_RESOLVE")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("concurrent transact on the same run: fencing rejects the loser", async () => {
+    const ctx = freshApproval(); try {
+      const first = ctx.authority.transact(ctx.token, async (state) => {
+        const record = { ...binding(), approvalId: "a-x", ordinal: 1, requestGeneration: 1, createdAt: clock(), expiresAt: 2000, state: "PENDING" as const }
+        return { state: { ...state, approvals: { ...state.approvals, "a-x": record } }, result: 1 }
+      })
+      await first
+      // simulate a lost authority (generation bump by another claim)
+      ctx.authority.takeover(ctx.token, "owner-b")
+      const fresh: AuthorityToken = { workflowRunId: "run-1", generation: 2, authorityOwnerId: "owner-b" }
+      await expect(ctx.authority.transact(ctx.token, async (state) => ({ state, result: 2 }))).rejects.toThrow("STALE_AUTHORITY")
+      await expect(ctx.authority.transact(fresh, async (state) => ({ state, result: state.generation }))).resolves.toBe(2)
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("D-02 V4 directive-8 proofs on the durable authority", () => {
+  test("pending approval survives restart and resolves after it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-v4-pending-"))
+    try {
+      const first = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      first.initialize(); first.claim("run-1", "owner-a")
+      const brokerA = new ApprovalBrokerV4(first)
+      const tokenA: AuthorityToken = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
+      const requested = await brokerA.request(approvalInput(), tokenA)
+      first.close()
+      const second = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      second.initialize()
+      const brokerB = new ApprovalBrokerV4(second)
+      const resolved = await brokerB.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), tokenA)
+      expect(resolved.state).toBe("APPROVED")
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("derived ApprovalId: identical duplicate request returns the same record", async () => {
+    const ctx = freshApproval(); try {
+      const first = await ctx.broker.request(approvalInput(), ctx.token)
+      const second = await ctx.broker.request(approvalInput(), ctx.token)
+      expect(second.approvalId).toBe(first.approvalId); expect(second.ordinal).toBe(1)
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("binding TOCTOU + policy drift are journalled as distinct STALE kinds", async () => {
+    const ctx = freshApproval(); try {
+      const a = await ctx.broker.request(approvalInput(), ctx.token)
+      await expect(ctx.broker.resolve(a.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), executionPlanDigest: "plan-b" }, ctx.token)).resolves.toMatchObject({ state: "STALE" })
+      const b = await ctx.broker.request({ ...approvalInput(), requestGeneration: 2 }, ctx.token)
+      await expect(ctx.broker.resolve(b.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), policyDecisionRef: "policy-b" }, ctx.token)).resolves.toMatchObject({ state: "STALE" })
+      const events = await ctx.broker.history(b.approvalId, ctx.token)
+      expect(events.map((e) => e.kind)).toEqual(["REQUESTED", "STALE_DIGEST_MISMATCH"])
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("scope list reordering does not invalidate a binding", async () => {
+    const ctx = freshApproval(); try {
+      const created = await ctx.broker.request({ ...approvalInput(), capabilityRefs: ["fs.read", "fs.write"], resourceScope: ["/tmp/a", "/tmp/b"] }, ctx.token)
+      const reordered = { ...binding(), capabilityRefs: ["fs.write", "fs.read"], resourceScope: ["/tmp/b", "/tmp/a"] }
+      await expect(ctx.broker.resolve(created.approvalId, "APPROVED", { id: "human-1", kind: "human" }, reordered, ctx.token)).resolves.toMatchObject({ state: "APPROVED" })
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("expiry boundary: past-expiry resolve is EXPIRED (fail-closed)", async () => {
+    const ctx = freshApproval(); try {
+      const created = await ctx.broker.request(approvalInput(), ctx.token)
+      const late: NativeApprovalAuthorityOptions = { databasePath: ctx.dir + "/a.sqlite", now: () => 30_000 }
+      void late
+      ctx.authority.close()
+      const lateAuthority = new NativeApprovalAuthority({ databasePath: join(ctx.dir, "approvals.sqlite"), now: () => 30_000 })
+      lateAuthority.initialize()
+      const lateBroker = new ApprovalBrokerV4(lateAuthority)
+      await expect(lateBroker.resolve(created.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), ctx.token)).resolves.toMatchObject({ state: "EXPIRED" })
+      lateAuthority.close()
+    } finally { rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("requester cancellation allowed; forged system cancellation rejected", async () => {
+    const ctx = freshApproval(); try {
+      const first = await ctx.broker.request(approvalInput(), ctx.token)
+      await expect(ctx.broker.cancel(first.approvalId, { id: "intruder", kind: "system" }, ctx.token)).rejects.toThrow("CANCEL_REJECTED")
+      const cancelled = await ctx.broker.cancel(first.approvalId, { id: "workflow-1", kind: "system" }, ctx.token)
+      expect(cancelled.state).toBe("CANCELLED")
+      const second = await ctx.broker.request({ ...approvalInput(), requestGeneration: 2 }, ctx.token)
+      const byTrusted = await ctx.broker.cancel(second.approvalId, { id: "authority-system", kind: "system" }, ctx.token)
+      expect(byTrusted.state).toBe("CANCELLED")
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("conflicting resolution rejected; journal sequence stays durable and monotonic across restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-v4-monotonic-"))
+    try {
+      const first = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      first.initialize(); first.claim("run-1", "owner-a")
+      const brokerA = new ApprovalBrokerV4(first)
+      const tokenA: AuthorityToken = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
+      const created = await brokerA.request(approvalInput(), tokenA)
+      await brokerA.resolve(created.approvalId, "APPROVED", { id: "human-1", kind: "human" }, binding(), tokenA)
+      await expect(brokerA.resolve(created.approvalId, "DENIED", { id: "human-2", kind: "human" }, binding(), tokenA)).rejects.toThrow("APPROVAL_ALREADY_RESOLVED")
+      first.close()
+      const second = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      second.initialize()
+      const brokerB = new ApprovalBrokerV4(second)
+      const events = await brokerB.history(created.approvalId, tokenA)
+      expect(events.map((e) => e.eventSequence)).toEqual([1, 2])
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("NativeAttemptAuthority (M3 durable attempt/effect identity)", () => {
+  test("retry semantics: same LI + same EffectKey -> NEW AttemptId, monotonic seq", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.mail.send")
+       const second = a.allocateAttempt(token, "li-1", "ek.mail.send")
+      expect(first.attemptId).not.toBe(second.attemptId)
+      expect(first.seq).toBe(1); expect(second.seq).toBe(2)
+      const effectId = NativeAttemptAuthority.effectId("run-1", "ek.mail.send")
+      expect(first.effectKey).toBe("ek.mail.send")
+      expect(a.inspectEffect("run-1", "ek.mail.send")!.effectId).toBe(effectId)
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("outcome recording: attempt becomes terminal, effect follows; double-record rejected", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att2-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.http.call")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+       expect(() => a.recordAttemptOutcome(token, "li-1", first.attemptId, "FAILED", {})).toThrow("already terminal")
+      expect(a.inspectEffect("run-1", "ek.http.call")!.status).toBe("SUCCEEDED")
+      // SUCCEEDED is terminal unconditionally: minting another attempt would
+      // risk redispatching an already-realized external effect.
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.http.call"), "EFFECT_ALREADY_TERMINAL")
+      expect(a.inspectAttempts("run-1", "li-1")).toHaveLength(1)
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("UNKNOWN_EXTERNAL_STATE: first-class outcome; terminal states are never overwritten; reconciliation journals", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att3-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // UNKNOWN is reconciliation-only; no second attempt may be minted.
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // only explicit reconciliation moves it, and it is journalled + flagged
+       a.reconcileEffect(token, "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+      const effect = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(effect!.status).toBe("SUCCEEDED"); expect(effect!.reconciled).toBe(true)
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "EFFECT_ALREADY_TERMINAL")
+       expectAttemptError(() => a.reconcileEffect(token, "ek.pay.charge", "FAILED", {}), "RECONCILIATION_CONFLICT")
+      a.close()
+    } finally { Bun.gc(true); rmSync(dir, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }) }
+  })
+
+  test("idempotency: terminal effect is never overwritten by a late attempt outcome", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att4-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.fs.write")
+       const retry = a.allocateAttempt(token, "li-1", "ek.fs.write")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: { n: 1 } })
+       a.recordAttemptOutcome(token, "li-1", retry.attemptId, "FAILED", { result: { n: 2 } })
+      const effect = a.inspectEffect("run-1", "ek.fs.write")
+      expect(effect!.status).toBe("SUCCEEDED")
+      const attempts = a.inspectAttempts("run-1", "li-1")
+      expect(attempts).toHaveLength(2)
+      expect(attempts[0]!.outcome).toBe("SUCCEEDED"); expect(attempts[1]!.outcome).toBe("FAILED")
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: attempts, effects and journal survive close + reopen", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att5-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.x")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
+      a.close()
+       const { authority: b, token: tokenB } = freshAttempts(dir)
+      expect(b.inspectAttempts("run-1", "li-1")).toHaveLength(1)
+      expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+       b.reconcileEffect(tokenB, "ek.x", "FAILED", {})
+      expect(b.inspectEffect("run-1", "ek.x")!.status).toBe("FAILED")
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconciled failure requires explicit retry authorization", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-retry-auth-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+       a.reconcileEffect(token, "ek.pay.charge", "FAILED", { reconciled: true })
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RETRY_NOT_AUTHORIZED")
+       a.authorizeRetry(token, "ek.pay.charge")
+       const retry = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+      expect(retry.seq).toBe(2)
+      // The consumed authorization reopened the logical effect: the cycle is
+      // fresh PENDING again, so normal allocation resumes and the new
+      // outcome genuinely drives the effect.
+      const reopened = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(reopened!.status).toBe("PENDING"); expect(reopened!.reconciled).toBe(false)
+      expect(a.inspectJournal("run-1", "ek.pay.charge").map((e) => [e.from, e.to])).toContainEqual(["FAILED", "PENDING"])
+      const third = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+      expect(third.seq).toBe(3)
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { ok: 1 } })
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("SUCCEEDED")
+      a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("direct FAILED retry: authorize reopens the effect, new outcome drives it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-direct-failed-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.job.run")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "FAILED", { result: { exit: 3 } })
+      expect(a.inspectEffect("run-1", "ek.job.run")!.status).toBe("FAILED")
+      // A plain FAILED effect (never reconciled) still requires authorization.
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.job.run"), "RETRY_NOT_AUTHORIZED")
+      a.authorizeRetry(token, "ek.job.run")
+      const retry = a.allocateAttempt(token, "li-1", "ek.job.run")
+      expect(retry.seq).toBe(2)
+      expect(a.inspectJournal("run-1", "ek.job.run").map((e) => [e.from, e.to])).toContainEqual(["FAILED", "PENDING"])
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { exit: 0 } })
+      const effect = a.inspectEffect("run-1", "ek.job.run")
+      expect(effect!.status).toBe("SUCCEEDED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("UNKNOWN reconcile FAILED then authorized retry lands SUCCEEDED", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-unknown-retry-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.refund")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.reconcileEffect(token, "ek.pay.refund", "FAILED", { probe: "absent" })
+      expect(a.inspectEffect("run-1", "ek.pay.refund")!.status).toBe("FAILED")
+      expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.refund"), "RETRY_NOT_AUTHORIZED")
+      a.authorizeRetry(token, "ek.pay.refund")
+      const retry = a.allocateAttempt(token, "li-1", "ek.pay.refund")
+      a.recordAttemptOutcome(token, "li-1", retry.attemptId, "SUCCEEDED", { result: { refunded: true } })
+      const effect = a.inspectEffect("run-1", "ek.pay.refund")
+      expect(effect!.status).toBe("SUCCEEDED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect is idempotent on the same reconciled outcome", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-idem-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.ok")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.reconcileEffect(token, "ek.idem.ok", "SUCCEEDED", { ok: 1 })
+      const settled = a.inspectEffect("run-1", "ek.idem.ok")
+      expect(settled!.status).toBe("SUCCEEDED"); expect(settled!.reconciled).toBe(true)
+      const journalLen = a.inspectJournal("run-1", "ek.idem.ok").length
+      // Redelivered reconcile with the SAME outcome: no-op, zero mutation.
+      a.reconcileEffect(token, "ek.idem.ok", "SUCCEEDED", { ok: 1 })
+      const replayed = a.inspectEffect("run-1", "ek.idem.ok")
+      expect(replayed!.status).toBe("SUCCEEDED"); expect(replayed!.reconciled).toBe(true)
+      expect(a.inspectJournal("run-1", "ek.idem.ok")).toHaveLength(journalLen)
+      // Conflicting outcome on the reconciled effect: typed conflict.
+      expectAttemptError(() => a.reconcileEffect(token, "ek.idem.ok", "FAILED", {}), "RECONCILIATION_CONFLICT")
+      expect(a.inspectEffect("run-1", "ek.idem.ok")!.status).toBe("SUCCEEDED")
+      expect(a.inspectJournal("run-1", "ek.idem.ok")).toHaveLength(journalLen)
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect FAILED replay is idempotent; cross-outcome conflicts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-fail-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.fail")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", {})
+      a.reconcileEffect(token, "ek.idem.fail", "FAILED", {})
+      const journalLen = a.inspectJournal("run-1", "ek.idem.fail").length
+      a.reconcileEffect(token, "ek.idem.fail", "FAILED", {})
+      expect(a.inspectEffect("run-1", "ek.idem.fail")!.status).toBe("FAILED")
+      expect(a.inspectJournal("run-1", "ek.idem.fail")).toHaveLength(journalLen)
+      expectAttemptError(() => a.reconcileEffect(token, "ek.idem.fail", "SUCCEEDED", {}), "RECONCILIATION_CONFLICT")
+      expect(a.inspectEffect("run-1", "ek.idem.fail")!.status).toBe("FAILED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("reconcileEffect on a normally-succeeded effect stays illegal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-att-reconcile-misuse-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.idem.misuse")
+      a.recordAttemptOutcome(token, "li-1", first.attemptId, "SUCCEEDED", { result: 1 })
+      expect(a.inspectEffect("run-1", "ek.idem.misuse")!.reconciled).toBe(false)
+      expect(() => a.reconcileEffect(token, "ek.idem.misuse", "SUCCEEDED", {})).toThrow("already terminal")
+      expect(a.inspectEffect("run-1", "ek.idem.misuse")!.status).toBe("SUCCEEDED")
+       a.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("NativeDurableHistoryAuthority — durable timers (directives 16-17)", () => {
+  test("no early fire; due exactly at fireAt; markTimerFired removes from due (at-most-once)", () => {
+    const ctx = freshHistory(); try {
+      ctx.authority.register(makeRun("run-1"))
+       ctx.authority.scheduleTimer(ctx.token, "t-1", "run-1", 5000, "allow")
+      expect(ctx.authority.dueTimers(4999)).toHaveLength(0)
+      expect(ctx.authority.dueTimers(5000)).toEqual([{ runId: "run-1", timerId: "t-1", fireAt: 5000 }])
+       ctx.authority.markTimerFired(ctx.token, "run-1", "t-1", 5000)
+      expect(ctx.authority.dueTimers(99999)).toHaveLength(0)
+      expect(ctx.authority.firedTimers("run-1")).toEqual([{ runId: "run-1", timerId: "t-1", firedAt: 5000 }])
+       try { ctx.authority.markTimerFired(ctx.token, "run-1", "t-1", 5001); expect.unreachable() } catch { /* at-most-once */ }
+    } finally { ctx.authority.close(); rmSync(ctx.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+
+  test("RESTART: a timer scheduled before shutdown fires after restart (durable catch-up), no duplicate", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-timer-restart-"))
+    try {
+      const first = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      first.initialize()
+      first.register(makeRun("run-1"))
+       const token = first.claim("run-1", "owner-a")
+       first.scheduleTimer(token, "t-9", "run-1", 7000, "allow")
+      first.close()
+      const second = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      second.initialize()
+      const due = second.dueTimers(8000)
+      expect(due).toEqual([{ runId: "run-1", timerId: "t-9", fireAt: 7000 }])
+       second.markTimerFired(token, "run-1", "t-9", 8000)
+      // a THIRD process sees the fired fact (no duplicate logical fire)
+      const third = new NativeDurableHistoryAuthority({ databasePath: join(dir, "h.sqlite"), now: clock })
+      third.initialize()
+      expect(third.dueTimers(99999)).toHaveLength(0)
+      expect(third.firedTimers("run-1")).toHaveLength(1)
+      third.close()
+      second.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("ACK-loss production regression (directive 23, FC-04 principle)", () => {
+  test("provider commits, candidate loses ack: UNKNOWN first-class, NO blind retry path, reconcile-only exit, restart-proof", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-ackloss-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       const first = a.allocateAttempt(token, "li-1", "ek.pay.charge")
+      // the provider committed but the transport ACK was lost:
+       a.recordAttemptOutcome(token, "li-1", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      const effect = a.inspectEffect("run-1", "ek.pay.charge")
+      expect(effect!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      // NO blind retry: UNKNOWN rejects allocation before a second dispatch.
+       expectAttemptError(() => a.allocateAttempt(token, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
+      expect(a.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+      a.close()
+      // RESTART: UNKNOWN survives; only the explicit reconciliation exits
+       const { authority: b, token: tokenB } = freshAttempts(dir)
+      expect(b.inspectEffect("run-1", "ek.pay.charge")!.status).toBe("UNKNOWN_EXTERNAL_STATE")
+       // #45: the refusal survives restart — still no second dispatch before reconcile.
+       expectAttemptError(() => b.allocateAttempt(tokenB, "li-1", "ek.pay.charge"), "RECONCILIATION_REQUIRED")
+       b.reconcileEffect(tokenB, "ek.pay.charge", "SUCCEEDED", { reconciled: true })
+      expect(b.inspectEffect("run-1", "ek.pay.charge")!.reconciled).toBe(true)
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("Recovery / reconciliation loop (directive 22)", () => {
+  test("restart scan: non-terminal PENDING surfaced for re-drive (new attempts), UNKNOWN surfaced for reconcile-only", () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-recovery-"))
+    try {
+       const { authority: a, token } = freshAttempts(dir)
+       a.allocateAttempt(token, "li-1", "ek.inflight")
+       const first = a.allocateAttempt(token, "li-2", "ek.pay")
+       a.recordAttemptOutcome(token, "li-2", first.attemptId, "UNKNOWN_EXTERNAL_STATE", { ackLost: true })
+      a.close()
+       const { authority: b, token: tokenB } = freshAttempts(dir)
+      const pending = b.pendingEffects("run-1")
+      expect(pending.map((e) => e.effectKey)).toEqual(["ek.inflight"])
+      const uncertain = b.uncertainEffects("run-1")
+      expect(uncertain.map((e) => e.effectKey)).toEqual(["ek.pay"])
+      // re-drive of the PENDING effect = NEW attempt (no blind replay of attempt 1)
+       const reDrive = b.allocateAttempt(tokenB, "li-1", "ek.inflight")
+      expect(reDrive.seq).toBe(2)
+      // reconciliation is the only exit for the UNKNOWN effect
+       b.reconcileEffect(tokenB, "ek.pay", "SUCCEEDED", { ok: true })
+      expect(b.uncertainEffects("run-1")).toHaveLength(0)
+      b.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})
+
+describe("Secret-leak canary (directive 39)", () => {
+  test("canary through tool input + error + approval: NO raw secret in any durable surface", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unifia-canary-"))
+    try {
+      const CANARY = "CANARY-SECRET-s3cr3t-value"
+      const redactor = new DefaultSecretRedactor()
+      redactor.register(CANARY) // the OS broker registers material it resolves for this process
+       const { authority: attempts, token: attemptToken } = freshAttempts(dir, redactor)
+      // realistic path 1: a tool effect whose result accidentally embeds the secret
+       const first = attempts.allocateAttempt(attemptToken, "li-1", "ek.http.call")
+       attempts.recordAttemptOutcome(attemptToken, "li-1", first.attemptId, "SUCCEEDED", { result: { body: `ok ${CANARY}` } })
+      // realistic path 2: an effect error carrying the secret
+       const second = attempts.allocateAttempt(attemptToken, "li-2", "ek.http.fail")
+       attempts.recordAttemptOutcome(attemptToken, "li-2", second.attemptId, "FAILED", { result: { error: `conn refused at ${CANARY}` } })
+      const approval = new NativeApprovalAuthority({ databasePath: join(dir, "a.sqlite"), now: clock })
+      approval.initialize(); approval.claim("run-1", "owner-a")
+      const broker = new ApprovalBrokerV4(approval)
+      const token = { workflowRunId: "run-1", generation: 1, authorityOwnerId: "owner-a" }
+      const requested = await broker.request({ ...binding(), expiresAt: 20_000, requestGeneration: 1, resourceScope: ["/data/ledger"] }, token)
+      await broker.resolve(requested.approvalId, "APPROVED", { id: "human-1", kind: "human" }, { ...binding(), resourceScope: ["/data/ledger"] }, token)
+      // SCAN all durable surfaces for the raw canary
+      const durableText = JSON.stringify([
+        attempts.inspectAttempts("run-1", "li-1"),
+        attempts.inspectAttempts("run-1", "li-2"),
+        broker.inspect(requested.approvalId, token),
+        broker.history(requested.approvalId, token),
+      ])
+      expect(durableText.includes(CANARY)).toBe(false)
+      expect(durableText.includes("[REDACTED:secret]")).toBe(true)
+      attempts.close(); approval.close()
+    } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }) }
+  })
+})

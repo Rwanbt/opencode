@@ -1,0 +1,91 @@
+card_id: TEAM-B05
+card_title: "Gate non-régression Debate"
+generation: post-t0-008-v1
+owner: MM7
+lease_id: LEASE-B05-20260725150000-team-b05-debate-gate-v1
+fencing_token: 155
+base_sha: d94b4108894477f166ea57b6fb15a769f82a7044
+retry_base_sha: a3343b7fda9d3b1694032e1be1e7372bf37bd270
+retry_reason: >
+  Original commit (0e9225a1ed, base d94b410889) found and pinned a real
+  regression (InsufficientProvidersError Fail-to-Die reclassification) as
+  a trip-wire, then correctly did NOT create a READY flag
+  (B05-BLOCKED.md written instead). Corrective card TEAM-B02-FIX fixed the
+  regression (commit a3343b7fda9d3b1694032e1be1e7372bf37bd270, independently
+  reviewed APPROVED_WITH_FOLLOWUP). Branch c-B05/18853556 was rebased onto
+  the new Team HEAD (clean rebase, zero conflicts) and the trip-wire
+  assertions were inverted to match the now-correct behaviour. See
+  B05-RETRY-VALIDATION-REPORT.md for full detail.
+branch: c-B05/18853556
+worktree: D:\App\OpenCode\.team-worktrees\B05-18853556
+depends_on:
+  - TEAM-B02 (CLOSED+INTEGRATED, D-042)
+  - TEAM-B03 v2 (CLOSED+INTEGRATED, D-050)
+  - TEAM-B04 (CLOSED+INTEGRATED, D-055)
+  - TEAM-B02-FIX (regression_origin: B02, discovered by TEAM-B05, R-B05-001;
+    fix commit a3343b7fda9d3b1694032e1be1e7372bf37bd270)
+allowed_create:
+  - packages/unifia/test/collective/**
+  - packages/unifia/test/tool/debate.test.ts (extend if pre-existing, else create)
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-B05.yaml
+forbidden:
+  - packages/unifia/src/collective/**
+  - packages/unifia/src/multi-model/**
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/team/**
+  - main, dev, opti-ui, Team branches
+notes: "Carte de PREUVE, pas d'implémentation nouvelle. Objectif: prouver que
+  l'extraction canonique (B01-B04) n'a pas dégradé le comportement de Debate.
+  Ne pas modifier src/collective/** — seulement lire, tester, comparer."
+deviations_from_spec: >
+  None from the allowed_create/allowed_modify_existing scope. One addition
+  beyond the two explicitly named test targets: a test fixture directory
+  packages/unifia/test/collective/fixtures/ containing a verbatim, frozen
+  copy of the pre-B02 collective/provider-discovery.ts implementation
+  (retrieved via `git show 55b47593b9:...`), used as an executable
+  regression oracle. This is a test-only file under
+  packages/unifia/test/collective/**, within allowed_create's glob, and
+  imports no src/collective/** or src/multi-model/** internals — it is a
+  self-contained historical snapshot, not a modification of frozen domains.
+scope_respected: >
+  Yes. Verified: 0 files touched under src/collective/**, src/multi-model/**,
+  src/model-intelligence/**, src/team/**. Only files created/modified:
+  packages/unifia/test/collective/provider-discovery.regression.test.ts,
+  packages/unifia/test/collective/fixtures/pre-b02-provider-discovery-oracle.ts,
+  and this manifest. packages/unifia/test/tool/debate.test.ts already
+  existed with strong coverage of DebateLive/executeWithLiveTracking and was
+  NOT modified (no gap found there worth extending; the gap was in
+  provider-discovery coverage, addressed in test/collective/).
+finding_summary: >
+  Executed a byte-for-byte behavioral comparison between the current
+  production adapter (src/collective/provider-discovery.ts, read-only) and
+  a frozen pre-B02 oracle, under identical mocked Provider.list()/Auth.all()/
+  credential-file/CLI-subprocess inputs. All cascade auth-method paths
+  (api_key via env-var, api_key via stored auth, credential_file,
+  cli_subprocess), ghost-model warnings, includeJudge, and selectJudge
+  produce structurally identical results (verified via 24 executed tests
+  in provider-discovery.regression.test.ts, 0 failures, on top of the
+  retry_base_sha). Three cosmetic, provably-inert shape differences were
+  found and characterized (own-key-presence of an undefined `role` field
+  on explicit participants; key insertion order on the judge object;
+  cost-missing edge case where the oracle dies and the adapter gracefully
+  omits the cost key) — none affects any current Debate consumer (verified
+  by reading every call site); all three re-verified unaffected by
+  TEAM-B02-FIX and the cost-missing case is now permanently pinned as an
+  executable test (previously described only in prose).
+retry_outcome: >
+  RESOLVED. The one real regression from the original submission
+  (InsufficientProvidersError Fail-to-Die reclassification at
+  src/collective/provider-discovery.ts:131-132) was fixed by TEAM-B02-FIX
+  (commit a3343b7fda9d3b1694032e1be1e7372bf37bd270): discover() now does
+  `yield* discoverAvailableProviders(...)` directly instead of the
+  Effect.promise(Effect.runPromise(...)) round-trip. The trip-wire this
+  card built specifically to catch that fix (or any further drift) —
+  the "Fail/Die parity" describe block in
+  provider-discovery.regression.test.ts, formerly "KNOWN REGRESSION" — was
+  inverted to assert the now-correct behaviour (Cause.hasFails=true,
+  hasDies=false on BOTH oracle and adapter) and passes. behavioral_diff is
+  now NONE. B05-READY.flag created with commit f5aa0f8edd4184bfdd0f1752da98abfc91523e49.
+  B05-BLOCKED.md left in place as historical record (superseded — see
+  B05-RETRY-VALIDATION-REPORT.md).

@@ -1,21 +1,23 @@
-# opencode VS Code Extension
+# unifia VS Code Extension
 
-A Visual Studio Code extension that integrates [opencode](https://opencode.ai) directly into your development workflow.
+A Visual Studio Code extension that integrates [unifia](https://github.com/Rwanbt/unifia) directly into your development workflow.
 
 ## Prerequisites
 
-This extension requires the [opencode CLI](https://opencode.ai) to be installed on your system. Visit [opencode.ai](https://opencode.ai) for installation instructions.
+This extension requires the [unifia CLI](https://github.com/Rwanbt/unifia) to be installed on your system. See
+[the repository README](https://github.com/Rwanbt/unifia#readme) for installation instructions. This fork controls no
+domain and does not use upstream's installer — see `docs/FORK-DISTRIBUTION.md`.
 
 ## Features
 
-- **Quick Launch**: Use `Cmd+Esc` (Mac) or `Ctrl+Esc` (Windows/Linux) to open opencode in a split terminal view, or focus an existing terminal session if one is already running.
-- **New Session**: Use `Cmd+Shift+Esc` (Mac) or `Ctrl+Shift+Esc` (Windows/Linux) to start a new opencode terminal session, even if one is already open. You can also click the opencode button in the UI.
-- **Context Awareness**: Automatically share your current selection or tab with opencode.
+- **Quick Launch**: Use `Cmd+Esc` (Mac) or `Ctrl+Esc` (Windows/Linux) to open unifia in a split terminal view, or focus an existing terminal session if one is already running.
+- **New Session**: Use `Cmd+Shift+Esc` (Mac) or `Ctrl+Shift+Esc` (Windows/Linux) to start a new unifia terminal session, even if one is already open. You can also click the unifia button in the UI.
+- **Context Awareness**: Automatically share your current selection or tab with unifia.
 - **File Reference Shortcuts**: Use `Cmd+Option+K` (Mac) or `Alt+Ctrl+K` (Linux/Windows) to insert file references. For example, `@File#L37-42`.
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/Rwanbt/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/Rwanbt/unifia/issues.
 
 ## Development
 

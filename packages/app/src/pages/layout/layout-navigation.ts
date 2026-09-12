@@ -10,7 +10,8 @@
 import { untrack } from "solid-js"
 import type { SetStoreFunction } from "solid-js/store"
 import { produce } from "solid-js/store"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@unifia/util/encode"
+import type { ShellMode } from "@unifia/workbench-shell/modes"
 import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 import type { useGlobalSDK } from "@/context/global-sdk"
@@ -18,6 +19,7 @@ import type { useGlobalSync } from "@/context/global-sync"
 import type { useLayout } from "@/context/layout"
 import type { useServer } from "@/context/server"
 import type { useNotification } from "@/context/notification"
+import { modeNavigationPath } from "@/context/mode-directory"
 import { effectiveWorkspaceOrder, latestRootSession, workspaceKey } from "./helpers"
 
 export interface LayoutNavigationDeps {
@@ -30,6 +32,8 @@ export interface LayoutNavigationDeps {
   navigateWithSidebarReset: (href: string) => void
   currentProject: () => LocalProject | undefined
   currentDir: () => string
+  /** The mode the user is currently viewing (Design/Work/Automate/Code) — switching projects or sessions must not reset it back to Code. */
+  activeMode: () => ShellMode
   prefetchSession: (session: Session, priority: "high" | "low") => void
   warm: (sessions: Session[], index: number) => void
   currentSessions: () => Session[]
@@ -53,6 +57,7 @@ export function createLayoutNavigation(deps: LayoutNavigationDeps) {
     navigateWithSidebarReset,
     currentProject,
     currentDir,
+    activeMode,
     prefetchSession,
     warm,
     currentSessions,
@@ -64,6 +69,22 @@ export function createLayoutNavigation(deps: LayoutNavigationDeps) {
 
   function activeProjectRoot(directory: string) {
     return currentProject()?.worktree ?? projectRoot(directory)
+  }
+
+  /**
+   * Builds a session URL that keeps whatever mode the user is currently
+   * viewing. Code mode keeps its historical path-segment form
+   * (`/{dir}/session/{id}`) byte-for-byte — every other mode routes through
+   * `modeNavigationPath` (`/{dir}/{mode}?session={id}`), the same helper
+   * `ModeContext.adoptSession` uses to keep a conversation alive across a
+   * mode switch. Before this, every navigation built here hardcoded
+   * `/session`, so switching projects (or opening a session) from Design,
+   * Work, or Automate silently dropped the user back into Code.
+   */
+  function directoryModePath(directory: string, sessionId?: string): string | undefined {
+    const mode = activeMode()
+    if (mode === "code") return `/${base64Encode(directory)}/session${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}`
+    return modeNavigationPath(directory, mode, sessionId ? `?session=${encodeURIComponent(sessionId)}` : "")
   }
 
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
@@ -118,7 +139,8 @@ export function createLayoutNavigation(deps: LayoutNavigationDeps) {
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
         setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
-        navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
+        const path = directoryModePath(target.directory, target.id)
+        if (path) navigateWithSidebarReset(path)
         return true
       }
       const resolved = await globalSDK.client.session
@@ -128,7 +150,8 @@ export function createLayoutNavigation(deps: LayoutNavigationDeps) {
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
+      const path = directoryModePath(resolved.directory, resolved.id)
+      if (path) navigateWithSidebarReset(path)
       return true
     }
 
@@ -164,12 +187,14 @@ export function createLayoutNavigation(deps: LayoutNavigationDeps) {
       return
     }
 
-    navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    const path = directoryModePath(root)
+    if (path) navigateWithSidebarReset(path)
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    const path = directoryModePath(session.directory, session.id)
+    if (path) navigateWithSidebarReset(path)
   }
 
   function openProject(directory: string, nav = true) {

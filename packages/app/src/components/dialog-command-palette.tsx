@@ -13,7 +13,7 @@ import {
   type Component,
 } from "solid-js"
 import { Portal } from "solid-js/web"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@unifia/ui/icon"
 import { useCommand, formatKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 

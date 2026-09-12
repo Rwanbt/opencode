@@ -1,15 +1,15 @@
 ---
 title: Servidores LSP
-description: OpenCode se integra con sus servidores LSP.
+description: Unifia se integra con sus servidores LSP.
 ---
 
-OpenCode se integra con su protocolo de servidor de idiomas (LSP) para ayudar a LLM a interactuar con su código base. Utiliza diagnósticos para proporcionar retroalimentación al LLM.
+Unifia se integra con su protocolo de servidor de idiomas (LSP) para ayudar a LLM a interactuar con su código base. Utiliza diagnósticos para proporcionar retroalimentación al LLM.
 
 ---
 
 ## Incorporados
 
-OpenCode viene con varios servidores LSP integrados para idiomas populares:
+Unifia viene con varios servidores LSP integrados para idiomas populares:
 
 | Servidor LSP       | Extensiones                                                         | Requisitos                                                               |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -50,14 +50,14 @@ OpenCode viene con varios servidores LSP integrados para idiomas populares:
 Los servidores LSP se habilitan automáticamente cuando se detecta una de las extensiones de archivo anteriores y se cumplen los requisitos.
 
 :::note
-Puede deshabilitar las descargas automáticas del servidor LSP configurando la variable de entorno `OPENCODE_DISABLE_LSP_DOWNLOAD` en `true`.
+Puede deshabilitar las descargas automáticas del servidor LSP configurando la variable de entorno `UNIFIA_DISABLE_LSP_DOWNLOAD` en `true`.
 :::
 
 ---
 
 ## Cómo funciona
 
-Cuando opencode abre un archivo:
+Cuando unifia abre un archivo:
 
 1. Comprueba la extensión del archivo con todos los servidores LSP habilitados.
 2. Inicia el servidor LSP apropiado si aún no se está ejecutando.
@@ -66,9 +66,9 @@ Cuando opencode abre un archivo:
 
 ## Configuración
 
-Puede personalizar los servidores LSP a través de la sección `lsp` en su configuración opencode.
+Puede personalizar los servidores LSP a través de la sección `lsp` en su configuración unifia.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -93,7 +93,7 @@ Veamos algunos ejemplos.
 
 Utilice la propiedad `env` para establecer variables de entorno al iniciar el servidor LSP:
 
-```json title="opencode.json" {5-7}
+```json title="unifia.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -112,7 +112,7 @@ Utilice la propiedad `env` para establecer variables de entorno al iniciar el se
 
 Utilice la propiedad `initialization` para pasar opciones de inicialización al servidor LSP. Estas son configuraciones específicas del servidor enviadas durante la solicitud LSP `initialize`:
 
-```json title="opencode.json" {5-9}
+```json title="unifia.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -137,7 +137,7 @@ Las opciones de inicialización varían según el servidor LSP. Consulte la docu
 
 Para deshabilitar **todos** los servidores LSP globalmente, configure `lsp` en `false`:
 
-```json title="opencode.json" {3}
+```json title="unifia.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -146,7 +146,7 @@ Para deshabilitar **todos** los servidores LSP globalmente, configure `lsp` en `
 
 Para deshabilitar un servidor LSP **específico**, configure `disabled` en `true`:
 
-```json title="opencode.json" {5}
+```json title="unifia.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -163,7 +163,7 @@ Para deshabilitar un servidor LSP **específico**, configure `disabled` en `true
 
 Puede agregar servidores LSP personalizados especificando el comando y las extensiones de archivo:
 
-```json title="opencode.json" {4-7}
+```json title="unifia.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

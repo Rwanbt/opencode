@@ -1,9 +1,9 @@
 import { createMemo, createSignal, onMount, For, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { List } from "@opencode-ai/ui/list"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Button } from "@opencode-ai/ui/button"
-import { showToast } from "@opencode-ai/ui/toast"
+import { List } from "@unifia/ui/list"
+import { Popover } from "@unifia/ui/popover"
+import { Button } from "@unifia/ui/button"
+import { showToast } from "@unifia/ui/toast"
 import { useLanguage } from "@/context/language"
 import type { useLocal } from "@/context/local"
 import { useProviders } from "@/hooks/use-providers"
@@ -60,7 +60,7 @@ export const DebateModelSelector: Component<{ local: LocalContext }> = (props) =
 
   onMount(async () => {
     const existing = props.local.debate.current() ?? (await props.local.debate.load())
-    if (!existing) return
+    if (!existing || !Array.isArray(existing.participants)) return
     const keys = new Set(available().map(modelKey))
     setAnnexSlots(existing.participants.filter((item) => keys.has(modelKey(item))).map(createAnnexSlot))
   })

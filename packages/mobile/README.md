@@ -1,18 +1,18 @@
-# OpenCode Mobile
+# Unifia Mobile
 
-Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports both local on-device AI and remote connection to a desktop OpenCode server.
+Native mobile app for Android (and future iOS), powered by Tauri 2.0. Supports both local on-device AI and remote connection to a desktop Unifia server.
 
 ## Features
 
 ### Dual Mode
-- **Local Mode** (Android): Runs an embedded OpenCode server directly on the device with full agent capabilities
-- **Remote Mode**: Connects to a desktop OpenCode instance over the network
+- **Local Mode** (Android): Runs an embedded Unifia server directly on the device with full agent capabilities
+- **Remote Mode**: Connects to a desktop Unifia instance over the network
 
 ### Local LLM Inference
 - On-device inference via llama.cpp with JNI bridge (GPU optional: OpenCL/Vulkan)
 - Adaptive runtime config: `n_gpu_layers` / threads / batch size derived from
   device profile (RAM, big.LITTLE CPU, GPU backend, thermal state) via
-  `packages/opencode/src/local-llm-server/auto-config.ts`
+  `packages/unifia/src/local-llm-server/auto-config.ts`
 - Model management: download GGUF models from HuggingFace, load/unload/delete
 - **Resumable downloads**: HTTP `Range` header picks up where a 4G interruption
   left off (4 GB GGUF doesn't restart from zero when signal drops)
@@ -177,7 +177,7 @@ packages/mobile/
 
 ### Shared Code
 
-The mobile app reuses the shared `@opencode-ai/app` package for UI components. Mobile adaptations include:
+The mobile app reuses the shared `@unifia/app` package for UI components. Mobile adaptations include:
 - `src/mobile.css` — Touch targets, safe areas, responsive layouts, terminal/diff/settings overrides
 - `src/platform.ts` — Mobile Platform implementation (storage, notifications, clipboard)
 - Responsive behavior via `@solid-primitives/media` breakpoints (768px for tablet, 1280px for desktop)
@@ -205,7 +205,7 @@ Packaged as JNI libs in `jniLibs/arm64-v8a/`:
 ## Remote Connection
 
 ### Setup
-1. Start OpenCode server on your desktop: `opencode serve --hostname 0.0.0.0`
+1. Start Unifia server on your desktop: `unifia serve --hostname 0.0.0.0`
 2. Note the server URL (e.g., `http://192.168.1.100:4096`)
 3. Open the mobile app → Remote → Enter server URL
 

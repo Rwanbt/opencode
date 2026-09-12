@@ -1,17 +1,38 @@
-import type { Platform } from "@opencode-ai/app"
+import type { Platform } from "@unifia/app"
+import { connectWorkbench, type NativeTokenBridge, type WorkbenchConnection } from "@unifia/workbench-shell"
 import { checkRuntime, extractRuntime, startEmbeddedServer, checkLocalHealth, stopLocalServer as stopLocal, writeDebugLog } from "./runtime"
 
 // Fingerprint du serveur privé (reçu via QR en mode Internet).
 // Quand défini, les requêtes HTTPS passent par la commande Rust
 // fetch_private_server qui accepte les certs self-signed.
 let _privateFp: string | null = null
+let _embeddedServerUrl: string | null = null
 
 export function setPrivateServerFp(fp: string | null) {
   _privateFp = fp
 }
 
+type NativeLease = { token: string; tokenId: string; instanceId: string; workspaceId: string; capabilities: string[]; issuedAt: number; expiresAt: number }
+type NativeRotation = { token: NativeLease; previousToken: string | null; gracePeriodMs: number }
+
+function mobileWorkbenchBridge(serverUrl: string): NonNullable<Platform["workbench"]> {
+  const request = (action: string, workspacePath?: string, workspaceId?: string, capabilities: readonly string[] = []) =>
+    import("@tauri-apps/api/core").then(({ invoke }) => invoke<unknown>("workbench_native_request", { serverUrl, action, workspacePath, workspaceId, capabilities: [...capabilities] }))
+  const bridge: NativeTokenBridge = {
+    issue: async (input) => await request("issue", undefined, input.workspaceId, input.capabilities) as NativeLease,
+    rotate: async (input) => await request("rotate", undefined, input.workspaceId, input.capabilities) as NativeRotation,
+    revoke: async (workspaceId) => { await request("revoke", undefined, workspaceId) },
+  }
+  return {
+    async connect(input): Promise<WorkbenchConnection> {
+      const opened = await request("open", input.workspacePath) as { workspaceId: string; instanceId: string }
+      return connectWorkbench({ baseUrl: `${serverUrl}/workbench`, bridge, tokenRequest: { workspaceId: opened.workspaceId, capabilities: [...input.capabilities] } })
+    },
+  }
+}
+
 // IPs RFC1918 + loopback + IPv6 ULA. Utilisé comme fallback quand l'utilisateur
-// arrive sur une URL HTTPS LAN sans avoir transité par le deep link `opencode://`
+// arrive sur une URL HTTPS LAN sans avoir transité par le deep link `unifia://`
 // (cas typique : scan via Google Lens / scanner tiers qui ne route pas les
 // schemes custom — l'utilisateur copie-colle l'URL HTTPS à la main, donc fp
 // jamais transmis). Sans cette détection, le tauri-plugin-http rejette le cert
@@ -142,15 +163,16 @@ const pkg = { version: "0.1.0" }
 // Lazy-load Tauri plugins to prevent crash if not available
 async function loadPlugins() {
   try {
-    const [http, os, notification, process, store, clipboard] = await Promise.all([
+    const [http, os, notification, process, store, clipboard, opener] = await Promise.all([
       import("@tauri-apps/plugin-http").catch(() => null),
       import("@tauri-apps/plugin-os").catch(() => null),
       import("@tauri-apps/plugin-notification").catch(() => null),
       import("@tauri-apps/plugin-process").catch(() => null),
       import("@tauri-apps/plugin-store").catch(() => null),
       import("@tauri-apps/plugin-clipboard-manager").catch(() => null),
+      import("@tauri-apps/plugin-opener").catch(() => null),
     ])
-    return { http, os, notification, process, store, clipboard }
+    return { http, os, notification, process, store, clipboard, opener }
   } catch {
     return null
   }
@@ -243,7 +265,17 @@ export async function createPlatform(): Promise<Platform> {
     version: pkg.version,
 
     openLink(url: string) {
-      window.open(url, "_blank")
+      // FORK: must open the system browser (Custom Tabs), never the app's
+      // embedded WebView — load-bearing for the GitHub OAuth Device Flow,
+      // which requires the user to authenticate on github.com itself, not
+      // inside a surface this app controls. `window.open` inside a Tauri
+      // Android WebView just navigates the same view (or no-ops); it does
+      // NOT spawn a real external browser.
+      if (plugins?.opener?.openUrl) {
+        void plugins.opener.openUrl(url).catch(() => window.open(url, "_blank"))
+      } else {
+        window.open(url, "_blank")
+      }
     },
 
     async restart() {
@@ -316,10 +348,10 @@ export async function createPlatform(): Promise<Platform> {
     // The Tauri Android dialog plugin does not actually support directory
     // selection — it returns null silently. Leaving this property undefined
     // makes the frontend (home.tsx / layout.tsx) fall through to the in-app
-    // DialogSelectDirectory, which uses the opencode-cli /file API.
+    // DialogSelectDirectory, which uses the unifia-cli /file API.
 
     // List navigable storage roots on Android (internal storage, SD cards,
-    // OTG drives, opencode home). The dialog uses these as starting points
+    // OTG drives, unifia home). The dialog uses these as starting points
     // since Android sandboxes /storage/ from direct enumeration.
     async listStorageRoots() {
       try {
@@ -376,7 +408,7 @@ export async function createPlatform(): Promise<Platform> {
             : (input as Request).url
       // Routage via la commande Rust fetch_private_server (accept_invalid_certs)
       // dans deux cas :
-      //   1. fp pinning explicite reçu via deep link `opencode://...&fp=...`
+      //   1. fp pinning explicite reçu via deep link `unifia://...&fp=...`
       //   2. fallback HTTPS vers IP privée RFC1918 sans fp (scan QR via scanner
       //      tiers qui ne route pas les schemes custom — l'utilisateur a copié
       //      l'URL à la main). Sans ce fallback, l'erreur est silencieuse et
@@ -436,7 +468,8 @@ export async function createPlatform(): Promise<Platform> {
         await writeDebugLog(`server_running=true savedPw=${savedPw ? savedPw.slice(0,8)+"..." : "null"}`)
         if (savedPw) {
           await writeDebugLog(`returning cached: url=http://127.0.0.1:${port} pw=${savedPw.slice(0,8)}...`)
-          return { url: `http://127.0.0.1:${port}`, username: "opencode", password: savedPw }
+          _embeddedServerUrl = `http://127.0.0.1:${port}`
+          return { url: _embeddedServerUrl, username: "unifia", password: savedPw }
         }
         await writeDebugLog("server running but no saved password, restarting...")
         try { await stopLocal(port) } catch {}
@@ -465,11 +498,19 @@ export async function createPlatform(): Promise<Platform> {
         await writeDebugLog(`checkLocalHealth(${i+1}): ${healthy}`)
         if (healthy) {
           await writeDebugLog(`returning: url=http://127.0.0.1:${port} pw=${password.slice(0,8)}...`)
-          return { url: `http://127.0.0.1:${port}`, username: "opencode", password }
+          _embeddedServerUrl = `http://127.0.0.1:${port}`
+          return { url: _embeddedServerUrl, username: "unifia", password }
         }
       }
       await writeDebugLog("health check timed out after 30s")
       return null
+    },
+
+    workbench: {
+      connect(input) {
+        if (!_embeddedServerUrl) throw new Error("Workbench native bridge requires the embedded local server")
+        return mobileWorkbenchBridge(_embeddedServerUrl).connect(input)
+      },
     },
 
     async stopLocalServer() {
@@ -481,4 +522,3 @@ export async function createPlatform(): Promise<Platform> {
     },
   }
 }
-

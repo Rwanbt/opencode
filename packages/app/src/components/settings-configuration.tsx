@@ -1,8 +1,8 @@
 import { type Component, createSignal, createResource, type JSX, Show, onCleanup, For } from "solid-js"
 import { Slider } from "@kobalte/core/slider"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Select } from "@opencode-ai/ui/select"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { Switch } from "@unifia/ui/switch"
+import { Select } from "@unifia/ui/select"
+import { TextField } from "@unifia/ui/text-field"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 

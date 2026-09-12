@@ -36,10 +36,10 @@ Performance-related issues:
 
 Desktop app issues:
 
-- `opencode web` command
+- `unifia web` command
 - The desktop app itself
 
-**Only** add if it's specifically about the Desktop application or `opencode web` view. **Do not** add for terminal, TUI, or general opencode issues.
+**Only** add if it's specifically about the Desktop application or `unifia web` view. **Do not** add for terminal, TUI, or general unifia issues.
 
 #### nix
 
@@ -51,13 +51,13 @@ If the issue mentions nix, assign to `rekram1-node`.
 
 #### zen
 
-**Only** add if the issue mentions "zen" or "opencode zen" or "opencode black".
+**Only** add if the issue mentions "zen" or "unifia zen" or "unifia black".
 
-If the issue doesn't have "zen" or "opencode black" in it then don't add zen label
+If the issue doesn't have "zen" or "unifia black" in it then don't add zen label
 
 #### core
 
-Use for core server issues in `packages/opencode/`, excluding `packages/opencode/src/cli/cmd/tui/`.
+Use for core server issues in `packages/unifia/`, excluding `packages/unifia/src/cli/cmd/tui/`.
 
 Examples:
 
@@ -104,16 +104,16 @@ ONLY assign if the issue will have the "zen" label.
 - fwang
 - MrMushrooooom
 
-TUI (`packages/opencode/src/cli/cmd/tui/...`):
+TUI (`packages/unifia/src/cli/cmd/tui/...`):
 
 - thdxr for TUI UX/UI product decisions and interaction flow
 - kommander for OpenTUI engine issues: rendering artifacts, keybind handling, terminal compatibility, SSH behavior, and low-level perf bottlenecks
 - rekram1-node for TUI bugs that are not clearly OpenTUI engine issues
 
-Core (`packages/opencode/...`, excluding TUI subtree):
+Core (`packages/unifia/...`, excluding TUI subtree):
 
 - thdxr for sqlite/snapshot/memory bugs and larger architectural core features
-- jlongster for opencode server + API feature work (tool currently remaps jlongster -> thdxr until assignable)
+- jlongster for unifia server + API feature work (tool currently remaps jlongster -> thdxr until assignable)
 - rekram1-node for harness issues, provider issues, and other bug-squashing
 
 For core bugs that do not clearly map, either thdxr or rekram1-node is acceptable.

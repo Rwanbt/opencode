@@ -1,0 +1,23 @@
+{
+  "name": "@unifia/memory-governance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/governance.test.ts"
+  },
+  "dependencies": {
+    "@unifia/memory-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

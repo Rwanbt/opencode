@@ -1,0 +1,26 @@
+{
+  "name": "@unifia/runtime-conformance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/conformance.test.ts"
+  },
+  "dependencies": {
+    "@unifia/artifact-runtime": "workspace:*",
+    "@unifia/contracts": "workspace:*",
+    "@unifia/workbench-server": "workspace:*",
+    "@unifia/workspace-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

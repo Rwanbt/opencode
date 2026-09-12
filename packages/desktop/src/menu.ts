@@ -158,11 +158,11 @@ export async function createMenu(trigger: (id: string) => void) {
         items: [
           // missing native macos search
           await MenuItem.new({
-            action: () => openUrl("https://opencode.ai/docs"),
+            action: () => openUrl("https://github.com/Rwanbt/unifia#readme"),
             text: t("desktop.menu.help.documentation"),
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/Rwanbt/opencode"),
+            action: () => openUrl("https://github.com/Rwanbt/unifia"),
             text: t("desktop.menu.help.supportForum"),
           }),
           await PredefinedMenuItem.new({
@@ -175,11 +175,11 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Separator",
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/Rwanbt/opencode/issues/new?template=feature-request.yml"),
+            action: () => openUrl("https://github.com/Rwanbt/unifia/issues/new?template=feature-request.yml"),
             text: t("desktop.menu.help.shareFeedback"),
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/Rwanbt/opencode/issues/new?template=bug-report.yml"),
+            action: () => openUrl("https://github.com/Rwanbt/unifia/issues/new?template=bug-report.yml"),
             text: t("desktop.menu.help.reportBug"),
           }),
         ],

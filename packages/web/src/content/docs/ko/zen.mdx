@@ -7,13 +7,13 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen은 OpenCode 팀이 제공하는, 테스트와 검증을 거친 모델 목록입니다.
+Unifia Zen은 Unifia 팀이 제공하는, 테스트와 검증을 거친 모델 목록입니다.
 
 :::note
-OpenCode Zen은 현재 beta입니다.
+Unifia Zen은 현재 beta입니다.
 :::
 
-Zen은 OpenCode의 다른 provider와 똑같이 작동합니다. OpenCode Zen에 로그인해 API 키를 받으면 됩니다. 이는 **완전히 선택 사항**이며, OpenCode를 사용하기 위해 반드시 사용할 필요는 없습니다.
+Zen은 OpenCode의 다른 provider와 똑같이 작동합니다. Unifia Zen에 로그인해 API 키를 받으면 됩니다. 이는 **완전히 선택 사항**이며, OpenCode를 사용하기 위해 반드시 사용할 필요는 없습니다.
 
 ---
 
@@ -33,16 +33,16 @@ OpenCode에서 잘 작동하는 일부 모델과 provider를 직접 테스트했
 2. 이어서 몇몇 provider와 협력해, 이 모델들이 올바르게 제공되도록 했습니다.
 3. 마지막으로 모델/provider 조합을 벤치마크하고, 자신 있게 추천할 수 있는 목록을 정리했습니다.
 
-OpenCode Zen은 이런 모델에 접근할 수 있게 해주는 AI gateway입니다.
+Unifia Zen은 이런 모델에 접근할 수 있게 해주는 AI gateway입니다.
 
 ---
 
 ## 작동 방식
 
-OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
+Unifia Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 
-1. **<a href={console}>OpenCode Zen</a>**에 로그인하고, 결제 정보를 추가한 뒤, API 키를 복사합니다.
-2. TUI에서 `/connect` 명령을 실행하고, OpenCode Zen을 선택한 다음 API 키를 붙여넣습니다.
+1. **<a href={console}>Unifia Zen</a>**에 로그인하고, 결제 정보를 추가한 뒤, API 키를 복사합니다.
+2. TUI에서 `/connect` 명령을 실행하고, Unifia Zen을 선택한 다음 API 키를 붙여넣습니다.
 3. TUI에서 `/models`를 실행해, 저희가 추천하는 모델 목록을 확인합니다.
 
 요금은 요청별로 청구되며, 계정에 크레딧을 추가할 수 있습니다.
@@ -90,7 +90,7 @@ OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 | Qwen3.6 Plus Free     | qwen3.6-plus-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-OpenCode config에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식입니다. 예를 들어 GPT 5.3 Codex를 사용하려면 config에서 `opencode/gpt-5.3-codex`를 사용하면 됩니다.
+Unifia config에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식입니다. 예를 들어 GPT 5.3 Codex를 사용하려면 config에서 `opencode/gpt-5.3-codex`를 사용하면 됩니다.
 
 ---
 
@@ -256,7 +256,7 @@ Zen의 다른 모델도 계속 사용하면서, 자체 OpenAI 또는 Anthropic A
 
 ## 목표
 
-OpenCode Zen을 만든 이유는 다음과 같습니다.
+Unifia Zen을 만든 이유는 다음과 같습니다.
 
 1. 코딩 에이전트에 가장 적합한 모델/provider를 **벤치마크**하기 위해.
 2. 성능을 낮추거나 더 저렴한 provider로 라우팅하지 않고, **최고 품질**의 선택지에 접근하기 위해.

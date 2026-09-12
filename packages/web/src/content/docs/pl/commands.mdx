@@ -42,15 +42,15 @@ Uruchom polecenie, wpisując `/`, a następnie nazwę polecenia.
 
 ## Konfiguracja
 
-Możesz zdefiniować polecenia w `opencode.json` lub w plikach w katalogu `commands/`.
+Możesz zdefiniować polecenia w `unifia.json` lub w plikach w katalogu `commands/`.
 
 ---
 
 ### JSON
 
-Użyj opcji `command` w swojej konfiguracji opencode:
+Użyj opcji `command` w swojej konfiguracji unifia:
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Przyjrzyjmy się szczegółowo opcjom konfiguracji.
 
 Opcja `template` to prompt wysyłany do LLM po wykonaniu polecenia.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Jest to **wymagana** opcja konfiguracji.
 
 Użyj `description`, aby dodać krótki opis działania polecenia.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Użyj opcji `agent`, aby określić, który [agent](/docs/agents) powinien wykon
 Jeśli jest to [subagent](/docs/agents/#subagents), zostanie on użyty.
 Aby to zmienić, ustaw `subtask` na `false`.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Użyj `subtask`, aby wymusić wywołanie polecenia jako subzadania.
 Jest to przydatne, jeśli chcesz, aby polecenie nie zanieczyszczało kontekstu i **zmusiło** agenta do działania jako subagent,
 nawet jeśli `mode` jest ustawiony na `primary` w konfiguracji [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 Użyj `model`, aby określić model dla tego polecenia.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 ## Wbudowane
 
-opencode zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
+unifia zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
 
 :::note
 Polecenia wbudowane mogą zostać nadpisane.

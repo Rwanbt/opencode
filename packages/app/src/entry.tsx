@@ -9,7 +9,7 @@ import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
-const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
+const DEFAULT_SERVER_URL_KEY = "unifia.settings.dat:defaultServerUrl"
 
 const getLocale = () => {
   if (typeof navigator !== "object") return "en" as const
@@ -98,7 +98,9 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
 }
 
 const getCurrentUrl = () => {
-  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  // WHY no marketing-host branch: upstream special-cased its own site host to
+  // fall back to a local server. This fork controls no domain and publishes no
+  // site (see PROD_READINESS.md G9), so that branch was unreachable here.
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
   return location.origin
@@ -125,11 +127,24 @@ const platform: Platform = {
   setDefaultServer: writeDefaultServerUrl,
 }
 
+// V14.5 — test hook: the e2e harness (e2e/modes/design-journey.spec.ts)
+// can install a partial platform on `window.__UNIFIA_PLATFORM__` BEFORE
+// `entry.tsx` runs (via Playwright `addInitScript`). Production
+// runtimes never set the global, so the spread yields nothing and
+// the default web platform stands. The hook is intentionally narrow:
+// a Partial<Platform>, merged field-by-field, so a test only has
+// to override the slice it actually exercises (the workbench
+// bridge is the only one the harness ships today).
+const testOverride = (
+  typeof window !== "undefined" ? (window as { __UNIFIA_PLATFORM__?: Partial<Platform> }).__UNIFIA_PLATFORM__ : undefined
+)
+const merged: Platform = testOverride ? { ...platform, ...testOverride } : platform
+
 if (root instanceof HTMLElement) {
   const server: ServerConnection.Http = { type: "http", http: { url: getCurrentUrl() } }
   render(
     () => (
-      <PlatformProvider value={platform}>
+      <PlatformProvider value={merged}>
         <AppProviders
           defaultServer={ServerConnection.Key.make(getDefaultUrl())}
           servers={[server]}

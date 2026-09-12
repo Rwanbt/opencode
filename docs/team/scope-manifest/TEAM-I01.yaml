@@ -1,0 +1,22 @@
+schema_version: "1.0.0"
+card_id: TEAM-I01
+lease_id: LEASE-I01-20260727191000-team-i01-review-v1
+base_sha: e651c583d756430e0018a8dab12580e29812f9ae
+scope_mode: E2_REQUIRED
+allowed_files:
+  - docs/team/scope-manifest/TEAM-I01.yaml
+  - packages/unifia/src/team/review-runtime.ts
+  - packages/unifia/src/team/prompts/reviewer.txt
+  - packages/unifia/test/team/review-runtime.test.ts
+protected_files:
+  - packages/unifia/src/team/worker-runtime.ts
+  - packages/unifia/src/team/cli-worker-runtime.ts
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/scope-monitor.ts
+  - packages/unifia/src/team/rollback-manager.ts
+reserved_paths: []
+symlink_policy: REJECT
+case_policy: REJECT_DUPLICATE_CASE
+long_path_policy: FAIL_OVER_260
+eol_policy: LF_NORMALIZED

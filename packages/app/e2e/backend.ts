@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { createE2EProviderConfig } from "../src/testing/e2e-provider"
 
 type Handle = {
   url: string
@@ -64,22 +66,33 @@ function tail(input: string[]) {
 
 export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
-  const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
+  const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `unifia-e2e-${label}-`))
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
   const repoDir = path.resolve(appDir, "../..")
-  const opencodeDir = path.join(repoDir, "packages", "opencode")
+  // A missing cwd is reported as an executable spawn failure, so validate the
+  // renamed server package explicitly to keep path drift actionable.
+  const serverDir = path.join(repoDir, "packages", "unifia")
+  if (!existsSync(serverDir)) {
+    throw new Error(`Server package directory not found: ${serverDir}. Was packages/unifia renamed?`)
+  }
+  const configDir = path.join(sandbox, "config", "unifia")
+  await fs.mkdir(configDir, { recursive: true })
+  await fs.writeFile(
+    path.join(configDir, "unifia.json"),
+    JSON.stringify(createE2EProviderConfig(input?.llmUrl ?? "http://127.0.0.1:1/v1")),
+  )
   const env = {
     ...process.env,
-    OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
-    OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
-    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
-    OPENCODE_TEST_HOME: path.join(sandbox, "home"),
+    UNIFIA_DISABLE_LSP_DOWNLOAD: "true",
+    UNIFIA_DISABLE_DEFAULT_PLUGINS: "true",
+    UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+    UNIFIA_TEST_HOME: path.join(sandbox, "home"),
     XDG_DATA_HOME: path.join(sandbox, "share"),
     XDG_CACHE_HOME: path.join(sandbox, "cache"),
     XDG_CONFIG_HOME: path.join(sandbox, "config"),
     XDG_STATE_HOME: path.join(sandbox, "state"),
-    OPENCODE_CLIENT: "app",
-    OPENCODE_STRICT_CONFIG_DEPS: "true",
+    UNIFIA_CLIENT: "app",
+    UNIFIA_STRICT_CONFIG_DEPS: "true",
     OPENCODE_E2E_LLM_URL: input?.llmUrl,
   } satisfies Record<string, string | undefined>
   const out: string[] = []
@@ -88,9 +101,12 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     "bun",
     ["run", "--conditions=browser", "./src/index.ts", "serve", "--port", String(port), "--hostname", "127.0.0.1"],
     {
-      cwd: opencodeDir,
+      cwd: serverDir,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      // The server's parent watchdog treats end-of-stdin as a desktop host
+      // crash. Keeping this pipe open makes the E2E runner the explicit
+      // parent for the lifetime of the isolated backend.
+      stdio: ["pipe", "pipe", "pipe"],
     },
   )
   proc.stdout?.on("data", (chunk) => {
@@ -105,6 +121,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   const url = `http://127.0.0.1:${port}`
   try {
     await waitForHealth(url)
+    await waitForHealth(url, "/config/providers")
   } catch (error) {
     proc.kill("SIGTERM")
     await fs.rm(sandbox, { recursive: true, force: true }).catch(() => undefined)
@@ -123,6 +140,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   return {
     url,
     async stop() {
+      proc.stdin?.end()
       if (proc.exitCode === null) {
         proc.kill("SIGTERM")
         await waitExit(proc)

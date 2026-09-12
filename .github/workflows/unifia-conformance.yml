@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: MIT
+#
+# Gate for the Unifia-owned packages: supply-chain provenance, lint, typecheck
+# and every owned test suite. It proves only what is reproducible offline —
+# it is NOT a substitute for an external security audit or a signed release.
+name: unifia-conformance
+
+on:
+  push:
+    paths:
+      - "packages/**"
+      - "packages/artifact-runtime/**"
+      - "packages/browser-runtime/**"
+      - "packages/capability-runtime/**"
+      - "packages/contracts/**"
+      - "packages/desktop-runtime/**"
+      - "packages/document-packs/**"
+      - "packages/mcp-transport/**"
+      - "packages/memory-runtime/**"
+      - "packages/skill-hub/**"
+      - "packages/workbench-server/**"
+      - "packages/workflow-runtime/**"
+      - "packages/workspace-runtime/**"
+      - "scripts/unifia-conformance.mjs"
+      - "scripts/check-workbench-test-boundary.mjs"
+      - ".github/workflows/unifia-conformance.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # WHY full history: the gate enumerates tracked files with git ls-files.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install (frozen lockfile)
+        run: bun install --frozen-lockfile --no-progress
+
+      - name: Unifia conformance gate
+        run: node scripts/unifia-conformance.mjs --json unifia-conformance.json
+
+      - name: Mode registry guard
+        run: node scripts/check-mode-registry.mjs
+
+      - name: Workbench test boundary guard
+        run: node scripts/check-workbench-test-boundary.mjs
+
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unifia-conformance-report
+          path: unifia-conformance.json
+          if-no-files-found: warn

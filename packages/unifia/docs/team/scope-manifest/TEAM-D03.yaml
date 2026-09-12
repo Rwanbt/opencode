@@ -1,0 +1,17 @@
+card_id: TEAM-D03
+base_sha: 58fff9c5a505387e62284b2f7bd9b9070e18bef9
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/test/team/permission-broker.test.ts
+  - docs/team/scope-manifest/TEAM-D03.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/team-store.ts
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/provider/auth.ts
+  - packages/unifia/src/auth/**
+  - main
+  - dev
+  - opti-ui

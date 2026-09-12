@@ -5,12 +5,12 @@
 // write-only field — the config-read route never returns it, so this panel
 // can never display or leak a configured secret back to the screen.
 import { type Component, createResource, createSignal, For, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch as SwitchComponent } from "@opencode-ai/ui/switch"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@unifia/ui/button"
+import { Select } from "@unifia/ui/select"
+import { Switch as SwitchComponent } from "@unifia/ui/switch"
+import { TextField } from "@unifia/ui/text-field"
+import { Icon } from "@unifia/ui/icon"
+import { showToast } from "@unifia/ui/toast"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"

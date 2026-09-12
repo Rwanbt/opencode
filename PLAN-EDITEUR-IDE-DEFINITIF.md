@@ -1,4 +1,4 @@
-# Plan définitif — Éditeur & gestion fichiers OpenCode (IDE fonctionnel, zéro dette)
+# Plan définitif — Éditeur & gestion fichiers Unifia (IDE fonctionnel, zéro dette)
 
 > 📋 **Mirror vault** : [[OpenCode/Plan-Editeur-IDE-Definitif-2026-06-25]]
 > 📋 **Règle vault** : [[_global/rules/rule-plans-vault|règle plans-vault]]
@@ -10,7 +10,7 @@
 | Phase | Statut | Commit | Notes |
 |-------|--------|--------|-------|
 | Phase 0 (R3 build) | ⏸ à faire | — | Bloquant. copy-sidecar.ts déjà amélioré par GLM mais pas les 3 autres sous-étapes. |
-| **Phase 1 (R2 canonical)** | **✅ FAIT 2026-06-25** | `f46824090a` + `b1d2ac3131` | canonical.ts (frontend) + toCanonicalRelative (backend). 19 tests frontend + 3 tests backend. 129/129 packages/opencode/test/file/ verts. Reste : tools (write/edit/apply_patch) migrés en Phase 2. |
+| **Phase 1 (R2 canonical)** | **✅ FAIT 2026-06-25** | `f46824090a` + `b1d2ac3131` | canonical.ts (frontend) + toCanonicalRelative (backend). 19 tests frontend + 3 tests backend. 129/129 packages/unifia/test/file/ verts. Reste : tools (write/edit/apply_patch) migrés en Phase 2. |
 | Phase 2.1 (FileDoc contrat) | **✅ FAIT 2026-06-25** | `a93d6c6199` | Stamp gardé dans editor/store.ts. Stale absorbé dans `conflict`. Content = string + vcs séparé. 14 tests. 488/488 packages/app + 129/129 backend verts. |
 | Phase 2.2 (trim backend retiré) | **✅ FAIT 2026-06-25** | `76efa186a7` | `.trim()` retiré à `file/index.ts:633`. Pas de `readText()` créé (audit : aucun consumer ne veut le trim). 3 tests backend patchés (ils asservaient le bug R1). 129/129 backend + 488/488 packages/app verts. |
 | Phase 2.3 (unifier read/readRaw) | **✅ FAIT 2026-06-25** | `d8f8c1e998` | `read()` appelle `readRaw()` interne (via `Effect.promise` + `Effect.catch`). VCS mémo paresseux sera dans `FileDoc.vcs` côté frontend (2.4). 488/488 packages/app + 129/129 backend verts. |
@@ -30,7 +30,7 @@
 | Phase 6 (tests CI) | ⏸ partiel | — | canonical.test.ts ✅, manque : non-régression open→save→close→reopen, watcher echo, dirty-close, invariants runtime. |
 | Phase 6 (tests CI) | ⏸ partiel | — | canonical.test.ts ✅, manque : non-régression open→save→close→reopen, watcher echo, dirty-close, invariants runtime. |
 
-**Incident de session 2026-06-25 14h08** : `mavis-trash` a supprimé `D:\App\OpenCode\opencode` par erreur (path contenant `$null`). Récupération immédiate depuis Corbeille Windows via `robocopy` + `bun install`. Voir [[OpenCode/_review/2026-06-25 - Incident mavis-trash dossier opencode]].
+**Incident de session 2026-06-25 14h08** : `mavis-trash` a supprimé `D:\App\Unifia\unifia` par erreur (path contenant `$null`). Récupération immédiate depuis Corbeille Windows via `robocopy` + `bun install`. Voir [[OpenCode/_review/2026-06-25 - Incident mavis-trash dossier unifia]].
 > Ici on attaque les **causes racines architecturales**, pas les symptômes.
 > Objectif : l'app devient un IDE où l'on code à la main (comme VS Code), pas seulement via l'IA.
 > **Pas de MVP, pas de dette technique** : une source de vérité, des invariants vérifiés.
@@ -228,7 +228,7 @@ Sans ça, aucun fix n'est vérifiable.
 1. **Réparer le pipeline sidecar** : `copy-sidecar.ts` doit résoudre la source fraîche
    (pas via junction). Vérifier le junction (`Get-Item ... | Select LinkType,Target`) ;
    si présent, pointer la source vers le résolu réel
-   `packages/opencode/dist/opencode-windows-x64/bin/opencode.exe`.
+   `packages/unifia/dist/opencode-windows-x64/bin/opencode.exe`.
 2. **`beforeBuildCommand`** = `bun run build && bun run precopy:sidecar` (frontend + sidecar).
 3. **`cli.rs get_sidecar_path`** : fallback défense-en-profondeur vers `sidecars/` si le sibling
    est absent/stale (vérif : chaîne `File changed on disk since it was last read` présente).
@@ -278,7 +278,7 @@ C'est le cœur du plan. On fusionne cache lecture + baseline édition.
 5. ✅ **« Revert File »** : commit `0333705ac9`. `editor.revert(path)` alias de `reload()` + palette entry. 1 test.
 
 **Bilan Phase 3** : 5 commits atomiques, +27 tests, **519/519 packages/app tests verts**.
-Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 3)
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\Unifia\_memory\memory.md` (entrée 2026-06-25 Phase 3)
 + `OpenCode/sessions/2026-06-25 - Session Phase 3 Save Dirty.md` pour l'état détaillé.
 
 ### Phase 4 — Cohérence UI & conventions (R-code&conv)
@@ -303,7 +303,7 @@ Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 20
    renommé dans `GlobalConfigResponse` après le refactor backend
    (commit 61c5d7e6b0), `SpawnConfig` minimal en remplacement.
    Commit `cc8816f188` (2026-06-25).
-4. ✅ **Client SDK non-throwant par défaut** : `createOpencodeClient` passe
+4. ✅ **Client SDK non-throwant par défaut** : `createUnifiaClient` passe
    désormais `throwOnError:false` à `createClient` (était `undefined` →
    dépendait des overrides explicites). Migration des 2 root defaults
    (`global-sdk.tsx:234`, `sdk.tsx:20`) + retrait du workaround
@@ -312,7 +312,7 @@ Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 20
    Phase 5+) : `global-sync.tsx:183`, `prompt-input/submit.ts:355`,
    `dialog-connect-provider.tsx:171`. Commit `e8fff6c7b3` (2026-06-25).
 
-Voir `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\_memory\memory.md` (entrée 2026-06-25 Phase 4)
+Voir `D:\Documents\Obsidian\IA_Dev_Brain\Unifia\_memory\memory.md` (entrée 2026-06-25 Phase 4)
 + `OpenCode/sessions/2026-06-25 - Session Phase 4 UI Conventions.md` pour l'état détaillé.
 
 ### Phase 5 — Features IDE (manquants #5–17, par valeur)

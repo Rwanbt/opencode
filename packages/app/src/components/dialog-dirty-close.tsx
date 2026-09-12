@@ -12,9 +12,9 @@
 // The dialog is a pure renderer: the controller (close-guard.tsx) owns the
 // signal, the action promises, and the integration with FileStore + layout.
 
-import { Button } from "@opencode-ai/ui/button"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/util/path"
+import { Button } from "@unifia/ui/button"
+import { Dialog } from "@unifia/ui/dialog"
+import { getFilename } from "@unifia/util/path"
 import { useLanguage } from "@/context/language"
 
 export function DialogDirtyClose(props: {

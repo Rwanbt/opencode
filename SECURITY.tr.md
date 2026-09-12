@@ -10,17 +10,17 @@ AI tarafından oluşturulan güvenlik raporlarını kabul etmiyoruz. Bunlardan �
 
 ### Genel bakış
 
-OpenCode, makinenizde yerel olarak çalışan AI destekli bir kodlama asistanıdır. Shell yürütme, dosya işlemleri ve web erişimi dahil güçlü araçlara erişimi olan bir ajan sistemi sağlar.
+Unifia Workbench, makinenizde yerel olarak çalışan AI destekli bir kodlama asistanıdır. Shell yürütme, dosya işlemleri ve web erişimi dahil güçlü araçlara erişimi olan bir ajan sistemi sağlar.
 
 ### Sandbox yok
 
-OpenCode ajanı **sandbox'a almaz**. İzin sistemi, kullanıcıların ajanın ne yaptığının farkında olmasına yardımcı olan bir UX özelliği olarak vardır — komutları yürütmeden, dosya yazmadan vs. önce onay ister. Ancak güvenlik izolasyonu sağlamak için tasarlanmamıştır.
+Unifia Workbench ajanı **sandbox'a almaz**. İzin sistemi, kullanıcıların ajanın ne yaptığının farkında olmasına yardımcı olan bir UX özelliği olarak vardır — komutları yürütmeden, dosya yazmadan vs. önce onay ister. Ancak güvenlik izolasyonu sağlamak için tasarlanmamıştır.
 
-Gerçek izolasyona ihtiyacınız varsa OpenCode'u bir Docker kapsayıcısı veya VM içinde çalıştırın.
+Gerçek izolasyona ihtiyacınız varsa Unifia Workbench'u bir Docker kapsayıcısı veya VM içinde çalıştırın.
 
 ### Sunucu modu
 
-Sunucu modu yalnızca opt-in'dir. Etkinleştirildiğinde, HTTP Basic Auth gerektirmek için `OPENCODE_SERVER_PASSWORD` ayarlayın. Bu olmadan sunucu kimlik doğrulaması olmadan çalışır (uyarı ile). Sunucuyu güvence altına almak son kullanıcının sorumluluğundadır — sağladığı herhangi bir işlevsellik bir güvenlik açığı değildir.
+Sunucu modu yalnızca opt-in'dir. Etkinleştirildiğinde, HTTP Basic Auth gerektirmek için `UNIFIA_SERVER_PASSWORD` ayarlayın. Bu olmadan sunucu kimlik doğrulaması olmadan çalışır (uyarı ile). Sunucuyu güvence altına almak son kullanıcının sorumluluğundadır — sağladığı herhangi bir işlevsellik bir güvenlik açığı değildir.
 
 ### Kapsam dışı
 
@@ -38,7 +38,7 @@ Sunucu modu yalnızca opt-in'dir. Etkinleştirildiğinde, HTTP Basic Auth gerekt
 
 Bulgularınızı sorumlu bir şekilde açıklama çabanızı takdir ediyoruz ve katkılarınızı kabul etmek için her türlü çabayı göstereceğiz.
 
-Güvenlik sorunu bildirmek için GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new) sekmesini kullanın.
+Güvenlik sorunu bildirmek için GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new) sekmesini kullanın.
 
 Ekip, sonraki adımları belirten bir yanıt gönderecektir. İlk yanıttan sonra güvenlik ekibi, düzeltme ve tam duyuruya doğru ilerlemeler hakkında sizi bilgilendirecek ve ek bilgi isteyebilir.
 

@@ -13,7 +13,7 @@
  */
 import { createEffect, onCleanup, on } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { createAutoScroll } from "@unifia/ui/hooks"
 import { createSessionHistoryWindow } from "@/pages/session/session-history-window"
 import type { useSync } from "@/context/sync"
 import type { UserMessage, Message } from "../../types/sdk-shim"

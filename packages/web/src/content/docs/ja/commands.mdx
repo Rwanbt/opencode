@@ -42,15 +42,15 @@ Focus on the failing tests and suggest fixes.
 
 ## 設定
 
-カスタムコマンドは、OpenCode 設定を通じて、または `commands/` ディレクトリに Markdown ファイルを作成することによって追加できます。
+カスタムコマンドは、Unifia 設定を通じて、または `commands/` ディレクトリに Markdown ファイルを作成することによって追加できます。
 
 ---
 
 ### JSON
 
-OpenCode [設定](/docs/config)で `command` オプションを使用します:
+Unifia [設定](/docs/config)で `command` オプションを使用します:
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Check for performance issues and suggest improvements.
 
 `template` オプションは、コマンドの実行時に LLM に送信されるプロンプトを定義します。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Check for performance issues and suggest improvements.
 
 `description` オプションを使用して、コマンドの動作の簡単な説明を入力します。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Check for performance issues and suggest improvements.
 これが [subagent](/docs/agents/#subagents) の場合、コマンドはデフォルトでサブエージェントの呼び出しをトリガーします。
 この動作を無効にするには、`subtask` を `false` に設定します。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Check for performance issues and suggest improvements.
 これは、コマンドがプライマリコンテキストを汚染せず、エージェントがサブエージェントとして動作するように**強制**する場合に便利です。
 [agent](/docs/agents) 設定で `mode` が `primary` に設定されている場合でも。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Check for performance issues and suggest improvements.
 
 `model` 設定を使用して、このコマンドのデフォルトモデルをオーバーライドします。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 組み込み
 
-OpenCode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
+Unifia には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
 
 :::note
 カスタムコマンドは組み込みコマンドをオーバーライドできます。

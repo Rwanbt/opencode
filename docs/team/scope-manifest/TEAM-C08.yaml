@@ -1,0 +1,141 @@
+card_id: TEAM-C08
+card_title: "Lifecycle et collections dynamiques"
+generation: post-t0-009-v1
+owner: MM10
+lease_id: LEASE-C08-20260725160000-team-c08-lifecycle-collections-v1
+fencing_token: 158
+base_sha: ab3e9b1fb2c576017221b539736361988d320f49
+branch: c-C08/f408cb34
+worktree: D:\App\OpenCode\.team-worktrees\C08-f408cb34
+depends_on:
+  - TEAM-C07 (CLOSED+INTEGRATED, D-060)
+allowed_create:
+  - packages/unifia/src/model-intelligence/lifecycle.ts
+  - packages/unifia/src/model-intelligence/collections.ts
+  - packages/unifia/test/model-intelligence/lifecycle.test.ts
+  - packages/unifia/test/model-intelligence/collections.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C08.yaml
+forbidden:
+  - packages/unifia/src/model-intelligence/registry.ts
+  - packages/unifia/src/model-intelligence/schema.ts
+  - packages/unifia/src/model-intelligence/storage.ts
+  - packages/unifia/src/model-intelligence/ingestion.ts
+  - packages/unifia/src/model-intelligence/connectors/**
+  - packages/unifia/src/model-intelligence/pricing.ts
+  - packages/unifia/src/model-intelligence/benchmarks.ts
+  - packages/unifia/src/model-intelligence/health.ts
+  - packages/unifia/src/model-intelligence/sync.ts
+  - packages/unifia/src/multi-model/**
+  - packages/unifia/src/team/**
+  - main, dev, opti-ui, Team branches
+notes: |
+  schema.ts:106-115 (C01, gelé) définit déjà l'enum LifecycleStage à 8 états :
+  discovered -> metadata_validated -> probed -> low_risk_eligible ->
+  general_eligible -> trusted_by_domain, plus deprecated/quarantined (états
+  exceptionnels atteignables depuis n'importe quel état non-terminal). AUCUNE
+  state machine gérant ces transitions n'existe encore. lifecycle.ts doit
+  implémenter cette state machine (transitions valides/invalides, conditions de
+  promotion). collections.ts doit gérer des collections dynamiques utilisateur
+  (filtres versionnés, opt-in visible et explicite — jamais auto-trust silencieux).
+deviations_from_spec: |
+  1. [CORRECTED post-E2-review, see retry commit] `TransitionEvidence` carries
+     NO timestamp field of any kind — neither `currentStageEnteredAtUTC` (removed
+     in the original commit) NOR `nowUTC` (removed in the F1 retry commit, after
+     independent E2 review proved the original claim below was incomplete).
+     `LifecycleStore` takes a `clock: () => string` at construction (default
+     `isoUtcNow`) and is the SOLE source of both the persisted `enteredAtUTC`
+     and the evaluation instant used for every elapsed-time promotion condition.
+     The original text of this entry (superseded, kept below struck through for
+     the record) claimed the anti-spoofing fix was already complete after only
+     removing `currentStageEnteredAtUTC`; E2 review (reproduced with probes)
+     showed `evidence.nowUTC` — the *other* operand of the elapsed-time
+     subtraction — was still an unvalidated, caller-supplied field, enabling
+     (a) a far-future `nowUTC` promoting a model with 0ms real elapsed time,
+     (b) that same caller value being persisted into the store's own
+     "authoritative" `enteredAtUTC` and the audit log, and (c) a malformed
+     `nowUTC` producing `NaN` elapsed time that silently satisfied every
+     duration gate (`NaN < threshold` is `false`), i.e. fail-OPEN on bad input.
+     Fixed by moving the clock to construction-time injection (this card's
+     original preferred fix, per E2 review) and adding an explicit
+     `Number.isFinite(elapsed)` fail-closed check (`pushElapsedGate`) as
+     defense-in-depth against a misbehaving injected clock. See
+     `lifecycle.ts`'s "Clock" module-doc section.
+     ~~Original (superseded) text: `TransitionEvidence` does NOT carry
+     `currentStageEnteredAtUTC` as originally drafted internally — the state
+     machine (`LifecycleStore`) is authoritative about when a model entered
+     its current stage ... A caller cannot spoof "this model has been in
+     probation for 3 days".~~ — this last sentence was the inaccurate part;
+     see above for what is actually now true.
+  2. `lifecycle.ts` and `collections.ts` are intentionally NOT code-coupled
+     (no import between them) despite being conceptually linked (an elevated
+     collection opt-in is the natural trigger for a `grant_trust` explicit
+     lifecycle action). Each is independently testable; the integration is
+     documented in both files' module docs for the next integrator/orchestration
+     layer to wire together.
+  3. `deprecated` is reachable only from `low_risk_eligible`, `general_eligible`,
+     `trusted_by_domain` — NOT from `discovered`/`metadata_validated`/`probed`.
+     Rationale documented in lifecycle.ts module doc: "deprecated" means "was
+     offered for use, now retired in favor of something else"; an onboarding
+     model was never offered for use. Early-stage rejection uses `quarantined`
+     instead, which remains reachable from every non-terminal stage including
+     these three.
+  4. `deprecated` and `quarantined` are terminal (zero outgoing transitions) —
+     re-review of a rejected/retired model is modeled as a new record decision
+     outside this module's scope, not a state-machine transition, to keep the
+     graph acyclic and every stage's remaining transitions a structural fact.
+scope_respected: |
+  Created exactly the 4 files allowed by allowed_create (lifecycle.ts,
+  collections.ts, lifecycle.test.ts, collections.test.ts) plus this manifest
+  update. No frozen file (registry.ts, schema.ts, storage.ts, ingestion.ts,
+  connectors/**, pricing.ts, benchmarks.ts, health.ts, sync.ts) was modified —
+  schema.ts/health.ts/benchmarks.ts were imported read-only (LifecycleStage
+  reused via `Model.shape.lifecycleStage`, `ModelHealth`/`ModelCapabilities`
+  types reused, no enum or type re-declared). No import from multi-model/ or
+  team/ (verified via grep, 0 matches). All work stayed inside the C08
+  worktree; no push, fetch, or pull was run; no other worktree was touched.
+  Retry commit (F1 fix) touched only lifecycle.ts, lifecycle.test.ts, and this
+  manifest — collections.ts was untouched (E2 review found no defect in it).
+review_history:
+  - reviewer: E2 (Claude Opus 5, independent, fresh context)
+    date_utc: "2026-07-25T14:30:08Z"
+    commit_reviewed: 2664d5574fc209238e564dc2cb89b2ba760ce7f7
+    verdict: CHANGES_REQUESTED
+    confidence: 92
+    blocking_findings:
+      - "F1: elapsed-time governance (evaluatePromotionConditions/LifecycleStore.transition)
+         was bypassable via the untrusted, unvalidated TransitionEvidence.nowUTC field —
+         3 reproduced defects: (1) future-nowUTC bypass of MIN_PROBATION_MS/MIN_LOW_RISK_MS/
+         MIN_GENERAL_ELIGIBLE_MS with 0ms real elapsed time, (2) the spoofed value persisted
+         into the store's own enteredAtUTC and the audit log (including rewinding it before
+         initialize()), (3) a malformed nowUTC produced NaN elapsed time that silently
+         satisfied every duration gate — fail-OPEN, contradicting the module's own
+         documented fail-closed doctrine."
+    non_blocking_findings: [F2 filter-object-by-reference in collections.ts, F3 grantOptIn
+      re-grant semantics, F4 initialize() atUTC unvalidated (folded into F1 fix), F5 commit
+      message overstated test coverage for MissingReplacementPolicyError path]
+    positive_observations: [LifecycleStage enum reuse "exemplary", transition graph
+      construction, mandatory grant_trust gate for trusted_by_domain, deprecation
+      replacement-policy enforcement, collections.ts opt-in gate "well-designed",
+      test quality/non-tautological assertions]
+    full_verdict_ref: "D:\\Documents\\Obsidian\\IA_Dev_Brain\\OpenCode\\UNIFIA-TEAM-V3-FINAL-SANS-DETTE\\Execution\\Reviews\\C08-E2-REVIEWER-VERDICT.md"
+  - retry_by: MM10
+    fix_commit: PENDING (see git log for actual SHA — this manifest is committed
+      together with the fix)
+    fix_summary: |
+      Moved the transition-evaluation clock from per-call, caller-supplied
+      TransitionEvidence.nowUTC to a clock: () => string injected once at
+      LifecycleStore construction (default isoUtcNow). Removed nowUTC entirely
+      from TransitionEvidence — there is no timestamp field left on it at all.
+      initialize() no longer accepts a caller atUTC parameter either (F4,
+      folded in) — it always reads this.clock(). evaluatePromotionConditions
+      now takes nowUTC as an explicit positional parameter (never sourced from
+      evidence) and a new pushElapsedGate() helper fails closed
+      (Number.isFinite(elapsed) check) as defense-in-depth against a
+      misbehaving injected clock, rather than letting NaN comparisons silently
+      report success. 8 new regression tests added (F1 fail-closed on
+      malformed enteredAtUTC/nowUTC at the pure-function level; LifecycleStore
+      end-to-end proof that enteredAtUTC/atUTC come only from the clock; a
+      TypeScript-bypass test proving an injected nowUTC-shaped field on
+      evidence has zero runtime effect; default-clock test). collections.ts
+      was not touched — E2 found no defect there.

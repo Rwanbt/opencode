@@ -1,0 +1,23 @@
+{
+  "name": "@unifia/sandbox-drivers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/drivers.test.ts"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

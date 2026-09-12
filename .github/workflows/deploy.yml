@@ -1,11 +1,17 @@
 name: deploy
 
+# WHY manual-only: this deploys upstream's SaaS (Cloudflare hostnames under
+# opencode.ai, a Stripe webhook, PlanetScale branches) and this fork owns none
+# of it. The former `push: [dev, production]` trigger meant merging the rebrand
+# into `dev` would fire a deploy at infrastructure that is not ours. The fork
+# publishes no site — see infra/stage.ts and PROD_READINESS.md G9.
 on:
-  push:
-    branches:
-      - dev
-      - production
   workflow_dispatch:
+    inputs:
+      confirm_upstream_deploy:
+        description: "Type 'yes' to confirm this deploys infrastructure the fork does not own"
+        required: true
+        default: "no"
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -48,8 +54,12 @@ jobs:
           test -x "$STRIPE_PLUGIN_DIR/pulumi-resource-stripe"
 
       - name: Deploy
+        if: inputs.confirm_upstream_deploy == 'yes'
         run: bun sst deploy --stage=${{ github.ref_name }}
         env:
+          # Unlocks infra/stage.ts, which otherwise refuses to build a domain
+          # this fork does not own.
+          UNIFIA_ALLOW_UPSTREAM_DEPLOY: "1"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
           PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}

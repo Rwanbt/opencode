@@ -30,7 +30,7 @@ description: OpenCode를 확장하기 위해 자신만의 플러그인을 작성
 
 config 파일에 npm 패키지를 지정합니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -56,7 +56,7 @@ config 파일에 npm 패키지를 지정합니다.
 플러그인은 모든 소스에서 로드되며 모든 후크는 순서대로 실행됩니다. 로드 순서는 다음과 같습니다:
 
 1. 글로벌 구성 (`~/.config/opencode/opencode.json`)
-2. 프로젝트 구성 (`opencode.json`)
+2. 프로젝트 구성 (`unifia.json`)
 3. 글로벌 플러그인 디렉토리 (`~/.config/opencode/plugins/`)
 4. 프로젝트 플러그인 디렉토리 (`.opencode/plugins/`)
 
@@ -117,7 +117,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: 현재 프로젝트 정보.
 - `directory`: 현재 작업 디렉토리.
 - `worktree`: git worktree 경로.
-- `client`: AI와 상호 작용을 위한 opencode SDK 클라이언트.
+- `client`: AI와 상호 작용을 위한 unifia SDK 클라이언트.
 - `$`: 명령어를 실행하기 위한 Bun의 [shell API](https://bun.com/docs/runtime/shell).
 
 ---
@@ -127,7 +127,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 TypeScript 플러그인의 경우 플러그인 패키지에서 타입을 가져올 수 있습니다.
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 macOS에서 AppleScript를 실행하기 위해 `osascript`를 사용하고 있습니다. 여기서는 알림을 보내는 데 사용합니다.
 
 :::note
-opencode 데스크톱 앱을 사용하는 경우 응답이 준비되어 있거나 세션 오류가 있을 때 시스템 알림을 자동으로 보낼 수 있습니다.
+unifia 데스크톱 앱을 사용하는 경우 응답이 준비되어 있거나 세션 오류가 있을 때 시스템 알림을 자동으로 보낼 수 있습니다.
 :::
 
 ---
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 플러그인은 opencode에 사용자 정의 도구를 추가할 수 있습니다:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -339,7 +339,7 @@ export const MyPlugin = async ({ client }) => {
 세션이 압축될 때 포함되는 컨텍스트를 사용자 지정할 수 있습니다:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 또한 `output.prompt`를 설정하여 압축 프롬프트를 완전히 대체할 수도 있습니다:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

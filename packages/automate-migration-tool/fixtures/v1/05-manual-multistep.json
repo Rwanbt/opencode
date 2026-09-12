@@ -1,0 +1,34 @@
+{
+  "id": "wf-fixture-manual-multistep",
+  "version": 3,
+  "workspaceId": "ws-fixture",
+  "steps": [
+    {
+      "id": "manual",
+      "capability": "manual",
+      "input": { "comment": "user clicks 'start' in the workbench" }
+    },
+    {
+      "id": "fetch-config",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://config.example.com/wf-fixture" }
+    },
+    {
+      "id": "step-a",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://api.example.com/step-a" },
+      "requiresApproval": true
+    },
+    {
+      "id": "step-b",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://api.example.com/step-b" },
+      "requiresApproval": true
+    },
+    {
+      "id": "finalize",
+      "capability": "http",
+      "input": { "method": "POST", "url": "https://api.example.com/finalize" }
+    }
+  ]
+}

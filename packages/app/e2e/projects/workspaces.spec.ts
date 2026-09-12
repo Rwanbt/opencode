@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@unifia/util/encode"
 import type { Page } from "@playwright/test"
 
 import { test, expect } from "../fixtures"
@@ -108,7 +108,7 @@ test("can create a workspace", async ({ page, project }) => {
 test("non-git projects keep workspace mode disabled", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const nonGit = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-nongit-"))
+  const nonGit = await fs.mkdtemp(path.join(os.tmpdir(), "unifia-e2e-project-nongit-"))
   const nonGitSlug = dirSlug(nonGit)
 
   await fs.writeFile(path.join(nonGit, "README.md"), "# e2e nongit\n")
@@ -120,10 +120,15 @@ test("non-git projects keep workspace mode disabled", async ({ page, project }) 
     await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
 
     const activeDir = await resolveSlug(slugFromUrl(page.url())).then((item) => item.directory)
-    expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
+    expect(path.basename(activeDir)).toContain("unifia-e2e-project-nongit-")
 
     await openSidebar(page)
     await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
+
+    const reviewToggle = page.getByRole("button", { name: "Toggle review" }).first()
+    await expect(reviewToggle).toBeVisible()
+    if ((await reviewToggle.getAttribute("aria-expanded")) !== "true") await reviewToggle.click()
+    await expect(reviewToggle).toHaveAttribute("aria-expanded", "true")
     await expect(page.getByRole("button", { name: "Create Git repository" })).toBeVisible()
   } finally {
     await cleanupTestProject(nonGit)

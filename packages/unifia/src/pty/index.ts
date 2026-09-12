@@ -1,0 +1,566 @@
+import { Flag } from "../flag/flag"
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
+import { Instance } from "@/project/instance"
+import type { IPty } from "bun-pty"
+import z from "zod"
+import { Log } from "../util/log"
+import { lazy } from "@unifia/util/lazy"
+import { Shell } from "@/shell/shell"
+import { Plugin } from "@/plugin"
+import { PtyID } from "./schema"
+import { Effect, Layer, ServiceMap } from "effect"
+
+export namespace Pty {
+  const log = Log.create({ service: "pty" })
+
+  const BUFFER_LIMIT = 1024 * 1024 * 2
+  const BUFFER_CHUNK = 64 * 1024
+  const encoder = new TextEncoder()
+
+  type Socket = {
+    readyState: number
+    data?: unknown
+    send: (data: string | Uint8Array | ArrayBuffer) => void
+    close: (code?: number, reason?: string) => void
+  }
+
+  type Active = {
+    info: Info
+    process: IPty
+    buffer: string
+    bufferCursor: number
+    cursor: number
+    subscribers: Map<unknown, Socket>
+    // Mobile portrait first-prompt fix: track the dims the shell was spawned
+    // with so we can no-op identical resize requests (the frontend's initial
+    // fit.fit() produces the same numbers as estimateTerminalSize() on matching
+    // viewports), and we record the spawn timestamp so we can delay the first
+    // SIGWINCH until after mksh has emitted its PS1 and entered its readline
+    // loop. Sending SIGWINCH during that window triggers sigwinch_redisplay()
+    // which pads the line with spaces and overwrites the prompt.
+    spawnedAt: number
+    spawnCols: number
+    spawnRows: number
+    firstOutputAt: number | undefined
+    pendingResize: { cols: number; rows: number; timer: ReturnType<typeof setTimeout> } | undefined
+  }
+
+  // Hold the first post-spawn resize for this long if it arrives before any
+  // shell output — gives mksh time to source rc files, emit PS1 and initialize
+  // readline. Measured locally: PS1 arrives within ~120ms on cold boot; 800ms
+  // covers worst-case .profile sourcing. If output is seen earlier, the queued
+  // resize is flushed immediately.
+  const SPAWN_SIGWINCH_HOLD_MS = 800
+
+  type State = {
+    dir: string
+    sessions: Map<PtyID, Active>
+  }
+
+  // WebSocket control frame: 0x00 + UTF-8 JSON.
+  const meta = (cursor: number) => {
+    const json = JSON.stringify({ cursor })
+    const bytes = encoder.encode(json)
+    const out = new Uint8Array(bytes.length + 1)
+    out[0] = 0
+    out.set(bytes, 1)
+    return out
+  }
+
+  const pty = lazy(async () => {
+    // On Android, bun runs with Seccomp: 2 (musl) which blocks fork()/clone()
+    // from forkpty children (SIGSYS / exitCode=159). Use pty_server instead ---
+    // a native binary spawned from Java context (Seccomp: 0) that relays PTY
+    // data over TCP.
+    if (Flag.UNIFIA_PTY_PORT) {
+      log.info("using android-pty via TCP", { port: Flag.UNIFIA_PTY_PORT })
+      const { androidSpawn } = await import("./android-pty")
+      return androidSpawn
+    }
+    log.info("using bun-pty FFI")
+    const { spawn } = await import("bun-pty")
+    return spawn
+  })
+
+  export const Info = z
+    .object({
+      id: PtyID.zod,
+      title: z.string(),
+      command: z.string(),
+      args: z.array(z.string()),
+      cwd: z.string(),
+      status: z.enum(["running", "exited"]),
+      pid: z.number(),
+    })
+    .meta({ ref: "Pty" })
+
+  export type Info = z.infer<typeof Info>
+
+  export const CreateInput = z.object({
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().optional(),
+    title: z.string().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    // Optional client-provided session id. Used by the mobile frontend's
+    // lazy-create flow: the Terminal component mounts first, measures its
+    // container, calls fit() to get the *exact* grid size, and only then
+    // calls pty.create with that id + the measured dims. The shell is then
+    // born at the final size so no SIGWINCH is ever needed and readline's
+    // pad-erase redisplay never fires — fixing the portrait first-prompt
+    // bug at its root. When omitted, the server generates one as before.
+    id: z.string().startsWith("pty_").optional(),
+    // Initial PTY dimensions. When omitted the platform default (80x24) is
+    // used, which on mobile webviews causes the first shell prompt to be
+    // dropped: the shell writes its prompt at 80x24, the frontend fit()s
+    // down to ~36x11 immediately after spawn, and mksh/bash do not re-emit
+    // the prompt after SIGWINCH. Passing the estimated final dims at spawn
+    // time sidesteps the problem — the prompt is written in the right
+    // dimensions from the start and any subsequent fit() is a minor tweak.
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
+  })
+
+  export type CreateInput = z.infer<typeof CreateInput>
+
+  export const UpdateInput = z.object({
+    title: z.string().optional(),
+    size: z
+      .object({
+        rows: z.number(),
+        cols: z.number(),
+      })
+      .optional(),
+  })
+
+  export type UpdateInput = z.infer<typeof UpdateInput>
+
+  export const Event = {
+    Created: BusEvent.define("pty.created", z.object({ info: Info })),
+    Updated: BusEvent.define("pty.updated", z.object({ info: Info })),
+    Exited: BusEvent.define("pty.exited", z.object({ id: PtyID.zod, exitCode: z.number() })),
+    Deleted: BusEvent.define("pty.deleted", z.object({ id: PtyID.zod })),
+  }
+
+  export interface Interface {
+    readonly list: () => Effect.Effect<Info[]>
+    readonly get: (id: PtyID) => Effect.Effect<Info | undefined>
+    readonly create: (input: CreateInput) => Effect.Effect<Info>
+    readonly update: (id: PtyID, input: UpdateInput) => Effect.Effect<Info | undefined>
+    readonly remove: (id: PtyID) => Effect.Effect<void>
+    readonly resize: (id: PtyID, cols: number, rows: number) => Effect.Effect<void>
+    readonly write: (id: PtyID, data: string) => Effect.Effect<void>
+    readonly connect: (
+      id: PtyID,
+      ws: Socket,
+      cursor?: number,
+    ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
+    // FORK: Phase 4 stretch — problem matchers
+    readonly tail: (id: PtyID, maxChars?: number) => Effect.Effect<string>
+  }
+
+  // Strip ANSI escape codes for problem matcher analysis
+  const ANSI_RE =
+    /\x1B(?:\[[0-9;]*[mGKHFJABCDsuMPX@AHIJORSTLZ]|\][^\x07]*(?:\x07|\x1B\\)|[()][AB012]|[M78])/g
+
+  export function stripAnsi(raw: string): string {
+    return raw.replace(ANSI_RE, "").replace(/\r/g, "")
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Pty") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const plugin = yield* Plugin.Service
+      function teardown(session: Active) {
+        if (session.pendingResize) {
+          clearTimeout(session.pendingResize.timer)
+          session.pendingResize = undefined
+        }
+        try {
+          session.process.kill()
+        } catch {}
+        for (const [key, ws] of session.subscribers.entries()) {
+          try {
+            if (ws.data === key) ws.close()
+          } catch {}
+        }
+        session.subscribers.clear()
+      }
+
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Pty.state")(function* (ctx) {
+          const state = {
+            dir: ctx.directory,
+            sessions: new Map<PtyID, Active>(),
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              for (const session of state.sessions.values()) {
+                teardown(session)
+              }
+              state.sessions.clear()
+            }),
+          )
+
+          return state
+        }),
+      )
+
+      const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return
+        s.sessions.delete(id)
+        log.info("removing session", { id })
+        teardown(session)
+        yield* bus.publish(Event.Deleted, { id: session.info.id })
+      })
+
+      const list = Effect.fn("Pty.list")(function* () {
+        const s = yield* InstanceState.get(state)
+        return Array.from(s.sessions.values()).map((session) => session.info)
+      })
+
+      const get = Effect.fn("Pty.get")(function* (id: PtyID) {
+        const s = yield* InstanceState.get(state)
+        return s.sessions.get(id)?.info
+      })
+
+      // FORK: Phase 4 stretch — problem matchers
+      const tail = Effect.fn("Pty.tail")(function* (id: PtyID, maxChars = 60_000) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return ""
+        return stripAnsi(session.buffer.slice(-maxChars))
+      })
+
+      const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
+        const s = yield* InstanceState.get(state)
+        // Use the client-provided id if present (lazy-create flow), else mint
+        // a fresh ascending id. PtyID.ascending(given) validates the prefix.
+        if (input.id && s.sessions.has(input.id as PtyID)) {
+          return s.sessions.get(input.id as PtyID)!.info
+        }
+        const id = input.id ? PtyID.ascending(input.id) : PtyID.ascending()
+        const command = input.command || Shell.preferred()
+        const args = input.args || []
+        if (Shell.login(command)) {
+          args.push("-l")
+        }
+        const _shellName = Shell.name(command)
+
+        let cwd = input.cwd || s.dir
+        // On Android, the project dir may be "/" which is unreadable from
+        // the app sandbox.  Fall back to $HOME so the terminal opens in a
+        // usable directory.
+        if (cwd === "/" && process.env.HOME) {
+          cwd = process.env.HOME
+        }
+        const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
+        const env = {
+          ...process.env,
+          ...input.env,
+          ...shell.env,
+          TERM: "xterm-256color",
+          OPENCODE_TERMINAL: "1",
+        } as Record<string, string>
+
+        if (process.platform === "win32") {
+          env.LC_ALL = "C.UTF-8"
+          env.LC_CTYPE = "C.UTF-8"
+          env.LANG = "C.UTF-8"
+          // Git Bash: login shells get plain "$ " because /etc/profile exports
+          // PS1 before bash.bashrc can set a colored one. MSYS2_PS1 is checked
+          // first by bash.bashrc and overrides the plain prompt.
+          env.MSYS2_PS1 =
+            "\\[\\e]0;\\w\\a\\]\\n\\[\\e[32m\\]\\u@\\h \\[\\e[35m\\]MINGW64\\[\\e[0m\\] \\[\\e[33m\\]\\w\\[\\e[0m\\]\\n\\$ "
+        }
+        // Enable colored output for bash/zsh on all platforms
+        env.force_color_prompt = "yes"
+        env.CLICOLOR = "1"
+        env.CLICOLOR_FORCE = "1"
+        log.info("creating session", { id, cmd: command, args, cwd })
+
+        const spawn = yield* Effect.promise(() => pty())
+        const proc = yield* Effect.sync(() =>
+          spawn(command, args, {
+            name: "xterm-256color",
+            cwd,
+            env,
+            cols: input.cols,
+            rows: input.rows,
+          }),
+        )
+
+        const info = {
+          id,
+          title: input.title || `Terminal ${id.slice(-4)}`,
+          command,
+          args,
+          cwd,
+          status: "running",
+          pid: proc.pid,
+        } as const
+        const session: Active = {
+          info,
+          process: proc,
+          buffer: "",
+          bufferCursor: 0,
+          cursor: 0,
+          subscribers: new Map(),
+          spawnedAt: Date.now(),
+          spawnCols: input.cols ?? 80,
+          spawnRows: input.rows ?? 24,
+          firstOutputAt: undefined,
+          pendingResize: undefined,
+        }
+        s.sessions.set(id, session)
+        proc.onData(
+          Instance.bind((chunk) => {
+            session.cursor += chunk.length
+            if (session.firstOutputAt === undefined) {
+              session.firstOutputAt = Date.now()
+              // Flush any resize that was held while we waited for the shell
+              // to emit its prompt. Deferring until after output reaches
+              // readline means SIGWINCH lands in a state where mksh only
+              // updates its internal COLUMNS without repainting (no pad).
+              const pending = session.pendingResize
+              if (pending) {
+                clearTimeout(pending.timer)
+                session.pendingResize = undefined
+                try {
+                  session.process.resize(pending.cols, pending.rows)
+                  session.spawnCols = pending.cols
+                  session.spawnRows = pending.rows
+                } catch (err) {
+                  log.info("deferred resize failed", { id, err: String(err) })
+                }
+              }
+            }
+
+            for (const [key, ws] of session.subscribers.entries()) {
+              if (ws.readyState !== 1) {
+                session.subscribers.delete(key)
+                continue
+              }
+              if (ws.data !== key) {
+                session.subscribers.delete(key)
+                continue
+              }
+              try {
+                ws.send(chunk)
+              } catch {
+                session.subscribers.delete(key)
+              }
+            }
+
+            session.buffer += chunk
+            if (session.buffer.length <= BUFFER_LIMIT) return
+            const excess = session.buffer.length - BUFFER_LIMIT
+            session.buffer = session.buffer.slice(excess)
+            session.bufferCursor += excess
+          }),
+        )
+        proc.onExit(
+          Instance.bind(({ exitCode }) => {
+            if (session.info.status === "exited") return
+            log.info("session exited", { id, exitCode })
+            session.info.status = "exited"
+            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }))
+            Effect.runFork(remove(id))
+          }),
+        )
+        yield* bus.publish(Event.Created, { info })
+        return info
+      })
+
+      const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return
+        if (input.title) {
+          session.info.title = input.title
+        }
+        if (input.size) {
+          applyResize(session, input.size.cols, input.size.rows)
+        }
+        yield* bus.publish(Event.Updated, { info: session.info })
+        return session.info
+      })
+
+      // Mobile portrait first-prompt guard. Three cases:
+      //  1. Identical to spawn dims — skip ioctl+SIGWINCH entirely. No kernel
+      //     state change needed, no signal to trigger readline pad.
+      //  2. Shell hasn't emitted output yet and we're inside the hold window —
+      //     queue the resize; it is flushed either by the first onData callback
+      //     (see create handler) or by a fallback timer at hold-deadline.
+      //  3. Anything else — resize immediately (genuine mid-session resize).
+      function applyResize(session: Active, cols: number, rows: number) {
+        if (cols === session.spawnCols && rows === session.spawnRows) {
+          if (session.pendingResize) {
+            clearTimeout(session.pendingResize.timer)
+            session.pendingResize = undefined
+          }
+          return
+        }
+        const sinceSpawn = Date.now() - session.spawnedAt
+        if (session.firstOutputAt === undefined && sinceSpawn < SPAWN_SIGWINCH_HOLD_MS) {
+          if (session.pendingResize) {
+            clearTimeout(session.pendingResize.timer)
+          }
+          const timer = setTimeout(() => {
+            const pending = session.pendingResize
+            if (!pending) return
+            session.pendingResize = undefined
+            try {
+              session.process.resize(pending.cols, pending.rows)
+              session.spawnCols = pending.cols
+              session.spawnRows = pending.rows
+            } catch (err) {
+              log.info("held resize fallback failed", { err: String(err) })
+            }
+          }, Math.max(0, SPAWN_SIGWINCH_HOLD_MS - sinceSpawn))
+          session.pendingResize = { cols, rows, timer }
+          return
+        }
+        try {
+          session.process.resize(cols, rows)
+          session.spawnCols = cols
+          session.spawnRows = rows
+        } catch (err) {
+          log.info("resize failed", { err: String(err) })
+        }
+      }
+
+      const resize = Effect.fn("Pty.resize")(function* (id: PtyID, cols: number, rows: number) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (session && session.info.status === "running") {
+          applyResize(session, cols, rows)
+        }
+      })
+
+      const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (session && session.info.status === "running") {
+          session.process.write(data)
+        }
+      })
+
+      const connect = Effect.fn("Pty.connect")(function* (id: PtyID, ws: Socket, cursor?: number) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) {
+          ws.close()
+          return
+        }
+        log.info("client connected to session", { id })
+
+        // Use ws.data as the unique key for this connection lifecycle.
+        // If ws.data is undefined, fallback to ws object.
+        const key = ws.data && typeof ws.data === "object" ? ws.data : ws
+        // Optionally cleanup if the key somehow exists
+        session.subscribers.delete(key)
+        session.subscribers.set(key, ws)
+
+        const cleanup = () => {
+          session.subscribers.delete(key)
+        }
+
+        const start = session.bufferCursor
+        const end = session.cursor
+        const from =
+          cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
+
+        const data = (() => {
+          if (!session.buffer) return ""
+          if (from >= end) return ""
+          const offset = Math.max(0, from - start)
+          if (offset >= session.buffer.length) return ""
+          return session.buffer.slice(offset)
+        })()
+
+        if (data) {
+          try {
+            for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
+              ws.send(data.slice(i, i + BUFFER_CHUNK))
+            }
+          } catch {
+            cleanup()
+            ws.close()
+            return
+          }
+        }
+
+        try {
+          ws.send(meta(end))
+        } catch {
+          cleanup()
+          ws.close()
+          return
+        }
+
+        return {
+          onMessage: (message: string | ArrayBuffer) => {
+            session.process.write(String(message))
+          },
+          onClose: () => {
+            log.info("client disconnected from session", { id })
+            cleanup()
+          },
+        }
+      })
+
+      return Service.of({ list, get, create, update, remove, resize, write, connect, tail })
+    }),
+  )
+
+  const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function list() {
+    return runPromise((svc) => svc.list())
+  }
+
+  export async function get(id: PtyID) {
+    return runPromise((svc) => svc.get(id))
+  }
+
+  export async function resize(id: PtyID, cols: number, rows: number) {
+    return runPromise((svc) => svc.resize(id, cols, rows))
+  }
+
+  export async function write(id: PtyID, data: string) {
+    return runPromise((svc) => svc.write(id, data))
+  }
+
+  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
+    return runPromise((svc) => svc.connect(id, ws, cursor))
+  }
+
+  export async function create(input: CreateInput) {
+    return runPromise((svc) => svc.create(input))
+  }
+
+  export async function update(id: PtyID, input: UpdateInput) {
+    return runPromise((svc) => svc.update(id, input))
+  }
+
+  export async function remove(id: PtyID) {
+    return runPromise((svc) => svc.remove(id))
+  }
+
+  // FORK: Phase 4 stretch — problem matchers
+  export async function tail(id: PtyID, maxChars?: number) {
+    return runPromise((svc) => svc.tail(id, maxChars))
+  }
+}

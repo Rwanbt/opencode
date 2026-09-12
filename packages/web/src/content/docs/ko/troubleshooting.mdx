@@ -13,21 +13,21 @@ opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 
 -**macOS/리눅스**: `~/.local/share/opencode/log/`
 
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode\log`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\unifia\log`
 
 로그 파일은 타임스탬프 (예 : `2025-01-09T123456.log`)과 가장 최근 10 로그 파일이 보관됩니다.
 
-자세한 디버그 정보를 얻기 위해 `--log-level` 명령줄 옵션을 사용하여 로그 레벨을 설정할 수 있습니다. 예를 들면, `opencode --log-level DEBUG`.
+자세한 디버그 정보를 얻기 위해 `--log-level` 명령줄 옵션을 사용하여 로그 레벨을 설정할 수 있습니다. 예를 들면, `unifia --log-level DEBUG`.
 
 ---
 
 ## 저장소
 
-opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
+unifia 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
 -**macOS/리눅스**: `~/.local/share/opencode/`
 
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\unifia`
 
 이 디렉토리는 다음과 같습니다:
 
@@ -41,13 +41,13 @@ opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
 ## 데스크톱 앱
 
-opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sidecar)를 실행합니다. 대부분의 문제는 misbehaving 플러그인, 손상된 캐시, 또는 나쁜 서버 설정에 의해 발생합니다.
+unifia 데스크톱은 배경에서 로컬 unifia 서버 (`opencode-cli` sidecar)를 실행합니다. 대부분의 문제는 misbehaving 플러그인, 손상된 캐시, 또는 나쁜 서버 설정에 의해 발생합니다.
 
 ## 빠른 확인
 
 - 완전히 종료하고 앱을 다시 시작.
 - 앱이 오류 화면을 보여 주면 ** Restart**를 클릭하고 오류 세부 정보를 복사합니다.
-- macOS만: `OpenCode` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
+- macOS만: `Unifia` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
 
 ---
 
@@ -61,7 +61,7 @@ opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sid
 
 -**macOS/리눅스**: `~/.config/opencode/opencode.jsonc` (또는 `~/.config/opencode/opencode.json`) -**macOS/Linux** (외부 설치): `~/.local/share/opencode/opencode.jsonc`
 
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\unifia\unifia.jsonc`
 
 구성 된 플러그인이있는 경우, 일시적으로 키를 제거하거나 빈 배열로 설정하여 비활성화하십시오.
 
@@ -77,7 +77,7 @@ opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sid
 opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. Temporarily 이동 이러한 방법 (또는 폴더 이름을 변경) 및 데스크톱 응용 프로그램을 다시 시작:
 
 - **글로벌 플러그인** -**macOS/리눅스**: `~/.config/opencode/plugins/`
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\plugins`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\unifia\plugins`
 - **프로젝트 플러그인** (프로젝트 설정만 사용)
 - `<your-project>/.opencode/plugins/`
 
@@ -89,21 +89,21 @@ opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 
 플러그인을 비활성화하는 경우 도움이되지 않습니다 (또는 플러그인 설치가 붙어있다), 캐시를 삭제 그래서 opencode는 그것을 재구성 할 수 있습니다.
 
-1. Quit opencode 데스크톱 완전히.
+1. Quit unifia 데스크톱 완전히.
 2. 캐시 디렉토리 삭제:
 
 -**macOS**: 찾기 -> `Cmd+Shift+G` -> 붙여넣기 `~/.cache/opencode`
 
 - **Linux**: `~/.cache/opencode` 삭제 (또는 `rm -rf ~/.cache/opencode` 실행)
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.cache\opencode`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.cache\unifia`
 
-3. Restart opencode 데스크탑.
+3. Restart unifia 데스크탑.
 
 ---
 
 ## 서버 연결 문제 수정
 
-opencode 데스크톱은 자체 로컬 서버(기본)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
+unifia 데스크톱은 자체 로컬 서버(기본)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
 
 **"Connection Failed"** 대화 상자 (또는 앱이 스패시 화면을 지나지 않습니다), 사용자 정의 서버 URL을 확인합니다.
 
@@ -113,13 +113,13 @@ Home 화면에서 Server Picker를 열려면 서버 이름(상태 점)을 클릭
 
 #### 설정에서 server.port/server.hostname 제거
 
-`opencode.json(c)`가 `server` 섹션을 포함하면 일시적으로 제거하고 데스크톱 앱을 다시 시작합니다.
+`unifia.json(c)`가 `server` 섹션을 포함하면 일시적으로 제거하고 데스크톱 앱을 다시 시작합니다.
 
 ### 환경 변수 확인
 
-`OPENCODE_PORT`가 있는 경우, 데스크탑 앱은 로컬 서버의 포트를 사용하려고 합니다.
+`UNIFIA_PORT`가 있는 경우, 데스크탑 앱은 로컬 서버의 포트를 사용하려고 합니다.
 
-- `OPENCODE_PORT` (또는 무료 포트를 선택) 및 재시작.
+- `UNIFIA_PORT` (또는 무료 포트를 선택) 및 재시작.
 
 ---
 
@@ -134,7 +134,7 @@ Linux에서 일부 Wayland 설정은 공백 창이나 compositor 오류를 일�
 
 ## Windows: WebView2 런타임
 
-Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 **를 요구합니다. 앱이 공백 창에 열거나 시작하지 않을 경우, install/update WebView2를 설치하고 다시 시도하십시오.
+Windows에서 unifia 데스크톱은 Microsoft Edge ** WebView2 실행 시간 **를 요구합니다. 앱이 공백 창에 열거나 시작하지 않을 경우, install/update WebView2를 설치하고 다시 시도하십시오.
 
 ---
 
@@ -146,7 +146,7 @@ Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 
 
 ## 알림이 표시되지 않음
 
-opencode 데스크톱은 시스템 알림을 보여줍니다 :
+unifia 데스크톱은 시스템 알림을 보여줍니다 :
 
 - OS 설정에서 opencode에 대한 알림이 활성화되고,
 - 앱 창이 집중되지 않습니다.
@@ -157,11 +157,11 @@ opencode 데스크톱은 시스템 알림을 보여줍니다 :
 
 앱이 시작되지 않은 경우 UI 내부에서 설정을 취소할 수 없습니다. 데스크탑 앱의 저장된 상태를 재설정하십시오.
 
-1. Quit opencode 데스크탑.
-2. 이 파일을 찾아 삭제 (opencode 데스크톱 앱 데이터 디렉토리에서 라이브):
+1. Quit unifia 데스크탑.
+2. 이 파일을 찾아 삭제 (unifia 데스크톱 앱 데이터 디렉토리에서 라이브):
 
-- `opencode.settings.dat` (데스크톱 기본 서버 URL)
-- `opencode.global.dat` 및 `opencode.workspace.*.dat` (최근 서버/프로젝트와 같은 UI 국가)
+- `unifia.settings.dat` (데스크톱 기본 서버 URL)
+- `unifia.global.dat` 및 `unifia.workspace.*.dat` (최근 서버/프로젝트와 같은 UI 국가)
 
 빠른 디렉토리를 찾을 수:
 
@@ -188,7 +188,7 @@ opencode와 문제가 발생하면:
 
 실시간 도움말 및 커뮤니티 토론을 위해 Discord 서버에 가입하십시오.
 
-[**opencode.ai/discord**](https://opencode.ai/discord)
+[**unifia.ai/discord**](https://opencode.ai/discord)
 
 ---
 
@@ -202,7 +202,7 @@ opencode와 문제가 발생하면:
 
 1. 오류 메시지에 대한 로그 확인
 2. terminal에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
-3. 당신은 `opencode upgrade`를 가진 최신 버전이 있는 것을 지킵니다
+3. 당신은 `unifia upgrade`를 가진 최신 버전이 있는 것을 지킵니다
 
 ---
 
@@ -230,7 +230,7 @@ opencode와 문제가 발생하면:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-당신이 액세스 할 수있는 모델을 파악하려면, `opencode models`를 실행
+당신이 액세스 할 수있는 모델을 파악하려면, `unifia models`를 실행
 
 ---
 
@@ -247,7 +247,7 @@ ProviderInitError가 발생하면 잘못된 구성이나 손상된 구성이 있
    rm -rf ~/.local/share/opencode
    ```
 
-Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.local\share\opencode`
+Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.local\share\unifia`
 
 3. TUI의 `/connect` 명령을 사용하여 공급자와 재해.
 
@@ -255,7 +255,7 @@ Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.local\sh
 
 ### AI_APICallError 및 공급자 패키지 문제
 
-API 호출 오류가 발생하면, 이 공급 업체 패키지로 인해 발생할 수 있습니다. opencode 동적 설치 공급자 패키지 (OpenAI, Anthropic, Google 등) 필요 하 고 로컬로 캐시.
+API 호출 오류가 발생하면, 이 공급 업체 패키지로 인해 발생할 수 있습니다. unifia 동적 설치 공급자 패키지 (OpenAI, Anthropic, Google 등) 필요 하 고 로컬로 캐시.
 
 공급자 패키지 문제를 해결하려면:
 
@@ -265,9 +265,9 @@ API 호출 오류가 발생하면, 이 공급 업체 패키지로 인해 발생�
    rm -rf ~/.cache/opencode
    ```
 
-Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.cache\opencode`
+Windows에서, `WIN+R`를 누르고 삭제하십시오: `%USERPROFILE%\.cache\unifia`
 
-2. 최신 공급자 포장을 재설치하는 Restart opencode
+2. 최신 공급자 포장을 재설치하는 Restart unifia
 
 이것은 종종 모델 매개 변수와 API 변경과 호환성 문제를 해결하는 공급자 패키지의 가장 최근 버전을 다운로드하기 위해 opencode를 강제합니다.
 

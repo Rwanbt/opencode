@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-app",
+  "name": "@unifia/console-app",
   "version": "1.3.15",
   "type": "module",
   "license": "MIT",
@@ -7,7 +7,7 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
-    "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../opencode/script/schema.ts ./.output/public/config.json ./.output/public/tui.json",
+    "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../unifia/script/schema.ts ./.output/public/config.json ./.output/public/tui.json",
     "start": "vite start"
   },
   "dependencies": {
@@ -16,10 +16,10 @@
     "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-mail": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@unifia/console-core": "workspace:*",
+    "@unifia/console-mail": "workspace:*",
+    "@unifia/console-resource": "workspace:*",
+    "@unifia/ui": "workspace:*",
     "@smithy/eventstream-codec": "4.2.7",
     "@smithy/util-utf8": "4.2.0",
     "@solidjs/meta": "catalog:",
@@ -38,7 +38,7 @@
     "@typescript/native-preview": "catalog:",
     "@webgpu/types": "0.1.54",
     "typescript": "catalog:",
-    "wrangler": "4.50.0"
+    "wrangler": "4.89.1"
   },
   "engines": {
     "node": ">=22"

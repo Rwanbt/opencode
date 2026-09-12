@@ -1,4 +1,4 @@
-# État des bugs terminal mobile OpenCode — handoff humain
+# État des bugs terminal mobile Unifia — handoff humain
 
 ## Bug #2 ✅ RÉSOLU — Touches avancées (Vim/Esc/Ctrl/flèches)
 

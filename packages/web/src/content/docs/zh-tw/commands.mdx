@@ -42,15 +42,15 @@ frontmatter 定義指令屬性，內容則成為範本。
 
 ## 設定
 
-您可以透過 OpenCode 設定或在 `commands/` 目錄中建立 markdown 檔案來新增自訂指令。
+您可以透過 Unifia 設定或在 `commands/` 目錄中建立 markdown 檔案來新增自訂指令。
 
 ---
 
 ### JSON
 
-在 OpenCode [設定](/docs/config)中使用 `command` 選項：
+在 Unifia [設定](/docs/config)中使用 `command` 選項：
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -221,7 +221,7 @@ Check for performance issues and suggest improvements.
 
 `template` 選項定義執行指令時傳送給 LLM 的提示詞。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Check for performance issues and suggest improvements.
 
 使用 `description` 選項提供指令功能的簡要說明。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -259,7 +259,7 @@ Check for performance issues and suggest improvements.
 如果這是一個[子代理](/docs/agents/#subagents)，該指令預設會觸發子代理呼叫。
 要停用此行為，請將 `subtask` 設定為 `false`。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -279,7 +279,7 @@ Check for performance issues and suggest improvements.
 如果您希望指令不污染主要上下文，這會很有用，它會**強制**代理作為子代理執行，
 即使[代理](/docs/agents)設定中的 `mode` 設定為 `primary`。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -297,7 +297,7 @@ Check for performance issues and suggest improvements.
 
 使用 `model` 設定覆寫此指令的預設模型。
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ## 內建指令
 
-OpenCode 包含多個內建指令，如 `/init`、`/undo`、`/redo`、`/share`、`/help`；[了解更多](/docs/tui#commands)。
+Unifia 包含多個內建指令，如 `/init`、`/undo`、`/redo`、`/share`、`/help`；[了解更多](/docs/tui#commands)。
 
 :::note
 自訂指令可以覆寫內建指令。

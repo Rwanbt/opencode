@@ -1,0 +1,11 @@
+{
+  "name": "@unifia/workspace-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "bun x tsc --noEmit", "test": "bun test/runtime.test.ts && bun test/identity.test.ts && bun test/storage.test.ts && bun test/queue.test.ts && bun test test/listing-contract.test.ts" },
+  "dependencies": { "@unifia/contracts": "workspace:*" },
+  "devDependencies": { "@types/bun": "catalog:", "@types/node": "catalog:", "typescript": "catalog:" }
+}

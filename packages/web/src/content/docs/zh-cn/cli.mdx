@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI 选项和命令。
+description: Unifia CLI 选项和命令。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI 在不带任何参数运行时，默认启动 [TUI](/docs/tui)。
+Unifia CLI 在不带任何参数运行时，默认启动 [TUI](/docs/tui)。
 
 ```bash
-opencode
+unifia
 ```
 
-但它也接受本页面中记录的命令，使您可以通过编程方式与 OpenCode 进行交互。
+但它也接受本页面中记录的命令，使您可以通过编程方式与 Unifia 进行交互。
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+unifia run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-启动 OpenCode 终端用户界面。
+启动 Unifia 终端用户界面。
 
 ```bash
-opencode [project]
+unifia [project]
 ```
 
 #### 标志
@@ -44,36 +44,36 @@ opencode [project]
 
 ## 命令
 
-OpenCode CLI 还提供以下命令。
+Unifia CLI 还提供以下命令。
 
 ---
 
 ### agent
 
-管理 OpenCode 的代理。
+管理 Unifia 的代理。
 
 ```bash
-opencode agent [command]
+unifia agent [command]
 ```
 
 ---
 
 ### attach
 
-将终端连接到已通过 `serve` 或 `web` 命令启动的 OpenCode 后端服务器。
+将终端连接到已通过 `serve` 或 `web` 命令启动的 Unifia 后端服务器。
 
 ```bash
-opencode attach [url]
+unifia attach [url]
 ```
 
-这允许将 TUI 与远程 OpenCode 后端配合使用。例如：
+这允许将 TUI 与远程 Unifia 后端配合使用。例如：
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+unifia web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+unifia attach http://10.20.30.40:4096
 ```
 
 #### 标志
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 使用自定义配置创建新的代理。
 
 ```bash
-opencode agent create
+unifia agent create
 ```
 
 此命令将引导您使用自定义系统提示词和工具配置来创建新的代理。
@@ -102,7 +102,7 @@ opencode agent create
 列出所有可用的代理。
 
 ```bash
-opencode agent list
+unifia agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 管理提供商的凭据和登录信息的命令。
 
 ```bash
-opencode auth [command]
+unifia auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode 基于 [Models.dev](https://models.dev) 的提供商列表运行，因此您可以使用 `opencode auth login` 为任何想要使用的提供商配置 API 密钥。密钥存储在 `~/.local/share/opencode/auth.json` 中。
+Unifia 基于 [Models.dev](https://models.dev) 的提供商列表运行，因此您可以使用 `unifia auth login` 为任何想要使用的提供商配置 API 密钥。密钥存储在 `~/.local/share/opencode/auth.json` 中。
 
 ```bash
-opencode auth login
+unifia auth login
 ```
 
-OpenCode 启动时会从凭据文件加载提供商信息，同时也会加载环境变量或项目中 `.env` 文件中定义的密钥。
+Unifia 启动时会从凭据文件加载提供商信息，同时也会加载环境变量或项目中 `.env` 文件中定义的密钥。
 
 ---
 
@@ -134,13 +134,13 @@ OpenCode 启动时会从凭据文件加载提供商信息，同时也会加载�
 列出凭据文件中存储的所有已认证提供商。
 
 ```bash
-opencode auth list
+unifia auth list
 ```
 
 或使用简写版本。
 
 ```bash
-opencode auth ls
+unifia auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 从凭据文件中清除提供商信息以完成登出。
 
 ```bash
-opencode auth logout
+unifia auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 管理用于仓库自动化的 GitHub 代理。
 
 ```bash
-opencode github [command]
+unifia github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 在您的仓库中安装 GitHub 代理。
 
 ```bash
-opencode github install
+unifia github install
 ```
 
 此命令会设置必要的 GitHub Actions 工作流并引导您完成配置过程。[了解更多](/docs/github)。
@@ -182,7 +182,7 @@ opencode github install
 运行 GitHub 代理。通常在 GitHub Actions 中使用。
 
 ```bash
-opencode github run
+unifia github run
 ```
 
 ##### 标志
@@ -199,7 +199,7 @@ opencode github run
 管理 Model Context Protocol 服务器。
 
 ```bash
-opencode mcp [command]
+unifia mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 将 MCP 服务器添加到您的配置中。
 
 ```bash
-opencode mcp add
+unifia mcp add
 ```
 
 此命令将引导您添加本地或远程 MCP 服务器。
@@ -221,13 +221,13 @@ opencode mcp add
 列出所有已配置的 MCP 服务器及其连接状态。
 
 ```bash
-opencode mcp list
+unifia mcp list
 ```
 
 或使用简写版本。
 
 ```bash
-opencode mcp ls
+unifia mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 对支持 OAuth 的 MCP 服务器进行认证。
 
 ```bash
-opencode mcp auth [name]
+unifia mcp auth [name]
 ```
 
 如果您不提供服务器名称，系统将提示您从可用的支持 OAuth 的服务器中进行选择。
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 您还可以列出支持 OAuth 的服务器及其认证状态。
 
 ```bash
-opencode mcp auth list
+unifia mcp auth list
 ```
 
 或使用简写版本。
 
 ```bash
-opencode mcp auth ls
+unifia mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 移除 MCP 服务器的 OAuth 凭据。
 
 ```bash
-opencode mcp logout [name]
+unifia mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 调试 MCP 服务器的 OAuth 连接问题。
 
 ```bash
-opencode mcp debug <name>
+unifia mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 列出已配置提供商的所有可用模型。
 
 ```bash
-opencode models [provider]
+unifia models [provider]
 ```
 
 此命令以 `provider/model` 的格式显示所有已配置提供商中可用的模型。
@@ -291,7 +291,7 @@ opencode models [provider]
 您可以选择传入提供商 ID 来按提供商筛选模型。
 
 ```bash
-opencode models anthropic
+unifia models anthropic
 ```
 
 #### 标志
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | 从 models.dev 刷新模型缓存               |
 | `--verbose` | 使用更详细的模型输出（包含费用等元数据） |
 
-使用 `--refresh` 标志可以更新缓存的模型列表。当提供商新增了模型并且您希望在 OpenCode 中看到它们时，此功能非常有用。
+使用 `--refresh` 标志可以更新缓存的模型列表。当提供商新增了模型并且您希望在 Unifia 中看到它们时，此功能非常有用。
 
 ```bash
-opencode models --refresh
+unifia models --refresh
 ```
 
 ---
 
 ### run
 
-以非交互模式运行 OpenCode，直接传入提示词。
+以非交互模式运行 Unifia，直接传入提示词。
 
 ```bash
-opencode run [message..]
+unifia run [message..]
 ```
 
 这对于脚本编写、自动化或无需启动完整 TUI 即可快速获取答案的场景非常有用。例如：
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "unifia run"
+unifia run Explain the use of context in Go
 ```
 
-您还可以连接到正在运行的 `opencode serve` 实例，以避免每次运行时 MCP 服务器的冷启动时间：
+您还可以连接到正在运行的 `unifia serve` 实例，以避免每次运行时 MCP 服务器的冷启动时间：
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+unifia serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+unifia run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### 标志
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f` | 附加到消息的文件                                               |
 | `--format`   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）           |
 | `--title`    |      | 会话标题（未提供值时使用截断的提示词）                         |
-| `--attach`   |      | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096） |
+| `--attach`   |      | 连接到正在运行的 unifia 服务器（例如 http://localhost:4096） |
 | `--port`     |      | 本地服务器端口（默认为随机端口）                               |
 
 ---
 
 ### serve
 
-启动无界面的 OpenCode 服务器以提供 API 访问。查看[服务器文档](/docs/server)了解完整的 HTTP 接口。
+启动无界面的 Unifia 服务器以提供 API 访问。查看[服务器文档](/docs/server)了解完整的 HTTP 接口。
 
 ```bash
-opencode serve
+unifia serve
 ```
 
-此命令启动一个 HTTP 服务器，提供对 OpenCode 功能的 API 访问，无需 TUI 界面。设置 `OPENCODE_SERVER_PASSWORD` 可启用 HTTP 基本认证（用户名默认为 `opencode`）。
+此命令启动一个 HTTP 服务器，提供对 Unifia 功能的 API 访问，无需 TUI 界面。设置 `UNIFIA_SERVER_PASSWORD` 可启用 HTTP 基本认证（用户名默认为 `unifia`）。
 
 #### 标志
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-管理 OpenCode 会话。
+管理 Unifia 会话。
 
 ```bash
-opencode session [command]
+unifia session [command]
 ```
 
 ---
 
 #### list
 
-列出所有 OpenCode 会话。
+列出所有 Unifia 会话。
 
 ```bash
-opencode session list
+unifia session list
 ```
 
 ##### 标志
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-显示 OpenCode 会话的 Token 用量和费用统计信息。
+显示 Unifia 会话的 Token 用量和费用统计信息。
 
 ```bash
-opencode stats
+unifia stats
 ```
 
 #### 标志
@@ -424,7 +424,7 @@ opencode stats
 将会话数据导出为 JSON。
 
 ```bash
-opencode export [sessionID]
+unifia export [sessionID]
 ```
 
 如果您不提供会话 ID，系统将提示您从可用的会话中进行选择。
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-从 JSON 文件或 OpenCode 分享链接导入会话数据。
+从 JSON 文件或 Unifia 分享链接导入会话数据。
 
 ```bash
-opencode import <file>
+unifia import <file>
 ```
 
-您可以从本地文件或 OpenCode 分享链接导入。
+您可以从本地文件或 Unifia 分享链接导入。
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+unifia import session.json
+unifia import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-启动带有 Web 界面的无界面 OpenCode 服务器。
+启动带有 Web 界面的无界面 Unifia 服务器。
 
 ```bash
-opencode web
+unifia web
 ```
 
-此命令启动一个 HTTP 服务器并打开浏览器，通过 Web 界面访问 OpenCode。设置 `OPENCODE_SERVER_PASSWORD` 可启用 HTTP 基本认证（用户名默认为 `opencode`）。
+此命令启动一个 HTTP 服务器并打开浏览器，通过 Web 界面访问 Unifia。设置 `UNIFIA_SERVER_PASSWORD` 可启用 HTTP 基本认证（用户名默认为 `unifia`）。
 
 #### 标志
 
@@ -474,7 +474,7 @@ opencode web
 启动 ACP（Agent Client Protocol）服务器。
 
 ```bash
-opencode acp
+unifia acp
 ```
 
 此命令启动一个通过 stdin/stdout 使用 nd-JSON 进行通信的 ACP 服务器。
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-卸载 OpenCode 并删除所有相关文件。
+卸载 Unifia 并删除所有相关文件。
 
 ```bash
-opencode uninstall
+unifia uninstall
 ```
 
 #### 标志
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-将 OpenCode 更新到最新版本或指定版本。
+将 Unifia 更新到最新版本或指定版本。
 
 ```bash
-opencode upgrade [target]
+unifia upgrade [target]
 ```
 
 更新到最新版本。
 
 ```bash
-opencode upgrade
+unifia upgrade
 ```
 
 更新到指定版本。
 
 ```bash
-opencode upgrade v0.1.48
+unifia upgrade v0.1.48
 ```
 
 #### 标志
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## 全局标志
 
-OpenCode CLI 接受以下全局标志。
+Unifia CLI 接受以下全局标志。
 
 | 标志           | 简写 | 描述                                 |
 | -------------- | ---- | ------------------------------------ |
@@ -551,35 +551,35 @@ OpenCode CLI 接受以下全局标志。
 
 ## 环境变量
 
-OpenCode 可以通过环境变量进行配置。
+Unifia 可以通过环境变量进行配置。
 
 | 变量                                  | 类型    | 描述                                    |
 | ------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 自动分享会话                            |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
-| `OPENCODE_CONFIG`                     | string  | 配置文件路径                            |
-| `OPENCODE_TUI_CONFIG`                 | string  | TUI 配置文件路径                        |
-| `OPENCODE_CONFIG_DIR`                 | string  | 配置目录路径                            |
-| `OPENCODE_CONFIG_CONTENT`             | string  | 内联 JSON 配置内容                      |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                        |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | 禁用旧数据清理                          |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自动终端标题更新                    |
-| `OPENCODE_PERMISSION`                 | string  | 内联 JSON 权限配置                      |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认插件                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用 LSP 服务器自动下载                 |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验性模型                          |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                      |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | 禁用读取 `.claude`（提示词 + 技能）     |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`          |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`               |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                    |
-| `OPENCODE_FAKE_VCS`                   | string  | 用于测试目的的模拟 VCS 提供商           |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 禁用文件时间检查优化                    |
-| `OPENCODE_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                   |
-| `OPENCODE_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本认证           |
-| `OPENCODE_SERVER_USERNAME`            | string  | 覆盖基本认证用户名（默认为 `opencode`） |
-| `OPENCODE_MODELS_URL`                 | string  | 自定义模型配置获取 URL                  |
+| `UNIFIA_AUTO_SHARE`                 | boolean | 自动分享会话                            |
+| `UNIFIA_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
+| `UNIFIA_CONFIG`                     | string  | 配置文件路径                            |
+| `UNIFIA_TUI_CONFIG`                 | string  | TUI 配置文件路径                        |
+| `UNIFIA_CONFIG_DIR`                 | string  | 配置目录路径                            |
+| `UNIFIA_CONFIG_CONTENT`             | string  | 内联 JSON 配置内容                      |
+| `UNIFIA_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                        |
+| `UNIFIA_DISABLE_PRUNE`              | boolean | 禁用旧数据清理                          |
+| `UNIFIA_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自动终端标题更新                    |
+| `UNIFIA_PERMISSION`                 | string  | 内联 JSON 权限配置                      |
+| `UNIFIA_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认插件                            |
+| `UNIFIA_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用 LSP 服务器自动下载                 |
+| `UNIFIA_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验性模型                          |
+| `UNIFIA_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                      |
+| `UNIFIA_DISABLE_CLAUDE_CODE`        | boolean | 禁用读取 `.claude`（提示词 + 技能）     |
+| `UNIFIA_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`          |
+| `UNIFIA_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`               |
+| `UNIFIA_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                    |
+| `UNIFIA_FAKE_VCS`                   | string  | 用于测试目的的模拟 VCS 提供商           |
+| `UNIFIA_DISABLE_FILETIME_CHECK`     | boolean | 禁用文件时间检查优化                    |
+| `UNIFIA_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）            |
+| `UNIFIA_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                   |
+| `UNIFIA_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本认证           |
+| `UNIFIA_SERVER_USERNAME`            | string  | 覆盖基本认证用户名（默认为 `unifia`） |
+| `UNIFIA_MODELS_URL`                 | string  | 自定义模型配置获取 URL                  |
 
 ---
 
@@ -589,15 +589,15 @@ OpenCode 可以通过环境变量进行配置。
 
 | 变量                                            | 类型    | 描述                            |
 | ----------------------------------------------- | ------- | ------------------------------- | --- | -------------------------------- | ------- | ------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 启用所有实验性功能              |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                    |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制         |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令的默认超时时间（毫秒） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 Token 数     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 启用整个目录的文件监听器        |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt 格式化器             |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件监听器                  |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能             |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 为 python 文件启用 TY LSP       |     | `OPENCODE_EXPERIMENTAL_MARKDOWN` | boolean | 启用实验性 Markdown 功能 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                    |
+| `UNIFIA_EXPERIMENTAL`                         | boolean | 启用所有实验性功能              |
+| `UNIFIA_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                    |
+| `UNIFIA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制         |
+| `UNIFIA_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令的默认超时时间（毫秒） |
+| `UNIFIA_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 Token 数     |
+| `UNIFIA_EXPERIMENTAL_FILEWATCHER`             | boolean | 启用整个目录的文件监听器        |
+| `UNIFIA_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt 格式化器             |
+| `UNIFIA_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具             |
+| `UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件监听器                  |
+| `UNIFIA_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能             |
+| `UNIFIA_EXPERIMENTAL_LSP_TY`                  | boolean | 为 python 文件启用 TY LSP       |     | `UNIFIA_EXPERIMENTAL_MARKDOWN` | boolean | 启用实验性 Markdown 功能 |
+| `UNIFIA_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                    |

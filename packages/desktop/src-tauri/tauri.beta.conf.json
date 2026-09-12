@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode Beta",
-  "identifier": "ai.opencode.desktop.beta",
+  "productName": "Unifia Beta",
+  "identifier": "ai.unifia.workbench.beta",
   "bundle": {
     "createUpdaterArtifacts": true,
     "icon": [
@@ -31,7 +31,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxMkE4NjA3M0JCQTIwRTQKUldUa0lMbzdCNFlxMFg3eGpGTDExY1dkbTg5eHRaRGUzcDNWK0pzUGlpUEZaZ0VIdm9xU3Z4ZVIK",
-      "endpoints": ["https://github.com/Rwanbt/opencode-beta/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/Rwanbt/unifia-beta/releases/latest/download/latest.json"]
     }
   }
 }

@@ -24,13 +24,13 @@
 #
 # Fork-safety
 # -----------
-# The `if: github.repository == 'Rwanbt/opencode'` gate prevents the
+# The `if: github.repository == 'Rwanbt/unifia'` gate prevents the
 # workflow from spamming downstream forks of this repository.
 #
 # Verifying a signed artifact
 # ---------------------------
 #   cosign verify-blob \
-#     --certificate-identity-regexp 'https://github.com/Rwanbt/opencode/.+' \
+#     --certificate-identity-regexp 'https://github.com/Rwanbt/unifia/.+' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
 #     --signature <artifact>.sig --certificate <artifact>.cert \
 #     <artifact>
@@ -49,7 +49,7 @@ permissions: {}
 jobs:
   attest-provenance:
     name: Attest build provenance
-    if: github.repository == 'Rwanbt/opencode'
+    if: github.repository == 'Rwanbt/unifia'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -97,7 +97,7 @@ jobs:
 
   cosign-sign:
     name: cosign keyless sign
-    if: github.repository == 'Rwanbt/opencode'
+    if: github.repository == 'Rwanbt/unifia'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

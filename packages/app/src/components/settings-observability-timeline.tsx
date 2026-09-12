@@ -4,8 +4,8 @@
 // including opt-in content when present (settings-observability-privacy.tsx
 // is where that content capture is actually turned on).
 import { type Component, createMemo, createResource, createSignal, For, Show } from "solid-js"
-import { Select } from "@opencode-ai/ui/select"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Select } from "@unifia/ui/select"
+import { Icon } from "@unifia/ui/icon"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { useLanguage } from "@/context/language"

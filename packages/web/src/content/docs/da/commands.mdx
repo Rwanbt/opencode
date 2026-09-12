@@ -48,9 +48,9 @@ Du kan tilføje brugerdefinerede kommandoer gennem OpenCode-konfigurationen elle
 
 ### JSON
 
-Brug indstillingerne `command` i din OpenCode [config](/docs/config):
+Brug indstillingerne `command` i din Unifia [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Lad os se nærmere på konfigurationsmulighederne.
 
 Indstillingen `template` definerer den prompt, der sendes til LLM, når kommandoen udføres.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Dette er en **påkrævet** konfigurationsindstilling.
 
 Brug indstillingen `description` til at give en kort beskrivelse af, hvad kommandoen gør.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Brug `agent`-konfigurationen til valgfrit at angive, hvilken [agent](/docs/agent
 Hvis dette er en [subagent](/docs/agents/#subagents), vil kommandoen som standard udløse en subagent påkaldelse.
 For at deaktivere denne adfærd skal du indstille `subtask` til `false`.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Brug `subtask` boolean til at tvinge kommandoen til at udløse en [subagent](/do
 Dette er nyttigt, hvis du ønsker, at kommandoen ikke skal forurene din primære kontekst og vil **tvinge** agenten til at fungere som en underagent,
 øjeblikkelig `mode` er sat til `primary` på [agent](/docs/agents) konfigurationen.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 Brug `model`-konfigurationen til at tilsidesætte standardmodellen for denne kommando.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 ## Indbyggede kommandoer
 
-opencode indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
+unifia indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
 
 :::note
 Brugerdefinerede kommandoer kan tilsidesætte indbyggede kommandoer.

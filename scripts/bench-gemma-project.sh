@@ -14,7 +14,7 @@ WORKDIR="${BENCH_WORKDIR:-D:/tmp/bench-prism-eq}"
 WEB_FLAG=""
 [[ "${1:-}" == "--web" ]] && WEB_FLAG="--web"
 
-OC="bun run --cwd packages/opencode --conditions=browser src/index.ts"
+OC="bun run --cwd packages/unifia --conditions=browser src/index.ts"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RESDIR="$WORKDIR/results-$TIMESTAMP"
 mkdir -p "$RESDIR"

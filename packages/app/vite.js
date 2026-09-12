@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync, statSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import path from "node:path"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
@@ -9,6 +11,25 @@ const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.
  * @type {import("vite").PluginOption}
  */
 export default [
+  {
+    name: "unifia-design-sketch:bundle",
+    apply: "build",
+    buildStart() {
+      execFileSync(process.platform === "win32" ? "bun.exe" : "bun", ["run", "build"], { cwd: path.resolve(process.cwd(), "../design-sketch"), stdio: "inherit" })
+    },
+    generateBundle() {
+      const root = path.resolve(process.cwd(), "../design-sketch/dist")
+      const emit = (directory, prefix = "") => {
+        for (const entry of readdirSync(directory)) {
+          const absolute = path.join(directory, entry)
+          const name = prefix ? `${prefix}/${entry}` : entry
+          if (statSync(absolute).isDirectory()) emit(absolute, name)
+          else this.emitFile({ type: "asset", fileName: `design-sketch/${name}`, source: readFileSync(absolute) })
+        }
+      }
+      emit(root)
+    },
+  },
   {
     name: "opencode-desktop:config",
     config() {

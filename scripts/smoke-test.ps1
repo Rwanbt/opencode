@@ -47,7 +47,7 @@ if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out
 
 # Kill any prior instance so we start clean
 Get-Process -Name "OpenCode*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "opencode-cli*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "unifia-cli*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
 # Resolve the binary path
@@ -152,7 +152,7 @@ $finalHits = if ($fatalHits.Count -gt 0) {
 # Process status snapshot
 $stillAlive = -not $proc.HasExited
 $mem = if ($stillAlive) { [math]::Round($proc.WorkingSet64 / 1MB, 1) } else { 0 }
-$sidecar = Get-Process -Name "opencode-cli*" -ErrorAction SilentlyContinue
+$sidecar = Get-Process -Name "unifia-cli*" -ErrorAction SilentlyContinue
 $mainWindow = if ($stillAlive) {
     (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue).MainWindowTitle
 } else { $null }
@@ -209,7 +209,7 @@ if (-not $KeepOpen) {
     if ($stillAlive) {
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
     }
-    Get-Process -Name "opencode-cli*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name "unifia-cli*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Write-Host ""
     Write-Host "Cleaned up. Use -KeepOpen to inspect manually."
 } else {

@@ -1,0 +1,107 @@
+card_id: TEAM-C07
+card_title: "Synchronisation transactionnelle et rollback"
+generation: post-t0-008-v1
+owner: MM8
+lease_id: LEASE-C07-20260725150000-team-c07-sync-rollback-v1
+fencing_token: 156
+base_sha: d94b4108894477f166ea57b6fb15a769f82a7044
+branch: c-C07/dd8e1ad9
+worktree: D:\App\OpenCode\.team-worktrees\C07-dd8e1ad9
+depends_on:
+  - TEAM-C03 (CLOSED+INTEGRATED, D-045)
+  - TEAM-C04 (CLOSED+INTEGRATED, D-049)
+  - TEAM-C05 (CLOSED+INTEGRATED, D-053)
+  - TEAM-C06 (CLOSED+INTEGRATED, D-054)
+allowed_create:
+  - packages/unifia/src/model-intelligence/sync.ts
+  - packages/unifia/test/model-intelligence/sync.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C07.yaml
+forbidden_modify:
+  - packages/unifia/src/model-intelligence/registry.ts   # JAMAIS réécrit, import type-only si besoin
+  - packages/unifia/src/model-intelligence/schema.ts       # import-only
+  - packages/unifia/src/model-intelligence/storage.ts      # import-only (StorageManager/StorageBackend exportés, réutilisables)
+  - packages/unifia/src/model-intelligence/ingestion.ts    # import-only (ingest/buildRegistry exportés)
+  - packages/unifia/src/model-intelligence/connectors/**   # import-only
+  - packages/unifia/src/model-intelligence/pricing.ts      # import-only
+  - packages/unifia/src/model-intelligence/benchmarks.ts   # import-only
+  - packages/unifia/src/model-intelligence/health.ts       # import-only
+  - packages/unifia/src/multi-model/**
+  - packages/unifia/src/team/**
+  - main, dev, opti-ui, Team branches
+notes: |
+  Risque CRITIQUE. TENSION ARCHITECTURALE DÉCOUVERTE PAR L'ORCHESTRATEUR (à
+  résoudre par le worker, documentée pour lui éviter une redécouverte à l'aveugle) :
+
+  Registry.sync() (registry.ts:158-206) EXISTE DÉJÀ mais est un stub incomplet :
+  - Hardcodé sur UNE SEULE source (ModelsDevConnector), ignore complètement le
+    connecteur générique C02 et le connecteur HTTP+snapshot C03.
+  - `opts: SyncOptions` (force/staging/validate) est un paramètre NOMMÉ MAIS
+    IGNORÉ (`(_opts) =>`) — aucune des 3 options n'a d'effet.
+  - `manager.set(registry)` remplace l'état directement, sans zone de staging
+    véritable ni validation pré-commit configurable.
+  - `manager` (StorageManager) est une variable de closure PRIVÉE à
+    makeLiveRegistryLayer — inaccessible depuis l'extérieur du fichier.
+
+  registry.ts est GELÉ pour cette carte (jamais réécrit). Donc sync.ts ne peut
+  PAS corriger le sync existant en place. Résolution recommandée (pattern DI,
+  déjà validé et loué par un reviewer indépendant sur B03/cost-catalog.ts,
+  cf. Execution/Reviews/B03-V2-E2-REVIEWER-VERDICT.md) : sync.ts doit exporter
+  un moteur de synchronisation AUTONOME et INJECTABLE — construit sur sa PROPRE
+  instance de StorageManager (importée de ./storage, pas celle du singleton Registry
+  live) et sur les connecteurs (ModelsDevConnector, C02, C03) importés en lecture
+  seule — qui implémente réellement staging + validation + commit atomique +
+  rollback, sans jamais toucher registry.ts. Documenter explicitement dans le
+  handoff : (a) pourquoi ce n'est pas un second registry (c'est un ENGINE, pas un
+  stockage parallèle de vérité — même StorageBackend/schema que C01, juste une
+  instance distincte tant que le singleton live n'est pas re-câblé, hors scope
+  ici) ; (b) le chemin d'intégration future plausible (comment un jour brancher
+  ce moteur sur le manager réel du Registry live, similaire à FU-1/FU-2 de B03)."
+deviations_from_spec: |
+  Followed the orchestrator's suggested resolution closely, with two additions
+  found necessary while implementing, both documented in sync.ts's file-header
+  comment and in the C07-attempt1.md handoff:
+  1. `buildRegistry()`'s `registryID` (ingestion.ts:156) is a hash of
+     {providers.length, models.length} only, NOT of actual content. Using it
+     for no-op/rollback-proof detection would produce false positives/negatives
+     (e.g. a pricing-only change with the same counts would hash identically).
+     sync.ts computes its own content-level diff (`computeDiff`/`isDiffEmpty`)
+     instead of relying on registryID for any correctness-relevant decision.
+     CORRECTION (post-E2 review, finding B-1, fixed in a follow-up commit on
+     this same branch): the first version of that content-level diff was
+     itself a field ALLOWLIST (modelContentEqual/providerContentEqual/the
+     Source diff each compared a hand-picked subset of fields), which
+     reintroduced the same class of defect in weaker form — 17
+     independently-confirmed cases of a real upstream change (e.g.
+     `lifecycleStage` transitioning to `quarantined`, `regionPolicy.
+     dataResidencyRequired`, `Source.confidenceLevel` downgrading) landing
+     in an uncompared field and being silently discarded as a no-op, with
+     the defect widening automatically on every future schema field added.
+     The comparison was inverted to a volatile-field DENYLIST (compare a
+     canonical serialization of the whole object, stripping only fields
+     proven to be pure fetch/observation bookkeeping — MODEL_VOLATILE_FIELDS
+     / PROVIDER_VOLATILE_FIELDS / SOURCE_VOLATILE_FIELDS in sync.ts) so any
+     field not explicitly proven volatile — including ones added to the
+     schema after this code was written — participates in the comparison by
+     default. Regression tests added for the reviewer's named fields.
+  2. `ingest()` (ingestion.ts:91-106, frozen) hardcodes the emitted `Source`
+     record's license/copyright/licenseFileURL fields to models.dev's values
+     regardless of which source produced the data. `mergeIngestResults()`
+     corrects those 3 fields per source using the adapter's own already-
+     validated license metadata (data already in hand, not reimplemented
+     validation) — otherwise every non-models.dev source's Source record
+     would carry misattributed license info.
+  Also deliberately bypasses `StorageManager.set()` (storage.ts:75-78) for the
+  commit step, calling the raw `StorageBackend.save()` directly, because
+  `set()` mutates its in-memory `this.registry` BEFORE awaiting
+  `backend.save()` — a latent bug in the frozen manager that would let a
+  failed save() leave a stale in-memory cache pointing at unpersisted data.
+  This is not a modification of storage.ts (untouched), just avoiding one of
+  its documented-here-not-there code paths for the transactional commit.
+scope_respected: |
+  Yes. Only created packages/unifia/src/model-intelligence/sync.ts and
+  packages/unifia/test/model-intelligence/sync.test.ts, and modified this
+  scope-manifest file. registry.ts never touched (verified: no git diff on
+  it). All model-intelligence/** and connectors/** imports in sync.ts are
+  read-only (no modification). No import of multi-model/** or team/**
+  (verified via grep, 0 matches, see C07-VALIDATION-REPORT.md).

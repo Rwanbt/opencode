@@ -1,0 +1,62 @@
+# Files to exclude from Docker build context
+# Reduces image size and build time
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in image)
+docs/
+*.md
+*.mdx
+LICENSE
+LICENSE-FAQ.md
+CODE_OF_CONDUCT.md
+README.md
+CHANGELOG.md
+RELEASE-NOTES.md
+RELEASE-GUIDE.md
+unifia-tasks.md
+SECURITY*.md
+PRODUCTION_READINESS.md
+DX-DEVEX-GUIDE.md
+
+# Tests
+tests/
+**/*.test.ts
+**/*.spec.ts
+
+# Build artifacts
+node_modules/
+dist/
+build/
+target/
+.turbo/
+.next/
+.svelte-kit/
+
+# Patches (will be re-applied at install)
+patches/
+
+# Secrets (NEVER commit)
+.env
+.env.*
+!.env.example
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Handoff
+handoff/

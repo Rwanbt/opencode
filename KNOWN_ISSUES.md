@@ -1,4 +1,4 @@
-# KNOWN ISSUES — OpenCode Fork
+# KNOWN ISSUES — Unifia Fork
 
 > Consolidation of known bugs, in-flight fixes, and documented limitations.
 > Updated: 2026-04-17 (post A.* + B.* + features/security session).
@@ -16,13 +16,13 @@ before a production release:
 
 | ID | Summary | File |
 |---|---|---|
-| S2.A1 | CORS regex accepts arbitrary `*.opencode.ai` subdomains | [packages/opencode/src/server/server.ts:64-88](packages/opencode/src/server/server.ts#L64) |
+| S2.A1 | CORS regex accepts arbitrary `*.opencode.ai` subdomains | [packages/unifia/src/server/server.ts:64-88](packages/unifia/src/server/server.ts#L64) |
 | S2.A2 | Deep-link `providerID` not constrained to a known-provider allowlist | [packages/app/src/pages/layout/deep-links.ts](packages/app/src/pages/layout/deep-links.ts) |
-| S1.S1 | WebSocket auth passed as `?authorization=` query param (browsers strip the header) | [packages/opencode/src/server/auth-jwt.ts:110-145](packages/opencode/src/server/auth-jwt.ts) |
-| S1.S2 | `auth.json` stored plaintext (mode 0o600). Move to OS keychain | [packages/opencode/src/auth/index.ts](packages/opencode/src/auth/index.ts) |
+| S1.S1 | WebSocket auth passed as `?authorization=` query param (browsers strip the header) | [packages/unifia/src/server/auth-jwt.ts:110-145](packages/unifia/src/server/auth-jwt.ts) |
+| S1.S2 | `auth.json` stored plaintext (mode 0o600). Move to OS keychain | [packages/unifia/src/auth/index.ts](packages/unifia/src/auth/index.ts) |
 | S2.S1 | Shell env (incl. `*_API_KEY`) inherited by CLI sidecar | [packages/desktop/src-tauri/src/cli.rs:371-480](packages/desktop/src-tauri/src/cli.rs) |
 | S2.S2 | Android `network_security_config.xml` allows cleartext globally | [packages/mobile/src-tauri/gen/android/app/src/main/res/xml/network_security_config.xml](packages/mobile/src-tauri/gen/android/app/src/main/res/xml/network_security_config.xml) |
-| S1.V2 | `fetch()` with no timeout on Ollama probe and OAuth token POST | [packages/opencode/src/mcp/oauth-callback.ts](packages/opencode/src/mcp/oauth-callback.ts) |
+| S1.V2 | `fetch()` with no timeout on Ollama probe and OAuth token POST | [packages/unifia/src/mcp/oauth-callback.ts](packages/unifia/src/mcp/oauth-callback.ts) |
 
 ---
 
@@ -36,7 +36,7 @@ Android terminal and speech stack:
 | Vim / alt-screen support (`ESC[?1049h`) on the WebView renderer | [packages/app/src/components/terminal.tsx](packages/app/src/components/terminal.tsx) |
 | Mouse tracking (`ESC[?1000h`, `?1002h`) for htop / tmux scroll | same |
 | Virtual keybinding row (Escape, arrows, Ctrl, Tab) on the Android prompt | [packages/mobile/src/mobile.css](packages/mobile/src/mobile.css) |
-| Thermal listener JNI that calls `resetProfileCache()` when the SoC throttles | [packages/opencode/src/local-llm-server/auto-config.ts](packages/opencode/src/local-llm-server/auto-config.ts) |
+| Thermal listener JNI that calls `resetProfileCache()` when the SoC throttles | [packages/unifia/src/local-llm-server/auto-config.ts](packages/unifia/src/local-llm-server/auto-config.ts) |
 | Neural voice clone engine (F5-TTS / XTTSv2 ONNX) so the VoiceClone section can be re-enabled on mobile | [packages/mobile/src-tauri/src/speech.rs](packages/mobile/src-tauri/src/speech.rs) |
 
 ---
@@ -45,7 +45,7 @@ Android terminal and speech stack:
 
 ### A.* first audit pass (token + reasoning + CSP + Android)
 - **A.1 tokenizer `length/4`** → replaced by `js-tiktoken` for OpenAI families,
-  heuristic `length/3.5` otherwise. [src/util/token.ts](packages/opencode/src/util/token.ts).
+  heuristic `length/3.5` otherwise. [src/util/token.ts](packages/unifia/src/util/token.ts).
 - **A.2 reasoning budget capped at 1024** → `getThinkingCap()` returns 8192 for
   Qwen/DeepSeek thinking, 2048 default, 0.15 fraction of the model output max.
 - **A.4 Android lifecycle** → `visibilitychange` hook + `llm_idle_tick`
@@ -77,7 +77,7 @@ Android terminal and speech stack:
 - **Git upstream watcher** — `Vcs.Event.BranchBehind` published every 5 min
   (warm-up 30 s) when the tracked upstream diverges; UI forwards to
   `platform.notify()` on desktop + mobile.
-- **OAuth deep-link callback** — `opencode://oauth/callback?providerID=…&code=…`
+- **OAuth deep-link callback** — `unifia://oauth/callback?providerID=…&code=…`
   auto-finalises the token exchange; `dialog-connect-provider.tsx` listens on
   the `oauthCallbackEvent` window event.
 - **Terminal first-prompt visible on mobile** — `Pty.CreateInput` accepts
@@ -103,7 +103,7 @@ by the viewport-sized spawn change described above.
 
 ### Zombie llama-server at shutdown
 Mitigated by `syncCleanup()` on `SIGTERM`/`SIGINT`
-([local-llm-server/index.ts:262-281](packages/opencode/src/local-llm-server/index.ts#L262-L281))
+([local-llm-server/index.ts:262-281](packages/unifia/src/local-llm-server/index.ts#L262-L281))
 and orphan recovery at next start via the `owner.pid` file.
 
 ### Gemma thinking loop
@@ -117,7 +117,7 @@ preserved).
 
 | Limitation | Workaround |
 |---|---|
-| No automatic GPU/VRAM detection on older SOC | Manual override via env vars (`OPENCODE_N_GPU_LAYERS`, `OPENCODE_KV_CACHE_TYPE`) |
+| No automatic GPU/VRAM detection on older SOC | Manual override via env vars (`UNIFIA_N_GPU_LAYERS`, `UNIFIA_KV_CACHE_TYPE`) |
 | ORT Android binaries must be extracted locally | Set `ORT_LIB_LOCATION=D:/tmp/ort-android` before `tauri android build` |
 | Xiaomi MIUI blocks `adb shell input` by default | Enable "USB debugging (Security settings)" in developer options |
 | One llama-server (port 14097) per process tree | Verified by atomic owner.pid, new CLI connects to the existing server instead of spawning a duplicate |

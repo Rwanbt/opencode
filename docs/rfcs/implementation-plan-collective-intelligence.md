@@ -10,7 +10,7 @@
 
 ### Ce qu'on construit
 
-Un mode `/debate` pour OpenCode qui fait dialoguer N modèles IA en parallèle
+Un mode `/debate` pour Unifia qui fait dialoguer N modèles IA en parallèle
 sur une même question, extrait les points de consensus et les **blind spots**
 (insights qu'un seul modèle a vus), puis produit un rapport structuré.
 
@@ -30,7 +30,7 @@ cherche les angles morts, pas le plus petit dénominateur commun.
 
 ## 2. Architecture
 
-### Positionnement dans OpenCode
+### Positionnement dans Unifia
 
 **Agent natif** dans un module dédié, exposé via un skill `/debate`.
 Suit les mêmes patterns que `orchestrator`, `critic`, `build`.
@@ -38,7 +38,7 @@ Suit les mêmes patterns que `orchestrator`, `critic`, `build`.
 ### Arbre de fichiers à créer
 
 ```
-packages/opencode/src/collective/
+packages/unifia/src/collective/
 ├── index.ts                — Export public + enregistrement agent
 ├── types.ts                — Claim, DebateReport, DebateConfig, DebateError
 ├── debate-agent.ts         — Agent.Info declaration (comme build/plan/critic)
@@ -65,7 +65,7 @@ packages/opencode/src/collective/
 ### Skill file
 
 ```
-packages/opencode/skills/debate/SKILL.md
+packages/unifia/skills/debate/SKILL.md
 ```
 
 YAML frontmatter: `name: debate`, `triggers: ["/debate", "/blind-spots"]`
@@ -74,7 +74,7 @@ YAML frontmatter: `name: debate`, `triggers: ["/debate", "/blind-spots"]`
 
 ## 3. Patterns du codebase à suivre
 
-### Service Effect (pattern canonique d'OpenCode)
+### Service Effect (pattern canonique d'Unifia)
 
 ```typescript
 // Interface
@@ -427,7 +427,7 @@ export type ProviderAuth = z.infer<typeof ProviderAuth>
   macOS Keychain, ou Linux secret-tool. Le blob est du JSON, la clé est dans
   `token.accessToken`. Fonctionne directement comme `GEMINI_API_KEY`.
 - **Ghost Model audit**: vérifier que chaque provider détecté est supporté
-  par OpenCode. Alerter si version obsolète.
+  par Unifia. Alerter si version obsolète.
 
 ---
 

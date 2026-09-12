@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicorichard/tauri-schema/main/tauri.conf.json",
-  "productName": "OpenCode Mobile",
+  "productName": "Unifia Mobile",
   "version": "0.1.0",
-  "identifier": "ai.opencode.mobile",
+  "identifier": "ai.unifia.mobile",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1430",
@@ -14,13 +14,13 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenCode",
+        "title": "Unifia",
         "fullscreen": false,
         "resizable": true
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: https://tauri.localhost; connect-src 'self' ipc: http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* https://huggingface.co https://*.hf.co https://*.huggingface.co https://opencode.ai; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
+      "csp": "default-src 'self' ipc: https://tauri.localhost; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* https://huggingface.co https://*.hf.co https://*.huggingface.co https://opencode.ai; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; frame-src 'self' data:; child-src 'self' data:"
     }
   },
   "bundle": {
@@ -44,7 +44,7 @@
     "deep-link": {
       "mobile": [
         {
-          "scheme": ["opencode"]
+          "scheme": ["unifia"]
         }
       ]
     }

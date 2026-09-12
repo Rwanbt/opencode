@@ -44,7 +44,7 @@ export interface DeviceProfile {
 
 ## 2. GGUF Metadata Reader (`readGgufMeta`)
 
-**Files**: `packages/opencode/src/local-llm-server/auto-config.ts` (TS) · `packages/desktop/src-tauri/src/llm.rs` (Rust mirror)
+**Files**: `packages/unifia/src/local-llm-server/auto-config.ts` (TS) · `packages/desktop/src-tauri/src/llm.rs` (Rust mirror)
 
 Reads two GGUF sections without loading weights:
 
@@ -87,7 +87,7 @@ Verified examples: `gemma4` (NOT `gemma3`), `gemma3n`, `qwen35`, `llama`.
 
 ## 3. Adaptive Context Formula (`estimateAdaptiveContext`)
 
-**File**: `packages/opencode/src/local-llm-server/auto-config.ts`
+**File**: `packages/unifia/src/local-llm-server/auto-config.ts`
 
 ### 3.1 KV Cache Cost Per Token
 
@@ -160,7 +160,7 @@ For these architectures, `deriveConfig` makes a **binary decision** (never an in
 
 ## 5. Compaction Trigger (`isOverflow`, `overflow.ts`)
 
-**File**: `packages/opencode/src/session/overflow.ts`
+**File**: `packages/unifia/src/session/overflow.ts`
 
 ```typescript
 function isOverflow({ cfg, tokens, model }) {
@@ -183,7 +183,7 @@ function isOverflow({ cfg, tokens, model }) {
 
 ## 6. The Three Spawn Paths
 
-OpenCode has two distinct paths that load llama-server:
+Unifia has two distinct paths that load llama-server:
 
 ### 6.1 TS Sidecar (chat hot-path)
 `llm.ts:334` → `LocalLLMServer.ensureRunning()` → `buildArgs()` → `spawnOnce()`

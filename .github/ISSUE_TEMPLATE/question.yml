@@ -1,11 +1,38 @@
 name: Question
-description: Ask a question
+description: Ask a question about Unifia
+title: "[Question] "
 labels: ["question"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking a question about Unifia! Please provide context
+        and what you've tried.
   - type: textarea
     id: question
     attributes:
-      label: Question
-      description: What's your question?
+      label: Your question
+      description: What is your question?
+      placeholder: How do I configure X?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any relevant context?
+      placeholder: OS, version, etc.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: What area is this question about?
+      options:
+        - General
+        - Installation
+        - Configuration
+        - Plugins
+        - Performance
+        - Documentation
     validations:
       required: true

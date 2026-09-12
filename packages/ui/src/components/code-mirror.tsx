@@ -45,7 +45,7 @@ export interface CodeMirrorHandle {
   setContent(content: string): void
 }
 
-// Minimal theme that adapts to OpenCode's CSS custom properties.
+// Minimal theme that adapts to Unifia's CSS custom properties.
 // Only structural/colour rules — no font stack override (inherited from body).
 const openCodeTheme = EditorView.theme({
   "&": {
@@ -257,5 +257,5 @@ export function CodeMirrorEditor(props: {
     view = undefined
   })
 
-  return <div ref={container} class="cm-opencode h-full overflow-hidden" />
+  return <div ref={container} class="cm-unifia h-full overflow-hidden" />
 }

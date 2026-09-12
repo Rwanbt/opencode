@@ -29,7 +29,7 @@ describe("CodeMirror CSP-safe highlighting", () => {
 
   test("statically styles every token class used by the sample", () => {
     for (const token of ["tok-keyword", "tok-variableName", "tok-operator", "tok-number", "tok-comment", "tok-heading"]) {
-      expect(css).toContain(`.cm-opencode .${token}`)
+      expect(css).toContain(`.cm-unifia .${token}`)
     }
   })
 
@@ -37,6 +37,6 @@ describe("CodeMirror CSP-safe highlighting", () => {
     const tokens = highlightAll("function greet(name) { return name }\ngreet(hello())\nobj.method()")
 
     expect(tokens.has("tok-function")).toBe(true)
-    expect(css).toContain(".cm-opencode .tok-function")
+    expect(css).toContain(".cm-unifia .tok-function")
   })
 })

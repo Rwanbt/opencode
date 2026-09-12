@@ -1,6 +1,6 @@
 import type { Todo } from "../types/sdk-shim"
 
-export const composerEvent = "opencode:e2e:composer"
+export const composerEvent = "unifia:e2e:composer"
 
 export type ComposerDriverState = {
   live?: boolean

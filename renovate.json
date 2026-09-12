@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Critical security updates: immediate automerge",
+      "matchCategories": ["security"],
+      "automerge": true,
+      "labels": ["security", "dependencies"]
+    },
+    {
+      "description": "Tauri/Rust: manual review (build risk)",
+      "matchManagers": ["cargo"],
+      "automerge": false,
+      "labels": ["rust", "tauri", "manual-review"]
+    },
+    {
+      "description": "Bun: auto-update patch + minor",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["bun"],
+      "automerge": true
+    },
+    {
+      "description": "@unifia/* workspace packages: manual review",
+      "matchPackageNames": ["@unifia/*"],
+      "automerge": false,
+      "labels": ["unifia-core", "manual-review"]
+    },
+    {
+      "description": "TypeScript types: automerge (dev only)",
+      "matchDepTypes": ["dev"],
+      "matchPackageNames": ["@types/*", "typescript", "tsgo"],
+      "automerge": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true
+}

@@ -1,4 +1,4 @@
-# RFC Process — OpenCode Fork
+# RFC Process — Unifia Fork
 
 Un RFC (Request for Comments) est requis avant toute modification architecturale majeure.
 
@@ -42,4 +42,4 @@ Points non résolus à la date du RFC.
 
 ## RFCs actifs
 
-Aucun RFC actif pour le moment.
+- [RFC-0001 — Découverte de nouvelles sessions workbench sans polling nominal](./RFC-0001-workbench-session-discovery.md) — Review (carte E13 du plan performance)

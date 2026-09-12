@@ -1,0 +1,87 @@
+# release-drafter.yml — Génération automatique des release notes
+# Source: https://github.com/release-drafter/release-drafter
+
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request_target:
+    types: [opened, closed, reopened]
+
+jobs:
+  update_release_draft:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v5
+        with:
+          config-name: release-drafter.yml
+          tag-name: v$RESOLVED_VERSION
+          version-resolver:
+            major:
+              labels: "breaking"
+            minor:
+              labels: "enhancement,feature"
+            patch:
+              labels: "fix,bugfix"
+            default: patch
+          include-pre-releases: false
+          name-template: "v$RESOLVED_VERSION"
+          tag-template: "v$RESOLVED_VERSION"
+          version-template: "$MAJOR.$MINOR.$PATCH"
+          categories:
+            - title: "🚨 Breaking Changes"
+              labels:
+                - breaking
+                - "breaking change"
+            - title: "🚀 New Features"
+              labels:
+                - feature
+                - enhancement
+            - title: "🐛 Bug Fixes"
+              labels:
+                - fix
+                - bug
+                - bugfix
+            - title: "📚 Documentation"
+              labels:
+                - documentation
+                - docs
+            - title: "🔒 Security"
+              labels:
+                - security
+            - title: "⚡ Performance"
+              labels:
+                - performance
+            - title: "🧪 Tests"
+              labels:
+                - test
+                - tests
+            - title: "🔧 Maintenance"
+              labels:
+                - chore
+                - maintenance
+            - title: "📦 Dependencies"
+              labels:
+                - dependencies
+                - deps
+          exclude-labels:
+            - "skip-changelog"
+            - "duplicate"
+          template: |
+            ## Changes
+
+            $CHANGES
+
+            ## Contributors
+
+            $CONTRIBUTORS
+
+            **Full Changelog**: https://github.com/Rwanbt/unifia/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+          change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+          version: 1

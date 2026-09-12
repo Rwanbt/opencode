@@ -47,6 +47,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # The `-r2` marker busts every cache written before the repository was
+      # renamed opencode -> unifia. Caches are keyed to the repository id, not
+      # its name, so the rename kept them — and cargo bakes absolute paths into
+      # build-script output under target/. Restoring one left the build looking
+      # for /home/runner/work/opencode/opencode/... in a workspace now checked
+      # out at /home/runner/work/unifia/unifia, which failed with
+      # "failed to read plugin permissions ... No such file or directory".
+      # Bump the marker again if the repository is ever renamed or moved.
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -54,9 +62,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/mobile/src-tauri/target
-          key: ${{ runner.os }}-mobile-cargo-${{ hashFiles('packages/mobile/src-tauri/Cargo.toml') }}
+          key: ${{ runner.os }}-mobile-cargo-r2-${{ hashFiles('packages/mobile/src-tauri/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-mobile-cargo-
+            ${{ runner.os }}-mobile-cargo-r2-
 
       - name: Run runtime.rs host tests
         run: cargo test --manifest-path packages/mobile/src-tauri/Cargo.toml --lib

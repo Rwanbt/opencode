@@ -1,0 +1,38 @@
+name: unifia
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  unifia:
+    if: |
+      contains(github.event.comment.body, ' /uni') ||
+      startsWith(github.event.comment.body, '/uni') ||
+      contains(github.event.comment.body, ' /unifia') ||
+      startsWith(github.event.comment.body, '/unifia')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      # The action this repo ships in github/, not upstream's. Running
+      # `anomalyco/opencode/github@<sha>` meant every `/unifia` comment executed
+      # upstream's agent, pinned to a revision this fork does not control, while
+      # the equivalent action sat unused in the tree.
+      - name: Run unifia
+        uses: ./github
+        env:
+          UNIFIA_API_KEY: ${{ secrets.UNIFIA_API_KEY }}
+          UNIFIA_PERMISSION: '{"bash": "deny"}'
+        with:
+          model: opencode/claude-opus-4-5

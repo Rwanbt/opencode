@@ -9,7 +9,7 @@ import { createMemo } from "solid-js"
 // unit-testable (the barrel transitively pulls @solidjs/router). (D-08)
 import type { FileSelection, SelectedLineRange } from "@/context/file/types"
 import { selectionFromLines } from "@/context/file/types"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { previewSelectedLines } from "@unifia/ui/pierre/selection-bridge"
 import type { useFile } from "@/context/file"
 import type { useComments } from "@/context/comments"
 import type { usePrompt } from "@/context/prompt"

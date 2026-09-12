@@ -1,0 +1,33 @@
+{
+  "name": "opencode-fork-test",
+  "description": "Le workspace opencode lui-même (test integration)",
+  "type": "monorepo",
+  "language": "mixed",
+  "structure": {
+    "root": "package.json",
+    "packages_dir": "packages/",
+    "expected_packages": [
+      "opencode",
+      "app",
+      "desktop",
+      "mobile",
+      "ui",
+      "opencode-sdk",
+      "console",
+      "web",
+      "storybook",
+      "plugin",
+      "function",
+      "util"
+    ],
+    "expected_count": "20-30 packages, 3000+ files"
+  },
+  "size": "very-large",
+  "agent_test_scenarios": [
+    "list_packages",
+    "identify_runtime",
+    "find_templates",
+    "lint_all",
+    "build_all"
+  ]
+}

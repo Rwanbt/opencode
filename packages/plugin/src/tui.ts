@@ -1,6 +1,6 @@
 import type {
   AgentPart,
-  OpencodeClient,
+  UnifiaClient,
   Event,
   FilePart,
   LspStatus,
@@ -15,7 +15,7 @@ import type {
   TextPart,
   Workspace,
   Config as SdkConfig,
-} from "@opencode-ai/sdk-shared"
+} from "@unifia/sdk-shared"
 import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
@@ -483,8 +483,8 @@ export type TuiPluginApi = {
   kv: TuiKV
   state: TuiState
   theme: TuiTheme
-  client: OpencodeClient
-  scopedClient: (workspaceID?: string) => OpencodeClient
+  client: UnifiaClient
+  scopedClient: (workspaceID?: string) => UnifiaClient
   workspace: TuiWorkspace
   event: TuiEventBus
   renderer: CliRenderer

@@ -2,7 +2,7 @@
 
 ## 0. Contexte
 
-Tu travailles sur le projet `D:\App\OpenCode\opencode\` (fork opencode).
+Tu travailles sur le projet `D:\App\Unifia\unifia\` (fork unifia).
 
 **Bug user (rapporté pour la 3ème fois)** :
 > "je clique sur enregistrer losque je le ferme puis le réouvre la modification n'est pas visible mais si je veux le remodifier en cliquant sur le bouton modifier la modification réalisé precedement est encore là mais non visible en mode lecture seule et les modifications ne sont pas réellement appliqué si j'accède au fichier directement dans l'explorateur windows"
@@ -13,7 +13,7 @@ Tu travailles sur le projet `D:\App\OpenCode\opencode\` (fork opencode).
 
 **Plan complet (à lire AVANT de coder)** :
 - **Vault Obsidian** : `OpenCode/Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md`
-- **Vault path** : `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md`
+- **Vault path** : `D:\Documents\Obsidian\IA_Dev_Brain\Unifia\Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md`
 - **Format** : markdown, 562 lignes, 13 sections. Lis-le ENTIÈREMENT avant de coder.
 - **Review** : déjà révisé par 3 AIs adversariaux (GLM 5.2, ChatGPT, DeepSeek). Le plan intègre leurs retours.
 
@@ -28,25 +28,25 @@ Tu travailles sur le projet `D:\App\OpenCode\opencode\` (fork opencode).
 ### Processus à NE JAMAIS toucher
 
 ```powershell
-# PID 18756 — extension VS Code MiniMax Code (OpenCode dans VS Code)
-# PID 23620 — opencode.exe qui héberge cette session (D:\IA\Opencode_officiel\bin\opencode.exe)
+# PID 18756 — extension VS Code MiniMax Code (Unifia dans VS Code)
+# PID 23620 — unifia.exe qui héberge cette session (D:\IA\Unifia_officiel\bin\unifia.exe)
 # Si tu dois killer des processus, filtre TOUJOURS :
-Get-Process -Name "opencode*" | Where-Object { $_.Id -ne 18756 -and $_.Id -ne 23620 } | Stop-Process -Force
+Get-Process -Name "unifia*" | Where-Object { $_.Id -ne 18756 -and $_.Id -ne 23620 } | Stop-Process -Force
 ```
 
 ### Disk space
 
 - C: peut être PLEIN → TOUJOURS set `TEMP` sur D: avant build :
 ```powershell
-$env:TEMP = "D:\App\OpenCode\.build-temp"
+$env:TEMP = "D:\App\Unifia\.build-temp"
 $env:TMP = $env:TEMP
 $env:TAURI_ENV_TARGET_TRIPLE = "x86_64-pc-windows-msvc"
-New-Item -ItemType Directory -Force "D:\App\OpenCode\.build-temp" | Out-Null
+New-Item -ItemType Directory -Force "D:\App\Unifia\.build-temp" | Out-Null
 ```
 
 ### Plan complet déjà dans ton contexte local
 
-- `D:\App\OpenCode\opencode\PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md` (copie locale du plan dans le repo fork)
+- `D:\App\Unifia\unifia\PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md` (copie locale du plan dans le repo fork)
 
 ---
 
@@ -54,11 +54,11 @@ New-Item -ItemType Directory -Force "D:\App\OpenCode\.build-temp" | Out-Null
 
 Lis **dans cet ordre** :
 
-1. `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md` (le plan complet, 562 lignes)
-2. `D:\App\OpenCode\opencode\packages\app\src\context\editor\store.ts` (state machine, lignes 1-366)
-3. `D:\App\OpenCode\opencode\packages\app\src\context\file\store.ts` (FileStore, lines 1-172)
-4. `D:\App\OpenCode\opencode\packages\app\src\context\editor\close-guard.tsx` (close-guard, lines 1-140)
-5. `D:\App\OpenCode\opencode\packages\app\src\pages\session\editor-panel.tsx` (EditorPanel, lines 1-343)
+1. `D:\Documents\Obsidian\IA_Dev_Brain\Unifia\Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md` (le plan complet, 562 lignes)
+2. `D:\App\Unifia\unifia\packages\app\src\context\editor\store.ts` (state machine, lignes 1-366)
+3. `D:\App\Unifia\unifia\packages\app\src\context\file\store.ts` (FileStore, lines 1-172)
+4. `D:\App\Unifia\unifia\packages\app\src\context\editor\close-guard.tsx` (close-guard, lines 1-140)
+5. `D:\App\Unifia\unifia\packages\app\src\pages\session\editor-panel.tsx` (EditorPanel, lines 1-343)
 
 Lis aussi le rapport de review des 3 AIs (intégré dans le plan, sections 7, 9, 10) — surtout :
 - § 7 Fix A révisé (getter pattern au lieu de mirror)
@@ -145,7 +145,7 @@ onSave={async () => {
 
 **IMPORTANT — Ajoute l'import `showToast`** si pas déjà présent en haut du fichier :
 ```tsx
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@unifia/ui/toast"
 ```
 
 ---
@@ -197,15 +197,15 @@ Si des tests échouent à cause des nouvelles méthodes dans FileStore (ex: `set
 ### D.1 — Build
 
 ```powershell
-cd D:\App\OpenCode\opencode\packages\app
+cd D:\App\Unifia\unifia\packages\app
 bun run typecheck -F packages/app   # 0 erreurs
 
-cd D:\App\OpenCode\opencode\packages\desktop
+cd D:\App\Unifia\unifia\packages\desktop
 bun run build                       # ~20s, build le frontend
-bun run tauri build --no-bundle    # ~3 min, build OpenCode.exe
+bun run tauri build --no-bundle    # ~3 min, build Unifia.exe
 ```
 
-Vérifie que `OpenCode.exe` est rebuild avec timestamp frais.
+Vérifie que `Unifia.exe` est rebuild avec timestamp frais.
 
 ### D.2 — Investigation runtime Observation 3 (AVANT de tester manuellement)
 
@@ -241,7 +241,7 @@ Dans `packages/app/src/context/editor.tsx`, dans `write()` AJOUTE :
 console.log('[editor] backend-write-send', filePath, 'len=', content.length, 'first50=', content.slice(0, 50), 'expectedHash=', effectiveHash)
 ```
 
-Dans `packages/opencode/src/file/index.ts`, dans `atomicWrite()` AJOUTE :
+Dans `packages/unifia/src/file/index.ts`, dans `atomicWrite()` AJOUTE :
 
 ```ts
 console.log('[backend] atomicWrite', full, 'len=', input.content.length, 'first50=', input.content.slice(0, 50))
@@ -251,7 +251,7 @@ console.log('[backend] atomicWrite', full, 'len=', input.content.length, 'first5
 
 1. Ajoute `"devtools": true` à `packages/desktop/src-tauri/tauri.conf.json` (pour ouvrir F12)
 2. Rebuild : `bun run tauri build --no-bundle`
-3. Lance `OpenCode.exe`, ouvre DevTools (F12), onglet Console
+3. Lance `Unifia.exe`, ouvre DevTools (F12), onglet Console
 4. Reproduit le flow user : ouvre fichier → modifie (ex: ajoute "TESTCOUCOU") → X sur onglet → Save dans dialog → rouvre
 5. Copie les logs console
 
@@ -284,7 +284,7 @@ Après les tests, retire TOUS les `console.log` ajoutés.
 **SEULEMENT si DoD rempli (voir §7)**.
 
 ```powershell
-cd D:\App\OpenCode\opencode
+cd D:\App\Unifia\unifia
 git add packages/app/src/context/editor/close-guard.tsx packages/app/src/context/editor/store.ts packages/app/src/context/file/store.ts packages/app/src/pages/session/editor-panel.tsx packages/app/src/context/file/store.test.ts
 git commit -m "fix(editor): expose CM live content via FileStore draft getter + check save return in close-guard
 
@@ -334,7 +334,7 @@ Fixes round 3 (3rd user report). Reviewed by GLM 5.2, ChatGPT, DeepSeek."
 Si après Phase D.3 le bug persiste :
 
 ```powershell
-cd D:\App\OpenCode\opencode
+cd D:\App\Unifia\unifia
 git revert HEAD
 ```
 
@@ -344,11 +344,11 @@ Puis investiguer selon Cas A/B/C (§10 du plan).
 
 ## 10. Références
 
-- **Plan complet dans Obsidian** : `OpenCode/Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md` (`D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\`)
-- **Plan complet local** : `D:\App\OpenCode\opencode\PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md`
-- **Handoff round précédent (GlobalSDK)** : `D:\App\OpenCode\opencode\HANDOFF-finir-rebuild.md`
-- **Prompt production round précédent** : `D:\App\OpenCode\opencode\PROMPT-PRODUCTION.md`
-- **Vault Obsidian** : `D:\Documents\Obsidian\IA_Dev_Brain\OpenCode\`
+- **Plan complet dans Obsidian** : `OpenCode/Plan-Fix-Close-Guard-Save-Round3-2026-06-28.md` (`D:\Documents\Obsidian\IA_Dev_Brain\Unifia\`)
+- **Plan complet local** : `D:\App\Unifia\unifia\PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md`
+- **Handoff round précédent (GlobalSDK)** : `D:\App\Unifia\unifia\HANDOFF-finir-rebuild.md`
+- **Prompt production round précédent** : `D:\App\Unifia\unifia\PROMPT-PRODUCTION.md`
+- **Vault Obsidian** : `D:\Documents\Obsidian\IA_Dev_Brain\Unifia\`
 
 ---
 

@@ -10,7 +10,7 @@ Par défaut, l'observabilité native reste 100% locale : aucun exporter n'est co
 
 ## Configurer l'exporter Langfuse
 
-Dans `opencode.json` / `opencode.jsonc` :
+Dans `unifia.json` / `unifia.jsonc` :
 
 ```json
 {
@@ -78,7 +78,7 @@ bun run script/observability-soak-test.ts --duration-ms=10000 --rate-per-sec=50
 bun run script/observability-soak-test.ts --duration-ms=86400000 --rate-per-sec=20 > soak-24h.log 2>&1 &
 ```
 
-Le script isole automatiquement son `XDG_*_HOME` dans un répertoire temporaire dédié — il ne touche jamais le profil OpenCode réel de la machine qui l'exécute. À la fin (ou sur `Ctrl+C`), il flush la queue, exécute `PRAGMA integrity_check`, et sort en erreur (`exit 1`) si le circuit breaker est resté ouvert. Pendant le run, `soak-24h.log` contient un point de mesure (`rssMb`, `queueSize`, `circuitOpen`, compteurs d'erreur) toutes les 60s — à examiner a posteriori pour une tendance mémoire ou une dérive de queue, ce que le script lui-même ne juge pas automatiquement.
+Le script isole automatiquement son `XDG_*_HOME` dans un répertoire temporaire dédié — il ne touche jamais le profil Unifia réel de la machine qui l'exécute. À la fin (ou sur `Ctrl+C`), il flush la queue, exécute `PRAGMA integrity_check`, et sort en erreur (`exit 1`) si le circuit breaker est resté ouvert. Pendant le run, `soak-24h.log` contient un point de mesure (`rssMb`, `queueSize`, `circuitOpen`, compteurs d'erreur) toutes les 60s — à examiner a posteriori pour une tendance mémoire ou une dérive de queue, ce que le script lui-même ne juge pas automatiquement.
 
 ## Ce qu'il resterait à faire avant de retirer les limites ci-dessus
 

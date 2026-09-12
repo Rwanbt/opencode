@@ -14,7 +14,7 @@
   node_modules ? callPackage ./node-modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "opencode";
+  pname = "unifia";
   inherit (node_modules) version src;
   inherit node_modules;
 
@@ -38,14 +38,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
-  env.OPENCODE_DISABLE_MODELS_FETCH = true;
-  env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "local";
+  env.UNIFIA_DISABLE_MODELS_FETCH = true;
+  env.UNIFIA_VERSION = finalAttrs.version;
+  env.UNIFIA_CHANNEL = "local";
 
   buildPhase = ''
     runHook preBuild
 
-    cd ./packages/opencode
+    cd ./packages/unifia
     bun --bun ./script/build.ts --single --skip-install
     bun --bun ./script/schema.ts schema.json
 
@@ -55,10 +55,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
+    install -Dm755 dist/unifia-*/bin/unifia $out/bin/unifia
+    install -Dm644 schema.json $out/share/unifia/schema.json
 
-    wrapProgram $out/bin/opencode \
+    wrapProgram $out/bin/unifia \
       --prefix PATH : ${
         lib.makeBinPath (
           [
@@ -74,9 +74,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    installShellCompletion --cmd unifia \
+      --bash <($out/bin/unifia completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/unifia completion)
   '';
 
   nativeInstallCheckInputs = [
@@ -84,18 +84,18 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
   doInstallCheck = true;
-  versionCheckKeepEnvironment = [ "HOME" "OPENCODE_DISABLE_MODELS_FETCH" ];
+  versionCheckKeepEnvironment = [ "HOME" "UNIFIA_DISABLE_MODELS_FETCH" ];
   versionCheckProgramArg = "--version";
 
   passthru = {
-    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    jsonschema = "${placeholder "out"}/share/unifia/schema.json";
   };
 
   meta = {
     description = "The open source coding agent";
-    homepage = "https://opencode.ai/";
+    homepage = "https://github.com/Rwanbt/unifia";
     license = lib.licenses.mit;
-    mainProgram = "opencode";
+    mainProgram = "unifia";
     inherit (node_modules.meta) platforms;
   };
 })

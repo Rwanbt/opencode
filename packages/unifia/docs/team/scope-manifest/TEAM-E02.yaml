@@ -1,0 +1,19 @@
+card_id: TEAM-E02
+base_sha: cf712835016de322642f71ea343419a1b3b89d59
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/task-planner.ts
+  - packages/unifia/src/team/prompts/planner.txt
+  - docs/team/scope-manifest/TEAM-E02.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/intake.ts
+  - packages/unifia/src/team/checkpoint-manager.ts
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/provider/auth.ts
+  - packages/unifia/src/auth/**
+  - main
+  - dev
+  - opti-ui

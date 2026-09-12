@@ -1,16 +1,33 @@
 import type { ComponentProps } from "solid-js"
+import unifiaLogotypeDark from "../assets/brand/unifia/unifia-logotype-dark.svg"
+import unifiaLogotypeLight from "../assets/brand/unifia/unifia-logotype-light.svg"
+import unifiaSymbol from "../assets/brand/unifia/unifia-symbol-color.svg"
+import { useColorScheme } from "./color-scheme"
 
+// The brand masters are drawn on a 400x400 canvas with the artwork centred, so
+// the components below crop to the artwork's own bounding box (measured with
+// getBBox on the master) instead of inheriting 400x400 of mostly-empty square.
+const LOGOTYPE_VIEWBOX = "32 145 306 123"
+// The symbol fills a little over half its canvas; `Mark` renders as small as
+// 12px wide, where the surrounding empty margin would swallow the glyph.
+const SYMBOL_VIEWBOX = "84 78 231 244"
+
+/**
+ * Compact product symbol, for spaces too small for the full signature.
+ *
+ * Was the upstream square glyph drawn in vector paths — see the note on `Logo`
+ * for why brand artwork is referenced rather than redrawn here.
+ */
 export const Mark = (props: { class?: string }) => {
   return (
     <svg
       data-component="logo-mark"
       classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 16 20"
+      viewBox={SYMBOL_VIEWBOX}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path data-slot="logo-logo-mark-shadow" d="M12 16H4V8H12V16Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-logo-mark-o" d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="var(--icon-strong-base)" />
+      <image href={unifiaSymbol} x="0" y="0" width="400" height="400" preserveAspectRatio="xMidYMid meet" />
     </svg>
   )
 }
@@ -21,42 +38,54 @@ export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
       ref={props.ref}
       data-component="logo-splash"
       classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 80 100"
+      viewBox="0 0 400 400"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M60 80H20V40H60V80Z" fill="var(--icon-base)" />
-      <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="var(--icon-strong-base)" />
+      <image href={unifiaSymbol} x="0" y="0" width="400" height="400" preserveAspectRatio="xMidYMid meet" />
     </svg>
   )
 }
 
-export const Logo = (props: { class?: string }) => {
+/**
+ * Product signature: the Unifia symbol followed by the wordmark.
+ *
+ * WHY this is an <image> rather than paths: the previous implementation spelled
+ * "opencode" out in hand-written vector paths, so the rebrand could not reach
+ * it — the home screen kept showing the upstream wordmark long after every
+ * other surface had moved. The wordmark is brand artwork with one owner
+ * (brand/unifia/masters, mirrored here by scripts/brand/generate.py); redrawing
+ * it as paths would recreate exactly the second owner that caused the drift.
+ *
+ * The light/dark pair exists because the wordmark is baked into the asset:
+ * `-dark` is the white-on-dark cut, so on a light theme it would be invisible.
+ *
+ * `scheme` pins that choice for surfaces that paint their own background. The
+ * mobile mode selector is one: it renders before `oc-theme-preload.js` has set
+ * `data-color-scheme`, so auto-detection would read the default "light" and put
+ * dark ink on its hardcoded dark canvas.
+ */
+export const Logo = (props: Pick<ComponentProps<"svg">, "class" | "style"> & { scheme?: "light" | "dark" }) => {
+  const detected = useColorScheme()
+  const scheme = () => props.scheme ?? detected()
+
   return (
     <svg
+      data-component="logo"
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 234 42"
+      viewBox={LOGOTYPE_VIEWBOX}
       fill="none"
+      style={props.style}
       classList={{ [props.class ?? ""]: !!props.class }}
     >
-      <g>
-        <path d="M18 30H6V18H18V30Z" fill="var(--icon-weak-base)" />
-        <path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" fill="var(--icon-base)" />
-        <path d="M48 30H36V18H48V30Z" fill="var(--icon-weak-base)" />
-        <path d="M36 30H48V12H36V30ZM54 36H36V42H30V6H54V36Z" fill="var(--icon-base)" />
-        <path d="M84 24V30H66V24H84Z" fill="var(--icon-weak-base)" />
-        <path d="M84 24H66V30H84V36H60V6H84V24ZM66 18H78V12H66V18Z" fill="var(--icon-base)" />
-        <path d="M108 36H96V18H108V36Z" fill="var(--icon-weak-base)" />
-        <path d="M108 12H96V36H90V6H108V12ZM114 36H108V12H114V36Z" fill="var(--icon-base)" />
-        <path d="M144 30H126V18H144V30Z" fill="var(--icon-weak-base)" />
-        <path d="M144 12H126V30H144V36H120V6H144V12Z" fill="var(--icon-strong-base)" />
-        <path d="M168 30H156V18H168V30Z" fill="var(--icon-weak-base)" />
-        <path d="M168 12H156V30H168V12ZM174 36H150V6H174V36Z" fill="var(--icon-strong-base)" />
-        <path d="M198 30H186V18H198V30Z" fill="var(--icon-weak-base)" />
-        <path d="M198 12H186V30H198V12ZM204 36H180V6H198V0H204V36Z" fill="var(--icon-strong-base)" />
-        <path d="M234 24V30H216V24H234Z" fill="var(--icon-weak-base)" />
-        <path d="M216 12V18H228V12H216ZM234 24H216V30H234V36H210V6H234V24Z" fill="var(--icon-strong-base)" />
-      </g>
+      <image
+        href={scheme() === "dark" ? unifiaLogotypeDark : unifiaLogotypeLight}
+        x="0"
+        y="0"
+        width="400"
+        height="400"
+        preserveAspectRatio="xMidYMid meet"
+      />
     </svg>
   )
 }

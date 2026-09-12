@@ -1,8 +1,7 @@
 // Phase 3 CostDashboard (plan §16). Project-wide cost breakdown reusing
 // existing endpoints — /summary/aggregate for totals, /compare for the
 // per-(model, skill) breakdown — rather than adding a dedicated cost route.
-import { type Component, createMemo, createResource } from "solid-js"
-import { For, Show } from "solid-js"
+import { type Component, createMemo, createResource, For } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { useLanguage } from "@/context/language"

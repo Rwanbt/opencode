@@ -54,12 +54,12 @@ I LlamaEngine: Device: board=cmi, hardware=qcom, soc=sm8250, sdk=33
 I LlamaEngine: Older SoC (sm8250) — using OpenCL
 I LlamaEngine: Disabling all GPU backends (CPU-only mode, faster on old SoCs)
 I LlamaEngine: Backend initialized (CPU-only)
-I OpenCode: LlamaEngine initialized
+I Unifia: LlamaEngine initialized
 ```
 
 La **logique de fallback SoC ancien → CPU-only** (adaptive runtime
 auto-config.ts) fonctionne correctement. C'est exactement le comportement
-documenté dans `packages/opencode/src/local-llm-server/auto-config.ts`.
+documenté dans `packages/unifia/src/local-llm-server/auto-config.ts`.
 
 ### T3. IPC llm_ipc command loop
 
@@ -75,7 +75,7 @@ I LlamaEngine: Command loop started, watching: /data/user/0/ai.opencode.mobile/r
 
 ```
 I LlamaService: PTY server spawned on port 14098 (binary=.../lib/arm64/libpty_server.so)
-I OpenCode: PTY server spawn requested
+I Unifia: PTY server spawn requested
 D PTY-Server: [PTY-Server] listening on 127.0.0.1:14098 (pid=18118)
 ```
 

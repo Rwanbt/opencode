@@ -1,13 +1,13 @@
-# Docker Compose for running OpenCode alongside AnythingLLM.
+# Docker Compose for running Unifia alongside AnythingLLM.
 #
 # Usage:
 #   docker compose -f packages/containers/docker-compose.anythingllm.yml up
 #
 # Env vars:
-#   OPENCODE_SERVER_PASSWORD - Server auth password
+#   UNIFIA_SERVER_PASSWORD - Server auth password
 #   ANYTHING_LLM_API_KEY    - AnythingLLM API key (generate in Settings)
 #
-# After startup, configure opencode.json:
+# After startup, configure unifia.json:
 #   "experimental": {
 #     "anythingllm": {
 #       "enabled": true,
@@ -19,21 +19,21 @@
 version: "3.8"
 
 services:
-  opencode:
+  unifia:
     build:
       context: ../..
       dockerfile: packages/containers/base/Dockerfile
     ports:
       - "4096:4096"
     environment:
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
-      - OPENCODE_HOSTNAME=0.0.0.0
+      - UNIFIA_SERVER_PASSWORD=${UNIFIA_SERVER_PASSWORD:-}
+      - UNIFIA_HOSTNAME=0.0.0.0
     volumes:
-      - opencode-data:/root/.opencode
+      - unifia-data:/root/.opencode
       - ./workspace:/workspace
     working_dir: /workspace
     networks:
-      - opencode-net
+      - unifia-net
 
   anythingllm:
     image: mintplexlabs/anythingllm:latest
@@ -44,12 +44,12 @@ services:
     volumes:
       - anythingllm-data:/app/server/storage
     networks:
-      - opencode-net
+      - unifia-net
 
 volumes:
-  opencode-data:
+  unifia-data:
   anythingllm-data:
 
 networks:
-  opencode-net:
+  unifia-net:
     driver: bridge

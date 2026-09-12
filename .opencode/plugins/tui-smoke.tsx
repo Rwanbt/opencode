@@ -8,7 +8,7 @@ import type {
   TuiPluginMeta,
   TuiPluginModule,
   TuiSlotPlugin,
-} from "@opencode-ai/plugin/tui"
+} from "@unifia/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {

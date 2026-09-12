@@ -1,13 +1,13 @@
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Button } from "@opencode-ai/ui/button"
+import { Dialog } from "@unifia/ui/dialog"
+import { List } from "@unifia/ui/list"
+import { Switch } from "@unifia/ui/switch"
+import { Tooltip } from "@unifia/ui/tooltip"
+import { Button } from "@unifia/ui/button"
 import type { Component } from "solid-js"
 import type { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@unifia/ui/context/dialog"
 // DialogSelectProvider loaded on-demand (keeps manage-models chunk slim).
 
 type ModelState = ReturnType<typeof useLocal>["model"]

@@ -1,11 +1,11 @@
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { TextField } from "@unifia/ui/text-field"
+import { Logo } from "@unifia/ui/logo"
+import { Button } from "@unifia/ui/button"
 import { type Component, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@unifia/ui/icon"
 import type { E2EWindow } from "@/testing/terminal"
 
 export type InitError = {
@@ -309,7 +309,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             <button
               type="button"
               class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openLink("https://github.com/Rwanbt/opencode")}
+              onClick={() => platform.openLink("https://github.com/Rwanbt/unifia")}
             >
               <div>{language.t("error.page.report.github")}</div>
               <Icon name="github" class="text-text-interactive-base" />

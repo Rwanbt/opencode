@@ -1,0 +1,123 @@
+import { Flag } from "@/flag/flag"
+import { lazy } from "@/util/lazy"
+import { Filesystem } from "@/util/filesystem"
+import { which } from "@/util/which"
+import path from "node:path"
+import { spawn, type ChildProcess } from "node:child_process"
+import { setTimeout as sleep } from "node:timers/promises"
+
+const SIGKILL_TIMEOUT_MS = 200
+
+export namespace Shell {
+  const BLACKLIST = new Set(["fish", "nu"])
+  const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
+  const POSIX = new Set(["bash", "dash", "ksh", "sh", "zsh"])
+
+  export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
+    const pid = proc.pid
+    if (!pid || opts?.exited?.()) return
+
+    if (process.platform === "win32") {
+      await new Promise<void>((resolve) => {
+        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+          stdio: "ignore",
+          windowsHide: true,
+        })
+        killer.once("exit", () => resolve())
+        killer.once("error", () => resolve())
+      })
+      return
+    }
+
+    try {
+      process.kill(-pid, "SIGTERM")
+      await sleep(SIGKILL_TIMEOUT_MS)
+      if (!opts?.exited?.()) {
+        process.kill(-pid, "SIGKILL")
+      }
+    } catch (_e) {
+      proc.kill("SIGTERM")
+      await sleep(SIGKILL_TIMEOUT_MS)
+      if (!opts?.exited?.()) {
+        proc.kill("SIGKILL")
+      }
+    }
+  }
+
+  function full(file: string) {
+    if (process.platform !== "win32") return file
+    const shell = Filesystem.windowsPath(file)
+    if (path.win32.dirname(shell) !== ".") {
+      if (shell.startsWith("/") && name(shell) === "bash") return gitbash() || shell
+      return shell
+    }
+    return Bun.which(shell) || shell
+  }
+
+  function pick() {
+    const pwsh = Bun.which("pwsh")
+    if (pwsh) return pwsh
+    const powershell = Bun.which("powershell")
+    if (powershell) return powershell
+  }
+
+  function select(file: string | undefined, opts?: { acceptable?: boolean }) {
+    if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
+    if (process.platform === "win32") {
+      // Prefer Git Bash on Windows: it has a colored prompt, full
+      // Unix command set (ls, grep, cat), and git integration out of
+      // the box. Falls back to PowerShell if Git isn't installed.
+      const gb = gitbash()
+      if (gb) return gb
+      const shell = pick()
+      if (shell) return shell
+    }
+    return fallback()
+  }
+
+  export function gitbash() {
+    if (process.platform !== "win32") return
+    if (Flag.UNIFIA_GIT_BASH_PATH) return Flag.UNIFIA_GIT_BASH_PATH
+    const git = which("git")
+    if (!git) return
+    // git.exe can live at <root>/cmd, <root>/mingw64/bin, or <root>/usr/bin
+    // depending on which copy PATH resolves first (e.g. running from inside
+    // Git Bash itself puts mingw64/bin ahead of cmd) — walk up from whichever
+    // one was found instead of assuming a fixed depth to the Git root.
+    let dir = path.dirname(git)
+    for (let i = 0; i < 4; i++) {
+      const file = path.join(dir, "bin", "bash.exe")
+      if (Filesystem.stat(file)?.size) return file
+      dir = path.dirname(dir)
+    }
+  }
+
+  function fallback() {
+    if (process.platform === "win32") {
+      const file = gitbash()
+      if (file) return file
+      return process.env.COMSPEC || "cmd.exe"
+    }
+    if (process.platform === "darwin") return "/bin/zsh"
+    const bash = which("bash")
+    if (bash) return bash
+    return "/bin/sh"
+  }
+
+  export function name(file: string) {
+    if (process.platform === "win32") return path.win32.parse(Filesystem.windowsPath(file)).name.toLowerCase()
+    return path.basename(file).toLowerCase()
+  }
+
+  export function login(file: string) {
+    return LOGIN.has(name(file))
+  }
+
+  export function posix(file: string) {
+    return POSIX.has(name(file))
+  }
+
+  export const preferred = lazy(() => select(process.env.SHELL))
+
+  export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+}

@@ -1,0 +1,1 @@
+Repair only the task nodes named by structured validator issues. Preserve every frozen constraint and every unaffected node byte-for-byte. Never rewrite the whole plan. If an issue has no node, requires a human decision, or the attempt exceeds two, stop and return a blocked repair with the rule and correction.

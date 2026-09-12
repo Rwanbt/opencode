@@ -14,8 +14,11 @@ export function validateDebateSelection(
   selection: DebateSelection | undefined,
   available: ReadonlySet<string>,
 ): DebateSelectionError | undefined {
-  if (!selection || !available.has(modelKey(selection.primary))) return "missing-primary"
-  if (selection.participants.length < 1) return "too-few-participants"
+  // WHY: same boundary hazard as normalizeTeamSelection — an API response can be an
+  // HTML string from the SPA fallback, so nothing here may assume its shape.
+  if (!selection || typeof selection !== "object") return "missing-primary"
+  if (!selection.primary || !available.has(modelKey(selection.primary))) return "missing-primary"
+  if (!Array.isArray(selection.participants) || selection.participants.length < 1) return "too-few-participants"
 
   const seen = new Set<string>()
   for (const participant of selection.participants) {

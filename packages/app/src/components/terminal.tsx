@@ -1,8 +1,8 @@
-import { withAlpha } from "@opencode-ai/ui/theme/color"
-import { useTheme } from "@opencode-ai/ui/theme/context"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { HexColor } from "@opencode-ai/ui/theme/types"
-import { showToast } from "@opencode-ai/ui/toast"
+import { withAlpha } from "@unifia/ui/theme/color"
+import { useTheme } from "@unifia/ui/theme/context"
+import { resolveThemeVariant } from "@unifia/ui/theme/resolve"
+import type { HexColor } from "@unifia/ui/theme/types"
+import { showToast } from "@unifia/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import ghosttyWasmUrl from "ghostty-web/ghostty-vt.wasm?url"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -266,7 +266,7 @@ export const Terminal = (props: TerminalProps) => {
     if (!http) return undefined
     return {
       url: http.url,
-      username: http.username ?? "opencode",
+      username: http.username ?? "unifia",
       password: http.password ?? "",
     }
   }

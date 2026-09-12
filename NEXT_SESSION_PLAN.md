@@ -92,14 +92,14 @@ Gemini/Anthropic. Workflow utilisateur : `Settings → Providers → Connect`
 continue de demander la clé.
 
 Si plus tard Anthropic/Google ouvrent un OAuth public :
-- Pattern à suivre : `packages/opencode/src/plugin/codex.ts` (plugin OAuth
+- Pattern à suivre : `packages/unifia/src/plugin/codex.ts` (plugin OAuth
   OpenAI Codex complet avec PKCE + callback server local).
-- Enregistrer dans `packages/opencode/src/plugin/` puis câbler le plugin
+- Enregistrer dans `packages/unifia/src/plugin/` puis câbler le plugin
   loader dans `ProviderAuth` (déjà générique, détecte `x.auth?.provider`).
 
 ### Bug 6 — CLI TUI : pas d'auto-spawn llama-server (HAUTE)
 
-- `packages/opencode/src/cli/cmd/tui/component/dialog-model.tsx:148-161` :
+- `packages/unifia/src/cli/cmd/tui/component/dialog-model.tsx:148-161` :
   après `local.model.set(...)`, si provider local →
   `await LocalLLMServer.ensureRunning(modelID)` avec spinner
   "Démarrage du serveur local…". Fallback gracieux si échec.
@@ -129,7 +129,7 @@ Fix:
 
 - `packages/desktop/src-tauri/src/server.rs` : si `RemoteConfig.enabled=true`
   → bind `0.0.0.0:<port>`. Warning UI Windows Firewall.
-- QR encode `opencode://connect?host=<ip>&port=<p>&fp=<sha256>&token=<uuid>`.
+- QR encode `unifia://connect?host=<ip>&port=<p>&fp=<sha256>&token=<uuid>`.
   Mobile auto-trust cert sur la session via fingerprint.
 - Fallback : si `detect_lan_ip` échoue → prompt IP manuel + aide `ipconfig`.
 - Endpoint `GET /health` non-auth → `{ok, tlsFingerprint}`. Scan mobile ping
@@ -159,7 +159,7 @@ warning jaune.
 
 ## Validation globale
 
-- [ ] `bun test` packages/opencode → 0 fail
+- [ ] `bun test` packages/unifia → 0 fail
 - [ ] `bun run typecheck` (monorepo) → 0 erreur
 - [ ] `cargo check --release` desktop + `cargo check` mobile → 0 warning
 - [ ] `bun run build:android` + sign + `adb install -r` Mi 10 Pro → pas de crash

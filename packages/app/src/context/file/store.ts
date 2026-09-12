@@ -23,7 +23,7 @@
 // (via `setDraftGetter(p, undefined)`) and on `remove(p)`.
 
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import type { Stamp } from "../editor/store"
 
 export type FileStatus = "clean" | "dirty" | "saving" | "conflict" | "missing"

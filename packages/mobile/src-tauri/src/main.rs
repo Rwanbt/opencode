@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    opencode_mobile_lib::run()
+    unifia_mobile_lib::run()
 }

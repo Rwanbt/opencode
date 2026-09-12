@@ -5,7 +5,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-RESULTS_DIR="packages/opencode/test/tool/eval-results"
+RESULTS_DIR="packages/unifia/test/tool/eval-results"
 mkdir -p "$RESULTS_DIR"
 
 echo "=== Integration test with local LLM ==="
@@ -13,9 +13,9 @@ echo "Timestamp: $TIMESTAMP"
 echo ""
 
 # Clean up any leftover test files
-rm -f packages/opencode/test/tool/tmp-eval.txt 2>/dev/null || true
+rm -f packages/unifia/test/tool/tmp-eval.txt 2>/dev/null || true
 
-RAW=$(bun run --cwd packages/opencode --conditions=browser src/index.ts run \
+RAW=$(bun run --cwd packages/unifia --conditions=browser src/index.ts run \
   --log-level ERROR \
   -m "local-llm/gemma-4-E4B-it" \
   --format json \

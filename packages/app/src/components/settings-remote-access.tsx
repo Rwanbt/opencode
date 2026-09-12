@@ -1,8 +1,8 @@
 import { type Component, Show, createMemo, createResource, createSignal } from "solid-js"
 import QRCode from "qrcode"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@unifia/ui/button"
+import { Select } from "@unifia/ui/select"
+import { showToast } from "@unifia/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsList } from "./settings-list"
@@ -223,7 +223,7 @@ export const SettingsRemoteAccess: Component = () => {
     if (data.tlsEnabled && data.tlsFingerprint) {
       params.set("fp", data.tlsFingerprint)
     }
-    return `opencode://connect?${params.toString()}`
+    return `unifia://connect?${params.toString()}`
   })
 
   // Border color for QR container: green = LAN, orange = Internet, neutral = local
@@ -332,7 +332,7 @@ export const SettingsRemoteAccess: Component = () => {
                       class="flex-1 text-12-regular bg-transparent border border-border-weak-base rounded px-2 py-1 text-text-strong font-mono outline-none focus:border-border-base"
                       value={editUsername()}
                       onInput={(e) => setEditUsername(e.currentTarget.value)}
-                      placeholder={info()?.username ?? "opencode"}
+                      placeholder={info()?.username ?? "unifia"}
                       autocomplete="off"
                       spellcheck={false}
                     />

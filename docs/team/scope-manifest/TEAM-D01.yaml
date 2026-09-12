@@ -1,0 +1,72 @@
+card_id: TEAM-D01
+card_title: "Contrats Team Zod finaux"
+generation: post-t0-010-v1
+owner: MM11
+lease_id: LEASE-D01-20260725170000-team-d01-contracts-v1
+fencing_token: 159
+base_sha: 7466496a41145dbe501e3ac4cf9398a1849ad955
+branch: c-D01/d144b530
+worktree: D:\App\OpenCode\.team-worktrees\D01-d144b530
+depends_on:
+  - TEAM-C08 (CLOSED+INTEGRATED, D-063)
+allowed_create:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/test/team/types.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-D01.yaml
+forbidden:
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/team/worktree-manager.ts
+  - packages/unifia/src/team/fencing.ts
+  - packages/unifia/src/team/hooks.ts
+  - packages/unifia/src/team/team-cli.ts
+  - packages/unifia/src/team/scope-monitor.ts
+  - packages/unifia/src/team/index.ts
+  - packages/unifia/src/team/db/**
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/multi-model/**
+  - main, dev, opti-ui, Team branches
+notes: |
+  Aucun fichier existant de packages/unifia/src/team/ (lock-manager.ts,
+  worktree-manager.ts, fencing.ts, hooks.ts, team-cli.ts, scope-monitor.ts,
+  index.ts) n'importe ni ne référence TeamConfig/Task/Plan/Attempt/Handoff/Gate/
+  RoutingDecision/Report — vérifié par grep par l'orchestrateur avant dispatch.
+  types.ts est donc un module fondation créé de zéro, sans surface d'intégration
+  existante à casser, mais dont toute la suite du programme (lots D à N)
+  dépendra potentiellement. Risque CRITIQUE malgré l'absence de consommateur
+  actuel — c'est le contrat de données le plus central du programme après
+  celui du registry C01.
+deviations_from_spec: |
+  Branded IDs use Zod's native `.brand<Tag>()` (a first-class Zod v4 feature)
+  rather than the Effect-Schema-based ProviderID/ModelID pattern in
+  provider/schema.ts. Rationale: that pattern is built on `effect`'s
+  Schema.brand + a `withStatics` helper designed for Effect-Schema-first
+  modules exposing a Zod interop shim; nothing in packages/unifia/src/team/**
+  depends on `effect` today, and model-intelligence/schema.ts (the file this
+  card was explicitly pointed at for versioning/error conventions) doesn't
+  brand its own ids either (plain z.string().min(1)). Using Zod's own
+  `.brand()` gives the same nominal-typing guarantee with zero new
+  dependencies. Full reasoning documented in the file header of
+  src/team/types.ts and in the D01-attempt1.md handoff.
+  Schema versioning: re-derives (does not import) the
+  model-intelligence/schema-version.ts + snapshot.ts pattern (semver
+  SCHEMA_VERSION constant + major-version-only compare + typed
+  UnsupportedSchemaVersionError-equivalent) as TEAM_SCHEMA_VERSION /
+  TEAM_SCHEMA_VERSION_N_MINUS_1 / compareTeamSchemaVersion / TeamSchemaVersionError,
+  scoped to the team domain per the "single canonical source per domain" rule
+  and the forbidden cross-import from model-intelligence/**.
+scope_respected: |
+  Only the two allowed_create files were created
+  (packages/unifia/src/team/types.ts,
+  packages/unifia/test/team/types.test.ts) plus this manifest update
+  (allowed_modify_existing). No forbidden file was touched. `bun install`
+  incidentally modified .husky/_/.gitignore (husky postinstall hook,
+  repo-root file outside this card's scope) — reverted via
+  `git checkout -- .husky/_/.gitignore` before committing; verified with
+  `git status` that no other out-of-scope file changed.
+  Validation: tsc --noEmit clean for new files (1 pre-existing, unrelated
+  error in src/provider/models.ts confirmed present on baseline via
+  git stash); bun test test/team/types.test.ts 49/49 pass; bun test
+  test/team/ 180/180 pass (baseline 131/131, zero regression, +49 new);
+  biome check src/team/types.ts clean; git diff --check clean; both
+  forbidden-import greps return no match (exit 1).

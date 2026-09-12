@@ -1,7 +1,7 @@
 import type { Message, Session } from "../../types/sdk-shim"
-import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { Binary } from "@opencode-ai/util/binary"
+import { showToast } from "@unifia/ui/toast"
+import { base64Encode } from "@unifia/util/encode"
+import { Binary } from "@unifia/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -333,6 +333,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           showToast({ title: language.t("common.requestFailed"), description: error instanceof Error ? error.message : String(error) })
           return
         }
+      }
+    }
+
+    if (currentAgent.name === "team") {
+      const configured = local.team.current() ?? (await local.team.load())
+      if (!local.team.isValid(configured)) {
+        showToast({ title: language.t("team.selection.invalid"), description: language.t("team.selection.minimum") })
+        return
       }
     }
 

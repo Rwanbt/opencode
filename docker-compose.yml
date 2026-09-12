@@ -1,0 +1,41 @@
+# docker-compose.yml pour Unifia Workbench
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+
+version: '3.8'
+
+services:
+  unifia:
+    build: .
+    image: unifia:latest
+    container_name: unifia-app
+    restart: unless-stopped
+    volumes:
+      # Persist Unifia data across restarts
+      - unifia-data:/root/.config/unifia
+      - unifia-cache:/root/.local/share/unifia
+    environment:
+      - UNIFIA_RUNTIME=unifia
+      - UNIFIA_PROVIDER=unifia
+      - UNIFIA_LOG_LEVEL=info
+      - UNIFIA_DEFAULT_DENY=true
+    env_file:
+      - .env
+    ports:
+      # MCP UI Server (if exposed)
+      - "3000:3000"
+      # Dashboard
+      - "3030:3030"
+    healthcheck:
+      test: ["CMD", "/app/scripts/unifia-verify.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  unifia-data:
+    driver: local
+  unifia-cache:
+    driver: local

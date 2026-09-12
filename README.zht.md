@@ -1,17 +1,10 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Unifia Workbench banner">
 </p>
 <p align="center">開源的 AI Coding Agent。</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +32,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 <!-- WHY-FORK-MATRIX -->
 ## 為何選擇此 Fork？
@@ -117,10 +110,14 @@ OpenCode（fork 版）— 可在 **桌面、伺服器和手機** 上執行的 AI
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia package or installer is published yet. Build from source:
+git clone https://github.com/Rwanbt/unifia.git
+cd unifia
+bun install
+bun run --cwd packages/opencode build --single
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### 此 fork 獨家打包的 8 項能力
@@ -139,8 +136,9 @@ curl -fsSL https://opencode.ai/install | bash
 ### 執行你的第一個任務
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+# This checkout still exposes the compatibility CLI name `opencode`.
+bun run --cwd packages/opencode dev
+bun run packages/opencode/src/index.ts run "fix the failing test in src/"
 ```
 
 > 💡 需要細節？下面每個部分預設收合 — 點擊展開你關心的部分。
@@ -157,7 +155,7 @@ opencode run "fix the failing test in src/"   # one-shot
 ## Fork 功能
 
 > 這是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的 fork，由 [Rwanbt](https://github.com/Rwanbt) 維護。
-> 與上游保持同步。查看 [dev 分支](https://github.com/Rwanbt/opencode/tree/dev) 了解最新變更。
+> 與上游保持同步。查看 [dev 分支](https://github.com/Rwanbt/unifia/tree/dev) 了解最新變更。
 
 #### 本地優先 AI
 
@@ -649,18 +647,9 @@ OpenCode 與 AnythingLLM 文件 RAG 平台之間的橋接。已實作：
 
 ```bash
 # 直接安裝 (YOLO)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
 
 # 套件管理員
-npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
-brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # 任何作業系統
-nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
 ```
 
 > [!TIP]
@@ -668,7 +657,7 @@ nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取�
 
 ### 桌面應用程式 (BETA)
 
-OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/Rwanbt/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下載。
+OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/Rwanbt/unifia/releases) 或 [opencode.ai/download](https://github.com/Rwanbt/unifia/releases/latest) 下載。
 
 | 平台                  | 下載連結                              |
 | --------------------- | ------------------------------------- |
@@ -679,7 +668,6 @@ OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (rele
 
 ```bash
 # macOS (Homebrew Cask)
-brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
@@ -695,8 +683,8 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # 範例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
+# No public Unifia installer is published; use the source build documented above.
 ```
 
 ### Agents
@@ -711,11 +699,11 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 
 此外，OpenCode 還包含一個 **general** 子 Agent，用於處理複雜搜尋與多步驟任務。此 Agent 供系統內部使用，亦可透過在訊息中輸入 `@general` 來呼叫。
 
-了解更多關於 [Agents](https://opencode.ai/docs/agents) 的資訊。
+了解更多關於 [Agents](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/agents) 的資訊。
 
 ### 線上文件
 
-關於如何設定 OpenCode 的詳細資訊，請參閱我們的 [**官方文件**](https://opencode.ai/docs)。
+關於如何設定 OpenCode 的詳細資訊，請參閱我們的 [**官方文件**](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs)。
 
 ### 參與貢獻
 
@@ -732,7 +720,7 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 在功能面上與 Claude Code 非常相似。以下是關鍵差異：
 
 - 100% 開源。
-- 不綁定特定的服務提供商。雖然我們推薦使用透過 [OpenCode Zen](https://opencode.ai/zen) 提供的模型，但 OpenCode 也可搭配 Claude, OpenAI, Google 甚至本地模型使用。隨著模型不斷演進，彼此間的差距會縮小且價格會下降，因此具備「不限廠商 (provider-agnostic)」的特性至關重要。
+- 不綁定特定的服務提供商。雖然我們推薦使用透過 [OpenCode Zen](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/providers.mdx) 提供的模型，但 OpenCode 也可搭配 Claude, OpenAI, Google 甚至本地模型使用。隨著模型不斷演進，彼此間的差距會縮小且價格會下降，因此具備「不限廠商 (provider-agnostic)」的特性至關重要。
 - 內建 LSP (語言伺服器協定) 支援。
 - 專注於終端機介面 (TUI)。OpenCode 由 Neovim 愛好者與 [terminal.shop](https://terminal.shop) 的創作者打造。我們將不斷挑戰終端機介面的極限。
 - 客戶端/伺服器架構 (Client/Server Architecture)。這讓 OpenCode 能夠在您的電腦上運行的同時，由行動裝置進行遠端操控。這意味著 TUI 前端只是眾多可能的客戶端之一。

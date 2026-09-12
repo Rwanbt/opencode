@@ -1,6 +1,6 @@
 # Generated mobile artifacts
 
-packages/mobile/src-tauri/assets/runtime/opencode-cli.js is the authoritative
+packages/mobile/src-tauri/assets/runtime/unifia-cli.js is the authoritative
 generated bundle. The Android generated-assets copy is derived from it by
 scripts/bundle-mobile.mjs; it must not be edited independently.
 

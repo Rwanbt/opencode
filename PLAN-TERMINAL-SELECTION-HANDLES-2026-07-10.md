@@ -195,13 +195,13 @@ Chaque étape doit rester buildable et être validée avant la suivante. Aucun b
 ## 11. Commandes de validation
 
 ```powershell
-cd D:\App\OpenCode\opencode\packages\app
+cd D:\App\Unifia\unifia\packages\app
 bun typecheck
 bunx biome check src/components/terminal.tsx src/components/terminal-touch-controller.ts src/components/terminal-selection-geometry.ts src/components/terminal-selection-overlay.tsx
 
-cd D:\App\OpenCode\opencode\packages\mobile
-$env:TEMP='D:\App\OpenCode\.build-temp'
-$env:TMP='D:\App\OpenCode\.build-temp'
+cd D:\App\Unifia\unifia\packages\mobile
+$env:TEMP='D:\App\Unifia\.build-temp'
+$env:TMP='D:\App\Unifia\.build-temp'
 $env:ORT_LIB_LOCATION='D:/tmp/ort-android'
 bun tauri android build --target aarch64
 ```

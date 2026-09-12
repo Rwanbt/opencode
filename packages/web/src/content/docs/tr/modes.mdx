@@ -4,14 +4,14 @@ description: farklı kullanım durumları için farklı modlar.
 ---
 
 :::caution
-Modlar artık opencode yapılandırmasındaki `agent` seçeneği aracılığıyla yapılandırılıyor.
+Modlar artık unifia yapılandırmasındaki `agent` seçeneği aracılığıyla yapılandırılıyor.
 `mode` seçeneği artık kullanımdan kaldırıldı. [Daha fazla bilgi](/docs/agents).
 :::
 
-opencode'daki modlar, farklı kullanım durumları için davranışı, araçları ve istemleri özelleştirmenize olanak tanır.
+unifia'daki modlar, farklı kullanım durumları için davranışı, araçları ve istemleri özelleştirmenize olanak tanır.
 
 İki yerleşik modla birlikte gelir: **build** ve **plan**. Kişiselleştirebilirsiniz
-bunları veya opencode yapılandırması aracılığıyla kendinizinkini yapılandırın.
+bunları veya unifia yapılandırması aracılığıyla kendinizinkini yapılandırın.
 
 Bir oturum sırasında modlar arasında geçiş yapabilir veya bunları yapılandırma dosyanızda yapılandırabilirsiniz.
 
@@ -19,7 +19,7 @@ Bir oturum sırasında modlar arasında geçiş yapabilir veya bunları yapılan
 
 ## Yerleşik
 
-opencode iki yerleşik modla birlikte gelir.
+unifia iki yerleşik modla birlikte gelir.
 
 ---
 
@@ -56,9 +56,9 @@ Yerleşik modları özelleştirebilir veya yapılandırma aracılığıyla kendi
 
 ### JSON Yapılandırması
 
-`opencode.json` yapılandırma dosyanızdaki modları yapılandırın:
+`unifia.json` yapılandırma dosyanızdaki modları yapılandırın:
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
@@ -120,7 +120,7 @@ Bu yapılandırma seçeneklerine ayrıntılı olarak bakalım.
 
 Bu modun varsayılan modelini geçersiz kılmak için `model` ayarını kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Bu modun varsayılan modelini geçersiz kılmak için `model` ayarını kullanı
 
 `temperature` yapılandırmasıyla yapay zekanın yanıtlarının rastgeleliğini ve yaratıcılığını kontrol edin. Düşük değerler yanıtları daha odaklı ve belirleyici hale getirirken, yüksek değerler yaratıcılığı ve değişkenliği artırır.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Sıcaklık değerleri tipik olarak 0,0 ila 1,0 arasındadır:
 - **0,3-0,5**: Biraz yaratıcılık içeren dengeli yanıtlar, genel gelişim görevleri için iyi
 - **0,6-1,0**: Daha yaratıcı ve çeşitli yanıtlar, beyin fırtınası ve keşif için yararlı
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Sıcaklık değerleri tipik olarak 0,0 ila 1,0 arasındadır:
 }
 ```
 
-Sıcaklık belirtilmezse, opencode modele özgü varsayılanları kullanır (çoğu model için genellikle 0, Qwen modelleri için 0,55).
+Sıcaklık belirtilmezse, unifia modele özgü varsayılanları kullanır (çoğu model için genellikle 0, Qwen modelleri için 0,55).
 
 ---
 
@@ -181,7 +181,7 @@ Sıcaklık belirtilmezse, opencode modele özgü varsayılanları kullanır (ço
 
 `prompt` yapılandırmasıyla bu mod için özel bir sistem bilgi istemi dosyası belirtin. Bilgi istemi dosyası, modun amacına özel talimatlar içermelidir.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "review": {
@@ -192,7 +192,7 @@ Sıcaklık belirtilmezse, opencode modele özgü varsayılanları kullanır (ço
 ```
 
 Bu yol, yapılandırma dosyasının bulunduğu yere göredir. Yani bu işe yarıyor
-hem global opencode yapılandırması hem de projeye özel yapılandırma.
+hem global unifia yapılandırması hem de projeye özel yapılandırma.
 
 ---
 
@@ -246,7 +246,7 @@ Yapılandırmaya ekleyerek kendi özel modlarınızı oluşturabilirsiniz. Her i
 
 ### JSON yapılandırması kullanma
 
-```json title="opencode.json" {4-14}
+```json title="unifia.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {

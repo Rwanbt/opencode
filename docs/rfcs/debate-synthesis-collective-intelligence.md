@@ -1,4 +1,4 @@
-# Synthèse du débat multi-IA — Collective Intelligence pour OpenCode
+# Synthèse du débat multi-IA — Collective Intelligence pour Unifia
 
 > 6 modèles interrogés : ChatGPT, MiniMax M3, DeepSeek, Mistral, Gemini, Qwen.
 > Synthèse réalisée le 2026-06-22. Ce document EST le dogfooding de la feature.
@@ -193,7 +193,7 @@ Tous convergent vers le même schéma fondamental :
 
 **Ajouts spécifiques par modèle** :
 - **DeepSeek** : YAML frontmatter dans le Markdown pour exploitation programmatique
-- **Gemini** : champ `verify_with_tool` lié aux outils OpenCode (ex: `run_cargo_audit`)
+- **Gemini** : champ `verify_with_tool` lié aux outils Unifia (ex: `run_cargo_audit`)
 - **Qwen** : catégorie `meta_observations` pour les insights hors catégorie
 
 → **Action** : Schéma JSON typé avec Effect Schema / Zod, rendu Markdown pour la TUI.
@@ -278,7 +278,7 @@ une contrainte architecturale, pas juste une question.
 - Audit des ghost models au lancement
 
 ### Phase 1 — MVP Minimal (2 providers suffisent)
-- Agent natif `debate` dans `packages/opencode/src/agent/debate/`
+- Agent natif `debate` dans `packages/unifia/src/agent/debate/`
 - Skill `/debate [prompt]` comme point d'entrée
 - Pipeline 2 phases : diverge parallèle → synthèse directe
 - Format JSON + Markdown

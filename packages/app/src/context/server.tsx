@@ -1,8 +1,9 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
+import { trimTrailingSlashes } from "@/utils/url"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -12,13 +13,13 @@ export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
-  return withProtocol.replace(/\/+$/, "")
+  return trimTrailingSlashes(withProtocol)
 }
 
 export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
   if (!conn) return ""
   if (conn.displayName && !ignoreDisplayName) return conn.displayName
-  return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+  return trimTrailingSlashes(conn.http.url.replace(/^https?:\/\//, ""))
 }
 
 function projectsKey(key: ServerConnection.Key) {

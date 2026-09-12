@@ -18,20 +18,20 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { createAutosave } from "@/context/editor/autosave"
 import { runSaveAction } from "@/context/editor/save-action"
-import { showToast } from "@opencode-ai/ui/toast"
-import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
+import { showToast } from "@unifia/ui/toast"
+import { markViewerTiming } from "@unifia/util/viewer-timing"
+import { IconButton } from "@unifia/ui/icon-button"
+import type { CodeMirrorHandle } from "@unifia/ui/code-mirror"
 import type {
   LspCallbacks,
   LspLocation,
-} from "@opencode-ai/ui/code-mirror-lsp"
+} from "@unifia/ui/code-mirror-lsp"
 import { EditorBanner } from "@/pages/session/editor-banner"
 import { consumeAutoEdit } from "@/pages/session/auto-edit"
 import type { FileState } from "@/context/file/types"
 
 const CodeMirrorEditor = lazy(() =>
-  import("@opencode-ai/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
+  import("@unifia/ui/code-mirror").then((m) => ({ default: m.CodeMirrorEditor })),
 )
 
 export interface EditorPanelProps {

@@ -115,7 +115,7 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   await page.keyboard.press("Escape")
 
   const storedThemeId = await page.evaluate(() => {
-    return localStorage.getItem("opencode-theme-id")
+    return localStorage.getItem("unifia-theme-id")
   })
 
   expect(storedThemeId).not.toBeNull()

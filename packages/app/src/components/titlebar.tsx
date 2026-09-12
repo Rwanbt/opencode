@@ -1,21 +1,24 @@
 import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Icon } from "@unifia/ui/icon"
+import { Button } from "@unifia/ui/button"
+import { Tooltip, TooltipKeybind } from "@unifia/ui/tooltip"
+import { useTheme } from "@unifia/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
+import { useTitlebarSlots } from "@/context/titlebar-slots"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
+  minimize?: () => Promise<void>
   toggleMaximize?: () => Promise<void>
+  close?: () => Promise<void>
 }
 
 type TauriThemeWindow = {
@@ -32,7 +35,6 @@ type TauriApi = {
 }
 
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
-const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
 
 export function Titlebar() {
@@ -44,6 +46,7 @@ export function Titlebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
+  const slots = useTitlebarSlots()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -110,10 +113,7 @@ export function Titlebar() {
     },
   ])
 
-  const getWin = () => {
-    if (platform.platform !== "desktop") return
-    return currentDesktopWindow()
-  }
+  const getWin = () => platform.platform === "desktop" ? platform.windowControls : undefined
 
   createEffect(() => {
     if (platform.platform !== "desktop") return
@@ -151,7 +151,7 @@ export function Titlebar() {
   const maximize = (e: MouseEvent) => {
     if (platform.platform !== "desktop") return
     if (interactive(e.target)) return
-    if (e.target instanceof Element && e.target.closest("[data-tauri-decorum-tb]")) return
+    if (e.target instanceof Element && e.target.closest("[data-window-controls]")) return
 
     const win = getWin()
     if (!win?.toggleMaximize) return
@@ -286,11 +286,11 @@ export function Titlebar() {
             </Show>
           </div>
         </div>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div id="unifia-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none">
-        <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
+        <div ref={slots.registerCenter} class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
       </div>
 
       <div
@@ -301,10 +301,40 @@ export function Titlebar() {
         data-tauri-drag-region
         onMouseDown={drag}
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
-        <Show when={windows()}>
-          {!tauriApi() && <div class="w-36 shrink-0" />}
-          <div data-tauri-decorum-tb class="flex flex-row" />
+        <div ref={slots.registerRight} class="flex items-center gap-1 shrink-0 justify-end" />
+        <Show when={platform.windowControls}>
+          <div data-window-controls class="flex flex-row shrink-0">
+            <button
+              data-window-control="minimize"
+              class="h-8 w-[58px] shrink-0 border-0 bg-transparent p-0 text-12-regular text-text-weak hover:bg-surface-raised-base-active"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize"
+              onClick={() => void getWin()?.minimize?.().catch(() => undefined)}
+            >
+              <span aria-hidden="true">−</span>
+            </button>
+            <button
+              data-window-control="maximize"
+              class="h-8 w-[58px] shrink-0 border-0 bg-transparent p-0 text-12-regular text-text-weak hover:bg-surface-raised-base-active"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize"
+              onClick={() => void getWin()?.toggleMaximize?.().catch(() => undefined)}
+            >
+              <span aria-hidden="true">□</span>
+            </button>
+            <button
+              data-window-control="close"
+              class="h-8 w-[58px] shrink-0 border-0 bg-transparent p-0 text-12-regular text-text-weak hover:bg-red-600 hover:text-white"
+              type="button"
+              title="Close"
+              aria-label="Close"
+              onClick={() => void getWin()?.close?.().catch(() => undefined)}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
         </Show>
       </div>
     </header>

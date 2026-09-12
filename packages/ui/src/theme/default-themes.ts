@@ -101,7 +101,7 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   nord: nordTheme,
   "one-dark": oneDarkTheme,
   onedarkpro: oneDarkProTheme,
-  opencode: opencodeTheme,
+  unifia: opencodeTheme,
   orng: orngTheme,
   "osaka-jade": osakaJadeTheme,
   palenight: palenightTheme,

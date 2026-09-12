@@ -1,0 +1,9 @@
+[package]
+name = "unifia-keyring-shim"
+version = "0.1.0"
+edition = "2021"
+description = "Brand-prefixed keyring helpers, isolated from the Tauri runtime for testability"
+publish = false
+
+[dependencies]
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored"] }

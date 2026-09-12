@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../src-tauri"
 
-echo "Building OpenCode Mobile for iOS..."
+echo "Building Unifia Mobile for iOS..."
 echo "Requires: Xcode and Apple Developer account"
 
 cargo tauri ios build "$@"

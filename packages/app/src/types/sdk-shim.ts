@@ -1,6 +1,6 @@
 /**
- * @deprecated Re-exports from @opencode-ai/sdk-shared. Consumers should
- * import directly from "@opencode-ai/sdk-shared" in new code. This file
+ * @deprecated Re-exports from @unifia/sdk-shared. Consumers should
+ * import directly from "@unifia/sdk-shared" in new code. This file
  * remains for backward compatibility with the ~163 existing call-sites in
  * packages/app/src.
  *
@@ -11,4 +11,4 @@
  * SDK route shapes. It became a 1-line re-export once Option X (workspace
  * package) landed — see Plan-Correction-Phase7 §7.2.3.
  */
-export * from "@opencode-ai/sdk-shared"
+export * from "@unifia/sdk-shared"

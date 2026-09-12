@@ -1,0 +1,19 @@
+{
+  "name": "single-file-script",
+  "description": "Projet single-file (script ou petit fichier)",
+  "type": "single-file",
+  "structure": {
+    "expected_files": [
+      "main.py",
+      "README.md"
+    ],
+    "expected_count": "1-5 files"
+  },
+  "size": "tiny",
+  "agent_test_scenarios": [
+    "read_file",
+    "edit_file",
+    "run_script",
+    "add_dependency"
+  ]
+}

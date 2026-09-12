@@ -21,7 +21,7 @@ export async function extractRuntime(): Promise<void> {
   return invoke("extract_runtime")
 }
 
-/** Start the embedded OpenCode server. */
+/** Start the embedded Unifia server. */
 export async function startEmbeddedServer(port: number, password: string): Promise<void> {
   return invoke("start_embedded_server", { port, password })
 }

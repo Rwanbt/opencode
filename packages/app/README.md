@@ -1,6 +1,6 @@
-# @opencode-ai/app
+# @unifia/app
 
-Shared UI package for all OpenCode frontends (desktop, mobile, web). Built with SolidJS and Tailwind CSS.
+Shared UI package for all Unifia frontends (desktop, mobile, web). Built with SolidJS and Tailwind CSS.
 
 ## Development
 
@@ -26,7 +26,7 @@ bun run test:unit:watch     # Watch mode
 
 ### E2E Tests (Playwright)
 
-Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an opencode backend (defaults to `localhost:4096`).
+Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an unifia backend (defaults to `localhost:4096`).
 
 ```bash
 bunx playwright install

@@ -5,7 +5,7 @@
 ## Contexte
 
 Le fork OpenCode mobile devient un IDE Android (roadmap dual-mode Agent ⇄ IDE,
-Phase 1). Le `File` namespace (`packages/opencode/src/file/index.ts`) est
+Phase 1). Le `File` namespace (`packages/unifia/src/file/index.ts`) est
 read-only : `init/status/read/list/mkdir/search`. Pour qu'un humain édite et
 sauve un fichier, il faut une API d'écriture exposée par HTTP.
 

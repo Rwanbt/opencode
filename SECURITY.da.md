@@ -10,17 +10,17 @@ Vi accepterer ikke AI-genererede sikkerhedsrapporter. Vi modtager et stort antal
 
 ### Oversigt
 
-OpenCode er en AI-drevet kodeassistent, der kører lokalt på din maskine. Den tilbyder et agentsystem med adgang til kraftfulde værktøjer, herunder shell-eksekvering, filoperationer og web-adgang.
+Unifia Workbench er en AI-drevet kodeassistent, der kører lokalt på din maskine. Den tilbyder et agentsystem med adgang til kraftfulde værktøjer, herunder shell-eksekvering, filoperationer og web-adgang.
 
 ### Ingen sandbox
 
-OpenCode sandboxer **ikke** agenten. Tilladelsessystemet findes som en UX-funktion for at hjælpe brugere med at være opmærksomme på, hvad agenten gør — det beder om bekræftelse, før der udføres kommandoer, skrives filer osv. Det er dog ikke designet til at give sikkerhedsisolation.
+Unifia Workbench sandboxer **ikke** agenten. Tilladelsessystemet findes som en UX-funktion for at hjælpe brugere med at være opmærksomme på, hvad agenten gør — det beder om bekræftelse, før der udføres kommandoer, skrives filer osv. Det er dog ikke designet til at give sikkerhedsisolation.
 
-Hvis du har brug for ægte isolation, så kør OpenCode inde i en Docker-container eller VM.
+Hvis du har brug for ægte isolation, så kør Unifia Workbench inde i en Docker-container eller VM.
 
 ### Servertilstand
 
-Servertilstand er kun opt-in. Når den er aktiveret, skal du sætte `OPENCODE_SERVER_PASSWORD` for at kræve HTTP Basic Auth. Uden dette kører serveren uautentificeret (med en advarsel). Det er slutbrugerens ansvar at sikre serveren — enhver funktionalitet, den tilbyder, er ikke en sårbarhed.
+Servertilstand er kun opt-in. Når den er aktiveret, skal du sætte `UNIFIA_SERVER_PASSWORD` for at kræve HTTP Basic Auth. Uden dette kører serveren uautentificeret (med en advarsel). Det er slutbrugerens ansvar at sikre serveren — enhver funktionalitet, den tilbyder, er ikke en sårbarhed.
 
 ### Uden for rammerne
 
@@ -38,7 +38,7 @@ Servertilstand er kun opt-in. Når den er aktiveret, skal du sætte `OPENCODE_SE
 
 Vi sætter pris på din indsats for ansvarligt at offentliggøre dine fund og vil gøre alt for at anerkende dine bidrag.
 
-For at rapportere et sikkerhedsproblem, brug fanen GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new).
+For at rapportere et sikkerhedsproblem, brug fanen GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new).
 
 Teamet sender et svar med de næste skridt. Efter det første svar holder sikkerhedsteamet dig informeret om fremskridtene mod en rettelse og fuld meddelelse og kan bede om yderligere oplysninger.
 

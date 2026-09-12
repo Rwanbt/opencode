@@ -1,9 +1,9 @@
 ---
 title: ปลั๊กอิน
-description: เขียนปลั๊กอินของคุณเองเพื่อขยาย OpenCode
+description: เขียนปลั๊กอินของคุณเองเพื่อขยาย Unifia
 ---
 
-ปลั๊กอินช่วยให้คุณสามารถขยาย OpenCode ได้โดยเชื่อมโยงกับเหตุการณ์ต่างๆ และปรับแต่งลักษณะการทำงาน คุณสามารถสร้างปลั๊กอินเพื่อเพิ่มคุณสมบัติใหม่ บูรณาการกับบริการภายนอก หรือแก้ไขการทำงานเริ่มต้นของ OpenCode
+ปลั๊กอินช่วยให้คุณสามารถขยาย Unifia ได้โดยเชื่อมโยงกับเหตุการณ์ต่างๆ และปรับแต่งลักษณะการทำงาน คุณสามารถสร้างปลั๊กอินเพื่อเพิ่มคุณสมบัติใหม่ บูรณาการกับบริการภายนอก หรือแก้ไขการทำงานเริ่มต้นของ Unifia
 
 ตัวอย่างเช่น ลองดู [ปลั๊กอิน](/docs/ecosystem#ปลั๊กอิน) ที่สร้างโดยชุมชน
 
@@ -30,7 +30,7 @@ description: เขียนปลั๊กอินของคุณเอง�
 
 ระบุแพ็คเกจ npm ในไฟล์ปรับแต่งของคุณ
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -56,7 +56,7 @@ description: เขียนปลั๊กอินของคุณเอง�
 ปลั๊กอินถูกโหลดจากทุกแหล่งและ hooks ทั้งหมดทำงานตามลำดับ ลำดับการโหลดคือ:
 
 1. การกำหนดค่าส่วนกลาง (`~/.config/opencode/opencode.json`)
-2. การกำหนดค่าโครงการ (`opencode.json`)
+2. การกำหนดค่าโครงการ (`unifia.json`)
 3. ไดเร็กทอรีปลั๊กอินสากล (`~/.config/opencode/plugins/`)
 4. ไดเรกทอรีปลั๊กอินโครงการ (`.opencode/plugins/`)
 
@@ -83,7 +83,7 @@ description: เขียนปลั๊กอินของคุณเอง�
 }
 ```
 
-OpenCode รัน `bun install` เมื่อเริ่มต้นเพื่อติดตั้งสิ่งเหล่านี้ ปลั๊กอินและเครื่องมือของคุณสามารถนำเข้าได้
+Unifia รัน `bun install` เมื่อเริ่มต้นเพื่อติดตั้งสิ่งเหล่านี้ ปลั๊กอินและเครื่องมือของคุณสามารถนำเข้าได้
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: ข้อมูลโครงการปัจจุบัน
 - `directory`: ไดเร็กทอรีการทำงานปัจจุบัน
 - `worktree`: เส้นทางเวิร์กทรีคอมไพล์
-- `client`: ไคลเอนต์ opencode SDK สำหรับการโต้ตอบกับ AI
+- `client`: ไคลเอนต์ unifia SDK สำหรับการโต้ตอบกับ AI
 - `$`: [shell API](https://bun.com/docs/runtime/shell) ของ Bun สำหรับการดำเนินการคำสั่ง
 
 ---
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 สำหรับปลั๊กอิน TypeScript คุณสามารถนำเข้าประเภทจากแพ็คเกจปลั๊กอินได้:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## ตัวอย่าง
 
-นี่คือตัวอย่างบางส่วนของปลั๊กอินที่คุณสามารถใช้เพื่อขยาย opencode
+นี่คือตัวอย่างบางส่วนของปลั๊กอินที่คุณสามารถใช้เพื่อขยาย unifia
 
 ---
 
@@ -225,7 +225,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -235,14 +235,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 เรากำลังใช้ `osascript` เพื่อเรียกใช้ AppleScript บน macOS ที่นี่เราใช้มันเพื่อส่งการแจ้งเตือน
 
 :::note
-หากคุณใช้แอปเดสก์ท็อป OpenCode แอปสามารถส่งการแจ้งเตือนของระบบโดยอัตโนมัติเมื่อมีการตอบกลับพร้อมหรือเมื่อเซสชันเกิดข้อผิดพลาด
+หากคุณใช้แอปเดสก์ท็อป Unifia แอปสามารถส่งการแจ้งเตือนของระบบโดยอัตโนมัติเมื่อมีการตอบกลับพร้อมหรือเมื่อเซสชันเกิดข้อผิดพลาด
 :::
 
 ---
 
 ### การป้องกัน .env
 
-ป้องกันไม่ให้ opencode อ่านไฟล์ `.env`:
+ป้องกันไม่ให้ unifia อ่านไฟล์ `.env`:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### เครื่องมือที่กำหนดเอง
 
-ปลั๊กอินยังสามารถเพิ่มเครื่องมือที่กำหนดเองให้กับ opencode:
+ปลั๊กอินยังสามารถเพิ่มเครื่องมือที่กำหนดเองให้กับ unifia:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-ตัวช่วย `tool` สร้างเครื่องมือแบบกำหนดเองที่สามารถเรียกใช้ opencode ได้ ใช้ฟังก์ชัน Zod schema และส่งกลับคำจำกัดความของเครื่องมือด้วย:
+ตัวช่วย `tool` สร้างเครื่องมือแบบกำหนดเองที่สามารถเรียกใช้ unifia ได้ ใช้ฟังก์ชัน Zod schema และส่งกลับคำจำกัดความของเครื่องมือด้วย:
 
 - `description`: เครื่องมือนี้ทำอะไร
 - `args`: Zod schema สำหรับข้อโต้แย้งของเครื่องมือ
 - `execute`: ฟังก์ชั่นที่ทำงานเมื่อมีการเรียกใช้เครื่องมือ
 
-เครื่องมือที่คุณกำหนดเองจะพร้อมใช้งานสำหรับ opencode ควบคู่ไปกับเครื่องมือในตัว
+เครื่องมือที่คุณกำหนดเองจะพร้อมใช้งานสำหรับ unifia ควบคู่ไปกับเครื่องมือในตัว
 
 :::note
 หากเครื่องมือปลั๊กอินใช้ชื่อเดียวกับเครื่องมือในตัว เครื่องมือปลั๊กอินจะมีความสำคัญเหนือกว่า
@@ -340,7 +340,7 @@ export const MyPlugin = async ({ client }) => {
 ปรับแต่งบริบทที่รวมไว้เมื่อมีการกระชับเซสชัน:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -364,7 +364,7 @@ Include any state that should persist across compaction:
 คุณยังสามารถแทนที่พรอมต์การกระชับข้อมูลทั้งหมดได้โดยตั้งค่า `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

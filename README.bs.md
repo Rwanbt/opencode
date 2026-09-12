@@ -1,17 +1,10 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Unifia Workbench banner">
 </p>
 <p align="center">OpenCode je open source AI agent za programiranje.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +32,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 <!-- WHY-FORK-MATRIX -->
 ## Zašto ovaj fork?
@@ -117,10 +110,14 @@ OpenCode (fork) — orkestrirani AI coding agent koji radi na **desktopu, server
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia package or installer is published yet. Build from source:
+git clone https://github.com/Rwanbt/unifia.git
+cd unifia
+bun install
+bun run --cwd packages/opencode build --single
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### 8 stvari koje samo ovaj fork objedinjuje
@@ -139,8 +136,9 @@ curl -fsSL https://opencode.ai/install | bash
 ### Pokreni prvi zadatak
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+# This checkout still exposes the compatibility CLI name `opencode`.
+bun run --cwd packages/opencode dev
+bun run packages/opencode/src/index.ts run "fix the failing test in src/"
 ```
 
 > 💡 Trebaju vam detalji? Svaki odjeljak ispod je sklopljen — kliknite da otvorite samo ono što vas zanima.
@@ -157,7 +155,7 @@ opencode run "fix the failing test in src/"   # one-shot
 ## Funkcionalnosti forka
 
 > Ovo je fork projekta [anomalyco/opencode](https://github.com/anomalyco/opencode) koji održava [Rwanbt](https://github.com/Rwanbt).
-> Sinhronizovano sa upstream-om. Pogledajte [dev granu](https://github.com/Rwanbt/opencode/tree/dev) za najnovije promjene.
+> Sinhronizovano sa upstream-om. Pogledajte [dev granu](https://github.com/Rwanbt/unifia/tree/dev) za najnovije promjene.
 
 #### Lokalna AI
 
@@ -501,18 +499,9 @@ Three major initiatives are planned on dedicated feature branches. Each is desig
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
 
 # Package manageri
-npm i -g opencode-ai@latest        # ili bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS i Linux (preporučeno, uvijek ažurno)
-brew install opencode              # macOS i Linux (zvanična brew formula, rjeđe se ažurira)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Bilo koji OS
-nix run nixpkgs#opencode           # ili github:anomalyco/opencode za najnoviji dev branch
 ```
 
 > [!TIP]
@@ -520,7 +509,7 @@ nix run nixpkgs#opencode           # ili github:anomalyco/opencode za najnoviji 
 
 ### Desktop aplikacija (BETA)
 
-OpenCode je dostupan i kao desktop aplikacija. Preuzmi je direktno sa [stranice izdanja](https://github.com/Rwanbt/opencode/releases) ili sa [opencode.ai/download](https://opencode.ai/download).
+OpenCode je dostupan i kao desktop aplikacija. Preuzmi je direktno sa [stranice izdanja](https://github.com/Rwanbt/unifia/releases) ili sa [opencode.ai/download](https://github.com/Rwanbt/unifia/releases/latest).
 
 | Platforma             | Preuzimanje                           |
 | --------------------- | ------------------------------------- |
@@ -531,7 +520,6 @@ OpenCode je dostupan i kao desktop aplikacija. Preuzmi je direktno sa [stranice 
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
@@ -547,8 +535,8 @@ Instalacijska skripta koristi sljedeći redoslijed prioriteta za putanju instala
 
 ```bash
 # Primjeri
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
+# No public Unifia installer is published; use the source build documented above.
 ```
 
 ### Agenti
@@ -564,11 +552,11 @@ OpenCode uključuje dva ugrađena agenta između kojih možeš prebacivati taste
 Uključen je i **general** pod-agent za složene pretrage i višekoračne zadatke.
 Koristi se interno i može se pozvati pomoću `@general` u porukama.
 
-Saznaj više o [agentima](https://opencode.ai/docs/agents).
+Saznaj više o [agentima](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/agents).
 
 ### Dokumentacija
 
-Za više informacija o konfiguraciji OpenCode-a, [**pogledaj dokumentaciju**](https://opencode.ai/docs).
+Za više informacija o konfiguraciji OpenCode-a, [**pogledaj dokumentaciju**](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs).
 
 ### Doprinosi
 
@@ -585,7 +573,7 @@ Ako radiš na projektu koji je povezan s OpenCode-om i koristi "opencode" kao di
 Po mogućnostima je vrlo sličan Claude Code-u. Ključne razlike su:
 
 - 100% open source
-- Nije vezan za jednog provajdera. Iako preporučujemo modele koje nudimo kroz [OpenCode Zen](https://opencode.ai/zen), OpenCode možeš koristiti s Claude, OpenAI, Google ili čak lokalnim modelima. Kako modeli napreduju, razlike među njima će se smanjivati, a cijene padati, zato je nezavisnost od provajdera važna.
+- Nije vezan za jednog provajdera. Iako preporučujemo modele koje nudimo kroz [OpenCode Zen](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/providers.mdx), OpenCode možeš koristiti s Claude, OpenAI, Google ili čak lokalnim modelima. Kako modeli napreduju, razlike među njima će se smanjivati, a cijene padati, zato je nezavisnost od provajdera važna.
 - LSP podrška odmah po instalaciji
 - Fokus na TUI. OpenCode grade neovim korisnici i kreatori [terminal.shop](https://terminal.shop); pomjeraćemo granice onoga što je moguće u terminalu.
 - Klijent/server arhitektura. To, recimo, omogućava da OpenCode radi na tvom računaru dok ga daljinski koristiš iz mobilne aplikacije, što znači da je TUI frontend samo jedan od mogućih klijenata.

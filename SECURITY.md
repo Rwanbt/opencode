@@ -19,23 +19,23 @@ submit one that will be an automatic ban from the project.
 | 1.2.x   | ⚠️ Security fixes only |
 | < 1.2   | ❌ No              |
 
-> This fork (`Rwanbt/opencode`) tracks the latest upstream release. Patches are backported to the current minor series only.
+> This fork (`Rwanbt/unifia`) tracks the latest upstream release. Patches are backported to the current minor series only.
 
 ## Threat Model
 
 ### Overview
 
-OpenCode is an AI-powered coding assistant that runs locally on your machine. It provides an agent system with access to powerful tools including shell execution, file operations, and web access.
+Unifia is an AI-powered coding assistant that runs locally on your machine. It provides an agent system with access to powerful tools including shell execution, file operations, and web access.
 
 ### No Sandbox
 
-OpenCode does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
+Unifia does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
 
-If you need true isolation, run OpenCode inside a Docker container or VM.
+If you need true isolation, run Unifia inside a Docker container or VM.
 
 ### Server Mode
 
-Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to require HTTP Basic Auth. Without this, the server runs unauthenticated (with a warning). It is the end user's responsibility to secure the server - any functionality it provides is not a vulnerability.
+Server mode is opt-in only. When enabled, set `UNIFIA_SERVER_PASSWORD` to require HTTP Basic Auth. Without this, the server runs unauthenticated (with a warning). It is the end user's responsibility to secure the server - any functionality it provides is not a vulnerability.
 
 ### Out of Scope
 
@@ -53,10 +53,21 @@ Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to requ
 
 We appreciate your efforts to responsibly disclose your findings, and will make every effort to acknowledge your contributions.
 
-To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/anomalyco/opencode/security/advisories/new) tab.
+To report a security issue **in this fork**, please use this repository's GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new) tab.
 
-The team will send a response indicating the next steps in handling your report. After the initial reply to your report, the security team will keep you informed of the progress towards a fix and full announcement, and may ask for additional information or guidance.
+The maintainer will send a response indicating the next steps in handling your report, and will keep you informed of the progress towards a fix and full announcement.
+
+## Which project to report to
+
+This fork carries a large amount of code inherited from upstream OpenCode. Report to whichever project actually owns the defect:
+
+| The issue is in | Report to |
+| --- | --- |
+| Fork-specific code — desktop/mobile shells, local model orchestration, Team, governance and identity gates | [Rwanbt/unifia advisories](https://github.com/Rwanbt/unifia/security/advisories/new) |
+| Code inherited unchanged from upstream, and reproducible on upstream | [anomalyco/opencode advisories](https://github.com/anomalyco/opencode/security/advisories/new) |
+
+If you are unsure, report here and the report will be forwarded upstream when it belongs there.
 
 ## Escalation
 
-If you do not receive an acknowledgement of your report within 6 business days, you may send an email to security@anoma.ly
+This fork is maintained by a single person, so acknowledgement can take longer than an organisation's. If you do not receive one within 14 calendar days, open a non-descriptive issue on [Rwanbt/unifia](https://github.com/Rwanbt/unifia/issues) asking the maintainer to check their advisory inbox — do not disclose the vulnerability in that issue.

@@ -10,14 +10,14 @@ Načini se sada konfiguriraju preko opcije `agent` u konfiguraciji otvorenog kod
 
 Režimi u otvorenom kodu omogućavaju vam da prilagodite ponašanje, alate i upite za različite slučajeve upotrebe.
 Dolazi sa dva ugrađena načina rada: **build** i **plan**. Možete prilagoditi
-ove ili konfigurirajte svoje putem opencode config.
+ove ili konfigurirajte svoje putem unifia config.
 Možete se prebacivati ​​između režima tokom sesije ili ih konfigurisati u svom konfiguracionom fajlu.
 
 ---
 
 ## Ugrađeni
 
-opencode dolazi sa dva ugrađena načina rada.
+unifia dolazi sa dva ugrađena načina rada.
 
 ### Build
 
@@ -48,9 +48,9 @@ Možete prilagoditi ugrađene načine rada ili kreirati vlastite kroz konfigurac
 
 ### JSON konfiguracija
 
-Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
+Konfigurirajte načine rada u svom `unifia.json` konfiguracijskom fajlu:
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
@@ -111,7 +111,7 @@ Pogledajmo ove opcije konfiguracije detaljno.
 
 Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. Korisno za korištenje različitih modela optimiziranih za različite zadatke. Na primjer, brži model za planiranje, sposobniji model za implementaciju.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -127,7 +127,7 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. 
 
 Kontrolišite slučajnost i kreativnost odgovora AI pomoću `temperature` konfiguracije. Niže vrijednosti čine odgovore fokusiranijim i determinističkim, dok veće vrijednosti povećavaju kreativnost i varijabilnost.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -146,7 +146,7 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 - **0,3-0,5**: Uravnoteženi odgovori sa malo kreativnosti, dobro za opšte razvojne zadatke
 - **0,6-1,0**: kreativniji i raznovrsniji odgovori, korisni za razmišljanje i istraživanje
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "analyze": {
@@ -164,13 +164,13 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 }
 ```
 
-Ako temperatura nije navedena, opencode koristi podrazumijevane postavke specifične za model (obično 0 za većinu modela i 0.55 za Qwen modele).
+Ako temperatura nije navedena, unifia koristi podrazumijevane postavke specifične za model (obično 0 za većinu modela i 0.55 za Qwen modele).
 
 ### Upit
 
 Navedite prilagođenu sistemsku datoteku prompta za ovaj način rada s konfiguracijom `prompt`. Datoteka s promptom treba da sadrži upute specifične za svrhu načina rada.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "review": {
@@ -232,7 +232,7 @@ Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfig
 
 ### Korištenje JSON konfiguracije
 
-```json title="opencode.json" {4-14}
+```json title="unifia.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {

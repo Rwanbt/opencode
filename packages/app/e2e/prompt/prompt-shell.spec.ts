@@ -1,4 +1,4 @@
-import type { ToolPart } from "@opencode-ai/sdk/v2/client"
+import type { ToolPart } from "@unifia/sdk/v2/client"
 import { test, expect } from "../fixtures"
 import { withSession } from "../actions"
 import { promptModelSelector, promptSelector, promptVariantSelector } from "../selectors"

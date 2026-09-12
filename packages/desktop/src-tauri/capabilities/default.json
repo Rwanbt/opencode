@@ -30,7 +30,6 @@
     "core:window:allow-set-size",
     "core:window:allow-is-maximized",
     "core:window:allow-toggle-maximize",
-    "decorum:allow-show-snap-overlay",
     "shell:allow-open",
     "updater:default",
     "dialog:default",

@@ -10,17 +10,17 @@ Chúng tôi không chấp nhận các báo cáo bảo mật do AI tạo ra. Chú
 
 ### Tổng quan
 
-OpenCode là một trợ lý lập trình được hỗ trợ bởi AI chạy cục bộ trên máy của bạn. Nó cung cấp một hệ thống tác nhân với quyền truy cập vào các công cụ mạnh mẽ bao gồm thực thi shell, thao tác tệp và truy cập web.
+Unifia Workbench là một trợ lý lập trình được hỗ trợ bởi AI chạy cục bộ trên máy của bạn. Nó cung cấp một hệ thống tác nhân với quyền truy cập vào các công cụ mạnh mẽ bao gồm thực thi shell, thao tác tệp và truy cập web.
 
 ### Không có sandbox
 
-OpenCode **không** đặt tác nhân vào sandbox. Hệ thống quyền tồn tại như một tính năng UX để giúp người dùng nhận biết những gì tác nhân đang làm — nó yêu cầu xác nhận trước khi thực thi các lệnh, ghi tệp, v.v. Tuy nhiên, nó không được thiết kế để cung cấp cách ly bảo mật.
+Unifia Workbench **không** đặt tác nhân vào sandbox. Hệ thống quyền tồn tại như một tính năng UX để giúp người dùng nhận biết những gì tác nhân đang làm — nó yêu cầu xác nhận trước khi thực thi các lệnh, ghi tệp, v.v. Tuy nhiên, nó không được thiết kế để cung cấp cách ly bảo mật.
 
-Nếu bạn cần cách ly thực sự, hãy chạy OpenCode bên trong một container Docker hoặc VM.
+Nếu bạn cần cách ly thực sự, hãy chạy Unifia Workbench bên trong một container Docker hoặc VM.
 
 ### Chế độ máy chủ
 
-Chế độ máy chủ chỉ là opt-in. Khi được bật, đặt `OPENCODE_SERVER_PASSWORD` để yêu cầu HTTP Basic Auth. Nếu không có điều này, máy chủ chạy không xác thực (với cảnh báo). Người dùng cuối có trách nhiệm bảo vệ máy chủ — bất kỳ chức năng nào nó cung cấp đều không phải là lỗ hổng.
+Chế độ máy chủ chỉ là opt-in. Khi được bật, đặt `UNIFIA_SERVER_PASSWORD` để yêu cầu HTTP Basic Auth. Nếu không có điều này, máy chủ chạy không xác thực (với cảnh báo). Người dùng cuối có trách nhiệm bảo vệ máy chủ — bất kỳ chức năng nào nó cung cấp đều không phải là lỗ hổng.
 
 ### Ngoài phạm vi
 
@@ -38,7 +38,7 @@ Chế độ máy chủ chỉ là opt-in. Khi được bật, đặt `OPENCODE_SE
 
 Chúng tôi đánh giá cao nỗ lực công bố có trách nhiệm các phát hiện của bạn và sẽ cố gắng hết sức để ghi nhận những đóng góp của bạn.
 
-Để báo cáo sự cố bảo mật, hãy sử dụng tab GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new).
+Để báo cáo sự cố bảo mật, hãy sử dụng tab GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new).
 
 Nhóm sẽ gửi phản hồi chỉ ra các bước tiếp theo. Sau phản hồi ban đầu, nhóm bảo mật sẽ thông báo cho bạn về tiến trình hướng tới một bản sửa lỗi và thông báo đầy đủ, và có thể yêu cầu thông tin bổ sung.
 

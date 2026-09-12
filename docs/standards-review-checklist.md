@@ -1,4 +1,4 @@
-# Standards Review Checklist — OpenCode Fork
+# Standards Review Checklist — Unifia Fork
 
 À utiliser avant tout commit significatif ou avant d'ouvrir une PR.
 

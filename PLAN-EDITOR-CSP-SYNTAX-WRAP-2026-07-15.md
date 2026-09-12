@@ -1,11 +1,11 @@
 ---
-project: opencode
+project: unifia
 type: roadmap
 tags: [codemirror, mobile, csp, syntax-highlighting, line-wrapping]
 summary: "Plan corrige pour restaurer la coloration CodeMirror sous CSP mobile et cadrer le wrap sans regressions de numerotation."
 created: 2026-07-15
 updated: 2026-07-15
-related: [[OpenCode/CLAUDE|OpenCode CLAUDE.md]], [[OpenCode/Plan-Editeur-IDE-Definitif-2026-06-25|Plan Editeur IDE Definitif]], [[OpenCode/Roadmap-IDE-Android-Dual-Mode|Roadmap IDE Android]], [[OpenCode/_memory/memory|Memory OpenCode]]
+related: [[OpenCode/CLAUDE|Unifia CLAUDE.md]], [[OpenCode/Plan-Editeur-IDE-Definitif-2026-06-25|Plan Editeur IDE Definitif]], [[OpenCode/Roadmap-IDE-Android-Dual-Mode|Roadmap IDE Android]], [[OpenCode/_memory/memory|Memory Unifia]]
 ---
 
 # Plan — Editeur CodeMirror : coloration CSP et wrap des longues lignes
@@ -34,7 +34,7 @@ Le viewer readonly n'est pas une preuve contraire : `@pierre/diffs` utilise Shik
 - Remplacer `defaultHighlightStyle` par `classHighlighter` de `@lezer/highlight`.
 - Declarer `@lezer/highlight` comme dependance directe de `packages/ui` ; sa presence transitive seule n'est pas un contrat de build.
 - Ne pas conserver `fallback: true` : `classHighlighter` est un highlighter par classes, pas un `HighlightStyle` runtime.
-- Ajouter les regles `.tok-*` dans le CSS statique partage, sous le scope `.cm-opencode`.
+- Ajouter les regles `.tok-*` dans le CSS statique partage, sous le scope `.cm-unifia`.
 - Reparer les styles inline du viewer Pierre via un watcher de mutation limite aux spans de tokens.
 - Reutiliser les variables `--syntax-*` existantes pour conserver la parite des themes.
 
@@ -76,14 +76,14 @@ Le wrap a un piege independant : `EditorView.lineWrapping` ajoute seulement `.cm
 - Ajouter `wrapLongLines: boolean` dans `Settings.general`, avec valeur par defaut `false` et compatibilite des settings persistants existants.
 - Ajouter le controle dans `settings-general.tsx` avec les traductions necessaires.
 - Utiliser une `Compartment` CodeMirror pour reconfigurer `EditorView.lineWrapping` sans recreer l'editeur.
-- Ajouter les regles CSS statiques `.cm-lineWrapping` dans le scope `.cm-opencode`, sans affecter le viewer readonly ni les blocs hors editeur.
+- Ajouter les regles CSS statiques `.cm-lineWrapping` dans le scope `.cm-unifia`, sans affecter le viewer readonly ni les blocs hors editeur.
 - Tester desktop/mobile, clair/sombre, grandes lignes, tabulations, lignes sans espaces, gutter et resize.
 
 ## Risques et garde-fous
 
 - `@lezer/highlight` ne doit pas rester transitive : dependance directe obligatoire.
 - Les classes `tok-*` n'ont aucune couleur par defaut : une absence de selecteur doit etre detectee par test CSS et revue visuelle.
-- Une regle `.tok-*` globale pourrait recolorer un autre composant : scope strict `.cm-opencode`.
+- Une regle `.tok-*` globale pourrait recolorer un autre composant : scope strict `.cm-unifia`.
 - `lineWrapping` sans CSS statique est inoperant sous CSP : ne pas livrer le toggle sans les regles de layout.
 - Le toggle ne doit pas reutiliser le scroll/wrap de `@pierre/diffs`, dont les contraintes sont differentes.
 - La validation navigateur desktop ne suffit pas a clore le bug CSP mobile ; la preuve finale doit venir de l'appareil reel.

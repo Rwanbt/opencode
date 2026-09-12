@@ -1,5 +1,52 @@
-# web + desktop packages
-packages/app/      @adamdotdevin
-packages/tauri/    @adamdotdevin
-packages/desktop/src-tauri/  @brendonovich
-packages/desktop/  @adamdotdevin
+# Code ownership for the Rwanbt/unifia fork.
+#
+# The file inherited from upstream assigned this fork's packages to upstream
+# maintainers (@adamdotdevin, @brendonovich), who have no access here — so every
+# entry named a reviewer GitHub could never request. It also still routed
+# `packages/tauri/`, a directory that does not exist in this repository.
+#
+# Only accounts with access to this repository may appear below. Until other
+# maintainers join, that is the fork owner alone; the value of the file is that
+# it makes "require review from Code Owners" enforceable on the branch
+# protection rules, and it names the areas where a review is least optional.
+
+# Default owner for anything not matched more specifically.
+*                                   @Rwanbt
+
+# --- Release, supply chain and CI -------------------------------------------
+# A change here can publish, sign or ship. Never self-merge without a read.
+/.github/workflows/                 @Rwanbt
+/.github/CODEOWNERS                 @Rwanbt
+/scripts/                           @Rwanbt
+/nix/                               @Rwanbt
+
+# --- Product identity --------------------------------------------------------
+# config/identity.json is the single source of truth the `identity` gate checks
+# every surface against; brand/ is what the `brand` gate hashes.
+/config/identity.json               @Rwanbt
+/brand/                             @Rwanbt
+/scripts/identity/                  @Rwanbt
+/scripts/brand/                     @Rwanbt
+
+# --- Cross-package contracts -------------------------------------------------
+# Types other packages compile against; a change fans out repo-wide.
+/packages/contracts/                @Rwanbt
+/packages/sdk/                      @Rwanbt
+/packages/sdk-shared/               @Rwanbt
+
+# --- Security-sensitive runtime ----------------------------------------------
+# Credential storage, server auth, permission gates and the native shells.
+/packages/unifia/src/auth/          @Rwanbt
+/packages/unifia/src/github/        @Rwanbt
+/packages/unifia/src/permission/    @Rwanbt
+/packages/unifia/src/server/        @Rwanbt
+/packages/unifia/src/flag/          @Rwanbt
+/packages/desktop/src-tauri/        @Rwanbt
+/packages/mobile/src-tauri/         @Rwanbt
+/crates/                            @Rwanbt
+
+# --- Governance documents ----------------------------------------------------
+/SECURITY.md                        @Rwanbt
+/AGENTS.md                          @Rwanbt
+/CLAUDE.md                          @Rwanbt
+/docs/adr/                          @Rwanbt

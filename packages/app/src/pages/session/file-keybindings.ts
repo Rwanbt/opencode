@@ -9,7 +9,7 @@
 
 import { createEffect } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { FileSearchHandle } from "@opencode-ai/ui/file"
+import type { FileSearchHandle } from "@unifia/ui/file"
 
 export interface FileKeybindingsDeps {
   /** Tab id — used to gate the listener to the active tab (unless override). */

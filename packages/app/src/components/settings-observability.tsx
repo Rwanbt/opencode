@@ -1,10 +1,10 @@
 import { type Component, createEffect, createResource, createSignal, For, onCleanup, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch as SwitchComponent } from "@opencode-ai/ui/switch"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@unifia/ui/button"
+import { Select } from "@unifia/ui/select"
+import { Switch as SwitchComponent } from "@unifia/ui/switch"
+import { TextField } from "@unifia/ui/text-field"
+import { Icon } from "@unifia/ui/icon"
+import { showToast } from "@unifia/ui/toast"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"
@@ -97,12 +97,7 @@ export const SettingsObservability: Component = () => {
   }
 
   const formatPct = (pct: number | undefined) => pct === undefined ? "—" : `${pct.toFixed(1)}%`
-  const formatMs = (ms: number | undefined) => ms === undefined ? "—" : `${(ms / 1000).toFixed(1)}s`
   const formatCost = (nano: number | undefined) => nano === undefined ? "—" : `$${(nano / 1_000_000_000).toFixed(4)}`
-  const diffColor = (val: number | undefined, betterLower = true) => {
-    if (val === undefined) return ""
-    return betterLower ? val < 0 : val > 0 ? "var(--icon-success-base)" : "var(--icon-critical-base)"
-  }
   const diffSign = (val: number | undefined) => val === undefined ? "" : val > 0 ? "+" : ""
 
   return <div class="flex h-full flex-col overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">

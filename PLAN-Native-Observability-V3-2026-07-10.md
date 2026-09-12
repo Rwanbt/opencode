@@ -171,13 +171,13 @@ Décision: tout pseudonyme ou hash sensible utilise HMAC-SHA256 avec `localInsta
    À la première activation de l’observabilité, générer 32 bytes cryptographiquement sûrs via `crypto.getRandomValues(new Uint8Array(32))` ou `node:crypto.randomBytes(32)`. `Bun.randomUUID()` est interdit pour une clé.
 
 2. **Stockage Phase 1**  
-   Stocker la clé dans un fichier dédié, hors DB observability, dans le répertoire config local OpenCode existant. Nom recommandé: `observability_hmac.key`.  
+   Stocker la clé dans un fichier dédié, hors DB observability, dans le répertoire config local Unifia existant. Nom recommandé: `observability_hmac.key`.  
    Permissions:
    - fichier: `0600`;
-   - dossier parent: `0700` si OpenCode contrôle sa création;
+   - dossier parent: `0700` si Unifia contrôle sa création;
    - ne jamais écrire la clé dans logs, DB, exports ou UI.
 
-   Le chemin exact doit être dérivé des primitives de config existantes d’OpenCode. Si aucun chemin config canonique n’est identifié avec citation code, ajouter un gate bloquant avant implémentation.
+   Le chemin exact doit être dérivé des primitives de config existantes d’Unifia. Si aucun chemin config canonique n’est identifié avec citation code, ajouter un gate bloquant avant implémentation.
 
 3. **Wipe / perte de clé**  
    Si la clé est supprimée alors que la DB reste présente, les HMACs historiques ne sont plus corrélables avec les nouveaux. C’est un comportement accepté et documenté: la continuité des stats par utilisateur/chemin peut être perdue, mais la confidentialité augmente.
@@ -302,7 +302,7 @@ Auth/ownership:
 
 Modèle minimal acceptable si app locale:
 - serveur bind loopback par défaut;
-- token local ou mécanisme équivalent déjà utilisé par OpenCode;
+- token local ou mécanisme équivalent déjà utilisé par Unifia;
 - CORS/origin restrictif;
 - aucune exposition à webviews/extensions non fiables;
 - accès remote explicitement opt-in et authentifié.
@@ -376,7 +376,7 @@ Migration:
 Rollback:
 - Drizzle ne garantit pas un down automatique. Le rollback Phase 1 est manuel et destructif: `DROP TABLE observability_event` + suppression routes/UI si besoin.
 - Downgrade applicatif après migration: non supporté sauf procédure manuelle documentée.
-- Avant release, documenter la procédure de restauration depuis backup utilisateur si OpenCode en a une.
+- Avant release, documenter la procédure de restauration depuis backup utilisateur si Unifia en a une.
 
 SDK drift CI:
 - Ajouter un step CI: régénérer SDK puis `git diff --exit-code` sur le SDK généré.
@@ -421,7 +421,7 @@ Décision Phase 1:
 Phase 3 local_full:
 - warning UI rouge obligatoire;
 - documentation chiffrement at-rest obligatoire;
-- si OpenCode a une primitive de secret/chiffrement locale, l’évaluer avant activation générale de `local_full`.
+- si Unifia a une primitive de secret/chiffrement locale, l’évaluer avant activation générale de `local_full`.
 
 Acceptation:
 - docs limites SQLite non chiffré;
@@ -546,7 +546,7 @@ Aucune dépendance à OTel/Langfuse dans le cœur. Phase 4 exporters reçoivent 
 
 ## 5. Schéma SQL Phase 1
 
-Fichier: `packages/opencode/src/observability/observability.sql.ts`.
+Fichier: `packages/unifia/src/observability/observability.sql.ts`.
 
 ```ts
 export const observabilityEvent = sqliteTable("observability_event", {
@@ -916,7 +916,7 @@ Phase 2/4.
 
 Phase 0 doit répondre avec preuve code:
 
-1. Le serveur OpenCode a-t-il déjà une authentification locale/token ?
+1. Le serveur Unifia a-t-il déjà une authentification locale/token ?
 2. Le serveur peut-il être exposé hors loopback ?
 3. Les routes existantes vérifient-elles workspace/project/session ownership ?
 4. Quelle convention Hono existe pour 401/403/404 ?
@@ -990,7 +990,7 @@ Rollback:
 - documenter la commande SQL et le risque de perte.
 
 Desktop/mobile:
-- Phase 1 cible `packages/opencode` backend.
+- Phase 1 cible `packages/unifia` backend.
 - Desktop Tauri: vérifier chemin config/secret et accès DB via même backend.
 - Mobile Android: hors support Phase 1 sauf preuve que le chemin storage/secret est compatible. Documenter “observability native mobile deferred” si non vérifié.
 
@@ -1156,7 +1156,7 @@ Pas de prompt/réponse/tool output/error message affiché.
 
 ### Phase 4 — **Livré** (2026-07-12, branche `observability`, complété en deux passes le même jour)
 
-- [x] exporter config — `experimental.observability.exporters` dans `opencode.json` **et** panneau UI dédié `settings-observability-exporters.tsx` (onglet "Exporters"), ajout/suppression d'un exporter Langfuse depuis l'interface, secret jamais renvoyé par l'API.
+- [x] exporter config — `experimental.observability.exporters` dans `unifia.json` **et** panneau UI dédié `settings-observability-exporters.tsx` (onglet "Exporters"), ajout/suppression d'un exporter Langfuse depuis l'interface, secret jamais renvoyé par l'API.
 - [x] preview projection — panneau UI + `GET /observability/exporters/preview/:eventId` : affiche l'`ExportProjection` exacte pour un event réel sans jamais l'envoyer nulle part.
 - [x] test export — panneau UI + `POST /observability/exporters/test` : envoie un event synthétique (aucune donnée réelle) à travers chaque exporter configuré, résultat par exporter affiché.
 - [x] logs export — chaque échec (après retry borné) est loggé (`log.warn`, `runtime.ts`), visible dans les logs process standards.

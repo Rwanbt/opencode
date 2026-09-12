@@ -1,0 +1,16 @@
+{
+  "description": "Reference crash matrix structure expected from desktop-crash-matrix.ps1",
+  "expectedFields": [
+    "timestamp",
+    "rootPid",
+    "rootTree",
+    "scenarios",
+    "note"
+  ],
+  "expectedScenarios": [
+    "spawn_failed",
+    "spawn_mid_init",
+    "spawn_post_lease",
+    "spawn_orphan"
+  ]
+}

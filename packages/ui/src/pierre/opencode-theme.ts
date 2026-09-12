@@ -1,9 +1,11 @@
 import { registerCustomTheme, type ThemeRegistrationResolved } from "@pierre/diffs"
 
+let openCodeThemeRegistered = false
+
 // WHY this lives here (not just in context/marked.tsx, where it originated):
 // the Shiki worker pool used for the read-only file viewer (worker.ts in this
 // same directory) resolves themes by NAME on the main thread before handing
-// them to the worker — it never falls back to a default if "OpenCode" isn't
+// them to the worker — it never falls back to a default if "Unifia" isn't
 // registered yet. The registration used to be a side effect of importing
 // context/marked.tsx (markdown rendering), which isn't guaranteed to have
 // run before the file viewer's worker pool initializes — e.g. opening a file
@@ -14,9 +16,12 @@ import { registerCustomTheme, type ThemeRegistrationResolved } from "@pierre/dif
 // Calling this from worker.ts too guarantees registration happens before the
 // pool ever needs it, regardless of whether markdown has rendered.
 export function registerOpenCodeTheme() {
-  registerCustomTheme("OpenCode", () => {
+  if (openCodeThemeRegistered) return
+  openCodeThemeRegistered = true
+
+  registerCustomTheme("Unifia", () => {
     return Promise.resolve({
-      name: "OpenCode",
+      name: "Unifia",
       colors: {
         "editor.background": "var(--color-background-stronger)",
         "editor.foreground": "var(--text-base)",

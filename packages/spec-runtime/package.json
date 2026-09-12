@@ -1,0 +1,24 @@
+{
+  "name": "@unifia/spec-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/spec.test.ts"
+  },
+  "dependencies": {
+    "@unifia/artifact-runtime": "workspace:*",
+    "@unifia/document-packs": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

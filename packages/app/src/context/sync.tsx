@@ -1,8 +1,8 @@
 import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { Binary } from "@unifia/util/binary"
+import { retry } from "@unifia/util/retry"
+import { createSimpleContext } from "@unifia/ui/context"
 import {
   clearSessionPrefetch,
   getSessionPrefetch,
@@ -305,7 +305,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
       const session = items.map((x) => x.info).sort((a, b) => cmp(a.id, b.id))
       const part = items.map((message) => ({ id: message.info.id, part: sortParts(message.parts) }))
-      const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
+      const cursor = messages.response?.headers.get("x-next-cursor") ?? undefined
       return {
         session,
         part,

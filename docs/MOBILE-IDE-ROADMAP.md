@@ -1,4 +1,4 @@
-# Roadmap — OpenCode Mobile → IDE Android complet (dual-mode Agent ⇄ IDE)
+# Roadmap — Unifia Mobile → IDE Android complet (dual-mode Agent ⇄ IDE)
 
 > Statut : approuvée 2026-06-16. Reviews croisées Codex + MiniMax, vérifiée contre la codebase.
 > Décisions : moteur éditeur = **CodeMirror 6** ; identité = **dual-mode switchable** (Mode Agent ⇄ Mode IDE).
@@ -32,20 +32,20 @@ desktop + Android (+ iOS futur).
 | Domaine | État réel | Fichier de référence |
 |---|---|---|
 | Éditeur | ✅ CodeMirror 6 éditable (dirty/save/conflit/undo-redo), dual-mode Agent⇄IDE | `packages/app/src/context/editor/store.ts`, `file-tabs.tsx:638` |
-| API fichier | ✅ `write/rename/move/delete` + garde anti-escape + modèle de conflit hash | `packages/opencode/src/server/routes/file.ts`, `file/index.ts` |
-| LSP backend | ✅ hover/def/refs/symbols/diagnostics + 9 ops | `packages/opencode/src/lsp/index.ts`, `packages/opencode/src/tool/lsp.ts` |
+| API fichier | ✅ `write/rename/move/delete` + garde anti-escape + modèle de conflit hash | `packages/unifia/src/server/routes/file.ts`, `file/index.ts` |
+| LSP backend | ✅ hover/def/refs/symbols/diagnostics + 9 ops | `packages/unifia/src/lsp/index.ts`, `packages/unifia/src/tool/lsp.ts` |
 | LSP UI humain | ✅ diagnostics gutter, hover, F12 go-to-def, `/find/symbol` réactivé | `packages/ui/src/components/code-mirror-lsp.ts`, `routes/lsp.ts` |
-| Git backend | ✅ add/reset/commit/push/pull/log/blame/branches/createBranch/switchBranch | `packages/opencode/src/git/index.ts` |
+| Git backend | ✅ add/reset/commit/push/pull/log/blame/branches/createBranch/switchBranch | `packages/unifia/src/git/index.ts` |
 | Git UI | ✅ Source Control panel — staged/unstaged/commit/push/pull/branch switcher | `packages/app/src/components/source-control.tsx` |
-| Terminal | ✅ Complet (PTY/tabs/toolbar mobile/WebSocket) | `packages/opencode/src/pty/index.ts`, `terminal-panel.tsx` |
+| Terminal | ✅ Complet (PTY/tabs/toolbar mobile/WebSocket) | `packages/unifia/src/pty/index.ts`, `terminal-panel.tsx` |
 | Build/Test/Debug utilisateur | ✅ Task runner — détecte npm/cargo/make, exécute via PTY | `packages/app/src/components/task-panel.tsx` |
-| Plugins backend | ✅ 14+ hooks, plugins internes/npm/locaux, custom tools, events | `packages/opencode/src/plugin/index.ts` |
+| Plugins backend | ✅ 14+ hooks, plugins internes/npm/locaux, custom tools, events | `packages/unifia/src/plugin/index.ts` |
 | Plugin manager UI | ✅ MCP full CRUD — add/remove/toggle/auth, remote + local | `packages/app/src/components/settings-plugins.tsx` |
 | Permissions Android | ✅ UX complète — diagnostics thermique/RAM, bouton permissions, état visible | `packages/app/src/components/settings-android.tsx` |
 | Notifications système | ✅ NotificationBridge — session completed/failed + model ready | `packages/mobile/src/notifications.ts`, `entry.tsx:540` |
 | Deep-link étendu | ✅ connect + open + session — handleDeepLink() router | `packages/mobile/src/entry.tsx:296` |
 | Mobile hardening (Phase 0+) | ✅ logging toolchain, runtime décomposé, bundling unifié | `packages/mobile/src-tauri/src/runtime/` |
-| Skills system | ✅ Liste + install via URL + uninstall (global skills) | `packages/opencode/src/skill/index.ts`, `settings-plugins.tsx` |
+| Skills system | ✅ Liste + install via URL + uninstall (global skills) | `packages/unifia/src/skill/index.ts`, `settings-plugins.tsx` |
 | Split panes | ✅ Ctrl+\ volet droit, drag resize, focus mode tablette | `file-tabs.tsx`, `session-side-panel.tsx`, `layout.tsx` |
 
 ## Audit dette technique (2026-06-16) & révisions
@@ -124,7 +124,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 - [x] Supprimer le swallow d'erreurs silencieux (`let _ =` sur symlink/fs) → logging. D-12/D-13 ont
   couvert `force_symlink`/`repair_rootfs_hardlinks` ; le durcissement final couvre le chemin `wrap_one`
   (cc1/collect2/binutils/rustlib), la réécriture de wrapper, la restauration `liblto_plugin.so` et le
-  seed `/etc/resolv.conf` — tous loggés (`[OpenCode] … failed to …`), best-effort par binaire conservé.
+  seed `/etc/resolv.conf` — tous loggés (`[Unifia] … failed to …`), best-effort par binaire conservé.
 - [x] Unifier le bundling CLI (`prepare-android-runtime.sh` → `scripts/bundle-mobile.mjs`) → source unique (D-17).
 - [x] Décomposer `runtime.rs` (1869 → ~848 LOC) en `runtime/{extraction,toolchain,server}.rs` (D-01).
 
@@ -134,8 +134,8 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 
 | Fonctionnalité | Fichier | État |
 |---|---|---|
-| API fichier write — `POST /file/write` (conflit hash stateless, écriture atomique), `POST /file/rename`, `POST /file/move`, `DELETE /file` | `packages/opencode/src/server/routes/file.ts` | ✅ |
-| Backend file service — `write/rename/move/delete` + `assertInsideProject` guard + `File.Event.Edited` | `packages/opencode/src/file/index.ts` | ✅ |
+| API fichier write — `POST /file/write` (conflit hash stateless, écriture atomique), `POST /file/rename`, `POST /file/move`, `DELETE /file` | `packages/unifia/src/server/routes/file.ts` | ✅ |
+| Backend file service — `write/rename/move/delete` + `assertInsideProject` guard + `File.Event.Edited` | `packages/unifia/src/file/index.ts` | ✅ |
 | ADR-0004 — modèle de conflit hash + écriture atomique documenté | `docs/adr/ADR-0004-file-write-conflict-model.md` | ✅ |
 | Editor store — state machine dirty/save/discard/reload/conflict, undo/redo | `packages/app/src/context/editor/store.ts` | ✅ |
 | Editor store tests (124 tests) | `packages/app/src/context/editor/store.test.ts` | ✅ |
@@ -189,7 +189,7 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 | Onglet "tasks" dans le side panel | `pages/session/session-side-panel.tsx:412` | ✅ |
 
 **Stretch (partiellement implémenté)** :
-- **Problem matchers** ✅ (commit `a7f40d58f1`) — `Pty.tail(id, maxChars)` + `GET /pty/:id/tail` (ANSI strippé) ; parseurs Rust (`--> file:line:col`) / TS (`file(line,col): error TSxxxx`) / GCC (`:line:col: error:`) ; bouton "Analyser" + panneau erreurs/avertissements dans le task panel. `terminal.newWithCommand()` retourne l'ID PTY. | `packages/opencode/src/pty/index.ts`, `routes/pty.ts`, `components/task-panel.tsx`
+- **Problem matchers** ✅ (commit `a7f40d58f1`) — `Pty.tail(id, maxChars)` + `GET /pty/:id/tail` (ANSI strippé) ; parseurs Rust (`--> file:line:col`) / TS (`file(line,col): error TSxxxx`) / GCC (`:line:col: error:`) ; bouton "Analyser" + panneau erreurs/avertissements dans le task panel. `terminal.newWithCommand()` retourne l'ID PTY. | `packages/unifia/src/pty/index.ts`, `routes/pty.ts`, `components/task-panel.tsx`
 - **Test explorer** — parser la sortie `cargo test` / `npm test` (patterns `test … ok` / `FAILED`) dans une vue séparée. Partage l'infra `Pty.tail()` déjà implémentée.
 - **DAP debug on-device** — démoté (chaîne shebang fragile, faible ROI vs desktop remote-control).
 
@@ -250,8 +250,8 @@ Issu de l'audit dette mobile (élevée). À traiter avant tout chantier build/te
 |---|---|---|
 | NotificationBridge instanciée dans `FullApp` — session.updated (completed/failed) + llm.status (loaded) | `packages/mobile/src/entry.tsx:540` | ✅ |
 | `handleDeepLink(url)` — router en cascade pour 3 schémas | `packages/mobile/src/entry.tsx:296` | ✅ |
-| `opencode://open?file=…&project=…` → dispatch `ide-open-file` CustomEvent | `packages/mobile/src/entry.tsx:26-40` | ✅ |
-| `opencode://session?id=…` → dispatch `navigate-to-session` CustomEvent | `packages/mobile/src/entry.tsx:51-63` | ✅ |
+| `unifia://open?file=…&project=…` → dispatch `ide-open-file` CustomEvent | `packages/mobile/src/entry.tsx:26-40` | ✅ |
+| `unifia://session?id=…` → dispatch `navigate-to-session` CustomEvent | `packages/mobile/src/entry.tsx:51-63` | ✅ |
 | `ANDROID_DEVELOPMENT.md §5-6` mis à jour — permissions, lifecycle, notifications, deep-link | `docs/ANDROID_DEVELOPMENT.md` | ✅ |
 
 ---

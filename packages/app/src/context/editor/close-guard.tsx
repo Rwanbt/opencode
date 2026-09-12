@@ -15,8 +15,8 @@
 
 import { createContext, createEffect, createSignal, useContext, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { showToast } from "@unifia/ui/toast"
 import { useEditor } from "../editor"
 import { useFileStore } from "../file/store"
 import { useLanguage } from "../language"

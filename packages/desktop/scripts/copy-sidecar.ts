@@ -1,10 +1,10 @@
 import { mkdirSync } from "node:fs"
 import { dirname } from "node:path"
 
-import { getCurrentSidecar, windowsify } from "./utils"
+import { cliPackageName, getCurrentSidecar, windowsify } from "./utils"
 
 // WHY: get_sidecar_path (cli.rs) spawns the sidecar SIBLING to the running
-// binary (target/<profile>/opencode-cli). tauri-build's externalBin step
+// binary (target/<profile>/unifia-cli). tauri-build's externalBin step
 // restores a stale sidecar there during `tauri build`, so this runs AFTER the
 // build (see the "release" npm script) to put the fresh one back.
 // Uses Bun.write (not node:fs copyFileSync): on Bun 1.3.11/win32 the latter
@@ -12,11 +12,15 @@ import { getCurrentSidecar, windowsify } from "./utils"
 const target = Bun.env.TAURI_ENV_TARGET_TRIPLE ?? "x86_64-pc-windows-msvc"
 const sidecarConfig = getCurrentSidecar(target)
 
-// Candidate source paths in order of preference
+// Candidate source paths in order of preference. The last one is the sidecar
+// already staged for the bundler; it exists to survive a packaging run that did
+// not rebuild the CLI, but it must stay LAST — while the first two pointed at
+// the pre-rebrand `bin/opencode`, they never matched and every build silently
+// recycled that stale copy instead of the freshly built binary.
 const candidates = [
-  windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`),
-  windowsify(`../opencode/dist/${sidecarConfig.ocBinary.replace("-baseline", "")}/bin/opencode`),
-  windowsify(`src-tauri/sidecars/opencode-cli-${target}`),
+  windowsify(`../unifia/dist/${sidecarConfig.ocBinary}/bin/${cliPackageName}`),
+  windowsify(`../unifia/dist/${sidecarConfig.ocBinary.replace("-baseline", "")}/bin/${cliPackageName}`),
+  windowsify(`src-tauri/sidecars/unifia-cli-${target}`),
 ]
 
 let src = ""
@@ -28,7 +32,7 @@ for (const candidate of candidates) {
 }
 
 if (!src) {
-  console.warn(`[copy-sidecar] source missing in candidates: ${candidates.join(", ")} — run "predev" or build the opencode sidecar first`)
+  console.warn(`[copy-sidecar] source missing in candidates: ${candidates.join(", ")} — run "predev" or build the unifia sidecar first`)
   process.exit(0)
 }
 
@@ -37,12 +41,12 @@ const srcFile = Bun.file(src)
 
 // WHY: Tauri resolves bundle.externalBin before Cargo starts, so the source
 // sidecar must exist in src-tauri/sidecars before the official build command.
-const bundleDestination = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
+const bundleDestination = windowsify(`src-tauri/sidecars/unifia-cli-${target}`)
 mkdirSync(dirname(bundleDestination), { recursive: true })
 await Bun.write(bundleDestination, srcFile)
 console.log(`[copy-sidecar] bundle <- ${bundleDestination}`)
 for (const profile of ["debug", "release"]) {
-  const dest = windowsify(`src-tauri/target/${profile}/opencode-cli`)
+  const dest = windowsify(`src-tauri/target/${profile}/unifia-cli`)
   mkdirSync(dirname(dest), { recursive: true })
   try {
     await Bun.write(dest, srcFile)

@@ -1,0 +1,29 @@
+Launch a coordinated team of agents to accomplish a complex task.
+
+Each sub-task runs in its own child session, in an isolated git worktree when
+the project is a git repository. Sub-tasks may declare dependencies on each
+other; the tool groups them into waves and runs a wave's tasks in parallel,
+waiting for the wave to finish before starting the next. The output of a
+completed task is passed as context to the tasks that depend on it.
+
+Use this when the work genuinely splits into parts that can proceed at the
+same time — independent research threads, or an implementation that a
+separate agent can test or review. For a single unit of work, use the task
+tool instead.
+
+Parameters:
+
+- description: the overall goal. It titles the run and its report.
+- tasks: 1 to 5 sub-tasks. Each carries a short description, the prompt its
+  agent receives, the agent to run it, and optional depends_on indices
+  (0-based, referring to other entries in this same list).
+- budget.max_cost / budget.max_tokens: stop before starting a new wave once
+  the run has spent this much. Tasks already running are not interrupted.
+- budget.max_agents: how many sub-tasks may run at once, 1 to 5. A wave wider
+  than this cap runs in successive groups.
+
+Cancelling this tool cancels every child session it started. Tasks the run
+never reached are reported as never started rather than dropped, and a task
+that produced nothing before the cancellation reached it is reported as
+cancelled, not completed. The summary always states how many tasks completed,
+failed, were cancelled, or never ran.

@@ -27,7 +27,7 @@ Validation : `bun run typecheck` (14 pkg) + `cargo check` desktop + `cargo check
 ### 1. Desktop `export_types` — NO-OP
 `packages/desktop/src-tauri/src/lib.rs:492` : la fn est **utilisée** ligne 323 (dans `setup()`) et dans `test_export_types`. `cargo check` desktop ne remonte aucun warning. Finding obsolète.
 
-**Test manuel** : `cargo check -p opencode-desktop` → 0 warning.
+**Test manuel** : `cargo check -p unifia-desktop` → 0 warning.
 
 ### 2. 40 warnings mobile — FIXED
 Cause : `#[tauri::command]` dans `speech.rs`, `kokoro/`, `parakeet/`, `fetch_private_server` sont enregistrés uniquement sous `#[cfg(target_os="android")]` dans `invoke_handler!`. Sur `cargo check` hôte Windows, le compilateur ne voit aucun appelant → 40 warnings dead_code.
@@ -42,17 +42,17 @@ Cause : `#[tauri::command]` dans `speech.rs`, `kokoro/`, `parakeet/`, `fetch_pri
 
 ### 3. S2.A2 Deep-link providerID allowlist — FIXED
 **Fichier** : `packages/app/src/pages/layout.tsx:1366-1390`.
-**Cause** : `parseOAuthCallbackDeepLink` valide la forme (`/^[a-z0-9][a-z0-9_-]{0,63}$/i`) mais pas l'identité. Une URL `opencode://oauth/callback?providerID=attacker&code=xxx` déclenchait `dispatchEvent` quel que soit l'ID.
+**Cause** : `parseOAuthCallbackDeepLink` valide la forme (`/^[a-z0-9][a-z0-9_-]{0,63}$/i`) mais pas l'identité. Une URL `unifia://oauth/callback?providerID=attacker&code=xxx` déclenchait `dispatchEvent` quel que soit l'ID.
 **Correctif** : au dispatch, on construit une allowlist = `providers.all()` (registry live) ∪ `popularProviders` (fallback first-launch) et on `continue` + `console.warn` si inconnu. Garde la compat avec les custom providers (tant qu'ils sont enregistrés).
 
 **Test manuel** :
-1. Construire un deep-link `opencode://oauth/callback?providerID=foobar&code=xxx`. L'ouvrir. Vérifier `console.warn` + aucune dialog déclenchée.
+1. Construire un deep-link `unifia://oauth/callback?providerID=foobar&code=xxx`. L'ouvrir. Vérifier `console.warn` + aucune dialog déclenchée.
 2. Avec `providerID=anthropic` (présent dans `popularProviders`), dispatch normal.
 
 **Risque** : un provider dynamique chargé tardivement (après handleDeepLinks drain) peut rater son callback. Mitigation : `popularProviders` couvre les 9 principaux, les custom providers sont chargés au démarrage via `provider.list()` avant le drain des deep-links pendants.
 
 ### 4. A.12 `_ownedChildPid` stale — FIXED
-**Fichier** : `packages/opencode/src/local-llm-server/index.ts:615-623`.
+**Fichier** : `packages/unifia/src/local-llm-server/index.ts:615-623`.
 **Cause** : sur exit naturel du child llama-server (OOM, segfault, kill externe), le `.then()` qui annule le stderrReader laissait `_ownedChildPid` pointer sur un PID réutilisable par l'OS.
 **Correctif** : reset de `_ownedChildPid = null` dans le handler `child.exited.then()`, gardé par `if (_ownedChildPid === child.pid)` pour éviter de marcher sur un spawn de remplacement (race avec `ensureCorrectModel`).
 
@@ -92,7 +92,7 @@ Cause : `#[tauri::command]` dans `speech.rs`, `kokoro/`, `parakeet/`, `fetch_pri
 **Risque** : nul, la sémantique existante (hit/miss) n'est pas modifiée, juste bornée.
 
 ### 8. S2.V2 embedding response validation — FIXED
-**Fichier** : `packages/opencode/src/rag/embed.ts`.
+**Fichier** : `packages/unifia/src/rag/embed.ts`.
 **Correctif** :
 - Schema Zod `VectorSchema = z.array(z.number().finite()).min(1)`.
 - Helper `assertVector(vec, expected?)` qui throw sur shape invalide ou dim mismatch.
@@ -106,7 +106,7 @@ Cause : `#[tauri::command]` dans `speech.rs`, `kokoro/`, `parakeet/`, `fetch_pri
 **Risque** : faible. Les providers honnêtes (OpenAI/Google) renvoient toujours une shape conforme.
 
 ### 9. S2.V1 RPC worker ID reuse — FIXED
-**Fichier** : `packages/opencode/src/util/rpc.ts`.
+**Fichier** : `packages/unifia/src/util/rpc.ts`.
 **Correctif** :
 - Compteur `id` remplacé par `crypto.randomUUID()` (pas de réutilisation possible).
 - `pending` typé `Map<string, Pending>` avec `{ resolve, reject, timer }`.
@@ -180,9 +180,9 @@ $ cd packages/app && bun test src/context/global-sync/session-prefetch.test.ts
 - `packages/mobile/src-tauri/src/speech.rs` (inner allow dead_code)
 - `packages/mobile/src-tauri/src/kokoro/engine.rs` (inner allow dead_code)
 - `packages/mobile/src-tauri/src/parakeet/engine.rs` (inner allow dead_code)
-- `packages/opencode/src/local-llm-server/index.ts` (reset _ownedChildPid on exit)
-- `packages/opencode/src/rag/embed.ts` (Zod validation embeddings)
-- `packages/opencode/src/util/rpc.ts` (UUID + timeout + delete-before-resolve)
+- `packages/unifia/src/local-llm-server/index.ts` (reset _ownedChildPid on exit)
+- `packages/unifia/src/rag/embed.ts` (Zod validation embeddings)
+- `packages/unifia/src/util/rpc.ts` (UUID + timeout + delete-before-resolve)
 - `packages/ui/src/components/markdown.tsx` (cap 50 + TTL 60s)
 - `packages/app/src/context/global-sync/session-prefetch.ts` (LRU cap 100)
 - `packages/app/src/pages/layout.tsx` (providerID allowlist)
@@ -272,10 +272,10 @@ introduirait une dépendance réseau dans un hot path startup. L'absolute
 path check est la barrière la plus rentable et la moins risquée.
 
 **Tests manuels** :
-1. `opencode://open-project?directory=../../etc` → rejeté (log silencieux).
-2. `opencode://open-project?directory=/tmp/demo` → accepté.
-3. `opencode://open-project?directory=C:\Users\me\project` → accepté.
-4. `opencode://open-project?directory=relative/path` → rejeté.
+1. `unifia://open-project?directory=../../etc` → rejeté (log silencieux).
+2. `unifia://open-project?directory=/tmp/demo` → accepté.
+3. `unifia://open-project?directory=C:\Users\me\project` → accepté.
+4. `unifia://open-project?directory=relative/path` → rejeté.
 
 **Risque** : les tests unitaires existants (`helpers.test.ts`) utilisent
 tous des chemins absolus (`/tmp/demo`, `/a`, `/b`, `/c`), donc aucune
@@ -284,7 +284,7 @@ un chemin relatif (improbable, l'UI n'en génère jamais) devra utiliser
 la forme absolue.
 
 **S2.L1 — SSE heartbeat (NO-OP)**
-Vérifié `packages/opencode/src/server/routes/event.ts:36-62` : un flag
+Vérifié `packages/unifia/src/server/routes/event.ts:36-62` : un flag
 `let done = false` est déjà présent et gate `stop()`. `stop()` est câblé
 sur 3 chemins (Bus.InstanceDisposed, stream.onAbort, finally de la boucle
 SSE) et chacun est idempotent par construction. Le finding est obsolète.

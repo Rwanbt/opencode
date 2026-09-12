@@ -4,7 +4,7 @@ Branche `dev`. Aucun commit effectué.
 
 ## Validation
 
-- `cd packages/opencode && bun run typecheck` → **0 erreur**.
+- `cd packages/unifia && bun run typecheck` → **0 erreur**.
 - `bun test test/provider/mock-provider.test.ts test/lib/in-process-server.test.ts test/e2e/dag-team.test.ts test/server/ws-ticket.test.ts` → **17 pass, 2 skip, 0 fail**.
 - `bun test test/provider/` → **270 pass, 0 fail** (pas de régression sur la suite provider existante).
 - `cd packages/desktop/src-tauri && cargo check --release` → **0 warning, 0 erreur**.
@@ -14,7 +14,7 @@ Branche `dev`. Aucun commit effectué.
 
 ### 1 — Mock provider harness — **FAIT**
 
-- Nouveau fichier : `packages/opencode/test/lib/mock-provider.ts`.
+- Nouveau fichier : `packages/unifia/test/lib/mock-provider.ts`.
 - API `createMockProvider({ responses })` retourne un `LanguageModelV3` compatible avec `wrapLanguageModel` / `streamText`.
 - Supporte :
   - texte statique (FIFO),
@@ -27,9 +27,9 @@ Branche `dev`. Aucun commit effectué.
 
 ### 2 — Provider fallback câblage — **FAIT (gated)**
 
-- `packages/opencode/src/provider/fallback.ts` : ajout `withStreamingFallback(primary, secondary, opts)` — wrapper `LanguageModelV3` qui fait un retry handshake-only sur `secondary`. Après le premier chunk, toute erreur propage (cohérence KV cache).
+- `packages/unifia/src/provider/fallback.ts` : ajout `withStreamingFallback(primary, secondary, opts)` — wrapper `LanguageModelV3` qui fait un retry handshake-only sur `secondary`. Après le premier chunk, toute erreur propage (cohérence KV cache).
 - Détection mid-vs-pre chunk : on lit le flux primary jusqu'au premier `text-delta|reasoning-delta|tool-input-start|tool-input-delta|finish`. Si on voit `error` avant, ou si la promesse `doStream` elle-même rejette, on bascule sur secondary.
-- `packages/opencode/src/session/llm.ts` : à l'ouverture du stream, si `resolveFallbackDirection()` renvoie non-null **et** qu'un secondary peut être construit, on wrap `language`. Si aucune cible secondary n'est résolvable, on log et on continue sur primary seul (comportement identique au sprint 4).
+- `packages/unifia/src/session/llm.ts` : à l'ouverture du stream, si `resolveFallbackDirection()` renvoie non-null **et** qu'un secondary peut être construit, on wrap `language`. Si aucune cible secondary n'est résolvable, on log et on continue sur primary seul (comportement identique au sprint 4).
 - Resolver secondary (`resolveSecondaryLanguageModel`) :
   - direction `"local"` : `local-llm` / premier modèle listé.
   - direction `"cloud"` : premier provider configuré différent du primary et de `local-llm`, premier modèle.
@@ -39,7 +39,7 @@ Branche `dev`. Aucun commit effectué.
 
 ### 3 — E2E DAG in-process server — **PARTIEL (harness prêt, e2e DAG toujours skippé)**
 
-- Nouveau helper : `packages/opencode/test/lib/in-process-server.ts`. Boot `Server.listen({ port: 0, hostname: "127.0.0.1" })`, retourne `{ url, port, fetch, close }`. Restaure les env vars à `close()`.
+- Nouveau helper : `packages/unifia/test/lib/in-process-server.ts`. Boot `Server.listen({ port: 0, hostname: "127.0.0.1" })`, retourne `{ url, port, fetch, close }`. Restaure les env vars à `close()`.
 - Smoke test : `test/lib/in-process-server.test.ts` (vérifie le binding et la routing Hono).
 - `test/e2e/dag-team.test.ts` : le `describe.skip("full e2e")` est mis à jour avec un commentaire actualisé (harness transport prêt, team-tool runtime toujours bloquant). Les 3 tests `dispatchDag` existants restent actifs (6 pass au total dans ce fichier).
 - **Pourquoi skipped encore** : le `team` tool demande `Instance.run` exposé pour tests (permission/Instance/Workspace scopes bootstrapés). Le preload actuel n'instancie que DB + log. Unbloquer demande un nouveau helper `Instance.runForTest(fn)` qui n'est pas du scope sprint 5 (risque régression non maîtrisé sur tous les tests session qui dépendent du runtime actuel).
@@ -59,21 +59,21 @@ Branche `dev`. Aucun commit effectué.
   - Rate limit 60 req/60s (fixed window, fail-closed).
   - Body cap 32 KiB.
 - `packages/desktop/src-tauri/src/lib.rs` : `start_keychain_endpoint` lancé dans `.setup()` via `tauri::async_runtime::spawn`. Échec non-fatal (fallback FileStorage).
-- `packages/desktop/src-tauri/src/cli.rs` : injection automatique de `OPENCODE_KEYCHAIN_URL` + `OPENCODE_KEYCHAIN_TOKEN` dans `envs` quand l'endpoint est up.
+- `packages/desktop/src-tauri/src/cli.rs` : injection automatique de `UNIFIA_KEYCHAIN_URL` + `UNIFIA_KEYCHAIN_TOKEN` dans `envs` quand l'endpoint est up.
 - `packages/desktop/src-tauri/Cargo.toml` : ajouté features tokio `net`, `io-util`, `sync`, `time`, `rt-multi-thread`. Pas de nouveau crate.
-- **TS** : `packages/opencode/src/auth/index.ts` — `KeychainStorage` devient opérationnelle. Lit les env vars au constructeur, `available()` gate, impl `load/save/get/set` via fetch contre l'endpoint.
+- **TS** : `packages/unifia/src/auth/index.ts` — `KeychainStorage` devient opérationnelle. Lit les env vars au constructeur, `available()` gate, impl `load/save/get/set` via fetch contre l'endpoint.
 - **Sécurité** : 127.0.0.1 only, header auth, rate limit, token 256 bits, lifetime = process Tauri.
 - **Test manuel** (à faire côté desktop en conditions réelles) :
   - Démarrer desktop → `cargo check` OK.
   - Logs : `keychain endpoint listening at http://127.0.0.1:XXXXX`.
-  - Le sidecar reçoit `OPENCODE_KEYCHAIN_URL` (pas vérifié en runtime e2e faute d'orchestration).
+  - Le sidecar reçoit `UNIFIA_KEYCHAIN_URL` (pas vérifié en runtime e2e faute d'orchestration).
 
 ### 5 — Migration auth.json — **FAIT (non activé par défaut)**
 
-- `packages/opencode/src/auth/index.ts` :
+- `packages/unifia/src/auth/index.ts` :
   - `initAuthStorage()` — fonction publique idempotente à appeler au boot.
-  - Si `OPENCODE_AUTH_STORAGE=keychain` + `auth.json` existe + keychain available → migre chaque entrée, vérifie round-trip, renomme `auth.json` → `auth.json.migrated`, warn one-shot.
-  - Si `OPENCODE_AUTH_STORAGE=file` + `auth.json.migrated` existe + `auth.json` absent → rollback (rename back).
+  - Si `UNIFIA_AUTH_STORAGE=keychain` + `auth.json` existe + keychain available → migre chaque entrée, vérifie round-trip, renomme `auth.json` → `auth.json.migrated`, warn one-shot.
+  - Si `UNIFIA_AUTH_STORAGE=file` + `auth.json.migrated` existe + `auth.json` absent → rollback (rename back).
   - `maybePurgeMigratedBackup` — unlink `auth.json.migrated` si mtime > 7j.
 - **Non branché au boot** : `initAuthStorage()` n'est pas appelé dans `cli/cmd/serve.ts` (ni ailleurs). Le comportement reste `FileStorage` par défaut. Pour activer, il faudra :
   1. Appeler `initAuthStorage()` dans le bootstrap du sidecar.
@@ -114,18 +114,18 @@ Branche `dev`. Aucun commit effectué.
 ## Fichiers modifiés / créés
 
 ### Créés
-- `packages/opencode/test/lib/mock-provider.ts` (~180 L)
-- `packages/opencode/test/lib/in-process-server.ts` (~70 L)
-- `packages/opencode/test/lib/in-process-server.test.ts` (~20 L)
-- `packages/opencode/test/provider/mock-provider.test.ts` (~75 L)
+- `packages/unifia/test/lib/mock-provider.ts` (~180 L)
+- `packages/unifia/test/lib/in-process-server.ts` (~70 L)
+- `packages/unifia/test/lib/in-process-server.test.ts` (~20 L)
+- `packages/unifia/test/provider/mock-provider.test.ts` (~75 L)
 - `packages/app/src/utils/ws-auth.ts` (~95 L)
 - `SPRINT5_NOTES.md` (ce fichier)
 
 ### Modifiés
-- `packages/opencode/src/provider/fallback.ts` (+~140 L — withStreamingFallback)
-- `packages/opencode/src/session/llm.ts` (+~75 L — fallback gate + resolver)
-- `packages/opencode/src/auth/index.ts` (+~190 L — KeychainStorage impl + migration)
-- `packages/opencode/test/e2e/dag-team.test.ts` (commentaire skip block mis à jour)
+- `packages/unifia/src/provider/fallback.ts` (+~140 L — withStreamingFallback)
+- `packages/unifia/src/session/llm.ts` (+~75 L — fallback gate + resolver)
+- `packages/unifia/src/auth/index.ts` (+~190 L — KeychainStorage impl + migration)
+- `packages/unifia/test/e2e/dag-team.test.ts` (commentaire skip block mis à jour)
 - `packages/desktop/src-tauri/src/auth_storage.rs` (+~260 L — HTTP endpoint)
 - `packages/desktop/src-tauri/src/lib.rs` (+~15 L — setup hook)
 - `packages/desktop/src-tauri/src/cli.rs` (+~10 L — env injection)

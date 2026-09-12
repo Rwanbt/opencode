@@ -1,6 +1,6 @@
 # Plan de débat multi-IA — Round 3 (convergence finale)
 
-> **Contexte** : Round 3 du débat "Collective Intelligence" pour OpenCode.
+> **Contexte** : Round 3 du débat "Collective Intelligence" pour Unifia.
 > Le Round 1 (6 modèles) a posé l'architecture. Le Round 2 (5 modèles) a
 > attaqué l'implémentation. Ce Round 3 cible les **4 divergences non résolues**
 > et la **mesure de valeur** du système.
@@ -14,7 +14,7 @@
 ## Ce qui est définitivement acquis (Rounds 1 + 2)
 
 ### Architecture (unanime, verrouillé)
-- Agent natif dans un module dédié `packages/opencode/src/collective/`
+- Agent natif dans un module dédié `packages/unifia/src/collective/`
 - Exposé via skill `/debate [prompt]`
 - Auth hybrid : env var → credential file → CLI subprocess (cascade Effect)
 - Pipeline **Extract-then-Target** en 4 phases :

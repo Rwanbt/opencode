@@ -8,8 +8,8 @@
  *   createWorkspaceCreate → { createWorkspace }
  */
 import { produce } from "solid-js/store"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { showToast, toaster } from "@opencode-ai/ui/toast"
+import { base64Encode } from "@unifia/util/encode"
+import { showToast, toaster } from "@unifia/ui/toast"
 import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 import type { useGlobalSDK } from "@/context/global-sdk"

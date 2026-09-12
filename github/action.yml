@@ -1,5 +1,5 @@
-name: "opencode GitHub Action"
-description: "Run opencode in GitHub Actions workflows"
+name: "unifia GitHub Action"
+description: "Run unifia in GitHub Actions workflows"
 branding:
   icon: "code"
   color: "orange"
@@ -14,7 +14,7 @@ inputs:
     required: false
 
   share:
-    description: "Share the opencode session (defaults to true for public repos)"
+    description: "Share the unifia session (defaults to true for public repos)"
     required: false
 
   prompt:
@@ -22,7 +22,7 @@ inputs:
     required: false
 
   use_github_token:
-    description: "Use GITHUB_TOKEN directly instead of OpenCode App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
+    description: "Use GITHUB_TOKEN directly instead of Unifia App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
     required: false
     default: "false"
 
@@ -41,22 +41,22 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Get opencode version
+    - name: Get unifia version
       id: version
       shell: bash
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/Rwanbt/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        VERSION=$(curl -sf https://api.github.com/repos/Rwanbt/unifia/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
-    - name: Cache opencode
+    - name: Cache unifia
       id: cache
       uses: actions/cache@v4
       with:
         path: ~/.opencode/bin
         key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
 
-    - name: Install opencode
-      # opencode.ai/install always installs anomalyco/opencode's own latest
+    - name: Install unifia
+      # unifia.ai/install always installs anomalyco/opencode's own latest
       # release regardless of any VERSION env var — it has no way to point at
       # a fork. Fetching the fork's own release tarball directly is the only
       # way this action installs the CLI it's actually meant to run. The
@@ -66,18 +66,18 @@ runs:
       shell: bash
       run: |
         mkdir -p "$HOME/.opencode/bin"
-        curl -fsSL "https://github.com/Rwanbt/opencode/releases/latest/download/opencode-linux-x64.tar.gz" \
+        curl -fsSL "https://github.com/Rwanbt/unifia/releases/latest/download/opencode-linux-x64.tar.gz" \
           -o /tmp/opencode.tar.gz
         tar -xzf /tmp/opencode.tar.gz -C "$HOME/.opencode/bin"
 
-    - name: Add opencode to PATH
+    - name: Add unifia to PATH
       shell: bash
       run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
 
-    - name: Run opencode
+    - name: Run unifia
       shell: bash
       id: run_opencode
-      run: opencode github run
+      run: unifia github run
       env:
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}

@@ -30,7 +30,7 @@
     <!-- A held WAKE_LOCK keeps the CPU from deep-sleeping but does NOT exempt the
          app from Doze's network restrictions — confirmed on-device 2026-07-02:
          `dumpsys deviceidle whitelist` did not list this app, and the bun sidecar
-         (opencode-cli.js, port 14096) stayed unreachable for the full Dozing
+         (unifia-cli.js, port 14096) stayed unreachable for the full Dozing
          window even with the WAKE_LOCK above actively held. The sidecar is the
          entry point for every request (including ones that only need llama-server),
          so this exemption is requested at startup — see MainActivity.requestBatteryOptimizationExemption(). -->
@@ -48,7 +48,7 @@
         android:name=".OpenCodeApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.opencode_mobile"
+        android:theme="@style/Theme.unifia_mobile"
         android:extractNativeLibs="true"
         android:requestLegacyExternalStorage="true"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -83,7 +83,7 @@
                 <action android:name="org.chromium.arc.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="opencode" />
+                <data android:scheme="unifia" />
                 
                 
                 

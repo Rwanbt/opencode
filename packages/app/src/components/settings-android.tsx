@@ -1,7 +1,7 @@
 // FORK: ADR-0005 Phase 6 — Android Permissions UX + device diagnostics.
 // Only shown in dialog-settings.tsx when platform.os === "android".
 import { createResource, createSignal, onCleanup, Show, type Component } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
+import { Button } from "@unifia/ui/button"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"

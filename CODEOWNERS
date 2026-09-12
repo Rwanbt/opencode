@@ -1,0 +1,70 @@
+# CODEOWNERS — Unifia Workbench V3
+
+**Statut :** `v1.0`
+**Date :** 2026-07-31
+
+# Default owner: Erwan (tous les fichiers)
+* @erwan
+
+# Brand & identité
+/brand/ @erwan
+/GOVERNANCE.md @erwan
+/UPSTREAM-STRATEGY.md @erwan
+/RELEASE-NOTES.md @erwan
+/docs/autonomy/MIGRATION-PLAN.md @erwan
+
+# Security & governance (PHASE 3 — SECURITY-CRITICAL)
+# Tout changement dans ces zones demande review explicite
+/husky/ @erwan
+/.github/workflows/ @erwan
+/scripts/unifia-migrate.sh @erwan
+/docs/autonomy/DO-NOT-IMPORT.md @erwan
+/docs/autonomy/SECURITY* @erwan
+/docs/autonomy/POLICY* @erwan
+
+# Architecture Decision Records
+/docs/adr/ @erwan
+/docs/autonomy/plans/ @erwan
+/docs/autonomy/TASK-GRAPH* @erwan
+/docs/autonomy/BLOCKED-DECISIONS.md @erwan
+
+# Runtime principal (PHASE 2+ — code TS)
+/packages/unifia/src/ @erwan
+/packages/unifia/bin/ @erwan
+/packages/unifia/test/ @erwan
+/packages/unifia/bench/ @erwan
+/packages/unifia/script/ @erwan
+/packages/unifia/specs/ @erwan
+
+# Workbench (PHASE 7+)
+/packages/app/ @erwan
+/packages/desktop/ @erwan
+/packages/mobile/ @erwan
+/packages/console/ @erwan
+/packages/web/ @erwan
+
+# Deprecated (BD-3)
+/packages/desktop-electron/ @erwan
+
+# Excluded (BD-2)
+/packages/enterprise/ @erwan
+
+# SDK & libraries
+/packages/sdk/ @erwan
+/packages/ui/ @erwan
+/packages/util/ @erwan
+/packages/plugin/ @erwan
+/packages/script/ @erwan
+/packages/identity/ @erwan
+/packages/slack/ @erwan
+/packages/extensions/ @erwan
+/packages/function/ @erwan
+/packages/containers/ @erwan
+/packages/containers/zed/ @erwan
+
+# CI/CD & infrastructure
+/.github/ @erwan
+/scripts/ @erwan
+/sst.config.ts @erwan
+/turbo.json @erwan
+/package.json @erwan

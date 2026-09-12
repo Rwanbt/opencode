@@ -17,7 +17,7 @@ LlamaService.kt (dans gen/android/) est un foreground service Kotlin qui possèd
 | Proxy Rust | Interne Tauri | `proxy.rs` — route les requêtes sidecar vers llama-server |
 
 ## Constraints
-- `OPENCODE_CLIENT=mobile-embedded` est settée par `runtime.rs` dans les env_vars — gater TOUT choix desktop↔mobile avec cette variable
+- `UNIFIA_CLIENT=mobile-embedded` est settée par `runtime.rs` dans les env_vars — gater TOUT choix desktop↔mobile avec cette variable
 - Sur Adreno 6xx (Mi 10 Pro), Q4_0 CPU bat OpenCL — pas d'OpenCL sur SM8350 et inférieur
 - Sur Adreno 7xx (SM8450+), OpenCL est bénéfique pour Q4_0 uniquement (pas les K-quants)
 - Q4_K_M + OpenCL Adreno = crash `SET_ROWS` exit 134 — router sur CPU systématiquement pour K-quants

@@ -40,9 +40,21 @@ mod extraction;
 pub use extraction::{__cmd__extract_runtime, extract_runtime};
 use extraction::is_runtime_ready;
 
+// DA-SEC-01: derive a fresh `WorkbenchIpcBearer` from the
+// `MobileEncryptionKey` so the cipher key and the IPC bearer are
+// distinct strings. The module is platform-agnostic (pure crypto) so
+// it is declared unconditionally; on host/test builds it powers the
+// integration test in `server.rs::tests` and the cargo integration
+// test in `tests/bearer_env.rs`.
+mod bearer;
+// Re-exported for the cargo integration test in `tests/bearer_env.rs`
+// (which only sees the public API of the crate, not sibling modules).
+pub use bearer::derive_workbench_bearer;
+
 const DEFAULT_PORT: u32 = 14096;
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 const RUNTIME_SUBDIR: &str = "runtime";
+const CLI_BUNDLE_FILE: &str = "unifia-cli.js";
 // Bump this when the rootfs layout, wrapper scripts, or binary ABI changes
 // in a way that requires a clean re-extraction. Models directory is preserved.
 const RUNTIME_SCHEMA_VERSION: u32 = 1;
@@ -59,9 +71,9 @@ mod server;
 #[cfg(unix)]
 #[allow(unused_imports)]
 pub use server::{
-    __cmd__check_local_health, __cmd__read_server_logs, __cmd__start_embedded_server,
+    __cmd__check_local_health, __cmd__read_server_logs, __cmd__start_embedded_server, __cmd__workbench_native_request,
     __cmd__stop_local_server, check_local_health, read_server_logs, start_embedded_server,
-    stop_local_server,
+    stop_local_server, workbench_native_request,
 };
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -120,9 +132,9 @@ pub async fn check_runtime(app: AppHandle) -> RuntimeInfo {
     // Log debug info
     if let Some(nlib) = native_lib_dir(&dir) {
         log::debug!("[OpenCode] nativeLibDir={}, bun_exists={}, cli_exists={}",
-            nlib.display(), nlib.join("libbun_exec.so").exists(), dir.join("opencode-cli.js").exists());
+            nlib.display(), nlib.join("libbun_exec.so").exists(), dir.join(CLI_BUNDLE_FILE).exists());
     } else {
-        log::debug!("[OpenCode] nativeLibDir not found, cli_exists={}", dir.join("opencode-cli.js").exists());
+        log::debug!("[OpenCode] nativeLibDir not found, cli_exists={}", dir.join(CLI_BUNDLE_FILE).exists());
     }
 
     RuntimeInfo {
@@ -316,7 +328,7 @@ pub async fn install_extended_env(app: AppHandle) -> Result<(), String> {
 pub(crate) fn runtime_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .data_dir()
-        .unwrap_or_else(|_| PathBuf::from("/data/data/ai.opencode.mobile/files"))
+        .unwrap_or_else(|_| PathBuf::from("/data/data/ai.unifia.mobile/files"))
         .join(RUNTIME_SUBDIR)
 }
 
@@ -389,8 +401,8 @@ mod tests {
     #[test]
     fn is_ready_without_schema_check_missing_native_lib_dir() {
         let dir = temp_test_dir("missing_nld");
-        // Create opencode-cli.js but NOT .native_lib_dir
-        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        // Create unifia-cli.js but NOT .native_lib_dir
+        std::fs::write(dir.join(CLI_BUNDLE_FILE), b"// cli").unwrap();
         let result = is_ready_without_schema_check(&dir);
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!result, "missing .native_lib_dir should return false");
@@ -403,7 +415,7 @@ mod tests {
         let nlib_dir = temp_test_dir("nlib_ok");
         std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
 
-        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(CLI_BUNDLE_FILE), b"// cli").unwrap();
         std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
 
         let result = is_ready_without_schema_check(&dir);
@@ -433,7 +445,7 @@ mod tests {
     /// Helper: populate `dir` with the minimal structure for is_runtime_ready,
     /// using `nlib_dir` as the nativeLibraryDir (must contain libbun_exec.so).
     fn setup_runtime_files(dir: &Path, nlib_dir: &Path) {
-        std::fs::write(dir.join("opencode-cli.js"), b"// cli").unwrap();
+        std::fs::write(dir.join(CLI_BUNDLE_FILE), b"// cli").unwrap();
         std::fs::write(dir.join(".native_lib_dir"), nlib_dir.to_str().unwrap()).unwrap();
         std::fs::write(nlib_dir.join("libbun_exec.so"), b"ELF").unwrap();
     }
@@ -518,6 +530,7 @@ mod tests {
         // Interposer libs must exist or the function bails early.
         std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
         std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libgit_dispatch.so"), b"stub").unwrap();
 
         // A fake ELF deep in the gcc libexec tree: ELF magic + >= 1024 bytes.
         let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
@@ -526,6 +539,16 @@ mod tests {
         let mut elf = vec![0x7f, b'E', b'L', b'F'];
         elf.resize(elf.len() + 2048, 0u8);
         std::fs::write(&cc1, &elf).unwrap();
+
+        // Alpine's git-core dispatcher is a symlink back to the raw musl Git
+        // ELF. Git re-execs this path before starting git-remote-https, so it
+        // must point to the APK-extracted native dispatcher.
+        let git_core = rootfs.join("usr/libexec/git-core");
+        std::fs::create_dir_all(&git_core).unwrap();
+        let git_binary = rootfs.join("usr/bin/git");
+        std::fs::write(&git_binary, &elf).unwrap();
+        let git_dispatcher = git_core.join("git");
+        std::os::unix::fs::symlink("../../bin/git", &git_dispatcher).unwrap();
 
         // First pass: cc1 becomes a script, original bytes saved to cc1.elf64.
         prepare_toolchain_wrappers(&rootfs, &nlib, &cache).expect("first pass should succeed");
@@ -539,6 +562,17 @@ mod tests {
         assert!(
             std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
             "cc1 must become a shebang script"
+        );
+        let native_dispatcher = nlib.join("libgit_dispatch.so");
+        assert_eq!(
+            std::fs::read_link(&git_dispatcher).unwrap(),
+            native_dispatcher,
+            "git dispatcher must point to the APK-extracted native executable"
+        );
+        assert_eq!(
+            std::fs::read(&git_binary).unwrap(),
+            elf,
+            "canonical usr/bin/git must remain an ELF"
         );
 
         // Second pass must not double-wrap nor mangle the backup.
@@ -555,6 +589,15 @@ mod tests {
         assert!(
             std::fs::read_to_string(&cc1).unwrap().starts_with("#!"),
             "cc1 must remain a shebang script after the second pass"
+        );
+        assert_eq!(
+            std::fs::read_link(&git_dispatcher).unwrap(),
+            native_dispatcher,
+            "git dispatcher symlink must be stable across repeated passes"
+        );
+        assert!(
+            !git_core.join("git.elf64").exists(),
+            "git dispatcher must not create a duplicate ELF backup"
         );
 
         let _ = std::fs::remove_dir_all(&base);
@@ -658,6 +701,7 @@ mod tests {
         std::fs::create_dir_all(rootfs.join("usr/bin")).unwrap();
         std::fs::write(nlib.join("libbash_exec.so"), b"stub").unwrap();
         std::fs::write(nlib.join("libmusl_linker.so"), b"stub").unwrap();
+        std::fs::write(nlib.join("libgit_dispatch.so"), b"stub").unwrap();
 
         let libexec = rootfs.join("usr/libexec/gcc/aarch64-alpine-linux-musl/13.2.0");
         std::fs::create_dir_all(&libexec).unwrap();

@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@unifia/util/encode"
 
 /** Accept mode: true = full auto, "auto-edit" = auto-accept edits only, false/undefined = ask */
 export type AcceptMode = boolean | "auto-edit"

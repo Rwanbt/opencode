@@ -59,7 +59,7 @@ export function NavDrawer(props: NavDrawerProps) {
         style={{ "padding-top": "var(--safe-area-top, 0px)" }}
       >
         <div class="flex items-center justify-between px-4 py-3 border-b">
-          <span class="font-semibold text-sm">OpenCode</span>
+          <span class="font-semibold text-sm">Unifia</span>
           <button
             class="text-secondary text-lg px-2"
             onClick={() => setIsOpen(false)}

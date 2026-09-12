@@ -1,0 +1,101 @@
+# TEAM-B01 scope manifest v1 (WAVE-POST-T0-002) — base Team HEAD officiel
+# Cartographie canonique des fichiers dans le périmètre B01 vs hors périmètre.
+# Aligné avec 00-PLAN-DIRECTEUR.md ligne 1501+ (Carte B01) + D-035/D-036 satisfaite.
+# Ce manifeste est vérifié avant chaque commit par G01 ScopeMonitor (via lease v1).
+scope_manifest:
+  card_id: TEAM-B01
+  generation: post-t0-002-v1
+  scope_version: 1
+  base_sha: fe6f85aebe2b537be4158b4cce8ebd5934115223
+  fencing_token: 12
+  reviewer_required_distinct_from: [TEAM-A06, TEAM-G01, TEAM-C01, TEAM-C01-RETRY, TEAM-G02]
+  architectural_constraint: "packages/unifia/src/multi-model/ — premier fichier de ce namespace, doit servir de référence pour B02..B05"
+
+allowed_files:
+  create:
+    - path: "packages/unifia/src/multi-model/types.ts"
+      role: "ModelRef, EndpointRef, InvocationRequest/Result, erreurs partagées (canonique plan §B01 ligne 1511)"
+      line_budget_max: 400  # heuristique
+    - path: "packages/unifia/src/multi-model/model-ref.ts"
+      role: "Branded IDs (ModelRef, EndpointRef) + helpers parsing/validation"
+      line_budget_max: 300
+  create_optional:
+    - path: "packages/unifia/test/multi-model/types.test.ts"
+      role: "Parsing + aliases + invalid inputs (Critères d'acceptation §B01 ligne 1536)"
+    - path: "packages/unifia/test/multi-model/model-ref.test.ts"
+      role: "Branded IDs round-trip"
+  modify_existing_allowed:
+    - path: "docs/team/scope-manifest/TEAM-B01.yaml"
+      role: "ce manifeste"
+      allowed_modifications: ["metadata only, pas de allowed_files"]
+
+forbidden_paths:
+  do_not_touch:
+    - "packages/unifia/src/model-intelligence/**"  # C01, figé D-036
+    - "packages/unifia/src/team/**"                 # G01/G02, figé D-032/D-037
+    - "packages/unifia/src/collective/**"           # B0X futur (B02..B05)
+    - "packages/unifia/src/multi-model/{provider-discovery,model-invoker,usage-normalizer,cost-catalog,prompt-registry}.ts"  # B02..B04 futurs
+    - "packages/unifia/migration/**"                # schéma C01, ne pas toucher
+    - ".github/workflows/**"                          # CI, hors scope
+    - "Execution/Handoffs/G0*-*"
+    - "Execution/Handoffs/C0*-*"
+  do_not_create_registries:
+    - "packages/unifia/src/registry/**"
+    - "packages/unifia/src/models-registry/**"
+
+scope_objectives:
+  primary:
+    - "Créer ModelRef (branded ID) avec parsing strict (regex, ISO, semver si applicable)"
+    - "Créer EndpointRef (branded ID) avec parsing URL/scheme validation"
+    - "Créer InvocationRequest/Result types couvrant cancellation, timeout, usage, errors"
+    - "Créer NamedError typées pour erreurs partagées (cohérent avec C01/G01/G02 usage)"
+  secondary:
+    - "Documenter compatibilité ascendante N-1/N-2 (commentaire bloc)"
+  nice_to_have:
+    - "Documenter best-practices contrats multi-model dans docs/team/multi-model-contracts.md"
+
+tests:
+  minimum:
+    unit: "≥ 4 tests (parsing 1 cas valide + 3 cas invalides par type, par fichier)"
+  commands:
+    typecheck: "bunx tsc --noEmit -p packages/unifia"
+    unit: "bun test packages/unifia/test/multi-model/ --timeout 30000"
+  expected:
+    unit: "100% PASS sur les tests présents (pas de test NOT RUN)"
+    tsc_clean_in_scope: "0 erreur dans src/multi-model/**"
+
+handoff_required:
+  at_minimum:
+    - "Execution/Handoffs/B01-attempt1.md (auteur MM2, hash canonique inclus)"
+    - "Execution/Handoffs/B01-VALIDATION-REPORT.md (auteur MM2, signé)"
+    - "Execution/Handoffs/B01-BUNDLE.md (auteur MM2, signé)"
+    - "Execution/Handoffs/B01-CLAUDE-PROMPT.md (auteur MM2, pour re-review E2 Kimi K2.6)"
+  ready_flag:
+    - "Execution/Handoffs/B01-READY.flag créé après PASS complet"
+
+integration_sequence:
+  post_review:
+    - "1) E2 review par Kimi K2.6 (priorité 1) ou Mistral-Large-2 (priorité 2) — distinct de tous les reviewers précédents"
+    - "2) verdict APPROVED ou APPROVED_WITH_FOLLOWUP"
+    - "3) MM1-POST-T0-ORCHESTRATOR cherry-pick dans Team (worktree integration, fe6f85aebe)"
+    - "4) tests relancés dans worktree integration post-cherry-pick"
+    - "5) verdict PUBLISHED + intégration appliquée"
+    - "6) fencing_token suivant = 14 attribué via team-cli officiel"
+
+supersedes:
+  - "BLOCKED status antérieur (D-035, levé par C01 INTEGRATED D-036)"
+  - "DAG_CONTRADICTION de WAVE-POST-T0-001 v1 (résolu D-035)"
+
+f2_g02_verification_protocol:  # OBLIGATOIRE avant d'accepter B01-READY.flag
+  mandatory_pre_acceptance_checks:
+    - "git log c-B01/d0b09496 → ≥1 commit au-dessus de fe6f85aebe"
+    - "git rev-parse <commit>^ = fe6f85aebe (parent == base_sha D-007)"
+    - "scope_manifest_check (git diff --name-only vs allowed_files)"
+    - "bunx tsc --noEmit -p packages/unifia → 0 erreur dans scope"
+    - "bun test test/multi-model/ → 100% PASS sur tests présents"
+    - "branch livrée == c-B01/d0b09496 (pas une autre branche)"
+    - "fencing_token attribué == 12"
+  si_0_commit_ailleurs_qu_Team_HEAD:
+    - "REJET IMMÉDIAT du rapport du worker"
+    - "Chercher activement la branche parallèle réellement utilisée"
+    - "Refaire le READY.flag seulement après confirmation que la livraison est sur c-B01/d0b09496"

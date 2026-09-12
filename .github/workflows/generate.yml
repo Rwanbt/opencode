@@ -17,8 +17,8 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      OPENCODE_APP_ID: ${{ vars.OPENCODE_APP_ID }}
-      OPENCODE_APP_SECRET: ${{ secrets.OPENCODE_APP_SECRET }}
+      UNIFIA_APP_ID: ${{ vars.UNIFIA_APP_ID }}
+      UNIFIA_APP_SECRET: ${{ secrets.UNIFIA_APP_SECRET }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,15 +27,15 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Setup git committer
-        if: env.OPENCODE_APP_ID != '' && env.OPENCODE_APP_SECRET != ''
+        if: env.UNIFIA_APP_ID != '' && env.UNIFIA_APP_SECRET != ''
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ env.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ env.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ env.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ env.UNIFIA_APP_SECRET }}
 
       - name: Setup fallback git committer
-        if: env.OPENCODE_APP_ID == '' || env.OPENCODE_APP_SECRET == ''
+        if: env.UNIFIA_APP_ID == '' || env.UNIFIA_APP_SECRET == ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

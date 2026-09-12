@@ -4,7 +4,7 @@
 
 ## Contexte
 
-`packages/opencode/src/provider/provider.ts` avait atteint **1644 LOC**, au-delà
+`packages/unifia/src/provider/provider.ts` avait atteint **1644 LOC**, au-delà
 du seuil BLOCKER de 1500 LOC fixé par `CLAUDE.md` (refactor obligatoire). La
 cause unique : la fonction `custom(dep)` (~614 LOC) qui retournait un
 `Record<string, CustomLoader>` — un loader par provider (anthropic, openai,

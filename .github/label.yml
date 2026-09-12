@@ -1,0 +1,82 @@
+---
+# Configuration for github/labeler
+# Source: https://github.com/actions/labeler
+# Auto-label issues and PRs based on file paths.
+
+# Package-level labels
+- label: "area: packages/unifia"
+  paths:
+    - "packages/unifia/**"
+- label: "area: packages/app"
+  paths:
+    - "packages/app/**"
+- label: "area: packages/desktop"
+  paths:
+    - "packages/desktop/**"
+- label: "area: packages/mobile"
+  paths:
+    - "packages/mobile/**"
+- label: "area: packages/console"
+  paths:
+    - "packages/console/**"
+- label: "area: packages/web"
+  paths:
+    - "packages/web/**"
+- label: "area: packages/contracts"
+  paths:
+    - "packages/contracts/**"
+- label: "area: packages/sdk"
+  paths:
+    - "packages/sdk/**"
+- label: "area: packages/enterprise"
+  paths:
+    - "packages/enterprise/**"
+
+# Topical labels
+- label: "docs"
+  paths:
+    - "**/*.md"
+    - "**/*.mdx"
+    - "docs/**"
+- label: "tests"
+  paths:
+    - "**/*.test.ts"
+    - "**/*.spec.ts"
+    - "tests/**"
+- label: "ci"
+  paths:
+    - ".github/workflows/**"
+    - ".github/actions/**"
+- label: "scripts"
+  paths:
+    - "scripts/**"
+- label: "docs:autonomy"
+  paths:
+    - "docs/autonomy/**"
+- label: "docs:adr"
+  paths:
+    - "docs/adr/**"
+- label: "brand"
+  paths:
+    - "brand/**"
+- label: "license"
+  paths:
+    - "LICENSE*"
+    - "**/LICENSE*"
+- label: "changelog"
+  paths:
+    - "CHANGELOG.md"
+    - "RELEASE-NOTES.md"
+- label: "config"
+  paths:
+    - "*.json"
+    - "*.yml"
+    - "*.yaml"
+    - "*.jsonc"
+    - "*.toml"
+- label: "skill"
+  paths:
+    - "skills/**"
+- label: "fixture"
+  paths:
+    - "tests/fixtures/**"

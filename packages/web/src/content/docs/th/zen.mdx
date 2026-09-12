@@ -1,21 +1,21 @@
 ---
 title: เซน
-description: รายการโมเดลที่คัดสรรโดย OpenCode
+description: รายการโมเดลที่คัดสรรโดย Unifia
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen คือรายการโมเดลที่ผ่านการทดสอบและยืนยันแล้วโดยทีม OpenCode
+Unifia Zen คือรายการโมเดลที่ผ่านการทดสอบและยืนยันแล้วโดยทีม Unifia
 
 :::note
-OpenCode Zen อยู่ในช่วงเบต้าในขณะนี้
+Unifia Zen อยู่ในช่วงเบต้าในขณะนี้
 :::
 
-Zen ทำงานเหมือน provider อื่น ๆ ใน OpenCode คุณล็อกอินเข้า OpenCode Zen แล้วรับ
+Zen ทำงานเหมือน provider อื่น ๆ ใน Unifia คุณล็อกอินเข้า Unifia Zen แล้วรับ
 API key ของคุณได้เลย มันเป็น **ทางเลือกทั้งหมด** และคุณไม่จำเป็นต้องใช้มันเพื่อใช้งาน
-OpenCode
+Unifia
 
 ---
 
@@ -24,7 +24,7 @@ OpenCode
 ปัจจุบันมีโมเดลจำนวนมาก แต่มีเพียงไม่กี่โมเดลเท่านั้นที่ทำงานได้ดีในฐานะ coding agent นอกจากนี้ provider ส่วนใหญ่ยังถูกตั้งค่าแตกต่างกันมาก จึงทำให้ประสิทธิภาพและคุณภาพที่ได้ต่างกันมากเช่นกัน
 
 :::tip
-เราได้ทดสอบโมเดลและ provider ที่คัดมาแล้วกลุ่มหนึ่งซึ่งทำงานได้ดีกับ OpenCode
+เราได้ทดสอบโมเดลและ provider ที่คัดมาแล้วกลุ่มหนึ่งซึ่งทำงานได้ดีกับ Unifia
 :::
 
 ดังนั้นหากคุณใช้โมเดลผ่านอะไรอย่าง OpenRouter คุณจะไม่มีทางแน่ใจได้ว่าคุณกำลังได้โมเดลเวอร์ชันที่ดีที่สุดที่คุณต้องการจริง ๆ
@@ -35,16 +35,16 @@ OpenCode
 2. จากนั้นเราทำงานร่วมกับ provider บางรายเพื่อให้แน่ใจว่าโมเดลเหล่านี้ถูกเสิร์ฟอย่างถูกต้อง
 3. สุดท้าย เรา benchmark ชุดจับคู่ model/provider และสรุปออกมาเป็นรายการที่เรามั่นใจพอจะแนะนำ
 
-OpenCode Zen คือ AI gateway ที่ให้คุณเข้าถึงโมเดลเหล่านี้
+Unifia Zen คือ AI gateway ที่ให้คุณเข้าถึงโมเดลเหล่านี้
 
 ---
 
 ## วิธีการทำงาน
 
-OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน OpenCode
+Unifia Zen ทำงานเหมือน provider อื่น ๆ ใน Unifia
 
-1. คุณลงชื่อเข้าใช้ **<a href={console}>OpenCode Zen</a>** เพิ่มรายละเอียดการเรียกเก็บเงิน แล้วคัดลอก API key ของคุณ
-2. รันคำสั่ง `/connect` ใน TUI เลือก OpenCode Zen แล้ววาง API key ของคุณ
+1. คุณลงชื่อเข้าใช้ **<a href={console}>Unifia Zen</a>** เพิ่มรายละเอียดการเรียกเก็บเงิน แล้วคัดลอก API key ของคุณ
+2. รันคำสั่ง `/connect` ใน TUI เลือก Unifia Zen แล้ววาง API key ของคุณ
 3. รัน `/models` ใน TUI เพื่อดูรายการโมเดลที่เราแนะนำ
 
 คุณจะถูกคิดค่าบริการตามแต่ละ request และสามารถเติมเครดิตเข้าบัญชีได้
@@ -92,7 +92,7 @@ OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน 
 | Qwen3.6 Plus Free     | qwen3.6-plus-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-[model id](/docs/config/#models) ใน OpenCode config ของคุณใช้รูปแบบ `opencode/<model-id>` ตัวอย่างเช่น สำหรับ GPT 5.3 Codex คุณจะใช้ `opencode/gpt-5.3-codex` ใน config ของคุณ
+[model id](/docs/config/#models) ใน Unifia config ของคุณใช้รูปแบบ `opencode/<model-id>` ตัวอย่างเช่น สำหรับ GPT 5.3 Codex คุณจะใช้ `opencode/gpt-5.3-codex` ใน config ของคุณ
 
 ---
 
@@ -159,12 +159,12 @@ https://opencode.ai/zen/v1/models
 
 โมเดลฟรี:
 
-- MiniMax M2.5 Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
-- MiMo V2 Pro Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
-- MiMo V2 Omni Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
-- Qwen3.6 Plus Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
-- Nemotron 3 Super Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
-- Big Pickle เป็น stealth model ที่ใช้งานฟรีบน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- MiniMax M2.5 Free เปิดให้ใช้บน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- MiMo V2 Pro Free เปิดให้ใช้บน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- MiMo V2 Omni Free เปิดให้ใช้บน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- Qwen3.6 Plus Free เปิดให้ใช้บน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- Nemotron 3 Super Free เปิดให้ใช้บน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- Big Pickle เป็น stealth model ที่ใช้งานฟรีบน Unifia ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
 
 <a href={email}>ติดต่อเรา</a> หากคุณมีคำถาม
 
@@ -258,9 +258,9 @@ Admins สามารถเปิดหรือปิดโมเดลบา�
 
 ## เป้าหมาย
 
-เราสร้าง OpenCode Zen ขึ้นมาเพื่อ:
+เราสร้าง Unifia Zen ขึ้นมาเพื่อ:
 
 1. **Benchmark** โมเดล/provider ที่ดีที่สุดสำหรับ coding agents
 2. เข้าถึงตัวเลือกที่มี **คุณภาพสูงสุด** โดยไม่ลดประสิทธิภาพหรือ route ไปยัง provider ที่ถูกกว่า
 3. ส่งต่อ **การลดราคา** ด้วยการขายในราคาทุน ดังนั้น markup เพียงอย่างเดียวคือเพื่อครอบคลุมค่าธรรมเนียมการประมวลผลของเรา
-4. ทำให้เกิด **no lock-in** โดยให้คุณใช้มันร่วมกับ coding agent อื่น ๆ ได้ และยังเปิดให้คุณใช้ provider อื่น ๆ กับ OpenCode ได้เสมอ
+4. ทำให้เกิด **no lock-in** โดยให้คุณใช้มันร่วมกับ coding agent อื่น ๆ ได้ และยังเปิดให้คุณใช้ provider อื่น ๆ กับ Unifia ได้เสมอ

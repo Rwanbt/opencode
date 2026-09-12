@@ -1,7 +1,7 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createSimpleContext } from "@unifia/ui/context"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
@@ -273,22 +273,32 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       return all
     })
 
+    // WHY the JSON guard + `reconcile` + `untrack`: this effect rebuilds the
+    // whole catalog into fresh object literals, and `setCatalog` is a
+    // `makePersisted` setter, so every run serialized ~12 KB to localStorage
+    // AND handed every `catalog[id]` reader a new reference. `keybind()` reads
+    // `catalog`, so a single mode switch re-entered this effect 3 237 times
+    // with byte-identical content (measured 2026-08-28). The guard drops the
+    // no-op writes; `reconcile` only notifies leaves that actually changed.
+    let lastCatalogJson = ""
     createEffect(() => {
       if (!catalogReady()) return
 
-      setCatalog(
-        registered().reduce((acc, opt) => {
-          const id = actionId(opt.id)
-          acc[id] = {
-            title: opt.title,
-            description: opt.description,
-            category: opt.category,
-            keybind: opt.keybind,
-            slash: opt.slash,
-          }
-          return acc
-        }, {} as CommandCatalog),
-      )
+      const next = registered().reduce((acc, opt) => {
+        const id = actionId(opt.id)
+        acc[id] = {
+          title: opt.title,
+          description: opt.description,
+          category: opt.category,
+          keybind: opt.keybind,
+          slash: opt.slash,
+        }
+        return acc
+      }, {} as CommandCatalog)
+      const json = JSON.stringify(next)
+      if (json === lastCatalogJson) return
+      lastCatalogJson = json
+      untrack(() => setCatalog(reconcile(next)))
     })
 
     const catalogOptions = createMemo(() => Object.entries(catalog).map(([id, meta]) => ({ id, ...meta })))

@@ -16,7 +16,13 @@ test("can send a prompt and receive a reply", async ({ page, project, assistant 
     await assistant.reply(token)
     const sessionID = await project.prompt(`Reply with exactly: ${token}`)
 
-    await expect.poll(() => assistant.calls()).toBeGreaterThanOrEqual(1)
+    await expect
+      .poll(() => assistant.calls())
+      .toBeGreaterThanOrEqual(1)
+      .catch(async (error) => {
+        const messages = await project.sdk.session.messages({ sessionID, limit: 50 }).then((result) => result.data ?? [])
+        throw new Error(`Mock LLM was not called: ${JSON.stringify(messages)}`, { cause: error })
+      })
     await expect.poll(() => assistantText(project.sdk, sessionID), { timeout: 30_000 }).toContain(token)
   } finally {
     page.off("pageerror", onPageError)

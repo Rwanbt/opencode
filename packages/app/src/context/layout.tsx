@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -179,7 +179,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(review)) return review
         if (typeof review.panelOpened === "boolean") return review
 
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        // Falls back closed, like the live default: a user migrating from a
+        // state file with no fileTree flag should land on the chat, not on a
+        // panel they never opened.
+        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : false
         return {
           ...review,
           panelOpened: opened,
@@ -245,7 +248,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          panelOpened: false,
         },
         fileTree: {
           opened: false,
@@ -640,7 +643,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+            // Picking a diff style must not open the panel as a side effect.
+            setStore("review", { diffStyle, panelOpened: false })
             return
           }
           setStore("review", "diffStyle", diffStyle)
@@ -768,7 +772,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        // Closed until the user asks for it: opening on the chat with nothing
+        // else in the way is what people want on launch. It used to default to
+        // open, which on a phone left the conversation unreachable because the
+        // toggle is only in the header (see session-header.tsx).
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -789,7 +797,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
 
-          const value = current.panelOpened ?? true
+          // Must match the `?? false` default read by reviewPanelOpened above:
+          // if this said `?? true`, the first toggle from the closed default
+          // would compare true === true and return without storing anything,
+          // so the button would appear dead on first press.
+          const value = current.panelOpened ?? false
           if (value === next) return
           setStore("review", "panelOpened", next)
         }

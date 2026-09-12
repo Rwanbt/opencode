@@ -1,4 +1,5 @@
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification"
+import { trimTrailingSlashes } from "@unifia/app"
 
 export type SSEEvent =
   | { type: "session.updated"; properties?: { status?: string; title?: string; id?: string } }
@@ -40,7 +41,7 @@ export class NotificationBridge {
   private visibilityHandler: (() => void) | null = null
 
   constructor(serverUrl: string) {
-    this.serverUrl = serverUrl.replace(/\/+$/, "")
+    this.serverUrl = trimTrailingSlashes(serverUrl)
   }
 
   async connect(directory?: string) {

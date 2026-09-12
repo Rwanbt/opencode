@@ -1,0 +1,16 @@
+{
+  "name": "unifia-workspace-fixtures",
+  "version": "1.0",
+  "description": "Test fixtures for Unifia WorkspaceRuntime (P1-C100e)",
+  "fixtures": [
+    "monorepo-typescript.json",
+    "monorepo-rust.json",
+    "polyrepo-microservices.json",
+    "single-file-script.json",
+    "empty-workspace.json",
+    "large-monorepo.json",
+    "opencode-fork-test.json"
+  ],
+  "usage": "Each fixture is a JSON manifest describing a workspace scenario. The test suite should use these for conformance testing of P1-C100.",
+  "total_fixtures": 7
+}

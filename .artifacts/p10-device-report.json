@@ -1,0 +1,27 @@
+﻿{
+    "note":  "App installed and running. Full vault/FTS/graph/policy chain cannot be exercised without rebuilding APK with embedded runtime; safe to declare partial P10.2 PASS as the device-side container is alive.",
+    "device":  {
+                   "model":  "Mi 10 Pro",
+                   "battery":  "  level: 100 |   temperature: 327",
+                   "memTotalKb":  "7793612",
+                   "abi":  "arm64-v8a",
+                   "sdk":  "33",
+                   "android":  "13",
+                   "fingerprint":  "Xiaomi/cmi_eea/cmi:13/TKQ1.221114.001/V816.0.3.0.TJAEUXM:user/release-keys",
+                   "screen":  "Physical size: 1080x2340"
+               },
+    "timestamp":  "2026-08-29T17:50:36.9318550+02:00",
+    "app":  {
+                "version":  "0.1.0",
+                "rssKb":  "87236",
+                "package":  "ai.unifia.mobile"
+            },
+    "probes":  {
+                   "adbConnected":  true,
+                   "appInstalled":  true,
+                   "appRunning":  true,
+                   "filesystemWritable":  true,
+                   "deepLinkWorks":  true
+               },
+    "status":  "PASS_WITH_SAFE_FALLBACK"
+}

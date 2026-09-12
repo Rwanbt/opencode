@@ -1,0 +1,24 @@
+{
+  "name": "broken-special-chars",
+  "description": "Workspace avec chemins speciaux (Unicode, espaces, quotes)",
+  "type": "broken",
+  "structure": {
+    "expected_files": [
+      "fichier avec accents éà.txt",
+      "文件_中文.txt",
+      "name with spaces.md",
+      "file'with'quotes.json"
+    ],
+    "expected_count": "4 files"
+  },
+  "errors": [
+    "unicode_paths",
+    "spaces_in_names",
+    "quotes_in_names"
+  ],
+  "agent_test_scenarios": [
+    "should_handle_unicode",
+    "should_handle_spaces",
+    "should_handle_quotes"
+  ]
+}

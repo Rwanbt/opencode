@@ -9,19 +9,19 @@ path, polyvalence as the value-add.
 
 ## Why bother
 
-OpenCode already has a deep tool system (Bash / Edit / Read / Grep / Web /
+Unifia already has a deep tool system (Bash / Edit / Read / Grep / Web /
 Agent) — far more powerful than Gallery's three skill types. The
 interesting thing about Gallery's design isn't the runtime; it's the
 **packaging format**. A `SKILL.md` is a single Markdown file with YAML
 frontmatter that any user can drop in `/sdcard/Download/` or fetch from
 a URL and the model picks it up automatically.
 
-Adopting that format gives OpenCode:
+Adopting that format gives Unifia:
 
 - **Distributable agent recipes** — share a "Refactor PR cleanup" skill
   via a GitHub Pages URL, anyone can install in one click.
 - **Bidirectional ecosystem** — import any skill from Gallery's
-  `skills/` directory unchanged; export OpenCode tool-chains as
+  `skills/` directory unchanged; export Unifia tool-chains as
   SKILL.md so Gallery users can run them.
 - **Zero friction custom prompts** — text-only skills are essentially
   named system-prompt fragments scoped to a tool call. Cleaner than
@@ -53,7 +53,7 @@ For each file in the diff:
 
 Three execution models, matching Gallery exactly:
 
-| Type        | Runtime                                         | OpenCode mapping                                                   |
+| Type        | Runtime                                         | Unifia mapping                                                   |
 | ----------- | ----------------------------------------------- | ------------------------------------------------------------------ |
 | `text-only` | Instructions appended to context                | Uses the existing System Prompt slot, no new tool                  |
 | `js`        | Sandbox webview executing `index.html`          | NEW tool `run_js` — Tauri sub-window or Bun worker (see below)     |

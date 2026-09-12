@@ -1,7 +1,8 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { ServerConnection } from "./server"
+import type { WorkbenchConnection } from "@unifia/workbench-shell"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -12,6 +13,14 @@ type UpdateInfo = { updateAvailable: boolean; version?: string }
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop" | "mobile"
+
+  /** Desktop-only window controls; provided by the host adapter. */
+  windowControls?: {
+    startDragging?(): Promise<void>
+    minimize?(): Promise<void>
+    toggleMaximize?(): Promise<void>
+    close?(): Promise<void>
+  }
 
   /** OS (Tauri desktop/mobile) */
   os?: "macos" | "windows" | "linux" | "ios" | "android"
@@ -129,6 +138,11 @@ export type Platform = {
 
   /** Stop the local CLI server */
   stopLocalServer?(): Promise<void>
+
+  /** Native-only Workbench connection; signing material never enters the WebView. */
+  workbench?: {
+    connect(input: { workspacePath: string; capabilities: readonly string[] }): Promise<WorkbenchConnection>
+  }
 }
 
 export type DisplayBackend = "auto" | "wayland"

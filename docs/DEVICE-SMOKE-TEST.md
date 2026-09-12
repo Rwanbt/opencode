@@ -1,6 +1,6 @@
 # Device smoke test — on-device validation checklist
 
-Some of OpenCode mobile's most critical behaviour **cannot be validated on a host
+Some of Unifia mobile's most critical behaviour **cannot be validated on a host
 or in CI**, because it depends on Android-only mechanisms that simply do not exist
 on Linux/WSL/x86:
 
@@ -29,7 +29,7 @@ cd packages/mobile && bun tauri android build --target aarch64   # ORT_LIB_LOCAT
 adb shell pm clear ai.opencode.mobile && adb install -r <path-to.apk>
 ```
 
-Stream logs in another shell: `adb logcat -s OpenCode bun` (only `process.stderr`
+Stream logs in another shell: `adb logcat -s Unifia bun` (only `process.stderr`
 reaches logcat — stdout goes to a local file).
 
 ---

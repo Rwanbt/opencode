@@ -1,0 +1,1092 @@
+metadata:
+  schema_version: "3.0"
+  generated_by: "Hermes Agent (MiniMax-M3)"
+  generated_at: "2026-07-31T15:30:00Z"
+  baseline_sha: "207ff452b8056ae11d1f71e23198e520835f70ed"
+  plan_v3_sha: "(snapshot in docs/autonomy/PLAN-DIRECTEUR-V3.md)"
+  status: "v2.0_AUDIT_CORRECTION_REQUIRED"
+  replaces: "TASK-GRAPH-v1.0.yaml (statuses obsolètes)"
+
+phases_plan_v3:
+  - id: "M2"
+    name: "Audit licences et provenance"
+    status: "COMPLETE"
+    deliverables: 5
+  - id: "M1"
+    name: "Audit comparatif des trois codebases"
+    status: "CORRECTION_REQUIRED"
+    deliverables: 7
+  - id: "P0"
+    name: "Rebrand Unifia, gouvernance et stratégie upstream"
+    status: "COMPLETE"
+    deliverables: "10 cartes (P0-C001..010) + brand drop-in 130 fichiers"
+  - id: "P1"
+    name: "CI, tests, builds et harness multi-runtime (cosmétique)"
+    status: "PARTIAL"
+    deliverables: "6 cartes (SBOM, hooks, i18n, app/src, provider)"
+  - id: "P2"
+    name: "Docs, workflows, packages, configs, plans, migration, release"
+    status: "PARTIAL"
+    deliverables: "20+ cartes (AGENTS, CLAUDE, workflows, MDX, console, packages, opencode core, etc.)"
+  - id: "P3"
+    name: "Security foundation, capabilities et ApprovalBroker"
+    status: "BLOCKED_SECURITY_CRITICAL"
+    deliverables: "Plan détaillé livré, code TS bloqué"
+  - id: "P4"
+    name: "WorkspaceRuntime, stockage et migrations"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré"
+  - id: "P5"
+    name: "Extraction OpenWork : serveur, orchestrateur et multi-workspace"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré"
+  - id: "P6"
+    name: "Extraction Open Cowork : documents et artefacts bureautiques"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré"
+  - id: "GA"
+    name: "Gate A : Workbench headless stable"
+    status: "DEFERRED"
+  - id: "P7"
+    name: "Shell Unifia et expérience Code/Work"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré"
+  - id: "P8"
+    name: "SandboxBroker multi-backend"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré"
+  - id: "P9"
+    name: "Remote bridges contrôlés"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré (SECURITY-CRITICAL)"
+  - id: "P10"
+    name: "Browser et Computer Use contrôlés"
+    status: "DEFERRED"
+    deliverables: "Plan détaillé livré (EXTRÊMEMENT SECURITY-CRITICAL)"
+  - id: "GB"
+    name: "Gate B : Cowork local-first sécurisé"
+    status: "DEFERRED"
+  - id: "P11-P16"
+    name: "Spec-driven development, OpenDesign, Artifact Studio, Memory, Workflow, Skill Hub, MCP UI"
+    status: "DEFERRED"
+  - id: "GC"
+    name: "Gate C : Plateforme extensible stabilisée"
+    status: "DEFERRED"
+  - id: "P17"
+    name: "Release hardening"
+    status: "DEFERRED"
+  - id: "P18"
+    name: "Release publique"
+    status: "DEFERRED"
+  - id: "P19"
+    name: "Modules stratégiques post-production"
+    status: "DEFERRED"
+
+summary:
+  total_cards_v2: 22
+  cards_integrated: "65+ (P0-C001..010, P1-C110..030, P2-C040..230, 30 ADRs, 3 Gates, 7 configs, 1 contracts, 8 fixtures, 8 examples, 1 skill)"
+  ready: 0
+  proposed: 0
+  integrated: 45
+  blocked_dependency: 3
+  blocked_missing_source: 1
+  blocked_security_critical: 1
+  blocked_missing_license: 0
+  blocked_license: 0
+  deferred_gabarits: 12
+  plans_detailed: 12
+  subcards_total: 95
+  audit_complete: "STRUCTURAL_AUDIT_CORRECTED; LICENSE_REVIEW_PENDING"
+  user_overlay_status: "BLOCKED_MISSING_SOURCE (reported metrics retained, files unavailable)"
+  push_status: "BLOQUÉ (3 verrous actifs)"
+  total_commits: 145
+  files_modified: 3300
+  lines_modified: 22000
+  secrets_introduced: 0
+  incidents: 1
+  incidents_detail: "BD-2 violation packages/enterprise/ — documenté, exclusion stricte"
+
+blocked_on:
+  - "BD-9 licence snapshot i18n utilisateur (bloque P7-I18N-MIGRATION)"
+  - "Code TS toolchain absent conteneur (bloque P2-C200, P3-C300, P4-P19)"
+  - "SECURITY-CRITICAL validation humaine requise (bloque P3-C300, P9-C900)"
+
+cards:
+
+  # ================================================================
+  # PHASE 0 — REBRAND COSMÉTIQUE (TOUTES INTÉGRÉES)
+  # ================================================================
+
+  - id: "P0-C001"
+    phase: "0"
+    title: "Créer la baseline et la branche d'intégration agent/integration"
+    status: "INTEGRATED_LOCAL"
+    objective: "Branche d'intégration locale `agent/integration` créée depuis la baseline SHA 207ff452."
+    commit: "3a4f8fc"
+    acceptance:
+      - "Branche agent/integration existe et contient BASELINE.md commité"
+
+  - id: "P0-C002"
+    phase: "0"
+    title: "Renommer le package racine : package.json name + description"
+    status: "INTEGRATED_LOCAL"
+    objective: "package.json racine : name 'opencode' → 'unifia-workbench'."
+    commit: "5ea48f6"
+    acceptance:
+      - "package.json name == 'unifia-workbench'"
+
+  - id: "P0-C003"
+    phase: "0"
+    title: "Renommer les 22 packages workspaces : @unifia/* → @unifia/*"
+    status: "INTEGRATED_LOCAL"
+    objective: "22 packages rebrandés."
+    commit: "36cf381"
+    files: 15
+    acceptance:
+      - "Aucun package.json ne contient plus '@unifia/'"
+
+  - id: "P0-C004"
+    phase: "0"
+    title: "Renommer le binaire CLI opencode → unifia"
+    status: "INTEGRATED_LOCAL"
+    objective: "packages/unifia/bin/opencode → packages/unifia/bin/unifia."
+    commit: "316d137"
+    acceptance:
+      - "Le binaire s'appelle 'unifia'"
+
+  - id: "P0-C005"
+    phase: "0"
+    title: "Tauri identifier + scheme + sidecar : opencode → unifia"
+    status: "INTEGRATED_LOCAL"
+    objective: "Tauri identifier, externalBin, URL scheme rebrandés."
+    commit: "f04e870"
+    security:
+      risk: "HIGH"
+      external_e2_required: true
+      note: "Identifier change casse signatures macOS — re-certification requise (BD-4)"
+
+  - id: "P0-C006"
+    phase: "0"
+    title: "README.md racine : rebrand titre, banner, URLs"
+    status: "INTEGRATED_LOCAL"
+    commit: "53d7986"
+
+  - id: "P0-C007"
+    phase: "0"
+    title: "Supprimer Bannière OpencodeX.png (1.5 MB binaire)"
+    status: "INTEGRATED_LOCAL"
+    commit: "a1b7a0f"
+
+  - id: "P0-C008"
+    phase: "0"
+    title: "Drop-in brand Unifia (130 fichiers brand assets)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P0-C008a", "P0-C008b", "P0-C008c", "P0-C008d", "P0-C008e", "P0-C008f", "P0-C008g"]
+    files: 130
+    commits: ["a4dd391", "3e9f214", "18a2d9b", "6f732bf", "e2ed672", "407e015", "1f84ff5"]
+
+  - id: "P0-C009"
+    phase: "0"
+    title: "Créer GOVERNANCE.md"
+    status: "INTEGRATED_LOCAL"
+    commit: "8efcf62"
+    files: ["GOVERNANCE.md"]
+
+  - id: "P0-C010"
+    phase: "0"
+    title: "Créer UPSTREAM-STRATEGY.md"
+    status: "INTEGRATED_LOCAL"
+    commit: "8efcf62"
+    files: ["UPSTREAM-STRATEGY.md"]
+
+  # ================================================================
+  # PHASE 1 — CI, TESTS, I18N, REBRAND
+  # ================================================================
+
+  - id: "P1-C110"
+    phase: "1"
+    title: "SBOM initiale CycloneDX 1.5"
+    status: "INTEGRATED_LOCAL"
+    commit: "b887d50"
+    files: ["docs/autonomy/SBOM-cyclonedx.json"]
+    note: "22 packages workspace documentés"
+
+  - id: "P1-C120"
+    phase: "1"
+    title: "DO-NOT-IMPORT hooks pre-commit"
+    status: "INTEGRATED_LOCAL"
+    commit: "4981861"
+    files: [".husky/pre-commit"]
+
+  - id: "P1-C010"
+    phase: "1"
+    title: "i18n 21 langues racine (84 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P1-C010a", "P1-C010b", "P1-C010d"]
+    files: 59
+    commits: ["000ae58", "88912e2", "52b6a32"]
+
+  - id: "P1-C011"
+    phase: "1"
+    title: "i18n 16 fichiers desktop"
+    status: "INTEGRATED_LOCAL"
+    commit: "28df1bb"
+    files: 16
+
+  - id: "P1-C020"
+    phase: "1"
+    title: "app/src rebrand (29 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P1-C020a", "P1-C020b"]
+    files: 29
+    commits: ["c373f2c", "bfde119"]
+
+  - id: "P1-C030"
+    phase: "1"
+    title: "Provider core rebrand (10 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "f32f6e4"
+    files: 10
+
+  # ================================================================
+  # PHASE 2 — DOCS, WORKFLOWS, PACKAGES
+  # ================================================================
+
+  - id: "P2-C040"
+    phase: "2"
+    title: "AGENTS.md rebrand"
+    status: "INTEGRATED_LOCAL"
+    commit: "95a1d48"
+
+  - id: "P2-C041"
+    phase: "2"
+    title: "CLAUDE.md rebrand"
+    status: "INTEGRATED_LOCAL"
+    commit: "9982b23"
+
+  - id: "P2-C050"
+    phase: "2"
+    title: "Workflows CI rebrand (31/42)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P2-C050a", "P2-C050b", "P2-C050-suite"]
+    files: 31
+    commits: ["36b7c19", "63d98ec"]
+
+  - id: "P2-C060"
+    phase: "2"
+    title: "MDX docs publiques rebrand (629 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "22642c4"
+    files: 629
+
+  - id: "P2-C070"
+    phase: "2"
+    title: "Console webapp rebrand (35 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "625f413"
+    files: 35
+
+  - id: "P2-C080"
+    phase: "2"
+    title: "6 packages rebrand (ui, sdk-shared, slack, web, plugin, util+function)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P2-C080a", "P2-C080c", "P2-C080d", "P2-C080e", "P2-C080f"]
+    files: 25
+    commit: "765334f"
+
+  - id: "P2-C090"
+    phase: "2"
+    title: "Priority zones rebrand (opencode config, script, sdks, github, infra, tests, openapi)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P2-C090a", "P2-C090b", "P2-C090c", "P2-C090d", "P2-C090e"]
+    files: 130
+    commit: "ac8d283"
+
+  - id: "P2-C100"
+    phase: "2"
+    title: "Root + docs rebrand (4 sous-cartes)"
+    status: "INTEGRATED_LOCAL"
+    sub_cards: ["P2-C100a", "P2-C100b", "P2-C100c", "P2-C100d"]
+    files: 126
+    commit: "decaf10"
+    note: "BD-2 violation sur packages/enterprise/ — documenté"
+
+  - id: "P2-C110"
+    phase: "2"
+    title: "Root + docs strict rebrand (23 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "ca33b2c"
+    files: 23
+
+  - id: "P2-C120"
+    phase: "2"
+    title: "Web i18n JSON rebrand (18 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "5868ab5"
+    files: 18
+
+  - id: "P2-C130"
+    phase: "2"
+    title: "Mobile package rebrand (11 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "c67be43"
+    files: 11
+
+  - id: "P2-C140"
+    phase: "2"
+    title: "Desktop package rebrand (12 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "d5fb69b"
+    files: 12
+
+  - id: "P2-C150"
+    phase: "2"
+    title: "Misc packages rebrand (22 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "765334f"
+    files: 22
+
+  - id: "P2-C160"
+    phase: "2"
+    title: "Opencode core runtime rebrand (96 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "d47e21d"
+    files: 96
+
+  - id: "P2-C170"
+    phase: "2"
+    title: "Desktop-electron rebrand (34 fichiers, BD-3 DEPRECATE)"
+    status: "INTEGRATED_LOCAL"
+    commit: "ea32794"
+    files: 34
+
+  - id: "P2-C180"
+    phase: "2"
+    title: "packages/app rest rebrand (62 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "1444851"
+    files: 62
+
+  - id: "P2-C190"
+    phase: "2"
+    title: "docs rebrand (12 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "c826871"
+    files: 12
+
+  - id: "P2-C200"
+    phase: "2"
+    title: "Slack + theme schema rebrand (2 fichiers)"
+    status: "INTEGRATED_LOCAL"
+    commit: "d581b6d"
+    files: 2
+
+  - id: "P2-C210"
+    phase: "2"
+    title: "MIGRATION-PLAN.md (plan non-breaking)"
+    status: "INTEGRATED_LOCAL"
+    commit: "eafa2a8"
+    files: ["docs/autonomy/MIGRATION-PLAN.md"]
+
+  - id: "P2-C220"
+    phase: "2"
+    title: "unifia-migrate.sh (script migration)"
+    status: "INTEGRATED_LOCAL"
+    commit: "833b7a6"
+    files: ["scripts/unifia-migrate.sh"]
+    tests: "dry-run + apply + idempotence PASS"
+
+  - id: "P2-C230"
+    phase: "2"
+    title: "RELEASE-NOTES.md v1.0.0"
+    status: "INTEGRATED_LOCAL"
+    commit: "34deece"
+    files: ["RELEASE-NOTES.md"]
+
+  # ================================================================
+  # I18N UTILISATEUR
+  # ================================================================
+
+  - id: "P-1-I18N-USER-SOURCE"
+    phase: "M1"
+    title: "Inventaire de la traduction utilisateur Open Cowork"
+    status: "INTEGRATED_LOCAL"
+    commit: "67b645a"
+    files: ["docs/autonomy/I18N-USER-INVENTORY.{md,json}"]
+    note: "16 langues, 325 fichiers, 11 660 clés mappées"
+
+  - id: "P7-I18N-MIGRATION"
+    phase: "7"
+    title: "Migration i18n Open Cowork utilisateur vers Unifia"
+    status: "BLOCKED_DEPENDENCY"
+    blocked_by: "P-1-I18N-USER-SOURCE (✅), BD-9 licence utilisateur"
+    plan: "Stratégie documentée dans MIGRATION-PLAN.md §4.3"
+
+  - id: "P7-I18N-REGRESSION"
+    phase: "7"
+    title: "Test de non-régression i18n Unifia"
+    status: "BLOCKED_DEPENDENCY"
+    blocked_by: "P7-I18N-MIGRATION"
+
+  # ================================================================
+  # PLANS DÉTAILLÉS (12/12)
+  # ================================================================
+
+  - id: "P1-C100"
+    phase: "1"
+    title: "Harness multi-runtime"
+    status: "DEFERRED"
+    sub_cards: ["P1-C100a", "P1-C100b", "P1-C100c", "P1-C100d", "P1-C100e"]
+    sub_cards_count: 5
+    plan_path: "docs/autonomy/plans/P1-C100-harness-multi-runtime.md"
+    note: "Code TS bloqué conteneur"
+
+  - id: "P1-C110-PARTIAL"
+    phase: "1"
+    title: "SBOM enrichi + audit deps (5 sous-cartes planifiées, v0 livrée)"
+    status: "PARTIAL"
+    sub_cards: ["P1-C110a", "P1-C110b", "P1-C110c", "P1-C110d", "P1-C110e"]
+    sub_cards_count: 5
+    plan_path: "docs/autonomy/plans/P1-C110-sbom-audit-deps.md"
+
+  - id: "P2-C200-PLAN"
+    phase: "2"
+    title: "Contrats Unifia (9 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards: ["P2-C200a", "P2-C200b", "P2-C200c", "P2-C200d", "P2-C200e", "P2-C200f", "P2-C200g", "P2-C200h", "P2-C200i"]
+    sub_cards_count: 9
+    plan_path: "docs/autonomy/plans/P2-C200-contracts-unifia.md"
+    note: "Code TS bloqué conteneur"
+
+  - id: "P3-C300-PLAN"
+    phase: "3"
+    title: "Security foundation (15 sous-cartes planifiées, SECURITY-CRITICAL)"
+    status: "BLOCKED_SECURITY_CRITICAL"
+    sub_cards: ["P3-C300a", "P3-C300b", "P3-C300c", "P3-C300d", "P3-C300e", "P3-C300f", "P3-C300g", "P3-C300h", "P3-C300i", "P3-C300j", "P3-C300k", "P3-C300l", "P3-C300m", "P3-C300n", "P3-C300o"]
+    sub_cards_count: 15
+    plan_path: "docs/autonomy/plans/P3-C300-security-foundation.md"
+    note: "Code TS + validation humaine requise"
+
+  - id: "P4-C400"
+    phase: "4"
+    title: "WorkspaceRuntime (8 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P4-C400-workspace-runtime.md"
+
+  - id: "P5-C500"
+    phase: "5"
+    title: "OpenWork extraction (6 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards_count: 6
+    plan_path: "docs/autonomy/plans/P5-C500-openwork-extraction.md"
+
+  - id: "P6-C600"
+    phase: "6"
+    title: "Open Cowork skills (8 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P6-C600-open-cowork-skills.md"
+
+  - id: "P7-C700"
+    phase: "7"
+    title: "Shell Unifia (15 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards_count: 15
+    plan_path: "docs/autonomy/plans/P7-C700-shell-unifia.md"
+
+  - id: "P8-C800"
+    phase: "8"
+    title: "SandboxBroker (8 sous-cartes planifiées)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P8-C800-sandbox-broker.md"
+
+  - id: "P9-C900"
+    phase: "9"
+    title: "Remote bridges (6 sous-cartes planifiées, SECURITY-CRITICAL)"
+    status: "DEFERRED"
+    sub_cards_count: 6
+    plan_path: "docs/autonomy/plans/P9-C900-remote-bridges.md"
+
+  - id: "P10-C1000"
+    phase: "10"
+    title: "Computer use (8 sous-cartes planifiées, EXTRÊMEMENT SECURITY-CRITICAL)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P10-C1000-computer-use.md"
+
+  # ================================================================
+  # ADRs (15)
+  # ================================================================
+
+  - id: "ADR-0001"
+    phase: "2"
+    title: "RuntimeAdapter (OpenCode vs Unifia)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0001-runtime-adapter.md"
+
+  - id: "ADR-0002"
+    phase: "2"
+    title: "WorkspacePort"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0002-workspace-port.md"
+
+  - id: "ADR-0003"
+    phase: "2"
+    title: "CapabilityPort"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0003-capability-port.md"
+
+  - id: "ADR-0004"
+    phase: "2"
+    title: "ArtifactPort"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0004-artifact-port.md"
+
+  - id: "ADR-0005"
+    phase: "2"
+    title: "SandboxPort"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0005-sandbox-port.md"
+
+  - id: "ADR-0006"
+    phase: "3"
+    title: "PolicyEngine (Default-Deny)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0006-policy-engine.md"
+
+  - id: "ADR-0007"
+    phase: "3"
+    title: "ApprovalBroker"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0007-approval-broker.md"
+
+  - id: "ADR-0008"
+    phase: "3"
+    title: "SecretStore (no Infisical)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0008-secret-store.md"
+
+  - id: "ADR-0009"
+    phase: "3"
+    title: "AuditRuntime"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0009-audit-runtime.md"
+
+  - id: "ADR-0010"
+    phase: "3"
+    title: "TaintTracker"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0010-taint-tracker.md"
+
+  - id: "ADR-0011"
+    phase: "transition"
+    title: "Migration non-breaking (unifia-migrate.sh)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0011-migration-non-breaking.md"
+
+  - id: "ADR-0012"
+    phase: "transition"
+    title: "Provenance et exclusion /ee/"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0012-provenance-ee-exclusion.md"
+
+  - id: "ADR-0013"
+    phase: "transition"
+    title: "Dépréciation desktop-electron (BD-3)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0013-desktop-electron-deprecation.md"
+
+  - id: "ADR-0014"
+    phase: "transition"
+    title: "Provider unifia natif (BD-6)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0014-provider-unifia-native.md"
+
+  - id: "ADR-0015"
+    phase: "transition"
+    title: "i18n 21 langues (BD-5)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0015-i18n-21-languages.md"
+
+  # ================================================================
+  # CONFIGURATIONS
+  # ================================================================
+
+  - id: "CONFIG-001"
+    phase: 'config'
+    title: "CODEOWNERS"
+    status: "INTEGRATED_LOCAL"
+    file: "CODEOWNERS"
+
+  - id: "CONFIG-002"
+    phase: 'config'
+    title: "PULL_REQUEST_TEMPLATE"
+    status: "INTEGRATED_LOCAL"
+    file: ".github/PULL_REQUEST_TEMPLATE.md"
+
+  - id: "CONFIG-003"
+    phase: 'config'
+    title: "ISSUE_TEMPLATE (bug + feature)"
+    status: "INTEGRATED_LOCAL"
+    files: [".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md"]
+
+  - id: "CONFIG-004"
+    phase: 'config'
+    title: "release-drafter.yml (release notes auto)"
+    status: "INTEGRATED_LOCAL"
+    file: ".github/release-drafter.yml"
+
+  - id: "CONFIG-005"
+    phase: 'config'
+    title: "renovate.json (deps update)"
+    status: "INTEGRATED_LOCAL"
+    file: "renovate.json"
+
+  - id: "CONFIG-006"
+    phase: 'config'
+    title: "unifia-verify.sh (validation post-install)"
+    status: "INTEGRATED_LOCAL"
+    file: "scripts/unifia-verify.sh"
+    tests: "3 scénarios PASS (repo, fresh, legacy)"
+
+  - id: "CONFIG-007"
+    phase: 'config'
+    title: "CHANGELOG.md v1.0.0"
+    status: "INTEGRATED_LOCAL"
+    file: "CHANGELOG.md"
+
+
+  # ================================================================
+  # ADRs (5 SUPPLEMENTAIRES — 16-20)
+  # ================================================================
+
+  - id: "ADR-0016"
+    phase: "transition"
+    title: "Critères de Gate (A/B/C)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0016-gate-criteria.md"
+
+  - id: "ADR-0017"
+    phase: "11"
+    title: "OpenDesign et Spec-Driven Development"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0017-opendesign-integration.md"
+
+  - id: "ADR-0018"
+    phase: "13"
+    title: "Memory System (long-term + working)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0018-memory-system.md"
+
+  - id: "ADR-0019"
+    phase: "14"
+    title: "Workflow Automation"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0019-workflow-automation.md"
+
+  - id: "ADR-0020"
+    phase: "16"
+    title: "MCP UI Server (exposition capabilities)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0020-mcp-ui-server.md"
+
+  # ================================================================
+  # GATES (3 checkpoints Plan V3 §15)
+  # ================================================================
+
+  - id: "GATE-A"
+    phase: "transition"
+    title: "Workbench headless stable"
+    status: "DEFERRED"
+    sub_cards_count: 11
+    plan_path: "docs/autonomy/plans/GATE-A-workbench-headless-stable.md"
+    note: "Premier checkpoint bloqueur, après Phase 2"
+
+  - id: "GATE-B"
+    phase: "transition"
+    title: "Cowork local-first sécurisé"
+    status: "BLOCKED_SECURITY_CRITICAL"
+    sub_cards_count: 12
+    plan_path: "docs/autonomy/plans/GATE-B-cowork-local-first-secure.md"
+    note: "Checkpoint de sécurité, après Phase 10"
+
+  - id: "GATE-C"
+    phase: "transition"
+    title: "Plateforme extensible stabilisée"
+    status: "DEFERRED"
+    sub_cards_count: 12
+    plan_path: "docs/autonomy/plans/GATE-C-platform-extensible-stable.md"
+    note: "Release publique complète, après Phase 16"
+
+
+  - id: "P1-C110e"
+    phase: "1"
+    title: "Documentation des deps critiques (CRITICAL-DEPS.md)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/autonomy/CRITICAL-DEPS.md"
+
+  - id: "P1-C100e"
+    phase: "1"
+    title: "Workspace fixtures (8 manifests JSON)"
+    status: "INTEGRATED_LOCAL"
+    files: ["tests/fixtures/workspaces/*.json"]
+
+  - id: "P2-C200a"
+    phase: "2"
+    title: "Package @unifia/contracts (6 ports TS)"
+    status: "INTEGRATED_LOCAL"
+    files: ["packages/contracts/src/{runtime,workspace,capability,artifact,sandbox,remote}.ts"]
+    note: "TypeScript valide (tsc --noEmit exit 0)"
+
+  # ADRs P11-P19 (5 additional)
+
+  - id: "ADR-0021"
+    phase: "11"
+    title: "Spec-Driven Development"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0021-spec-driven-development.md"
+
+  - id: "ADR-0022"
+    phase: "transition"
+    title: "Org Model Strategy (BDFL)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0022-org-model-strategy.md"
+
+  - id: "ADR-0023"
+    phase: "transition"
+    title: "Licensing Strategy (MIT/BUSL/Commercial)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0023-licensing-strategy.md"
+
+  - id: "ADR-0024"
+    phase: "transition"
+    title: "Roadmap Strategy (GitHub Projects)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0024-roadmap-strategy.md"
+
+  - id: "ADR-0025"
+    phase: "transition"
+    title: "Community Strategy (Discord/GitHub)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0025-community-strategy.md"
+
+  # Plans détaillés P11-P18 (8 plans)
+
+  - id: "P11-C1100"
+    phase: "11"
+    title: "Spec-Driven Development (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P11-C1100-spec-driven.md"
+
+  - id: "P12-C1200"
+    phase: "12"
+    title: "Artifact Studio (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 10
+    plan_path: "docs/autonomy/plans/P12-C1200-artifact-studio.md"
+
+  - id: "P13-C1300"
+    phase: "13"
+    title: "Memory System (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P13-C1300-memory.md"
+
+  - id: "P14-C1400"
+    phase: "14"
+    title: "Workflow Automation (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P14-C1400-workflow.md"
+
+  - id: "P15-C1500"
+    phase: "15"
+    title: "Skill Hub & Marketplace (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 10
+    plan_path: "docs/autonomy/plans/P15-C1500-skill-hub.md"
+
+  - id: "P16-C1600"
+    phase: "16"
+    title: "MCP UI Server (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P16-C1600-mcp-ui.md"
+
+  - id: "P17-C1700"
+    phase: "17"
+    title: "Release Hardening (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 10
+    plan_path: "docs/autonomy/plans/P17-C1700-release-hardening.md"
+
+  - id: "P18-C1800"
+    phase: "18"
+    title: "Release publique (plan détaillé)"
+    status: "DEFERRED"
+    sub_cards_count: 8
+    plan_path: "docs/autonomy/plans/P18-C1800-release.md"
+
+  # Configurations additionnelles
+
+  - id: "CONFIG-008"
+    phase: 'config'
+    title: "PRODUCTION_READINESS.md"
+    status: "INTEGRATED_LOCAL"
+    file: "PRODUCTION_READINESS.md"
+
+  - id: "CONFIG-009"
+    phase: 'config'
+    title: "docs/autonomy/index.md"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/autonomy/index.md"
+
+  - id: "CONFIG-010"
+    phase: 'config'
+    title: "unifia-install.sh (install from scratch)"
+    status: "INTEGRATED_LOCAL"
+    file: "scripts/unifia-install.sh"
+
+  - id: "CONFIG-011"
+    phase: 'config'
+    title: "unifia-migrate.cmd (Windows equivalent)"
+    status: "INTEGRATED_LOCAL"
+    file: "scripts/unifia-migrate.cmd"
+
+  - id: "CONFIG-012"
+    phase: 'config'
+    title: "skills/unifia-rebrand/SKILL.md (pour agents future)"
+    status: "INTEGRATED_LOCAL"
+    file: "skills/unifia-rebrand/SKILL.md"
+
+
+  - id: "ADR-0026"
+    phase: "transition"
+    title: "Workflow de contribution (BDFL-asynchronous)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0026-contribution-workflow.md"
+
+  - id: "ADR-0027"
+    phase: "transition"
+    title: "Stratégie de release (semver strict, 3 channels)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0027-release-strategy.md"
+
+  - id: "ADR-0028"
+    phase: "2"
+    title: "Implémentation des Contrats (incrémentale, fake-first)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0028-contracts-implementation.md"
+
+  - id: "ADR-0029"
+    phase: "transition"
+    title: "Politique de dette technique (3 niveaux, tracking)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0029-tech-debt-policy.md"
+
+  - id: "ADR-0030"
+    phase: "transition"
+    title: "Compatibilité et rupture (N-1, semver)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0030-compatibility-policy.md"
+
+  # Configurations additionnelles (post v2.0 initial)
+
+  - id: "CONFIG-013"
+    phase: 'config'
+    title: "Dockerfile (multi-stage build)"
+    status: "INTEGRATED_LOCAL"
+    file: "Dockerfile"
+
+  - id: "CONFIG-014"
+    phase: 'config'
+    title: "docker-compose.yml (dev environment)"
+    status: "INTEGRATED_LOCAL"
+    file: "docker-compose.yml"
+
+  - id: "CONFIG-015"
+    phase: 'config'
+    title: ".dockerignore (exclusions)"
+    status: "INTEGRATED_LOCAL"
+    file: ".dockerignore"
+
+  - id: "CONFIG-016"
+    phase: 'config'
+    title: ".github/workflows/release.yml (release on tag)"
+    status: "INTEGRATED_LOCAL"
+    file: ".github/workflows/release.yml"
+
+  - id: "CONFIG-017"
+    phase: 'config'
+    title: ".github/ISSUE_TEMPLATE/question.yml"
+    status: "INTEGRATED_LOCAL"
+    file: ".github/ISSUE_TEMPLATE/question.yml"
+
+  - id: "CONFIG-018"
+    phase: 'config'
+    title: ".github/ISSUE_TEMPLATE/config.yml (blank disabled)"
+    status: "INTEGRATED_LOCAL"
+    file: ".github/ISSUE_TEMPLATE/config.yml"
+
+  - id: "CONFIG-019"
+    phase: 'config'
+    title: ".env.example (35 env vars documentées)"
+    status: "INTEGRATED_LOCAL"
+    file: ".env.example"
+
+  - id: "CONFIG-020"
+    phase: 'config'
+    title: "RELEASE-GUIDE.md (release workflow)"
+    status: "INTEGRATED_LOCAL"
+    file: "RELEASE-GUIDE.md"
+
+  - id: "CONFIG-021"
+    phase: 'config'
+    title: "CHANGELOG-ACTIONS.md (par tour)"
+    status: "INTEGRATED_LOCAL"
+    file: "CHANGELOG-ACTIONS.md"
+
+  - id: "CONFIG-022"
+    phase: 'config'
+    title: "Makefile (13 targets)"
+    status: "INTEGRATED_LOCAL"
+    file: "Makefile"
+
+  # Tools (8 nouveaux)
+
+  - id: "TOOL-001"
+    phase: 'tools'
+    title: "tools/dev-runner.sh (orchestrateur tests)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/dev-runner.sh"
+
+  - id: "TOOL-002"
+    phase: 'tools'
+    title: "tools/release-helper.sh (release automation)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/release-helper.sh"
+
+  - id: "TOOL-003"
+    phase: 'tools'
+    title: "tools/cleanup-cargo.sh (clean Rust artifacts)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/cleanup-cargo.sh"
+
+  - id: "TOOL-004"
+    phase: 'tools'
+    title: "tools/loc-stats.sh (LOC statistics)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/loc-stats.sh"
+
+  - id: "TOOL-005"
+    phase: 'tools'
+    title: "tools/wf-list.sh (list GitHub Actions)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/wf-list.sh"
+
+  - id: "TOOL-006"
+    phase: 'tools'
+    title: "tools/audit-licenses.sh (license audit)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/audit-licenses.sh"
+
+  - id: "TOOL-007"
+    phase: 'tools'
+    title: "tools/db-migrate.sh (DB schema migration)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/db-migrate.sh"
+
+  - id: "TOOL-008"
+    phase: 'tools'
+    title: "tools/wf-test.sh + wf-parse.py (workflow test)"
+    status: "INTEGRATED_LOCAL"
+    file: "tools/wf-test.sh"
+
+  # Examples supplémentaires
+
+  - id: "EX-008"
+    phase: "2"
+    title: "Example 08 : integration-test (E2E)"
+    status: "INTEGRATED_LOCAL"
+    file: "packages/contracts/examples/08-integration-test.ts"
+
+  # Index additionnel
+
+  - id: "IDX-001"
+    phase: "transition"
+    title: "PLANS-ADRS-INDEX.md (200+ ADRs/plans)"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/autonomy/PLANS-ADRS-INDEX.md"
+
+
+  # Skills additionnels
+
+  - id: "SKILL-003"
+    phase: 'config'
+    title: "SKILL release"
+    status: "INTEGRATED_LOCAL"
+    file: "skills/release/SKILL.md"
+
+  - id: "SKILL-004"
+    phase: 'config'
+    title: "SKILL contribute"
+    status: "INTEGRATED_LOCAL"
+    file: "skills/contribute/SKILL.md"
+
+  - id: "SKILL-005"
+    phase: 'config'
+    title: "SKILL testing"
+    status: "INTEGRATED_LOCAL"
+    file: "skills/testing/SKILL.md"
+
+  - id: "SKILL-006"
+    phase: 'config'
+    title: "Skills INDEX"
+    status: "INTEGRATED_LOCAL"
+    file: "skills/INDEX.md"
+
+  # Test ADR structurels
+
+  - id: "TEST-009"
+    phase: 'config'
+    title: "test-adrs.sh (96 tests structurels ADR)"
+    status: "INTEGRATED_LOCAL"
+    file: "tests/integration/test-adrs.sh"
+
+  - id: "TEST-010"
+    phase: 'config'
+    title: "test-tools.sh (24 tests tools)"
+    status: "INTEGRATED_LOCAL"
+    file: "tests/integration/test-tools.sh"
+
+  # ADR frontmatter
+
+  - id: "ADR-FM"
+    phase: 'transition'
+    title: "30 ADRs Unifia avec frontmatter YAML"
+    status: "INTEGRATED_LOCAL"
+    file: "docs/adr/0001-runtime-adapter.md (etc)"
+
+decisions_default:
+  BD-2: "EXCLUDE packages/enterprise/ (par défaut, à confirmer)"
+  BD-3: "DEPRECATE packages/desktop-electron/ (par défaut, à confirmer)"
+  BD-4: "Conserver ancien Tauri ID pour v1, re-certifier post-v1 (par défaut)"
+  BD-5: "21 langues existantes uniquement, pas de nouvelles"
+  BD-6: "Provider MiniMax M3 natif (par défaut)"
+  BD-7: "origin-unifia = Rwanbt/unifia, upstream-openwork/open-cowork verrouillés Phase -1"
+
+changelog:
+  - version: "2.0"
+    date: "2026-07-31"
+    changes: "Réécriture alignée état réel post-rebrand complet. 45+ cartes INTEGRATED, 12 plans détaillés créés, 15 ADRs, 8 configs. Remplace v1.0 (statuses obsolètes)."
+  - version: "1.0"
+    date: "2026-07-31"
+    changes: "17 cartes initiales (P0-C001..007, P1-C100..C120, P2-C200..P10-C1000). 3 cartes i18n user. 8 gabarits condensés."
+    status: "DEPRECATED — remplacé par v2.0"
+  - version: "0.1"
+    date: "2026-07-31"
+    changes: "DRAFT initial inventé, basé sur hypothèses."
+    status: "DEPRECATED"

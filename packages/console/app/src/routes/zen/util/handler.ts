@@ -1,19 +1,19 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
-import { getMonthlyBounds, getWeekBounds } from "@opencode-ai/console-core/util/date.js"
-import { Identifier } from "@opencode-ai/console-core/identifier.js"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { ZenData } from "@opencode-ai/console-core/model.js"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
-import { BlackData } from "@opencode-ai/console-core/black.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
-import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
-import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
+import { and, Database, eq, isNull, lt, or, sql } from "@unifia/console-core/drizzle/index.js"
+import { KeyTable } from "@unifia/console-core/schema/key.sql.js"
+import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@unifia/console-core/schema/billing.sql.js"
+import { centsToMicroCents } from "@unifia/console-core/util/price.js"
+import { getMonthlyBounds, getWeekBounds } from "@unifia/console-core/util/date.js"
+import { Identifier } from "@unifia/console-core/identifier.js"
+import { Billing } from "@unifia/console-core/billing.js"
+import { Actor } from "@unifia/console-core/actor.js"
+import { WorkspaceTable } from "@unifia/console-core/schema/workspace.sql.js"
+import { ZenData } from "@unifia/console-core/model.js"
+import { Subscription } from "@unifia/console-core/subscription.js"
+import { BlackData } from "@unifia/console-core/black.js"
+import { UserTable } from "@unifia/console-core/schema/user.sql.js"
+import { ModelTable } from "@unifia/console-core/schema/model.sql.js"
+import { ProviderTable } from "@unifia/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import {
   AuthError,
@@ -39,8 +39,8 @@ import { createRateLimiter } from "./rateLimiter"
 import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
-import { LiteData } from "@opencode-ai/console-core/lite.js"
-import { Resource } from "@opencode-ai/console-resource"
+import { LiteData } from "@unifia/console-core/lite.js"
+import { Resource } from "@unifia/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 
@@ -91,10 +91,10 @@ export async function handler(
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
     const ip = input.request.headers.get("x-real-ip") ?? ""
-    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
-    const requestId = input.request.headers.get("x-opencode-request") ?? ""
-    const projectId = input.request.headers.get("x-opencode-project") ?? ""
-    const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const sessionId = input.request.headers.get("x-unifia-session") ?? ""
+    const requestId = input.request.headers.get("x-unifia-request") ?? ""
+    const projectId = input.request.headers.get("x-unifia-project") ?? ""
+    const ocClient = input.request.headers.get("x-unifia-client") ?? ""
     logger.metric({
       is_stream: isStream,
       session: sessionId,
@@ -163,10 +163,10 @@ export async function handler(
           })
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
+          headers.delete("x-unifia-request")
+          headers.delete("x-unifia-session")
+          headers.delete("x-unifia-project")
+          headers.delete("x-unifia-client")
           return headers
         })(),
         body: reqBody,

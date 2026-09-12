@@ -20,7 +20,7 @@
 # ------------------------------
 #   slsa-verifier verify-artifact <artifact> \
 #     --provenance-path <artifact>.intoto.jsonl \
-#     --source-uri github.com/Rwanbt/opencode \
+#     --source-uri github.com/Rwanbt/unifia \
 #     --source-tag <tag>
 #
 # Fork-safety: gated on the canonical repo via `if:` on each job.
@@ -53,7 +53,7 @@ jobs:
   build-subjects:
     # When triggered by release.published, we compute subjects ourselves.
     # When called by publish.yml, we forward the provided digest map.
-    if: github.repository == 'Rwanbt/opencode'
+    if: github.repository == 'Rwanbt/unifia'
     name: Collect subjects
     runs-on: ubuntu-latest
     outputs:
@@ -138,4 +138,4 @@ jobs:
       base64-subjects: ${{ needs.build-subjects.outputs.subjects }}
       upload-assets: ${{ github.event_name == 'release' || inputs.upload-assets }}
       upload-tag-name: ${{ needs.build-subjects.outputs.tag }}
-      provenance-name: opencode.intoto.jsonl
+      provenance-name: unifia.intoto.jsonl

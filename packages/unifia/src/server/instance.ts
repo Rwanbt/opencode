@@ -1,0 +1,463 @@
+import { describeRoute, resolver, validator } from "hono-openapi"
+import { Hono } from "hono"
+import { proxy } from "hono/proxy"
+import z from "zod"
+import { createHash } from "node:crypto"
+import fs_native from "node:fs/promises"
+import os from "node:os"
+import { Log } from "../util/log"
+import { Format } from "../format"
+import { TuiRoutes } from "./routes/tui"
+import { Instance } from "../project/instance"
+import { Vcs } from "../project/vcs"
+import { Agent } from "../agent/agent"
+import { Skill } from "../skill"
+import { Global } from "../global"
+import { LSP } from "../lsp"
+import { Command } from "../command"
+import { Flag } from "../flag/flag"
+import { QuestionRoutes } from "./routes/question"
+import { PermissionRoutes } from "./routes/permission"
+import { Snapshot } from "@/snapshot"
+import { ProjectRoutes } from "./routes/project"
+import { SessionRoutes } from "./routes/session"
+import { PtyRoutes } from "./routes/pty"
+import { McpRoutes } from "./routes/mcp"
+import { FileRoutes } from "./routes/file"
+import { LspRoutes } from "./routes/lsp"
+import { GitRoutes } from "./routes/git"
+import { GithubRoutes } from "./routes/github"
+import { ConfigRoutes } from "./routes/config"
+import { ExperimentalRoutes } from "./routes/experimental"
+import { ProviderRoutes } from "./routes/provider"
+import { EventRoutes } from "./routes/event"
+import { TaskRoutes } from "./routes/task"
+import { WsEventRoutes } from "./routes/ws-event"
+import { Presence } from "./presence"
+import { AgentSkillRoutes } from "./routes/agent-skills"
+import { GdprRoutes } from "./routes/gdpr"
+import { ObservabilityRoutes } from "./routes/observability"
+import { DebateRoutes } from "./routes/debate"
+import { TeamRoutes } from "./routes/team"
+import { ModelIntelligenceRoutes } from "./routes/model-intelligence"
+import { errorHandler } from "./middleware"
+
+const log = Log.create({ service: "server" })
+
+const embeddedUIPromise = Flag.UNIFIA_DISABLE_EMBEDDED_WEB_UI
+  ? Promise.resolve(null)
+  : // @ts-expect-error - generated file at build time
+    import("unifia-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
+
+const DEFAULT_CSP =
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+
+const csp = (hash = "") =>
+  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+
+export const InstanceRoutes = (app?: Hono) =>
+  (app ?? new Hono())
+    .onError(errorHandler(log))
+    .route("/project", ProjectRoutes())
+    .route("/pty", PtyRoutes())
+    .route("/config", ConfigRoutes())
+    .route("/experimental", ExperimentalRoutes())
+    .route("/session", SessionRoutes())
+    .route("/task", TaskRoutes())
+    .route("/ws", WsEventRoutes())
+    .route("/agent-skills", AgentSkillRoutes())
+    .route("/permission", PermissionRoutes())
+    .route("/question", QuestionRoutes())
+    .route("/provider", ProviderRoutes())
+    .route("/debate", DebateRoutes())
+    .route("/team", TeamRoutes())
+    .route("/model-intelligence", ModelIntelligenceRoutes())
+    .route("/observability", ObservabilityRoutes())
+    .get(
+      "/presence",
+      describeRoute({
+        summary: "Get presence",
+        description: "Get list of online users and their current activity.",
+        operationId: "collab.presence",
+        responses: {
+          200: {
+            description: "Online users",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      userID: z.string(),
+                      username: z.string(),
+                      status: z.enum(["online", "idle", "away"]),
+                      activeSessionID: z.string().optional(),
+                      directory: z.string().optional(),
+                      lastSeen: z.number(),
+                      connectedAt: z.number(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(Presence.list())
+      },
+    )
+    .route("/", GdprRoutes())
+    .route("/", FileRoutes())
+    .route("/", EventRoutes())
+    .route("/mcp", McpRoutes())
+    .route("/tui", TuiRoutes())
+    .post(
+      "/instance/dispose",
+      describeRoute({
+        summary: "Dispose instance",
+        description: "Clean up and dispose the current Unifia instance, releasing all resources.",
+        operationId: "instance.dispose",
+        responses: {
+          200: {
+            description: "Instance disposed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const directory = c.req.query("directory")
+        await Instance.disposeDirectory(directory ?? Instance.directory)
+        return c.json(true)
+      },
+    )
+    // FORK: Stretch — disk space quota check (warns when < 500 MB)
+    .get(
+      "/disk",
+      describeRoute({
+        summary: "Get disk space",
+        description: "Returns available and total disk space for the working directory.",
+        operationId: "disk.get",
+        responses: {
+          200: {
+            description: "Disk space info",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    available: z.number().describe("Available bytes"),
+                    total: z.number().describe("Total bytes"),
+                    path: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        try {
+          // On Android, Instance.directory may be "/" (rootfs, read-only → 0 available).
+          // Fall back to HOME so the quota reflects the actual data partition.
+          const dir = Instance.directory === "/" ? os.homedir() : Instance.directory
+          const stats = await (fs_native as any).statfs(dir)
+          const available = stats.bsize * stats.bavail
+          const total = stats.bsize * stats.blocks
+          return c.json({ available, total, path: dir })
+        } catch {
+          // statfs not available (Windows, old Node) — return sentinel values
+          return c.json({ available: -1, total: -1, path: Instance.directory })
+        }
+      },
+    )
+    .get(
+      "/path",
+      describeRoute({
+        summary: "Get paths",
+        description: "Retrieve the current working directory and related path information for the Unifia instance.",
+        operationId: "path.get",
+        responses: {
+          200: {
+            description: "Path",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      home: z.string(),
+                      state: z.string(),
+                      config: z.string(),
+                      worktree: z.string(),
+                      directory: z.string(),
+                    })
+                    .meta({
+                      ref: "Path",
+                    }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json({
+          home: Global.Path.home,
+          state: Global.Path.state,
+          config: Global.Path.config,
+          worktree: Instance.worktree,
+          directory: Instance.directory,
+        })
+      },
+    )
+    .get(
+      "/vcs",
+      describeRoute({
+        summary: "Get VCS info",
+        description: "Retrieve version control system (VCS) information for the current project, such as git branch.",
+        operationId: "vcs.get",
+        responses: {
+          200: {
+            description: "VCS info",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.Info),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
+        return c.json({
+          branch,
+          default_branch,
+        })
+      },
+    )
+    .get(
+      "/vcs/diff",
+      describeRoute({
+        summary: "Get VCS diff",
+        description: "Retrieve the current git diff for the working tree or against the default branch.",
+        operationId: "vcs.diff",
+        responses: {
+          200: {
+            description: "VCS diff",
+            content: {
+              "application/json": {
+                schema: resolver(Snapshot.FileDiff.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          mode: Vcs.Mode,
+        }),
+      ),
+      async (c) => {
+        return c.json(await Vcs.diff(c.req.valid("query").mode))
+      },
+    )
+    .get(
+      "/command",
+      describeRoute({
+        summary: "List commands",
+        description: "Get a list of all available commands in the Unifia system.",
+        operationId: "command.list",
+        responses: {
+          200: {
+            description: "List of commands",
+            content: {
+              "application/json": {
+                schema: resolver(Command.Info.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const commands = await Command.list()
+        return c.json(commands)
+      },
+    )
+    .get(
+      "/agent",
+      describeRoute({
+        summary: "List agents",
+        description: "Get a list of all available AI agents in the Unifia system.",
+        operationId: "app.agents",
+        responses: {
+          200: {
+            description: "List of agents",
+            content: {
+              "application/json": {
+                schema: resolver(Agent.Info.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const modes = await Agent.list()
+        return c.json(modes)
+      },
+    )
+    .get(
+      "/skill",
+      describeRoute({
+        summary: "List skills",
+        description: "Get a list of all available skills in the Unifia system.",
+        operationId: "app.skills",
+        responses: {
+          200: {
+            description: "List of skills",
+            content: {
+              "application/json": {
+                schema: resolver(Skill.Info.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const skills = await Skill.all()
+        return c.json(skills)
+      },
+    )
+    // FORK: Stretch Phase 5 — install skill via URL (direct SKILL.md or discovery index)
+    .post(
+      "/skill/install",
+      describeRoute({
+        summary: "Install a skill",
+        description:
+          "Install a skill from a URL. Accepts a direct SKILL.md URL or a discovery index URL. The skill is saved to the global ~/.claude/skills/ directory and immediately available.",
+        operationId: "app.skillInstall",
+        responses: {
+          200: {
+            description: "Installed skill info",
+            content: { "application/json": { schema: resolver(Skill.Info) } },
+          },
+          400: { description: "Bad request" },
+          422: { description: "Install failed" },
+        },
+      }),
+      validator("json", z.object({ url: z.string().url() })),
+      async (c) => {
+        const { url } = c.req.valid("json")
+        try {
+          const info = await Skill.install(url)
+          return c.json(info)
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          return c.json({ error: message }, 422)
+        }
+      },
+    )
+    // FORK: Stretch Phase 5 — uninstall a globally-installed skill
+    .delete(
+      "/skill/:name",
+      describeRoute({
+        summary: "Uninstall a skill",
+        description: "Remove a globally-installed skill by name. Only skills under ~/.claude/skills/ can be removed.",
+        operationId: "app.skillUninstall",
+        responses: {
+          200: { description: "Success" },
+          400: { description: "Bad request" },
+        },
+      }),
+      validator("param", z.object({ name: z.string().min(1) })),
+      async (c) => {
+        const { name } = c.req.valid("param")
+        await Skill.uninstall(name)
+        return c.json({ ok: true })
+      },
+    )
+    .get(
+      "/lsp",
+      describeRoute({
+        summary: "Get LSP status",
+        description: "Get LSP server status",
+        operationId: "lsp.status",
+        responses: {
+          200: {
+            description: "LSP server status",
+            content: {
+              "application/json": {
+                schema: resolver(LSP.Status.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await LSP.status())
+      },
+    )
+    // FORK: Phase 2 LSP routes — diagnostics/hover/definition/references/documentSymbol
+    .route("/lsp", LspRoutes())
+    // FORK: Phase 3 Git write routes — add/reset/commit/push/pull/log/blame/branches
+    .route("/git", GitRoutes())
+    // FORK: GitHub account connection — OAuth Device Flow + capability diagnostics
+    .route("/github", GithubRoutes())
+    .get(
+      "/formatter",
+      describeRoute({
+        summary: "Get formatter status",
+        description: "Get formatter status",
+        operationId: "formatter.status",
+        responses: {
+          200: {
+            description: "Formatter status",
+            content: {
+              "application/json": {
+                schema: resolver(Format.Status.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await Format.status())
+      },
+    )
+    .all("/*", async (c) => {
+      const embeddedWebUI = await embeddedUIPromise
+      const path = c.req.path
+
+      if (embeddedWebUI) {
+        const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+        if (!match) return c.json({ error: "Not Found" }, 404)
+        const file = Bun.file(match)
+        if (await file.exists()) {
+          c.header("Content-Type", file.type)
+          if (file.type.startsWith("text/html")) {
+            c.header("Content-Security-Policy", DEFAULT_CSP)
+          }
+          return c.body(await file.arrayBuffer())
+        } else {
+          return c.json({ error: "Not Found" }, 404)
+        }
+      } else {
+        const response = await proxy(`https://app.opencode.ai${path}`, {
+          ...c.req,
+          headers: {
+            ...c.req.raw.headers,
+            host: "app.opencode.ai",
+          },
+        })
+        const match = response.headers.get("content-type")?.includes("text/html")
+          ? (await response.clone().text()).match(
+              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
+            )
+          : undefined
+        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
+        response.headers.set("Content-Security-Policy", csp(hash))
+        return response
+      }
+    })

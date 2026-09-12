@@ -130,12 +130,12 @@ After: expected ~3–4 s (rough — needs on-device measurement).
 
 **Status**: PARTIAL / SKIP.
 
-**Diagnostic** (`packages/opencode/src/local-llm-server/auto-config.ts`):
+**Diagnostic** (`packages/unifia/src/local-llm-server/auto-config.ts`):
 - `deriveConfig` already sets `nThreads = clamp(2, 6, cpuCores.big)` — big
   cores only, no tweak needed.
 - sm8250 has no Vulkan/OpenCL driver exposed to userland (Android 11 base)
   → `gpuBackend === "none"` → `deriveConfig` throws unless
-  `OPENCODE_ALLOW_CPU_ONLY=1` is set. This is the correct behaviour (CPU-only
+  `UNIFIA_ALLOW_CPU_ONLY=1` is set. This is the correct behaviour (CPU-only
   LLM on a 6 GB phone would be 1–2 tok/s — unusable). README already
   documents the opt-in.
 - **Eco preset**: no explicit "Eco" button in

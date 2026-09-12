@@ -1,7 +1,7 @@
 import type {
   Command,
   Config,
-  OpencodeClient,
+  UnifiaClient,
   Path,
   Project,
   ProviderAuthResponse,
@@ -9,9 +9,9 @@ import type {
   Session,
   Todo,
 } from "../../types/sdk-shim"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { retry } from "@opencode-ai/util/retry"
+import { showToast } from "@unifia/ui/toast"
+import { getFilename } from "@unifia/util/path"
+import { retry } from "@unifia/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -87,7 +87,7 @@ function showErrors(input: {
 }
 
 export async function bootstrapGlobal(input: {
-  globalSDK: OpencodeClient
+  globalSDK: UnifiaClient
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
@@ -124,7 +124,7 @@ export async function bootstrapGlobal(input: {
         input.globalSDK.project.list().then((x) => {
           const projects = (x.data ?? [])
             .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .filter((p) => !!p.worktree && !p.worktree.includes("unifia-test"))
             .slice()
             .sort((a, b) => cmp(a.id, b.id))
           input.setGlobalStore("project", projects)
@@ -180,7 +180,7 @@ function warmSessions(input: {
   ids: string[]
   store: Store<State>
   setStore: SetStoreFunction<State>
-  sdk: OpencodeClient
+  sdk: UnifiaClient
 }) {
   const known = new Set(input.store.session.map((item) => item.id))
   const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
@@ -198,7 +198,7 @@ function warmSessions(input: {
 
 export async function bootstrapDirectory(input: {
   directory: string
-  sdk: OpencodeClient
+  sdk: UnifiaClient
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache

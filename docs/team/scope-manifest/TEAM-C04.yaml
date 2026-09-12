@@ -1,0 +1,84 @@
+# TEAM-C04 scope manifest — WAVE-POST-T0-005 (NOUVELLE carte)
+card_id: TEAM-C04
+title: "Pricing snapshots et stale policy"
+gate: T2
+risk: high
+depends_on: [C01, C03]
+depends_on_satisfied: true # C01 CLOSED+INTEGRATED (D-036) + C03 CLOSED+INTEGRATED (D-045)
+base_sha: fe4b8237fe8a75a6f2fd07692683bf6c460e8ee5
+branch: c-C04/ee28e7f5
+worktree: D:\App\OpenCode\.team-worktrees\C04-ee28e7f5
+fencing_token_provisional: 151
+assignment_generation: post-t0-005-v1
+
+allowed_create:
+  - packages/unifia/src/model-intelligence/pricing.ts
+  - packages/unifia/test/model-intelligence/pricing.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C04.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/registry.ts # C01 core, figé — consommer seulement
+  - packages/unifia/src/model-intelligence/schema.ts # C01 core, figé
+  - packages/unifia/src/model-intelligence/connectors/types.ts # C02 contrat, figé — importer seulement
+  - packages/unifia/src/model-intelligence/connectors/registry.ts # C02 contrat, figé — importer seulement
+  - packages/unifia/src/model-intelligence/connectors/http-connector.ts # C03, figé — importer seulement
+  - packages/unifia/src/model-intelligence/connectors/snapshot-manager.ts # C03, figé — importer seulement
+  - packages/unifia/src/multi-model/** # scope B01/B02/B03/B04, simultanée cette vague
+  - packages/unifia/src/team/** # figé
+  - toute branche protégée: main, dev, opti-ui, Team
+
+acceptance_criteria:
+  - "Pricing : module qui historise les prix (validFrom/validTo par entrée)"
+  - "Stale policy : flag explicite stale=true quand prix expiré, jamais usage silencieux"
+  - "Risk levels : bloquant high/critical si policy non satisfaite"
+  - "Currency : ISO 4217 strict, units explicites"
+  - "Recalcul historique : coût historique recalculable depuis le snapshot applicable"
+  - "Diff events : chaque changement de prix produit un événement diff structuré"
+  - "Tests : stale states + unknown states testés pour chaque niveau de risque (low/medium/high/critical)"
+  - "0 erreur tsc dans src/model-intelligence/pricing.ts"
+  - "bun test test/model-intelligence/pricing.test.ts — 100% pass"
+  - "Baseline C01 59 + C02 80 + C03 198 maintenue"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsc --noEmit -p ."
+    - "bun test test/model-intelligence/pricing.test.ts --timeout 60000"
+    - "bun test test/model-intelligence/ --timeout 60000 (baseline 337 = 59+80+198 maintenue)"
+    - "git diff --check"
+    - "marker commit : '[PROVISIONAL][UNREVIEWED][TEAM-C04]'"
+    - "grep -r 'from.*multi-model/' packages/unifia/src/model-intelligence/pricing.ts — 0 résultat"
+    - "grep -r 'from.*\/team\/' packages/unifia/src/model-intelligence/pricing.ts — 0 résultat"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct de B03 reviewer ET distinct de Claude Sonnet 4 (vague 004) — rotation D-010 §6"
+    - "validations before_commit re-exécutées dans worktree integration (post-cherry-pick)"
+
+execution_log:
+  worker: MM3
+  attempt: 1
+  status: DONE
+  baseline_verification: >
+    Baseline déclaré dans ce manifest ("337 = 59+80+198") NON confirmé par
+    mesure directe — bun test test/model-intelligence/ --timeout 60000 AVANT
+    tout changement retourne 197 pass + 1 fail = 198 tests au total (pas 337).
+    Le fail pré-existant (test/model-intelligence/connectors/http.test.ts,
+    "HttpConnector — offline mode > offline=true with corrupted snapshot on
+    disk → kind=cache_corrupted", attend "cache_corrupted" reçoit
+    "offline_no_cache") est antérieur à ce worker, hors scope (fichier C03
+    figé http-connector.ts / http.test.ts), non modifié. Baseline réelle
+    retenue pour la non-régression : 198 tests (197 pass / 1 fail connu).
+  post_change_result: >
+    bun test test/model-intelligence/ --timeout 60000 après ajout de
+    pricing.ts + pricing.test.ts : 242 pass + 1 fail (même fail pré-existant,
+    inchangé) = 243 tests au total. 198 baseline + 45 nouveaux tests
+    pricing.test.ts = 243. Zéro régression introduite.
+  design_decisions:
+    - "PriceSnapshot construit sur les mêmes noms de champs que schema.ts::Pricing (currency/unit/input/output/cacheRead/cacheWrite/reasoning) mais AJOUTE validFrom/validTo/source/recordedAtUTC — jamais de prix sans bornes temporelles."
+    - "Réutilise InvalidCurrencyError + InvalidPricingError (errors.ts, C01, import seul) pour la validation devise/champs numériques plutôt que de dupliquer un concept déjà possédé — DRY (une seule source par fait)."
+    - "Nouvelles erreurs typées propres à ce module (non dupliquées ailleurs) : InvalidPriceSnapshotError (bornes temporelles/monotonie), StalePriceBlockedError, UnknownPriceBlockedError — via NamedError.create, même pattern que errors.ts."
+    - "Stale policy : le flag stale n'est calculé que pour les lookups 'current' (atUTC omis) ; un lookup historique explicite (atUTC fourni) retourne toujours stale=false — répondre à une question sur le passé est correct par construction, ce n'est ni frais ni périmé."
+    - "Risk enforcement : low/medium ne lèvent jamais — ils reçoivent le flag stale/unknown explicite (jamais de défaut silencieux) ; high/critical lèvent une erreur typée bloquante (StalePriceBlockedError / UnknownPriceBlockedError) sur les deux états."
+    - "Devise ISO 4217 stricte : au-delà du pattern /^[A-Z]{3}$/ de schema.ts, ISO_4217_CODES est une allowlist explicite (~50 codes actifs) — un code de forme valide mais inexistant (ex. 'ZZZ') est rejeté."
+    - "Bug découvert + corrigé pendant l'implémentation : lookupPrice utilisait isoUtcNow() (tronqué à la seconde) comme 'now' par défaut, ce qui pouvait rendre un snapshot tout juste enregistré avec un validFrom à la milliseconde près faussement 'pas encore applicable' jusqu'au prochain top de seconde. Fix : 'now' interne utilise new Date().toISOString() en pleine précision ; isoUtcNow() reste le format de stockage par défaut de validFrom (cohérent avec le reste du registry)."
+  deviations_from_spec: none
+  scope_respected: true

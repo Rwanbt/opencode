@@ -2,12 +2,12 @@ import { action, useParams, useAction, useSubmission, json, query, createAsync }
 import { createStore } from "solid-js/store"
 import { createMemo, For, Show } from "solid-js"
 import { Modal } from "~/component/modal"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
-import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
-import { LiteData } from "@opencode-ai/console-core/lite.js"
+import { Billing } from "@unifia/console-core/billing.js"
+import { Database, eq, and, isNull } from "@unifia/console-core/drizzle/index.js"
+import { BillingTable, LiteTable } from "@unifia/console-core/schema/billing.sql.js"
+import { Actor } from "@unifia/console-core/actor.js"
+import { Subscription } from "@unifia/console-core/subscription.js"
+import { LiteData } from "@unifia/console-core/lite.js"
 import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./lite-section.module.css"
@@ -201,7 +201,7 @@ export function LiteSection() {
             </div>
             <div data-slot="beta-notice">
               {i18n.t("workspace.lite.subscription.selectProvider")}{" "}
-              <a href={language.route("/docs/providers/#opencode-go")} target="_blank" rel="noopener noreferrer">
+              <a href={language.route("/docs/providers/#unifia-go")} target="_blank" rel="noopener noreferrer">
                 {i18n.t("common.learnMore")}
               </a>
               .

@@ -1,4 +1,4 @@
-# OpenCode — Système complet de prompts (Cloud vs Local)
+# Unifia — Système complet de prompts (Cloud vs Local)
 
 > Ce fichier contient l'INTÉGRALITÉ des prompts système, descriptions d'outils, et mécanismes d'optimisation.
 > Objectif : permettre à d'autres IA d'analyser et proposer des optimisations.
@@ -74,7 +74,7 @@ Descriptions d'outils cloud (top consommateurs) :
 
 ## 2. Architecture du routing
 
-### Fichier : `packages/opencode/src/session/system.ts`
+### Fichier : `packages/unifia/src/session/system.ts`
 
 ```typescript
 import PROMPT_LOCAL from "./prompt/local.txt"
@@ -138,7 +138,7 @@ export namespace SystemPrompt {
 }
 ```
 
-### Fichier : `packages/opencode/src/tool/registry.ts` (filtrage outils)
+### Fichier : `packages/unifia/src/tool/registry.ts` (filtrage outils)
 
 ```typescript
 // 7 outils au lieu de 19 pour local-llm
@@ -173,7 +173,7 @@ const description = isLocal
 ### LOCAL — `local.txt` (~600 octets, ~150 tokens)
 
 ```
-You are opencode, a coding CLI tool. Be concise and direct.
+You are unifia, a coding CLI tool. Be concise and direct.
 
 Rules:
 - Run tools to complete tasks, don't just explain
@@ -191,15 +191,15 @@ Rules:
 ### DEFAULT — `default.txt` (8,766 octets, ~2,192 tokens)
 
 ```
-You are opencode, an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
+You are unifia, an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
 
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.
 
 If the user asks for help or wants to give feedback inform them of the following:
-- /help: Get help with using opencode
+- /help: Get help with using unifia
 - To give feedback, users should report the issue at https://github.com/anomalyco/opencode/issues
 
-When the user directly asks about opencode (eg 'can opencode do...', 'does opencode have...') or asks in second person (eg 'are you able...', 'can you do...'), first use the WebFetch tool to gather information to answer the question from opencode docs at https://opencode.ai
+When the user directly asks about unifia (eg 'can unifia do...', 'does unifia have...') or asks in second person (eg 'are you able...', 'can you do...'), first use the WebFetch tool to gather information to answer the question from unifia docs at https://opencode.ai
 
 # Tone and style
 You should be concise, direct, and to the point. When you run a non-trivial bash command, you should explain what the command does and why you are running it, to make sure the user understands what you are doing (this is especially important when you are running a command that will make changes to the user's system).
@@ -290,7 +290,7 @@ When referencing specific functions or pieces of code include the pattern `file_
 ### ANTHROPIC — `anthropic.txt` (8,317 octets, ~2,079 tokens)
 
 Identique à default.txt sauf :
-- Ajout "You are OpenCode, the best coding agent on the planet."
+- Ajout "You are Unifia, the best coding agent on the planet."
 - Ajout "Professional objectivity" section
 - Ajout "Task Management" avec TodoWrite obligatoire + exemples détaillés
 - Tool usage : "proactively use the Task tool with specialized agents"
@@ -574,7 +574,7 @@ Use the skill tool to load a skill when a task matches its description.
 
 ## 7. Mécanismes de fiabilité (code-level, pas prompt)
 
-### Prompt profiler (`packages/opencode/src/session/llm.ts`)
+### Prompt profiler (`packages/unifia/src/session/llm.ts`)
 
 ```typescript
 if (input.model.providerID === "local-llm") {
@@ -584,7 +584,7 @@ if (input.model.providerID === "local-llm") {
 }
 ```
 
-### Pre-flight guards (`packages/opencode/src/session/prompt.ts`)
+### Pre-flight guards (`packages/unifia/src/session/prompt.ts`)
 
 ```typescript
 function preflightCheck(toolId, args, model, messages): string | undefined {
@@ -619,7 +619,7 @@ const pfError = preflightCheck(item.id, args, input.model, input.messages)
 if (pfError) throw new Error(pfError)
 ```
 
-### Doom loop auto-break (`packages/opencode/src/session/processor.ts`)
+### Doom loop auto-break (`packages/unifia/src/session/processor.ts`)
 
 ```typescript
 const DOOM_LOOP_THRESHOLD = 2  // 4B models spiral after 2 identical calls
@@ -640,7 +640,7 @@ if (ctx.model.providerID === "local-llm") {
 // Cloud : yield* permission.ask({ permission: "doom_loop", ... })
 ```
 
-### Tool telemetry (`packages/opencode/src/session/processor.ts`)
+### Tool telemetry (`packages/unifia/src/session/processor.ts`)
 
 ```typescript
 interface ToolTelemetry {
@@ -671,28 +671,28 @@ if (ctx.telemetry.calls > 0 && ctx.model.providerID === "local-llm") {
 
 | Fichier | Rôle |
 |---------|------|
-| `packages/opencode/src/session/prompt/local.txt` | Prompt local (~150 tokens) |
-| `packages/opencode/src/session/prompt/default.txt` | Prompt cloud fallback (~2,192 tokens) |
-| `packages/opencode/src/session/prompt/anthropic.txt` | Prompt Claude (~2,079 tokens) |
-| `packages/opencode/src/session/prompt/gemini.txt` | Prompt Gemini (~3,882 tokens) |
-| `packages/opencode/src/session/prompt/beast.txt` | Prompt GPT-4/o1/o3 (~2,807 tokens) |
-| `packages/opencode/src/session/prompt/gpt.txt` | Prompt GPT (~2,348 tokens) |
-| `packages/opencode/src/session/prompt/kimi.txt` | Prompt Kimi (~2,198 tokens) |
-| `packages/opencode/src/session/prompt/trinity.txt` | Prompt Trinity (~1,961 tokens) |
-| `packages/opencode/src/session/prompt/codex.txt` | Prompt Codex (~1,867 tokens) |
-| `packages/opencode/src/session/prompt/copilot-gpt-5.txt` | Prompt Copilot GPT-5 (~3,596 tokens) |
-| `packages/opencode/src/session/system.ts` | Router prompt + env + skills |
-| `packages/opencode/src/tool/registry.ts` | Filtrage outils + skeletons |
-| `packages/opencode/src/session/llm.ts` | Prompt profiler |
-| `packages/opencode/src/session/processor.ts` | Doom loop (threshold=2) + telemetry |
-| `packages/opencode/src/session/prompt.ts` | Pre-flight guards (4 guards code-level) |
-| `packages/opencode/src/tool/bash.txt` | Description bash (9,405 octets) |
-| `packages/opencode/src/tool/edit.txt` | Description edit (1,379 octets) |
-| `packages/opencode/src/tool/read.txt` | Description read (1,172 octets) |
-| `packages/opencode/src/tool/write.txt` | Description write (941 octets) |
-| `packages/opencode/src/tool/glob.txt` | Description glob (828 octets) |
-| `packages/opencode/src/tool/grep.txt` | Description grep (817 octets) |
-| `packages/opencode/src/tool/question.txt` | Description question (622 octets) |
+| `packages/unifia/src/session/prompt/local.txt` | Prompt local (~150 tokens) |
+| `packages/unifia/src/session/prompt/default.txt` | Prompt cloud fallback (~2,192 tokens) |
+| `packages/unifia/src/session/prompt/anthropic.txt` | Prompt Claude (~2,079 tokens) |
+| `packages/unifia/src/session/prompt/gemini.txt` | Prompt Gemini (~3,882 tokens) |
+| `packages/unifia/src/session/prompt/beast.txt` | Prompt GPT-4/o1/o3 (~2,807 tokens) |
+| `packages/unifia/src/session/prompt/gpt.txt` | Prompt GPT (~2,348 tokens) |
+| `packages/unifia/src/session/prompt/kimi.txt` | Prompt Kimi (~2,198 tokens) |
+| `packages/unifia/src/session/prompt/trinity.txt` | Prompt Trinity (~1,961 tokens) |
+| `packages/unifia/src/session/prompt/codex.txt` | Prompt Codex (~1,867 tokens) |
+| `packages/unifia/src/session/prompt/copilot-gpt-5.txt` | Prompt Copilot GPT-5 (~3,596 tokens) |
+| `packages/unifia/src/session/system.ts` | Router prompt + env + skills |
+| `packages/unifia/src/tool/registry.ts` | Filtrage outils + skeletons |
+| `packages/unifia/src/session/llm.ts` | Prompt profiler |
+| `packages/unifia/src/session/processor.ts` | Doom loop (threshold=2) + telemetry |
+| `packages/unifia/src/session/prompt.ts` | Pre-flight guards (4 guards code-level) |
+| `packages/unifia/src/tool/bash.txt` | Description bash (9,405 octets) |
+| `packages/unifia/src/tool/edit.txt` | Description edit (1,379 octets) |
+| `packages/unifia/src/tool/read.txt` | Description read (1,172 octets) |
+| `packages/unifia/src/tool/write.txt` | Description write (941 octets) |
+| `packages/unifia/src/tool/glob.txt` | Description glob (828 octets) |
+| `packages/unifia/src/tool/grep.txt` | Description grep (817 octets) |
+| `packages/unifia/src/tool/question.txt` | Description question (622 octets) |
 
 ---
 

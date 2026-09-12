@@ -8,9 +8,9 @@
  * budget.
  */
 import { produce } from "solid-js/store"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
-import { Binary } from "@opencode-ai/util/binary"
+import { base64Encode } from "@unifia/util/encode"
+import { getFilename } from "@unifia/util/path"
+import { Binary } from "@unifia/util/binary"
 import type { Session } from "../../types/sdk-shim"
 import type { LocalProject } from "@/context/layout"
 import type { useGlobalSDK } from "@/context/global-sdk"
@@ -19,7 +19,7 @@ import type { useLayout } from "@/context/layout"
 import type { usePlatform } from "@/context/platform"
 import type { useServer } from "@/context/server"
 import type { useLanguage } from "@/context/language"
-import type { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { useDialog } from "@unifia/ui/context/dialog"
 import { displayName, workspaceKey } from "./helpers"
 
 export interface ProjectActionsDeps {

@@ -1,0 +1,15 @@
+Recall what was decided, learned or constrained on this project in earlier sessions.
+
+The memory is a vault of Markdown notes with structured frontmatter, written by you and by the user across sessions. It holds the things that are true about the project but are not visible in the code: why an approach was rejected, a constraint the user stated once, a failure that must not be repeated, a preference about how they want to work.
+
+Use it when:
+- the user refers to something decided earlier ("comme on avait dit", "the approach we chose")
+- you are about to make a choice that smells like one already made
+- you hit a failure that has the shape of a known one
+- you are starting work on an area you have not seen in this session
+
+Do NOT use it to search source code — `grep`, `glob` and `codesearch` are for that, and they are better at it. The memory holds prose about the project, not the project.
+
+Results are ranked by relevance and bounded. Each one shows its locator, type, lifecycle and id. Pass the locator to `memory_read` for the full note.
+
+Notes may be withheld by the vault's egress policy: a note that declares it must not reach a remote model will not be returned when the current turn runs on a cloud model. When that happens the tool says so and names the setting, rather than reporting an empty result.

@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Unifia Desktop
 
-Native OpenCode desktop app, built with Tauri v2.
+Native Unifia desktop app, built with Tauri v2.
 
 ## Features
 
@@ -37,16 +37,16 @@ Custom GGUF models downloadable from HuggingFace with VRAM-based recommendations
 
 #### llama-server Flags
 
-Most numeric flags are derived at runtime by `packages/opencode/src/local-llm-server/auto-config.ts` (`deriveConfig()`) from the detected device profile (total/free RAM, big CPU cores, GPU backend + VRAM, thermal state). Environment variables let advanced users pin specific values.
+Most numeric flags are derived at runtime by `packages/unifia/src/local-llm-server/auto-config.ts` (`deriveConfig()`) from the detected device profile (total/free RAM, big CPU cores, GPU backend + VRAM, thermal state). Environment variables let advanced users pin specific values.
 
 | Flag | Value | Purpose |
 |------|-------|---------|
-| `--n-gpu-layers <N>` | adaptive (env: `OPENCODE_N_GPU_LAYERS`) | Layers offloaded to fit 85 % of detected VRAM |
+| `--n-gpu-layers <N>` | adaptive (env: `UNIFIA_N_GPU_LAYERS`) | Layers offloaded to fit 85 % of detected VRAM |
 | `--threads <N>` | adaptive (2–6, big cores only) | Performance cores via cpufreq split |
 | `--batch-size <N>` | adaptive (64–512) | Scales with free RAM, halved under thermal throttle |
 | `--ubatch-size <N>` | batch / 4 | Sub-batch for prefill |
-| `--cache-type-k/v` | adaptive f16/q8_0/q4_0 (env: `OPENCODE_KV_CACHE_TYPE`) | Quant tier from VRAM headroom |
-| `--fit on` | auto (fork-only, opt-in via `OPENCODE_LLAMA_ENABLE_FIT`) | Secondary VRAM adjustment |
+| `--cache-type-k/v` | adaptive f16/q8_0/q4_0 (env: `UNIFIA_KV_CACHE_TYPE`) | Quant tier from VRAM headroom |
+| `--fit on` | auto (fork-only, opt-in via `UNIFIA_LLAMA_ENABLE_FIT`) | Secondary VRAM adjustment |
 | `-fitt 512` / `-fitc 16384` | margin + min ctx (when `--fit` enabled) | Never below 16K context |
 | `--flash-attn on` | — | Flash Attention |
 | `-np 1` | single slot | Minimize VRAM |
@@ -110,7 +110,7 @@ Globe icon in prompt toolbar — toggle web search per message.
 
 Providers that redirect back to the app no longer require the user to
 copy-paste the authorization code. Register
-`opencode://oauth/callback?providerID=<id>&code=<code>&state=<opt>` as
+`unifia://oauth/callback?providerID=<id>&code=<code>&state=<opt>` as
 the `redirect_uri` and the desktop shell auto-finalises the token
 exchange — see
 [`packages/app/src/pages/layout/deep-links.ts`](../app/src/pages/layout/deep-links.ts)
@@ -145,12 +145,12 @@ otherwise abuse.
 
 ```bash
 # 1. Build CLI sidecar
-cd packages/opencode && bun run build --single
+cd packages/unifia && bun run build --single
 
 # 2. Copy sidecar
 mkdir -p packages/desktop/src-tauri/sidecars
-cp packages/opencode/dist/opencode-windows-x64/bin/opencode.exe \
-   packages/desktop/src-tauri/sidecars/opencode-cli-x86_64-pc-windows-msvc.exe
+cp packages/unifia/dist/opencode-windows-x64/bin/opencode.exe \
+   packages/desktop/src-tauri/sidecars/unifia-cli-x86_64-pc-windows-msvc.exe
 
 # 3. Build (requires MSVC on Windows for ONNX Runtime)
 bun run --cwd packages/desktop tauri build

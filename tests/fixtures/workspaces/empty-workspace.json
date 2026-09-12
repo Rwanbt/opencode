@@ -1,0 +1,15 @@
+{
+  "name": "empty-workspace",
+  "description": "Workspace vide (fresh init)",
+  "type": "empty",
+  "structure": {
+    "expected_files": [],
+    "expected_count": "0 files"
+  },
+  "size": "empty",
+  "agent_test_scenarios": [
+    "init_project",
+    "first_file",
+    "first_commit"
+  ]
+}

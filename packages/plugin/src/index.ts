@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createUnifiaClient,
   Project,
   Model,
   Provider,
@@ -10,13 +10,24 @@ import type {
   Part,
   Auth,
   Config as SDKConfig,
-} from "@opencode-ai/sdk"
-import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk-shared"
+} from "@unifia/sdk"
+import type { Provider as ProviderV2, Model as ModelV2 } from "@unifia/sdk-shared"
 
 import type { BunShell } from "./shell.js"
 import type { ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
+export {
+  DEFAULT_PLUGIN_CAPABILITY,
+  PLUGIN_KINDS,
+  PLUGIN_SPEC_VERSION,
+  grantCapabilities,
+  parsePluginManifest,
+  type PluginKind,
+  type PluginManifestField,
+  type PluginManifest,
+  type PluginSpecVersion,
+} from "./plugin-manifest.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -25,7 +36,7 @@ export type ProviderContext = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createUnifiaClient>
   project: Project
   directory: string
   worktree: string

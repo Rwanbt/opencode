@@ -10,17 +10,17 @@ Ne prihvatamo izvještaje o sigurnosti generisane pomoću AI. Primamo ih veliki 
 
 ### Pregled
 
-OpenCode je AI-pokretani asistent za kodiranje koji se izvršava lokalno na vašoj mašini. Pruža agentski sistem s pristupom moćnim alatima uključujući izvršavanje shell-a, operacije nad datotekama i web pristup.
+Unifia Workbench je AI-pokretani asistent za kodiranje koji se izvršava lokalno na vašoj mašini. Pruža agentski sistem s pristupom moćnim alatima uključujući izvršavanje shell-a, operacije nad datotekama i web pristup.
 
 ### Bez sandboxa
 
-OpenCode **ne** stavlja agenta u sandbox. Sistem dozvola postoji kao UX funkcija da pomogne korisnicima da budu svjesni šta agent radi — traži potvrdu prije izvršavanja naredbi, pisanja datoteka itd. Međutim, nije dizajniran da pruži sigurnosnu izolaciju.
+Unifia Workbench **ne** stavlja agenta u sandbox. Sistem dozvola postoji kao UX funkcija da pomogne korisnicima da budu svjesni šta agent radi — traži potvrdu prije izvršavanja naredbi, pisanja datoteka itd. Međutim, nije dizajniran da pruži sigurnosnu izolaciju.
 
-Ako trebate stvarnu izolaciju, pokrenite OpenCode unutar Docker kontejnera ili VM-a.
+Ako trebate stvarnu izolaciju, pokrenite Unifia Workbench unutar Docker kontejnera ili VM-a.
 
 ### Serverski režim
 
-Serverski režim je isključivo opt-in. Kad je omogućen, postavite `OPENCODE_SERVER_PASSWORD` kako biste zahtijevali HTTP Basic Auth. Bez toga server radi bez autentifikacije (uz upozorenje). Odgovornost je krajnjeg korisnika da zaštiti server — bilo koja funkcionalnost koju pruža nije ranjivost.
+Serverski režim je isključivo opt-in. Kad je omogućen, postavite `UNIFIA_SERVER_PASSWORD` kako biste zahtijevali HTTP Basic Auth. Bez toga server radi bez autentifikacije (uz upozorenje). Odgovornost je krajnjeg korisnika da zaštiti server — bilo koja funkcionalnost koju pruža nije ranjivost.
 
 ### Izvan opsega
 
@@ -38,7 +38,7 @@ Serverski režim je isključivo opt-in. Kad je omogućen, postavite `OPENCODE_SE
 
 Cijenimo vaše napore da odgovorno otkrijete svoje nalaze i učinit ćemo sve što možemo da prepoznamo vaše doprinose.
 
-Za prijavu sigurnosnog problema, koristite karticu GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new).
+Za prijavu sigurnosnog problema, koristite karticu GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new).
 
 Tim će poslati odgovor s opisom sljedećih koraka. Nakon prvog odgovora, sigurnosni tim će vas obavještavati o napretku prema popravku i punoj objavi i može tražiti dodatne informacije.
 

@@ -26,7 +26,7 @@ import type {
   LspTextEdit,
   LspWorkspaceEdit,
   LspCompletionItem,
-} from "@opencode-ai/ui/code-mirror-lsp"
+} from "@unifia/ui/code-mirror-lsp"
 
 export interface LspHandlerExtras {
   prepareRename: (word: string, line: number, character: number) => void

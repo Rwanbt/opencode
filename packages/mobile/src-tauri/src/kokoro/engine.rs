@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use opencode_kokoro_shared::{g2p, tokenizer};
+use unifia_kokoro_shared::{g2p, tokenizer};
 
 const STYLE_DIM: usize = 256;
 

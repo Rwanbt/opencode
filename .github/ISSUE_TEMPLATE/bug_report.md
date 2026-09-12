@@ -1,40 +1,56 @@
----
 name: Bug Report
-about: Report a bug or unexpected behavior
-title: "[Bug] "
-labels: bug
-assignees: ''
----
 
-## Describe the bug
+**À propos de Unifia Workbench**
 
-A clear and concise description of what the bug is.
+- **Version** : `unifia --version` (sortie)
+- **OS** : [ ] macOS [ ] Linux [ ] Windows
+- **Runtime** : [ ] Unifia (legacy) [ ] Unifia [ ] Fake (test)
 
-## Steps to Reproduce
+## Description
 
-1. Go to '...'
-2. Click on '...'
-3. See error
+<!-- Décrire le bug -->
 
-## Expected behavior
+## Reproduction
 
-A clear description of what you expected to happen.
+<!-- Étapes pour reproduire -->
 
-## Actual behavior
+1. 
+2. 
+3. 
 
-What actually happened.
+## Comportement attendu
 
-## Environment
+<!-- Ce qui devrait se passer -->
 
-- OS: [e.g. Windows 11, macOS 14, Ubuntu 22.04]
-- OpenCode version: [e.g. 1.3.15]
-- Platform: [Desktop / Mobile / Web]
-- Provider: [e.g. Anthropic, OpenAI, local LLM]
+## Comportement actuel
 
-## Logs / Screenshots
+<!-- Ce qui se passe réellement -->
 
-If applicable, attach logs or screenshots.
+## Captures d'écran
 
-## Additional context
+<!-- Si applicable -->
 
-Any other context about the problem.
+## Logs
+
+<!-- Sortie console, audit log (sans secrets !) -->
+
+```
+[coller les logs ici]
+```
+
+## Environnement
+
+- **Provider** : [ ] unifia [ ] OpenAI [ ] Anthropic [ ] Autre
+- **Model** : 
+- **Workspace type** : [ ] mono-repo [ ] poly-repo [ ] single-file
+- **Capacities actives** : 
+
+## Priorité
+
+- [ ] Bloquant (impossible d'utiliser Unifia)
+- [ ] Majeur (feature cassée, workaround existant)
+- [ ] Mineur (cosmétique, polish)
+
+## Sécurité
+
+- [ ] Ce bug est lié à un problème de sécurité (secret leak, escalation, etc.)

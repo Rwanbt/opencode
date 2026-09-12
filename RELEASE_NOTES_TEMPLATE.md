@@ -1,6 +1,6 @@
-# OpenCode Fork — Release Notes Template
+# Unifia Fork — Release Notes Template
 
-> Use this template for every release of the `Rwanbt/opencode` fork.
+> Use this template for every release of the `Rwanbt/unifia` fork.
 > Replace the `<...>` placeholders, keep the section order, drop empty
 > subsections. The first published release using this template is the
 > merge of the pre-production hardening work tracked in
@@ -22,7 +22,7 @@
 #### W9 — Shell environment is now filtered before it reaches the sidecar
 
 The desktop launcher used to inherit the **entire** login-shell environment
-(`zsh -il` / `bash -l`) and forward it to the `opencode` sidecar. Starting
+(`zsh -il` / `bash -l`) and forward it to the `unifia` sidecar. Starting
 this release, only an explicit allowlist is forwarded:
 
 - **Exact allowlist:** `PATH`, `HOME`, `USER`, `LANG`, `LANGUAGE`, `TERM`,
@@ -36,18 +36,18 @@ this release, only an explicit allowlist is forwarded:
 
 - Users who exported `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
   `GITHUB_TOKEN`, etc. in `~/.zshrc` / `~/.bashrc` / `~/.profile`
-  expecting OpenCode to pick them up transparently.
+  expecting Unifia to pick them up transparently.
 - MCP servers relying on `GITHUB_TOKEN` being inherited from the user
   shell.
 
 **Migration path**
 
-1. Preferred: declare credentials via `opencode auth login <provider>`
+1. Preferred: declare credentials via `unifia auth login <provider>`
    so they land in `auth.json` (or the OS keychain, opt-in via
-   `OPENCODE_AUTH_STORAGE=keychain`).
+   `UNIFIA_AUTH_STORAGE=keychain`).
 2. If you need a variable to reach the sidecar for a specific command,
    export it with the `OPENCODE_` prefix (forwarded by default) or pass
-   it inline: `ANTHROPIC_API_KEY=xxx opencode ...`.
+   it inline: `ANTHROPIC_API_KEY=xxx unifia ...`.
 3. For MCP servers, declare the required environment explicitly in the
    MCP server config (`env: { GITHUB_TOKEN: "..." }`), not via shell
    inheritance.
@@ -60,8 +60,8 @@ this release, only an explicit allowlist is forwarded:
   tasks beyond the cap stay `queued` and drain FIFO.
 - **llama-server tuning** — `--mmap`, `--slots`, `--slot-save-path`,
   `--cache-reuse 256`, speculative decoding via
-  `OPENCODE_DRAFT_MODEL` with VRAM headroom guard
-  (`OPENCODE_DRAFT_FORCE=1` opt-out).
+  `UNIFIA_DRAFT_MODEL` with VRAM headroom guard
+  (`UNIFIA_DRAFT_FORCE=1` opt-out).
 - **Crash reporter** — on-disk JSON crash dumps under
   `<datadir>/crashes/`, rotated at 50 files, opt-in upload via
   `experimental.crash.upload_endpoint`.
@@ -77,7 +77,7 @@ this release, only an explicit allowlist is forwarded:
   the secondary provider; no mid-stream switching.
 - **Thermal listener (scaffold)** — `get_thermal_state` Tauri command
   on Android, polled every 30 s to derive the runtime profile.
-  `OPENCODE_THERMAL_FORCE=1` enables desktop simulation.
+  `UNIFIA_THERMAL_FORCE=1` enables desktop simulation.
 - **WebSocket ticket flow** — `POST /auth/ws-ticket` issues 60-second
   single-use JWTs; clients upgrade via `Sec-WebSocket-Protocol:
   bearer,<jwt>` or cookie. Query-string legacy gated by
@@ -100,7 +100,7 @@ this release, only an explicit allowlist is forwarded:
 - **W7** — MCP tool scoping uses exact `Set.has` lookups; fixes the
   `github` vs `github_enterprise` prefix collision.
 - **W8** — CORS allowlist tightened to
-  `opencode.ai / www.opencode.ai / docs.opencode.ai /
+  `unifia.ai / www.opencode.ai / docs.opencode.ai /
   console.opencode.ai` + dev-loopback origins.
 - **W1/W2/W3** — typed task cost helper, typed `getWorktreeInfo`
   errors logged, `experimental.task.cost_cap` enforced.
@@ -116,7 +116,7 @@ this release, only an explicit allowlist is forwarded:
   release assets. Verify with:
   ```
   cosign verify-blob \
-    --certificate-identity-regexp 'https://github.com/Rwanbt/opencode/.+' \
+    --certificate-identity-regexp 'https://github.com/Rwanbt/unifia/.+' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     --signature <file>.sig --certificate <file>.cert <file>
   ```
@@ -124,7 +124,7 @@ this release, only an explicit allowlist is forwarded:
   artifact. Verify with `slsa-verifier verify-artifact`.
 - Dependabot, CodeQL and SBOM remain enabled per `PR` and weekly cron.
 - `auth.json` tokens can now optionally live in the OS keychain on
-  desktop (`OPENCODE_AUTH_STORAGE=keychain`). Migration is idempotent
+  desktop (`UNIFIA_AUTH_STORAGE=keychain`). Migration is idempotent
   and rollback-safe (renames `auth.json` → `auth.json.migrated`).
 
 ### Upgrade notes
@@ -132,7 +132,7 @@ this release, only an explicit allowlist is forwarded:
 - If you relied on shell-inherited credentials, re-read the **W9
   Breaking change** section above before upgrading.
 - The keychain backend is **opt-in** this release
-  (`OPENCODE_AUTH_STORAGE=keychain`). Default remains the on-disk
+  (`UNIFIA_AUTH_STORAGE=keychain`). Default remains the on-disk
   `auth.json` at mode 0o600.
 - Android LAN connectivity to non-RFC1918 hosts over plain HTTP is
   rejected. Use HTTPS or run the server on a LAN range.
@@ -150,16 +150,16 @@ sha256sum -c <artifact>.sha256
 cosign verify-blob ...   # see Security section
 slsa-verifier verify-artifact <artifact> \
   --provenance-path <artifact>.intoto.jsonl \
-  --source-uri github.com/Rwanbt/opencode \
+  --source-uri github.com/Rwanbt/unifia \
   --source-tag <vX.Y.Z>
 ```
 
 | Artifact | SHA-256 |
 |----------|---------|
-| `<opencode-desktop-x86_64.msi>` | `<fill in from .sha256>` |
-| `<opencode-desktop-aarch64.dmg>` | `<fill in from .sha256>` |
-| `<opencode-mobile.apk>` | `<fill in from .sha256>` |
-| `<opencode-cli-linux.tar.gz>` | `<fill in from .sha256>` |
+| `<unifia-desktop-x86_64.msi>` | `<fill in from .sha256>` |
+| `<unifia-desktop-aarch64.dmg>` | `<fill in from .sha256>` |
+| `<unifia-mobile.apk>` | `<fill in from .sha256>` |
+| `<unifia-cli-linux.tar.gz>` | `<fill in from .sha256>` |
 
 ### References
 

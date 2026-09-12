@@ -1,6 +1,6 @@
 # Maestro E2E flows (Android)
 
-Device/emulator end-to-end flows for OpenCode mobile (`appId: ai.opencode.mobile`).
+Device/emulator end-to-end flows for Unifia mobile (`appId: ai.opencode.mobile`).
 These complement the host suite (`cargo test`, `bun test`) and the manual
 [device smoke test](../../../docs/DEVICE-SMOKE-TEST.md) by automating the
 device-only paths that no host/CI can reach (seccomp, SELinux, `nativeLibraryDir`,

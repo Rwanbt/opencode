@@ -1,12 +1,38 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@unifia/plugin",
   "version": "1.3.15",
+  "description": "Author plugins and custom tools for Unifia — plugin lifecycle hooks, the tool() helper and the TUI extension types.",
+  "keywords": [
+    "unifia",
+    "plugin",
+    "tools",
+    "ai",
+    "agent",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Rwanbt/unifia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rwanbt/unifia.git",
+    "directory": "packages/plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/Rwanbt/unifia/issues"
+  },
   "type": "module",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "tsc"
+    "compile": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "build": "bun run compile",
+    "test": "bun test test/"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -14,22 +40,29 @@
     "./tui": "./src/tui.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/sdk-shared": "workspace:*",
+    "@unifia/sdk": "workspace:*",
+    "@unifia/sdk-shared": "workspace:*",
+    "@unifia/skill-hub": "workspace:*",
     "zod": "catalog:"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.1.96",
-    "@opentui/solid": ">=0.1.96"
+    "@opentui/solid": ">=0.1.96",
+    "@types/node": "*"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
       "optional": true
     },
     "@opentui/solid": {
+      "optional": true
+    },
+    "@types/node": {
       "optional": true
     }
   },

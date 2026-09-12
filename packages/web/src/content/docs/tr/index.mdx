@@ -1,15 +1,15 @@
 ---
 title: Giriş
-description: OpenCode kullanmaya başlayın.
+description: Unifia kullanmaya başlayın.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**Unifia**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
-![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+![unifia TUI with the unifia theme](../../../assets/lander/screenshot.png)
 
 Başlayalım.
 
@@ -17,7 +17,7 @@ Başlayalım.
 
 #### Ön koşullar
 
-OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
+Unifia'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 1. Şu gibi modern bir terminal emülatörü:
    - [WezTerm](https://wezterm.org), cross-platform (tüm platformlarda)
@@ -31,7 +31,7 @@ OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 ## Kurulum
 
-OpenCode'u kurmanın en kolay yolu kurulum betiğidir.
+Unifia'u kurmanın en kolay yolu kurulum betiğidir.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,31 +79,31 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
   brew install anomalyco/tap/opencode
   ```
 
-  > En güncel sürümler için OpenCode tap'ini kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
+  > En güncel sürümler için Unifia tap'ini kullanmanızı öneririz. Resmi `brew install unifia` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
 
 - **Paru'yu Arch Linux'ta kullanma**
 
   ```bash
-  sudo pacman -S opencode           # Arch Linux (Stable)
+  sudo pacman -S unifia           # Arch Linux (Stable)
   paru -S opencode-bin              # Arch Linux (Latest from AUR)
   ```
 
 #### Windows
 
 :::tip[Önerilen: WSL kullanın]
-Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve OpenCode'un özellikleriyle tam uyumluluğu sağlar.
+Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve Unifia'un özellikleriyle tam uyumluluğu sağlar.
 :::
 
 - **Chocolatey Kullanımı**
 
   ```bash
-  choco install opencode
+  choco install unifia
   ```
 
 - **Scoop Kullanımı**
 
   ```bash
-  scoop install opencode
+  scoop install unifia
   ```
 
 - **NPM kullanarak**
@@ -124,7 +124,7 @@ Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/window
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
+Unifia'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
 
 İkili dosyayı [Releases](https://github.com/anomalyco/opencode/releases)'dan da alabilirsiniz.
 
@@ -132,12 +132,12 @@ OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 
 ## Yapılandırma
 
-OpenCode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
+Unifia ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
-LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-OpenCode ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
+LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [Unifia Zen](/docs/zen) kullanmanızı öneririz.
+Unifia ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
 
-1. TUI'de `/connect` komutunu çalıştırın, OpenCode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+1. TUI'de `/connect` komutunu çalıştırın, Unifia'u seçin ve [unifia.ai/auth](https://opencode.ai/auth)'ye gidin.
 
    ```txt
    /connect
@@ -166,31 +166,31 @@ Artık bir sağlayıcı yapılandırdığınıza göre, üzerinde çalışmak is
 cd /path/to/project
 ```
 
-Ve OpenCode'u çalıştırın.
+Ve Unifia'u çalıştırın.
 
 ```bash
-opencode
+unifia
 ```
 
-Daha sonra aşağıdaki komutu çalıştırarak proje için OpenCode'u başlatın.
+Daha sonra aşağıdaki komutu çalıştırarak proje için Unifia'u başlatın.
 
 ```bash frame="none"
 /init
 ```
 
-Bu, OpenCode'un projenizi analiz etmesini ve bir `AGENTS.md` proje kökünde dosyası oluşturmasını sağlayacaktır.
+Bu, Unifia'un projenizi analiz etmesini ve bir `AGENTS.md` proje kökünde dosyası oluşturmasını sağlayacaktır.
 
 :::tip
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, OpenCode'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
+Bu, Unifia'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
 
 ---
 
 ## Kullanım
 
-Artık projeniz üzerinde çalışmak için OpenCode'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
+Artık projeniz üzerinde çalışmak için Unifia'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
 
 AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
 
@@ -198,7 +198,7 @@ AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı ola
 
 ### Soru Sorma
 
-OpenCode'dan kod tabanını size açıklamasını isteyebilirsiniz.
+Unifia'dan kod tabanını size açıklamasını isteyebilirsiniz.
 
 :::tip
 Projedeki dosyaları bulanık aramak için `@` tuşunu kullanın.
@@ -214,11 +214,11 @@ Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı ol
 
 ### Özellik Ekleme
 
-OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
+Unifia'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   OpenCode, değişiklik yapma özelliğini kapatan bir \_Plan modu\_\na sahiptir.
+   Unifia, değişiklik yapma özelliğini kapatan bir \_Plan modu\_\na sahiptir.
    Bu modda, özelliğin nasıl uygulanacağını önerir.
 
    **Tab** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
@@ -235,11 +235,11 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   OpenCode'un isteğinizi anlaması için yeterli ayrıntı verin.
+   Unifia'un isteğinizi anlaması için yeterli ayrıntı verin.
    Ekibinizdeki junior bir geliştiriciyle konuşur gibi yazmak genelde iyi sonuç verir.
 
    :::tip
-   OpenCode'a ne istediğinizi anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
+   Unifia'a ne istediğinizi anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
    :::
 
 2. **Planı yineleyin**
@@ -255,7 +255,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   OpenCode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Unifia verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
    Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 3. **Özelliği oluşturun**
@@ -276,7 +276,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ### Değişiklik Yapma
 
-Daha basit değişikliklerde, önce planı incelemeden OpenCode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
+Daha basit değişikliklerde, önce planı incelemeden Unifia'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -284,13 +284,13 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-OpenCode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
+Unifia'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
 
 ---
 
 ### Değişiklikleri Geri Alma
 
-Diyelim ki OpenCode'dan bazı değişiklikler yapmasını istediniz.
+Diyelim ki Unifia'dan bazı değişiklikler yapmasını istediniz.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -302,13 +302,13 @@ Ama istediğinin bu olmadığını anlıyorsun. `/undo` komutunu kullanarak değ
 /undo
 ```
 
-OpenCode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
+Unifia değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Buradan komut isteminde ince ayar yapabilir ve OpenCode'dan tekrar denemesini isteyebilirsiniz.
+Buradan komut isteminde ince ayar yapabilir ve Unifia'dan tekrar denemesini isteyebilirsiniz.
 
 :::tip
 Birden çok değişikliği geri almak için `/undo` komutunu birden çok kez çalıştırabilirsiniz.
@@ -324,7 +324,7 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ## Paylaşma
 
-OpenCode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
+Unifia ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
 ```bash frame="none"
 /share
@@ -336,12 +336,12 @@ Bu, mevcut konuşmaya bir bağlantı oluşturacak ve bunu panonuza kopyalayacakt
 Konuşmalar varsayılan olarak paylaşılmaz.
 :::
 
-İşte OpenCode ile bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
+İşte Unifia ile bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
 
 ---
 
 ## Özelleştirme
 
-İşte bu kadar! Artık OpenCode'u kullanma konusunda profesyonelsiniz.
+İşte bu kadar! Artık Unifia'u kullanma konusunda profesyonelsiniz.
 
-Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [OpenCode config](/docs/config) ile oynayabilirsiniz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [Unifia config](/docs/config) ile oynayabilirsiniz.

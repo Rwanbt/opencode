@@ -1,6 +1,6 @@
 # Dependabot — First-Batch Triage Guide
 
-> Cible : triage du premier batch Dependabot sur `Rwanbt/opencode`
+> Cible : triage du premier batch Dependabot sur `Rwanbt/unifia`
 > (probablement 20–50 PRs — monorepo npm/Bun + 3 `Cargo.toml` Rust
 > + GitHub Actions). À exécuter dans la demi-journée qui suit
 > l'activation de `.github/dependabot.yml`.
@@ -70,8 +70,8 @@ niveau semver** — doit être reviewée par un humain avant merge.
 - `@anthropic-ai/sdk`
 - `openai`
 
-**Pourquoi** : le pipeline `streamText` dans `packages/opencode/src/session/llm.ts`
-et `packages/opencode/src/provider/fallback.ts` dépend de la forme exacte
+**Pourquoi** : le pipeline `streamText` dans `packages/unifia/src/session/llm.ts`
+et `packages/unifia/src/provider/fallback.ts` dépend de la forme exacte
 des chunks `LanguageModelV3` (`text-delta`, `reasoning-delta`,
 `tool-input-*`, `finish`). Un bump mineur peut introduire un nouveau
 type de chunk et casser silencieusement le détecteur pre/mid stream
@@ -110,7 +110,7 @@ Tauri 1→2 ont cassé la config `tauri.conf.json`, l'IPC, les plugins.
 - `effect`
 - `@effect/*`
 
-**Pourquoi** : le runtime OpenCode repose sur Effect (`Layer`, `Service`,
+**Pourquoi** : le runtime Unifia repose sur Effect (`Layer`, `Service`,
 `Effect.gen`). Les bumps majors Effect ont historiquement modifié les
 signatures de `Effect.runPromise`, `Layer.effect`, et les `Context.Tag`.
 
@@ -134,14 +134,14 @@ migration.
 - [ ] Lire le CHANGELOG.
 - [ ] `bun run drizzle-kit check` (si commande disponible).
 - [ ] Vérifier que les migrations existantes sous
-      `packages/opencode/migration/` se ré-appliquent sans erreur
+      `packages/unifia/migration/` se ré-appliquent sans erreur
       (DB from scratch).
 
 ### Zod
 
 - `zod`
 
-**Pourquoi** : usage massif dans `packages/opencode/src/config/config.ts`
+**Pourquoi** : usage massif dans `packages/unifia/src/config/config.ts`
 et routes Hono. Un bump major (Zod 3 → 4) change l'API `.parse`,
 `.safeParse`, les error messages et les methods chainables.
 

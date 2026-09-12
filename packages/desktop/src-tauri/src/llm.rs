@@ -28,6 +28,10 @@ fn llm_base_dir() -> std::path::PathBuf {
 fn llm_ref_dir() -> std::path::PathBuf {
     llm_base_dir().join("refs")
 }
+/// Where `reclaim_port` writes the transient lease it takes before killing.
+fn llm_lease_dir() -> std::path::PathBuf {
+    llm_base_dir().join("leases")
+}
 fn llm_owner_file() -> std::path::PathBuf {
     llm_base_dir().join("owner.pid")
 }
@@ -500,7 +504,7 @@ const MULTIMODAL_ARCHITECTURES: &[&str] = &[
 /// full GPU offload or full CPU. Confirmed on Ornith-1.0-9B (GGUF
 /// general.architecture = "qwen35", a hybrid SSM/Gated-Delta-Net model).
 /// Mirrors NO_PARTIAL_OFFLOAD_ARCHITECTURES in
-/// packages/opencode/src/local-llm-server/auto-config.ts — keep both in sync.
+/// packages/unifia/src/local-llm-server/auto-config.ts — keep both in sync.
 const NO_PARTIAL_OFFLOAD_ARCHITECTURES: &[&str] = &["qwen35"];
 
 /// Minimal GGUF metadata: `general.architecture` and `<arch>.block_count`.
@@ -510,7 +514,7 @@ struct GgufMeta {
 }
 
 /// Minimal GGUF metadata reader, mirroring the TS sidecar's `readGgufMeta`
-/// (packages/opencode/src/local-llm-server/auto-config.ts). Returns fields as
+/// (packages/unifia/src/local-llm-server/auto-config.ts). Returns fields as
 /// None on any parse failure (caller decides the safe default). GGUF spec v2/v3.
 fn read_gguf_meta(path: &std::path::Path) -> GgufMeta {
     use std::io::{Read, Seek, SeekFrom};
@@ -755,26 +759,37 @@ pub async fn load_llm_model(app: AppHandle, filename: String, draft_model: Optio
             }
             need_kill = true;
         }
+    // Ensure llama-server runtime is available
+    let server_exe = ensure_llama_runtime(&app).await?;
+
     if need_kill {
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            let _ = std::process::Command::new("taskkill")
-                .args(["/F", "/IM", "llama-server.exe"])
-                .creation_flags(0x08000000)
-                .output();
-        }
-        #[cfg(unix)]
-        {
-            let _ = std::process::Command::new("sh")
-                .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", LLM_PORT)])
-                .output();
+        // Frees the port from the process holding it, but only when that process
+        // is running our own llama-server binary.
+        //
+        // This was `taskkill /F /IM llama-server.exe` on Windows and
+        // `lsof -ti :PORT | xargs kill -9` on Unix. The first ended every
+        // llama-server on the machine — the name belongs to llama.cpp, so any
+        // copy the user runs themselves was fair game — and the second killed
+        // whoever held the port, ours or not. Comparing the full executable path
+        // is what tells our copy apart, since the name cannot.
+        match unifia_supervisor::Supervisor::new(llm_lease_dir()).reclaim_port(LLM_PORT, &server_exe) {
+            unifia_supervisor::Verdict::Owned => {
+                tracing::info!("[LLM] Reclaimed port {} from our own llama-server", LLM_PORT)
+            }
+            unifia_supervisor::Verdict::Gone => {
+                tracing::info!("[LLM] Port {} was already free", LLM_PORT)
+            }
+            unifia_supervisor::Verdict::Impostor { running_exe, .. } => {
+                return Err(format!(
+                    "port {} is held by {}, which this app did not start — refusing to kill it. \
+                     Stop that process yourself, or configure a different port.",
+                    LLM_PORT,
+                    running_exe.display()
+                ));
+            }
         }
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     }
-
-    // Ensure llama-server runtime is available
-    let server_exe = ensure_llama_runtime(&app).await?;
 
     tracing::info!(
         "[LLM] Starting llama-server with {} on port {}",
@@ -1116,7 +1131,7 @@ pub async fn check_llm_health(app: AppHandle, _port: Option<u16>) -> bool {
 }
 
 /// Adaptive llama-server config written by the TypeScript sidecar
-/// (packages/opencode/src/local-llm-server/auto-config.ts) into
+/// (packages/unifia/src/local-llm-server/auto-config.ts) into
 /// `{tmpdir}/opencode-llm-14097/llm_config.json`. All fields optional —
 /// we only override defaults when the sidecar has something to say.
 #[derive(Debug, Default, serde::Deserialize)]

@@ -6,8 +6,8 @@
 
 ## Do Not Translate (Locale Additions)
 
-- `OpenCode` (preserve casing in prose; keep `opencode` only in commands, package names, paths, or code)
-- `OpenCode CLI`
+- `Unifia` (preserve casing in prose; keep `unifia` only in commands, package names, paths, or code)
+- `Unifia CLI`
 - `CLI`, `TUI`, `MCP`, `OAuth`
 - Locale code `br` in repo config, code, and paths (repo alias for Brazilian Portuguese)
 

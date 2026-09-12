@@ -45,21 +45,21 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
-      - name: Install OpenCode
+      - name: Install Unifia
         if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
+        run: bun i -g unifia-ai
 
       - id: version
         run: |
           ./script/version.ts
         env:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_BUMP: ${{ inputs.bump }}
-          OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          UNIFIA_BUMP: ${{ inputs.bump }}
+          UNIFIA_VERSION: ${{ inputs.version }}
+          UNIFIA_API_KEY: ${{ secrets.UNIFIA_API_KEY }}
           GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -82,30 +82,35 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
       - name: Build
         id: build
         run: |
-          ./packages/opencode/script/build.ts
+          ./packages/unifia/script/build.ts
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          UNIFIA_VERSION: ${{ needs.version.outputs.version }}
+          UNIFIA_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
 
+      # if-no-files-found: error on all three uploads below — the paths said
+      # opencode-* while build.ts has emitted unifia-* since the rename, and the
+      # default (warn) let the release publish empty CLI artifacts in silence.
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli
+          name: unifia-cli
+          if-no-files-found: error
           path: |
-            packages/opencode/dist/opencode-darwin*
-            packages/opencode/dist/opencode-linux*
+            packages/unifia/dist/unifia-darwin*
+            packages/unifia/dist/unifia-linux*
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist/opencode-windows*
+          name: unifia-cli-windows
+          if-no-files-found: error
+          path: packages/unifia/dist/unifia-windows*
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -127,15 +132,15 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
+          name: unifia-cli-windows
+          path: packages/unifia/dist
 
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
       - name: Azure login
         uses: azure/login@9dfca5820a9055ed36abbd5b5710ace9f209ead5  # pin 2026-05-07
@@ -150,9 +155,9 @@ jobs:
           signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
           files: |
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\unifia-windows-arm64\bin\unifia.exe
+            ${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64\bin\unifia.exe
+            ${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64-baseline\bin\unifia.exe
           exclude-environment-credential: true
           exclude-workload-identity-credential: true
           exclude-managed-identity-credential: true
@@ -168,9 +173,9 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-arm64\bin\unifia.exe",
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64\bin\unifia.exe",
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64-baseline\bin\unifia.exe"
           )
 
           foreach ($file in $files) {
@@ -181,12 +186,12 @@ jobs:
           }
 
       - name: Repack Windows CLI archives
-        working-directory: packages/opencode/dist
+        working-directory: packages/unifia/dist
         shell: pwsh
         run: |
-          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
+          Compress-Archive -Path "unifia-windows-arm64\bin\*" -DestinationPath "unifia-windows-arm64.zip" -Force
+          Compress-Archive -Path "unifia-windows-x64\bin\*" -DestinationPath "unifia-windows-x64.zip" -Force
+          Compress-Archive -Path "unifia-windows-x64-baseline\bin\*" -DestinationPath "unifia-windows-x64-baseline.zip" -Force
 
       - name: Upload signed Windows CLI release assets
         if: needs.version.outputs.release != ''
@@ -195,19 +200,20 @@ jobs:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           gh release upload "v${{ needs.version.outputs.version }}" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-arm64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\unifia-windows-x64-baseline.zip" `
             --clobber `
             --repo "${{ needs.version.outputs.repo }}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli-signed-windows
+          name: unifia-cli-signed-windows
+          if-no-files-found: error
           path: |
-            packages/opencode/dist/opencode-windows-arm64
-            packages/opencode/dist/opencode-windows-x64
-            packages/opencode/dist/opencode-windows-x64-baseline
+            packages/unifia/dist/unifia-windows-arm64
+            packages/unifia/dist/unifia-windows-x64
+            packages/unifia/dist/unifia-windows-x64-baseline
 
   build-tauri:
     needs:
@@ -311,9 +317,9 @@ jobs:
           cd packages/desktop
           bun ./scripts/prepare.ts
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          UNIFIA_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
+          UNIFIA_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'unifia-cli-windows') || 'unifia-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -340,8 +346,8 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
@@ -355,8 +361,8 @@ jobs:
           releaseId: ${{ needs.version.outputs.release }}
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
-          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-          repo: ${{ (github.ref_name == 'beta' && 'opencode-beta') || '' }}
+          releaseAssetNamePattern: unifia-desktop-[platform]-[arch][ext]
+          repo: ${{ (github.ref_name == 'beta' && 'unifia-beta') || '' }}
           releaseCommitish: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
@@ -375,7 +381,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\opencode-cli-${{ matrix.settings.target }}.exe"
+            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\unifia-cli-${{ matrix.settings.target }}.exe"
           )
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\src-tauri\target\${{ matrix.settings.target }}\release\bundle\nsis\*.exe" | Select-Object -ExpandProperty FullName
 
@@ -482,16 +488,16 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
       - name: Prepare
         run: bun ./scripts/prepare.ts
         working-directory: packages/desktop-electron
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
+          UNIFIA_VERSION: ${{ needs.version.outputs.version }}
+          UNIFIA_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          UNIFIA_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'unifia-cli-windows') || 'unifia-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -500,7 +506,7 @@ jobs:
         run: bun run build
         working-directory: packages/desktop-electron
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          UNIFIA_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
       - name: Package and publish
         if: needs.version.outputs.release
@@ -508,7 +514,7 @@ jobs:
         working-directory: packages/desktop-electron
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          UNIFIA_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -522,7 +528,7 @@ jobs:
         working-directory: packages/desktop-electron
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          UNIFIA_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
       - name: Verify signed Windows Electron artifacts
         if: runner.os == 'Windows'
@@ -531,7 +537,7 @@ jobs:
           $files = @()
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*.exe" | Select-Object -ExpandProperty FullName
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\resources\unifia-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
 
           foreach ($file in $files | Select-Object -Unique) {
             $sig = Get-AuthenticodeSignature $file
@@ -542,7 +548,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-electron-${{ matrix.settings.target }}
+          name: unifia-electron-${{ matrix.settings.target }}
           path: packages/desktop-electron/dist/*
 
       - uses: actions/upload-artifact@v4
@@ -586,23 +592,23 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli
-          path: packages/opencode/dist
+          name: unifia-cli
+          path: packages/unifia/dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
+          name: unifia-cli-windows
+          path: packages/unifia/dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli-signed-windows
-          path: packages/opencode/dist
+          name: unifia-cli-signed-windows
+          path: packages/unifia/dist
 
       - uses: actions/download-artifact@v4
         if: needs.version.outputs.release
@@ -625,14 +631,14 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "unifia@sst.dev"
+          git config --global user.name "unifia"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - run: ./script/publish.ts
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          UNIFIA_VERSION: ${{ needs.version.outputs.version }}
+          UNIFIA_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}

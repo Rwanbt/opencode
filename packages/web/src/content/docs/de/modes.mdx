@@ -8,7 +8,7 @@ Modi werden jetzt über die Option `agent` in der OpenCode-Konfiguration konfigu
 Die Option `mode` ist jetzt veraltet. [Learn more](/docs/agents).
 :::
 
-Mit den Modi in OpenCode können Sie das Verhalten, die Tools und die Eingabeaufforderungen für verschiedene Anwendungsfälle anpassen.
+Mit den Modi in Unifia können Sie das Verhalten, die Tools und die Eingabeaufforderungen für verschiedene Anwendungsfälle anpassen.
 
 Es verfügt über zwei integrierte Modi: **Build** und **Plan**. Sie können anpassen
 diese oder konfigurieren Sie Ihre eigenen über die OpenCode-Konfiguration.
@@ -19,7 +19,7 @@ Sie können während einer Sitzung zwischen den Modi wechseln oder diese in Ihre
 
 ## Integriert
 
-OpenCode verfügt über zwei integrierte Modi.
+Unifia verfügt über zwei integrierte Modi.
 
 ---
 
@@ -56,9 +56,9 @@ Sie können die integrierten Modi anpassen oder über die Konfiguration eigene e
 
 ### JSON-Konfiguration
 
-Konfigurieren Sie Modi in Ihrer `opencode.json`-Konfigurationsdatei:
+Konfigurieren Sie Modi in Ihrer `unifia.json`-Konfigurationsdatei:
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
@@ -120,7 +120,7 @@ Schauen wir uns diese Konfigurationsmöglichkeiten im Detail an.
 
 Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Modus zu überschreiben. Nützlich für die Verwendung verschiedener Modelle, die für verschiedene Aufgaben optimiert sind. Zum Beispiel ein schnelleres Modell für die Planung, ein leistungsfähigeres Modell für die Umsetzung.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Modus
 
 Steuern Sie die Zufälligkeit und Kreativität der Antworten von AI mit der `temperature`-Konfiguration. Niedrigere Werte machen die Antworten fokussierter und deterministischer, während höhere Werte die Kreativität und Variabilität steigern.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Temperaturwerte liegen typischerweise zwischen 0.0 und 1.0:
 - **0.3-0.5**: Ausgewogene Antworten mit etwas Kreativität, gut für allgemeine Entwicklungsaufgaben
 - **0.6-1.0**: Kreativere und vielfältigere Antworten, nützlich für Brainstorming und Erkundung
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Temperaturwerte liegen typischerweise zwischen 0.0 und 1.0:
 }
 ```
 
-Wenn keine Temperatur angegeben ist, verwendet OpenCode modellspezifische Standardwerte (normalerweise 0 für die meisten Modelle, 0.55 für Qwen-Modelle).
+Wenn keine Temperatur angegeben ist, verwendet Unifia modellspezifische Standardwerte (normalerweise 0 für die meisten Modelle, 0.55 für Qwen-Modelle).
 
 ---
 
@@ -181,7 +181,7 @@ Wenn keine Temperatur angegeben ist, verwendet OpenCode modellspezifische Standa
 
 Geben Sie mit der `prompt`-Konfiguration eine benutzerdefinierte Systemaufforderungsdatei für diesen Modus an. Die Eingabeaufforderungsdatei sollte spezifische Anweisungen für den Zweck des Modus enthalten.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "mode": {
     "review": {
@@ -246,7 +246,7 @@ Sie können Ihre eigenen benutzerdefinierten Modi erstellen, indem Sie diese zur
 
 ### Verwenden der JSON-Konfiguration
 
-```json title="opencode.json" {4-14}
+```json title="unifia.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {

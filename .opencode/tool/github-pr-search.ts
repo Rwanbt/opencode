@@ -1,5 +1,5 @@
 /// <reference path="../env.d.ts" />
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@unifia/plugin"
 async function githubFetch(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`https://api.github.com${endpoint}`, {
     ...options,
@@ -39,7 +39,7 @@ Use the query parameter to search for keywords that might appear in PR titles or
   },
   async execute(args) {
     const owner = "anomalyco"
-    const repo = "opencode"
+    const repo = "unifia"
 
     const page = Math.floor(args.offset / args.limit) + 1
     const searchQuery = encodeURIComponent(`${args.query} repo:${owner}/${repo} type:pr state:open`)

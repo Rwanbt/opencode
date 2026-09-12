@@ -1,0 +1,26 @@
+{
+  "name": "@unifia/generative-ui-dom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun --preload ./test/happydom.ts test/dom.test.ts",
+    "test:e2e": "bun test/browser.e2e.ts"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.11",
+    "@unifia/workbench-server": "workspace:*",
+    "playwright": "1.57.0",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

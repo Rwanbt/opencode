@@ -11,7 +11,7 @@ la synthèse/reconnaissance vocale (Kokoro TTS, Parakeet STT), l'orchestration L
 Le frontend SolidJS est servi depuis `packages/app`.
 
 ## Common failure modes
-- **Sidecar stale** : code TypeScript modifié mais `opencode-cli.exe` pas recompilé → comportement old version sans erreur visible ([référence](~/.claude/projects/d--App-OpenCode/memory/reference_sidecar_baseline_build.md))
+- **Sidecar stale** : code TypeScript modifié mais `unifia-cli.exe` pas recompilé → comportement old version sans erreur visible ([référence](~/.claude/projects/d--App-OpenCode/memory/reference_sidecar_baseline_build.md))
 - **TLS HTTPS scope manquant** : `https://*:*/*` absent du `tauri.conf.json` scope → les appels HTTPS échouent silencieusement en mode Internet
 - **Deep-link non détecté** : scheme absent de `plugins.deep-link.mobile` dans `tauri.conf.json` — le manifest intent-filter seul est silencieusement ignoré
 - **Config LLM non propagée** : `pushConfigToEnv` ne propage rien si les 12 champs ne sont pas tous présents dans l'invoke

@@ -15,9 +15,9 @@
 // code-actions-panel state.
 
 import { createSignal } from "solid-js"
-import { showToast } from "@opencode-ai/ui/toast"
-import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
-import type { LspCodeAction, LspWorkspaceEdit } from "@opencode-ai/ui/code-mirror-lsp"
+import { showToast } from "@unifia/ui/toast"
+import type { CodeMirrorHandle } from "@unifia/ui/code-mirror"
+import type { LspCodeAction, LspWorkspaceEdit } from "@unifia/ui/code-mirror-lsp"
 import { applyTextEdits, editsForFile } from "@/pages/session/lsp-handlers"
 import { useLanguage } from "@/context/language"
 import type { RenameState } from "@/pages/session/rename-dialog"
@@ -28,7 +28,7 @@ import type { CodeActionPos } from "@/pages/session/code-actions-panel"
  * generic response tagged by `ThrowOnError` whose `.data` field is either
  * the typed payload OR undefined (on non-2xx). We cast to the local
  * `LspCodeAction` / `LspWorkspaceEdit` types at the boundary — the shapes
- * match the OpenAPI Zod schemas (see `packages/opencode/src/server/routes/lsp.ts`).
+ * match the OpenAPI Zod schemas (see `packages/unifia/src/server/routes/lsp.ts`).
  *
  * Using `any` for the response shape is intentional: the SDK generic depends
  * on a `ThrowOnError` flag we never pass, and tightening the interface here

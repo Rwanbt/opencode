@@ -1,4 +1,4 @@
-# Registre de dette technique — OpenCode (fork Rwanbt)
+# Registre de dette technique — Unifia (fork Rwanbt)
 
 > **Document vivant.** Registre maître de la dette technique. À re-valider à chaque fin de sprint
 > et avant tout push majeur (`/verify-standards`, `/health`).
@@ -129,7 +129,7 @@ Norme SonarQube : vert ≤ 500, alerte 800, bloquant 1500. État au 2026-06-16 :
 
 ### I. Dette marquée (TODO/FIXME/HACK)
 
-État : app 17, ui 23, opencode 23, mobile 2. À auditer à chaque fin de session (règle globale) :
+État : app 17, ui 23, unifia 23, mobile 2. À auditer à chaque fin de session (règle globale) :
 chaque occurrence doit avoir un ticket ou être résolue.
 
 | ID | Action |
@@ -174,22 +174,22 @@ chaque occurrence doit avoir un ticket ou être résolue.
 - [x] **D-23** `/find/symbol` réactivé proprement (`server/routes/file.ts`) : `LSP.workspaceSymbol(query)` enveloppé dans `withTimeout(…, 5000)` + fallback `[]` loggé, au lieu du stub commenté renvoyant `[]`.
 - [x] **D-18** Single-flight sur `start_embedded_server()` : verrou async `tokio::sync::Mutex` (via `OnceLock`) tenu sur toute la fonction → deux démarrages concurrents ne peuvent plus spawner+orphaner. Vérifié sous WSL Linux (`cargo test --lib runtime` 14/0). Commit `e27d7d0510`.
 - [~] **D-19** Busybox static + seccomp. **Prévention host-testable faite** (2026-06-17, `runtime/server.rs`) : la politique « applets interactifs (vi/less/top/nano/more/…) servis par /system/bin/toybox seccomp-safe, JAMAIS par le busybox statique » est rendue explicite via deux consts (`BUSYBOX_FALLBACK_APPLETS` = gawk/ed/bc/dc/expr, disjoint de `SECCOMP_RISK_APPLETS`) + **garde-fou** `busybox_fallback_excludes_seccomp_risk_applets` (échoue si on ajoute un applet à risque au fallback). Vérifié WSL 18/0. **Reste device-in-loop** : la détection *runtime* d'un SIGSYS réel + fallback automatique (non validable sans device ; une version logging-only serait spéculative).
-- [x] **D-14 RÉSOLU** (2026-06-17) — décision actée dans [ADR-0003 §Amendement](adr/0003-fork-strategy.md). Audit : **0 marqueur `// FORK:` dans tout le repo** (`packages/opencode|ui|sdk`) — la convention prescrite par [ADR-0003](adr/0003-fork-strategy.md) n'a jamais été appliquée. Un retrofit complet sur les milliers de divergences upstream est hors scope. **Décision** : (a) appliquer `// FORK:` aux **nouvelles** modifs upstream à partir de maintenant, vérifié en revue ; (b) les changements déjà tracés `// DEBT: D-NN` restent acceptables (ils documentent le WHY). À acter : mettre à jour ADR-0003 pour refléter que la stratégie réelle = divergence + résolution au merge (pas blocs `// FORK:` systématiques), OU adopter la convention pour de bon avec un gate de revue.
+- [x] **D-14 RÉSOLU** (2026-06-17) — décision actée dans [ADR-0003 §Amendement](adr/0003-fork-strategy.md). Audit : **0 marqueur `// FORK:` dans tout le repo** (`packages/unifia|ui|sdk`) — la convention prescrite par [ADR-0003](adr/0003-fork-strategy.md) n'a jamais été appliquée. Un retrofit complet sur les milliers de divergences upstream est hors scope. **Décision** : (a) appliquer `// FORK:` aux **nouvelles** modifs upstream à partir de maintenant, vérifié en revue ; (b) les changements déjà tracés `// DEBT: D-NN` restent acceptables (ils documentent le WHY). À acter : mettre à jour ADR-0003 pour refléter que la stratégie réelle = divergence + résolution au merge (pas blocs `// FORK:` systématiques), OU adopter la convention pour de bon avec un gate de revue.
 - [x] **D-24** Recensement fait (re-vérifié 2026-06-22). Le comptage « 65 » initial incluait strings/i18n/généré. **12 vrais marqueurs `// TODO` actifs** (aucun `FIXME`/`HACK`/`XXX`), tous notes inline mineures majoritairement upstream — aucune dette fork critique. Emplacements actuels :
 
   | Fichier | Ligne | Note |
   |---|---|---|
-  | `packages/opencode/src/server/router.ts` | 44 | upstream |
-  | `packages/opencode/src/server/routes/global.ts` | 166 | upstream |
-  | `packages/opencode/src/provider/loaders.ts` | 172, 389 | déplacés depuis `provider.ts` lors de l'extraction ADR-0006 (22/06) |
-  | `packages/opencode/src/agent/agent.ts` | 498 | upstream (décalé de 496 suite à évolution) |
-  | `packages/opencode/src/account/index.ts` | 395 | upstream |
-  | `packages/opencode/src/session/index.ts` | 316 | upstream |
-  | `packages/opencode/src/session/llm.ts` | 208 | upstream |
-  | `packages/opencode/src/cli/cmd/tui/routes/home.tsx` | 12 | upstream |
-  | `packages/opencode/src/cli/cmd/github-install.ts` | 28 | upstream (split depuis `cli/cmd/github.ts`) |
-  | `packages/opencode/src/tool/bash.ts` | 585 | upstream |
-  | `packages/opencode/src/sync/index.ts` | 162 | upstream |
+  | `packages/unifia/src/server/router.ts` | 44 | upstream |
+  | `packages/unifia/src/server/routes/global.ts` | 166 | upstream |
+  | `packages/unifia/src/provider/loaders.ts` | 172, 389 | déplacés depuis `provider.ts` lors de l'extraction ADR-0006 (22/06) |
+  | `packages/unifia/src/agent/agent.ts` | 498 | upstream (décalé de 496 suite à évolution) |
+  | `packages/unifia/src/account/index.ts` | 395 | upstream |
+  | `packages/unifia/src/session/index.ts` | 316 | upstream |
+  | `packages/unifia/src/session/llm.ts` | 208 | upstream |
+  | `packages/unifia/src/cli/cmd/tui/routes/home.tsx` | 12 | upstream |
+  | `packages/unifia/src/cli/cmd/github-install.ts` | 28 | upstream (split depuis `cli/cmd/github.ts`) |
+  | `packages/unifia/src/tool/bash.ts` | 585 | upstream |
+  | `packages/unifia/src/sync/index.ts` | 162 | upstream |
 
   **Écart vs recensement initial** : 1 marqueur effacé (`cli/cmd/tui/context/prompt.tsx` — refactor TUI), 3 déplacés (provider → loaders, agent décalé, github split). À traiter à la règle Boy-Scout au point de contact ; pas d'action batch nécessaire.
 

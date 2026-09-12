@@ -6,7 +6,7 @@ import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createUnifiaClient } from "@unifia/sdk"
 import { spawn } from "node:child_process"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -113,7 +113,7 @@ type IssueQueryResponse = {
   }
 }
 
-const { client, server } = createOpencode()
+const { client, server } = createUnifia()
 let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
@@ -127,7 +127,7 @@ type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 try {
   assertContextEvent("issue_comment", "pull_request_review_comment")
   assertPayloadKeyword()
-  await assertOpencodeConnected()
+  await assertUnifiaConnected()
 
   accessToken = await getAccessToken()
   octoRest = new Octokit({ auth: accessToken })
@@ -142,7 +142,7 @@ try {
   const comment = await createComment()
   commentId = comment.data.id
 
-  // Setup opencode session
+  // Setup unifia session
   const repoData = await fetchRepo()
   session = await client.session.create<true>().then((r) => r.data)
   await subscribeSessionEvents()
@@ -152,7 +152,7 @@ try {
     await client.session.share<true>({ path: session })
     return session.id.slice(-8)
   })()
-  console.log("opencode session", session.id)
+  console.log("unifia session", session.id)
   if (shareId) {
     console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
   }
@@ -228,12 +228,12 @@ try {
 }
 process.exit(exitCode)
 
-function createOpencode() {
+function createUnifia() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
-  const client = createOpencodeClient({ baseUrl: url })
+  const proc = spawn(`unifia`, [`serve`, `--hostname=${host}`, `--port=${port}`])
+  const client = createUnifiaClient({ baseUrl: url })
 
   return {
     server: { url, close: () => proc.kill() },
@@ -267,7 +267,7 @@ function getReviewCommentContext() {
   }
 }
 
-async function assertOpencodeConnected() {
+async function assertUnifiaConnected() {
   let retry = 0
   let connected = false
   do {
@@ -286,7 +286,7 @@ async function assertOpencodeConnected() {
   } while (retry++ < 30)
 
   if (!connected) {
-    throw new Error("Failed to connect to opencode server")
+    throw new Error("Failed to connect to unifia server")
   }
 }
 
@@ -382,7 +382,7 @@ async function getAccessToken() {
       body: JSON.stringify({ owner: repo.owner, repo: repo.repo }),
     })
   } else {
-    const oidcToken = await core.getIDToken("opencode-github-action")
+    const oidcToken = await core.getIDToken("unifia-github-action")
     response = await fetch("https://api.opencode.ai/exchange_github_app_token", {
       method: "POST",
       headers: {
@@ -607,7 +607,7 @@ async function resolveAgent(): Promise<string | undefined> {
 }
 
 async function chat(text: string, files: PromptFiles = []) {
-  console.log("Sending message to opencode...")
+  console.log("Sending message to unifia...")
   const { providerID, modelID } = useEnvModel()
   const agent = await resolveAgent()
 
@@ -663,8 +663,8 @@ async function configureGit(appToken: string) {
 
   await $`git config --local --unset-all ${config}`
   await $`git config --local ${config} "AUTHORIZATION: basic ${newCredentials}"`
-  await $`git config --global user.name "opencode-agent[bot]"`
-  await $`git config --global user.email "opencode-agent[bot]@users.noreply.github.com"`
+  await $`git config --global user.name "unifia-agent[bot]"`
+  await $`git config --global user.email "unifia-agent[bot]@users.noreply.github.com"`
 }
 
 async function restoreGitConfig() {
@@ -823,7 +823,7 @@ function footer(opts?: { image?: boolean }) {
 
     return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  const shareUrl = shareId ? `[unifia session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 

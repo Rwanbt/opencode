@@ -7,7 +7,7 @@
  */
 import { batch, createMemo } from "solid-js"
 import { useMutation } from "@tanstack/solid-query"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@unifia/ui/toast"
 import type { UserMessage } from "../../types/sdk-shim"
 import type { useSDK } from "@/context/sdk"
 import type { useSync } from "@/context/sync"

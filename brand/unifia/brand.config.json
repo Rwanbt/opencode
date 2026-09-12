@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "masterDir": "brand/unifia/masters",
+  "primaryIcon": "unifia-app-icon-dark",
+  "svgSets": [
+    "brand/unifia/variants",
+    "packages/app/src/assets/brand/unifia",
+    "packages/web/public/brand/unifia"
+  ],
+  "rasters": [
+    { "path": "packages/web/public/brand/unifia/unifia-192.png", "size": 192 },
+    { "path": "packages/web/public/brand/unifia/unifia-512.png", "size": 512 }
+  ],
+  "icos": [
+    { "path": "packages/web/public/brand/unifia/favicon.ico", "sizes": [16, 32, 48] }
+  ],
+  "copies": [
+    { "from": "brand/unifia/unifia.css", "to": "packages/app/src/styles/unifia-brand.css" },
+    {
+      "from": "brand/unifia/masters/unifia-app-icon-dark.svg",
+      "to": "packages/app/public/brand/unifia/unifia-app-icon-dark.svg"
+    },
+    {
+      "from": "brand/unifia/masters/unifia-symbol-color.svg",
+      "to": "packages/ui/src/assets/brand/unifia/unifia-symbol-color.svg"
+    },
+    {
+      "from": "brand/unifia/variants/unifia-logotype-dark.svg",
+      "to": "packages/ui/src/assets/brand/unifia/unifia-logotype-dark.svg"
+    },
+    {
+      "from": "brand/unifia/variants/unifia-logotype-light.svg",
+      "to": "packages/ui/src/assets/brand/unifia/unifia-logotype-light.svg"
+    },
+    {
+      "from": "packages/web/public/brand/unifia/unifia-192.png",
+      "to": "packages/app/public/brand/unifia/unifia-192.png"
+    },
+    {
+      "from": "packages/web/public/brand/unifia/unifia-512.png",
+      "to": "packages/app/public/brand/unifia/unifia-512.png"
+    },
+    {
+      "from": "packages/web/public/brand/unifia/favicon.ico",
+      "to": "packages/app/public/brand/unifia/favicon.ico"
+    }
+  ],
+  "androidLauncher": {
+    "dir": "packages/mobile/src-tauri/gen/android/app/src/main/res",
+    "icon": { "mdpi": 48, "hdpi": 49, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192 },
+    "foreground": { "mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432 },
+    "foregroundSource": "unifia-symbol-color"
+  },
+  "tauriIconSets": [
+    "packages/desktop/src-tauri/icons",
+    "packages/desktop/src-tauri/icons/dev",
+    "packages/desktop/src-tauri/icons/beta",
+    "packages/desktop/src-tauri/icons/prod",
+    "packages/desktop-electron/icons/dev",
+    "packages/desktop-electron/icons/beta",
+    "packages/desktop-electron/icons/prod",
+    "packages/mobile/src-tauri/icons"
+  ],
+  "tauriIconSpec": {
+    "png": {
+      "32x32.png": 32,
+      "128x128.png": 128,
+      "128x128@2x.png": 256,
+      "icon.png": 512,
+      "Square30x30Logo.png": 30,
+      "Square44x44Logo.png": 44,
+      "Square71x71Logo.png": 71,
+      "Square89x89Logo.png": 89,
+      "Square107x107Logo.png": 107,
+      "Square142x142Logo.png": 142,
+      "Square150x150Logo.png": 150,
+      "Square284x284Logo.png": 284,
+      "Square310x310Logo.png": 310,
+      "StoreLogo.png": 50
+    },
+    "ico": { "icon.ico": [16, 24, 32, 48, 64, 128, 256] },
+    "icns": { "icon.icns": [16, 32, 64, 128, 256, 512, 1024] }
+  }
+}

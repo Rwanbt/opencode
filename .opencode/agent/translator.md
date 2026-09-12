@@ -35,7 +35,7 @@ Locale guidance does not override code/command preservation rules or the global 
 
 ---
 
-# Do-Not-Translate Terms (OpenCode Docs)
+# Do-Not-Translate Terms (Unifia Docs)
 
 Generated from: `packages/web/src/content/docs/*.mdx` (default English docs)
 Generated on: 2026-02-10
@@ -68,8 +68,8 @@ Neovim
 Node.js
 npm
 Obsidian
-opencode
-opencode-ai
+unifia
+unifia-ai
 Paru
 pnpm
 ripgrep
@@ -152,14 +152,14 @@ OAuth
 Ollama integration docs
 OpenAI's Data Policies
 OpenChamber
-OpenCode
-OpenCode config
-OpenCode Config
-OpenCode TUI with the opencode theme
-OpenCode Web - Active Session
-OpenCode Web - New Session
-OpenCode Web - See Servers
-OpenCode Zen
+Unifia
+Unifia config
+Unifia Config
+Unifia TUI with the unifia theme
+Unifia Web - Active Session
+Unifia Web - New Session
+Unifia Web - See Servers
+Unifia Zen
 OpenCode-Obsidian
 OpenRouter dashboard
 OpenWork
@@ -301,7 +301,7 @@ NoeFabris
 OpenAI
 OpenAPI
 OpenChamber
-OpenCode
+Unifia
 OpenRouter
 OpenTUI
 OpenWork
@@ -325,69 +325,69 @@ xAI
 ZenMux
 ```
 
-## OpenCode CLI commands (as shown in docs)
+## Unifia CLI commands (as shown in docs)
 
 ```text
-opencode
-opencode [project]
-opencode /path/to/project
-opencode acp
-opencode agent [command]
-opencode agent create
-opencode agent list
-opencode attach [url]
-opencode attach http://10.20.30.40:4096
-opencode attach http://localhost:4096
-opencode auth [command]
-opencode auth list
-opencode auth login
-opencode auth logout
-opencode auth ls
-opencode export [sessionID]
-opencode github [command]
-opencode github install
-opencode github run
-opencode import <file>
-opencode import https://opncd.ai/s/abc123
-opencode import session.json
-opencode mcp [command]
-opencode mcp add
-opencode mcp auth [name]
-opencode mcp auth list
-opencode mcp auth ls
-opencode mcp auth my-oauth-server
-opencode mcp auth sentry
-opencode mcp debug <name>
-opencode mcp debug my-oauth-server
-opencode mcp list
-opencode mcp logout [name]
-opencode mcp logout my-oauth-server
-opencode mcp ls
-opencode models --refresh
-opencode models [provider]
-opencode models anthropic
-opencode run [message..]
-opencode run Explain the use of context in Go
-opencode serve
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
-opencode serve --hostname 0.0.0.0 --port 4096
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
-opencode session [command]
-opencode session list
-opencode session delete <sessionID>
-opencode stats
-opencode uninstall
-opencode upgrade
-opencode upgrade [target]
-opencode upgrade v0.1.48
-opencode web
-opencode web --cors https://example.com
-opencode web --hostname 0.0.0.0
-opencode web --mdns
-opencode web --mdns --mdns-domain myproject.local
-opencode web --port 4096
-opencode web --port 4096 --hostname 0.0.0.0
-opencode.server.close()
+unifia
+unifia [project]
+unifia /path/to/project
+unifia acp
+unifia agent [command]
+unifia agent create
+unifia agent list
+unifia attach [url]
+unifia attach http://10.20.30.40:4096
+unifia attach http://localhost:4096
+unifia auth [command]
+unifia auth list
+unifia auth login
+unifia auth logout
+unifia auth ls
+unifia export [sessionID]
+unifia github [command]
+unifia github install
+unifia github run
+unifia import <file>
+unifia import https://opncd.ai/s/abc123
+unifia import session.json
+unifia mcp [command]
+unifia mcp add
+unifia mcp auth [name]
+unifia mcp auth list
+unifia mcp auth ls
+unifia mcp auth my-oauth-server
+unifia mcp auth sentry
+unifia mcp debug <name>
+unifia mcp debug my-oauth-server
+unifia mcp list
+unifia mcp logout [name]
+unifia mcp logout my-oauth-server
+unifia mcp ls
+unifia models --refresh
+unifia models [provider]
+unifia models anthropic
+unifia run [message..]
+unifia run Explain the use of context in Go
+unifia serve
+unifia serve --cors http://localhost:5173 --cors https://app.example.com
+unifia serve --hostname 0.0.0.0 --port 4096
+unifia serve [--port <number>] [--hostname <string>] [--cors <origin>]
+unifia session [command]
+unifia session list
+unifia session delete <sessionID>
+unifia stats
+unifia uninstall
+unifia upgrade
+unifia upgrade [target]
+unifia upgrade v0.1.48
+unifia web
+unifia web --cors https://example.com
+unifia web --hostname 0.0.0.0
+unifia web --mdns
+unifia web --mdns --mdns-domain myproject.local
+unifia web --port 4096
+unifia web --port 4096 --hostname 0.0.0.0
+unifia.server.close()
 ```
 
 ## Slash commands and routes
@@ -581,48 +581,48 @@ NODE_ENV
 NODE_EXTRA_CA_CERTS
 NPM_AUTH_TOKEN
 OC_ALLOW_WAYLAND
-OPENCODE_API_KEY
-OPENCODE_AUTH_JSON
-OPENCODE_AUTO_SHARE
-OPENCODE_CLIENT
-OPENCODE_CONFIG
-OPENCODE_CONFIG_CONTENT
-OPENCODE_CONFIG_DIR
-OPENCODE_DISABLE_AUTOCOMPACT
-OPENCODE_DISABLE_AUTOUPDATE
-OPENCODE_DISABLE_CLAUDE_CODE
-OPENCODE_DISABLE_CLAUDE_CODE_PROMPT
-OPENCODE_DISABLE_CLAUDE_CODE_SKILLS
-OPENCODE_DISABLE_DEFAULT_PLUGINS
-OPENCODE_DISABLE_FILETIME_CHECK
-OPENCODE_DISABLE_LSP_DOWNLOAD
-OPENCODE_DISABLE_MODELS_FETCH
-OPENCODE_DISABLE_PRUNE
-OPENCODE_DISABLE_TERMINAL_TITLE
-OPENCODE_ENABLE_EXA
-OPENCODE_ENABLE_EXPERIMENTAL_MODELS
-OPENCODE_EXPERIMENTAL
-OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS
-OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
-OPENCODE_EXPERIMENTAL_EXA
-OPENCODE_EXPERIMENTAL_FILEWATCHER
-OPENCODE_EXPERIMENTAL_ICON_DISCOVERY
-OPENCODE_EXPERIMENTAL_LSP_TOOL
-OPENCODE_EXPERIMENTAL_LSP_TY
-OPENCODE_EXPERIMENTAL_MARKDOWN
-OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
-OPENCODE_EXPERIMENTAL_OXFMT
-OPENCODE_EXPERIMENTAL_PLAN_MODE
-OPENCODE_ENABLE_QUESTION_TOOL
-OPENCODE_FAKE_VCS
-OPENCODE_GIT_BASH_PATH
-OPENCODE_MODEL
-OPENCODE_MODELS_URL
-OPENCODE_PERMISSION
-OPENCODE_PORT
-OPENCODE_SERVER_PASSWORD
-OPENCODE_SERVER_USERNAME
+UNIFIA_API_KEY
+UNIFIA_AUTH_JSON
+UNIFIA_AUTO_SHARE
+UNIFIA_CLIENT
+UNIFIA_CONFIG
+UNIFIA_CONFIG_CONTENT
+UNIFIA_CONFIG_DIR
+UNIFIA_DISABLE_AUTOCOMPACT
+UNIFIA_DISABLE_AUTOUPDATE
+UNIFIA_DISABLE_CLAUDE_CODE
+UNIFIA_DISABLE_CLAUDE_CODE_PROMPT
+UNIFIA_DISABLE_CLAUDE_CODE_SKILLS
+UNIFIA_DISABLE_DEFAULT_PLUGINS
+UNIFIA_DISABLE_FILETIME_CHECK
+UNIFIA_DISABLE_LSP_DOWNLOAD
+UNIFIA_DISABLE_MODELS_FETCH
+UNIFIA_DISABLE_PRUNE
+UNIFIA_DISABLE_TERMINAL_TITLE
+UNIFIA_ENABLE_EXA
+UNIFIA_ENABLE_EXPERIMENTAL_MODELS
+UNIFIA_EXPERIMENTAL
+UNIFIA_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS
+UNIFIA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER
+UNIFIA_EXPERIMENTAL_EXA
+UNIFIA_EXPERIMENTAL_FILEWATCHER
+UNIFIA_EXPERIMENTAL_ICON_DISCOVERY
+UNIFIA_EXPERIMENTAL_LSP_TOOL
+UNIFIA_EXPERIMENTAL_LSP_TY
+UNIFIA_EXPERIMENTAL_MARKDOWN
+UNIFIA_EXPERIMENTAL_OUTPUT_TOKEN_MAX
+UNIFIA_EXPERIMENTAL_OXFMT
+UNIFIA_EXPERIMENTAL_PLAN_MODE
+UNIFIA_ENABLE_QUESTION_TOOL
+UNIFIA_FAKE_VCS
+UNIFIA_GIT_BASH_PATH
+UNIFIA_MODEL
+UNIFIA_MODELS_URL
+UNIFIA_PERMISSION
+UNIFIA_PORT
+UNIFIA_SERVER_PASSWORD
+UNIFIA_SERVER_USERNAME
 PROJECT_ROOT
 RESOURCE_NAME
 RUST_LOG
@@ -636,8 +636,8 @@ XDG_CONFIG_HOME
 ```text
 ../../../config.mjs
 @astrojs/starlight/components
-@opencode-ai/plugin
-@opencode-ai/sdk
+@unifia/plugin
+@unifia/sdk
 path
 shescape
 zod
@@ -650,7 +650,7 @@ zod
 @ai-sdk/openai-compatible
 @File#L37-42
 @modelcontextprotocol/server-everything
-@opencode
+@unifia
 ```
 
 ## GitHub owner/repo slugs referenced in docs
@@ -661,13 +661,13 @@ angristan/opencode-wakatime
 anomalyco/opencode
 apps/opencode-agent
 athal7/opencode-devcontainers
-awesome-opencode/awesome-opencode
+awesome-opencode/awesome-unifia
 backnotprop/plannotator
-ben-vargas/ai-sdk-provider-opencode-sdk
+ben-vargas/ai-sdk-provider-unifia-sdk
 btriapitsyn/openchamber
 BurntSushi/ripgrep
 Cluster444/agentic
-code-yeongyu/oh-my-opencode
+code-yeongyu/oh-my-unifia
 darrenhinde/opencode-agents
 different-ai/opencode-scheduler
 different-ai/openwork
@@ -755,11 +755,11 @@ zenobi-us/opencode-skillful
 {file:path/to/file}
 **/*.js
 %USERPROFILE%/intelephense/license.txt
-%USERPROFILE%\.cache\opencode
-%USERPROFILE%\.config\opencode\opencode.jsonc
-%USERPROFILE%\.config\opencode\plugins
-%USERPROFILE%\.local\share\opencode
-%USERPROFILE%\.local\share\opencode\log
+%USERPROFILE%\.cache\unifia
+%USERPROFILE%\.config\unifia\unifia.jsonc
+%USERPROFILE%\.config\unifia\plugins
+%USERPROFILE%\.local\share\unifia
+%USERPROFILE%\.local\share\unifia\log
 <project-root>/.opencode/themes/*.json
 <providerId>/<modelId>
 <your-project>/.opencode/plugins/
@@ -828,7 +828,7 @@ model: "anthropic/claude-sonnet-4-5"
 modes/
 node_modules/
 openai/gpt-4.1
-opencode.ai/config.json
+unifia.ai/config.json
 opencode/<model-id>
 opencode/gpt-5.1-codex
 opencode/gpt-5.2-codex
@@ -883,7 +883,7 @@ WIN+R
 ## Model ID strings referenced
 
 ```text
-{env:OPENCODE_MODEL}
+{env:UNIFIA_MODEL}
 anthropic/claude-3-5-sonnet-20241022
 anthropic/claude-haiku-4-20250514
 anthropic/claude-haiku-4-5

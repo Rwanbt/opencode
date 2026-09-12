@@ -1,6 +1,6 @@
 import type { FileDiff, Project, UserMessage } from "../types/sdk-shim"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getWorkerPool } from "@opencode-ai/ui/pierre/worker"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { getWorkerPool } from "@unifia/ui/pierre/worker"
 import { useMutation } from "@tanstack/solid-query"
 import {
   onCleanup,
@@ -9,6 +9,7 @@ import {
   Switch,
   createMemo,
   createEffect,
+  createSignal,
   createComputed,
   on,
   onMount,
@@ -20,10 +21,10 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
 import { useFile } from "@/context/file"
 import { createStore, produce } from "solid-js/store"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { ResizeHandle } from "@unifia/ui/resize-handle"
+import { Tabs } from "@unifia/ui/tabs"
 import { createSessionScroll } from "@/pages/session/session-scroll"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@unifia/ui/toast"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -36,6 +37,7 @@ import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { useWorkspaceWorkbench } from "@/context/workbench/provider"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -79,9 +81,28 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const workbench = useWorkspaceWorkbench()
+  const [artifactDocument, setArtifactDocument] = createSignal<{ filename: string; content: string }>()
+  const [artifactError, setArtifactError] = createSignal<string>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
   useViewMode()
+
+  createEffect(() => {
+    const artifactId = (searchParams as { artifact?: string }).artifact
+    const connection = workbench.connection()
+    if (!artifactId || !connection) {
+      setArtifactDocument(undefined)
+      return
+    }
+    setArtifactError(undefined)
+    void connection.client.getArtifact(connection.workspaceId, artifactId)
+      .then((result) => {
+        const bytes = Uint8Array.from(atob(result.content), (value) => value.charCodeAt(0))
+        setArtifactDocument({ filename: result.artifact.filename, content: new TextDecoder().decode(bytes) })
+      })
+      .catch((error) => setArtifactError(error instanceof Error ? error.message : "Artifact could not be loaded"))
+  })
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -885,6 +906,17 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
+      <Show when={artifactDocument() || artifactError()}>
+        <section class="mx-4 mt-2 max-h-72 overflow-auto rounded-lg border border-border-base bg-background-stronger p-3" data-code-artifact-viewer>
+          <div class="flex items-center justify-between gap-3 text-12-medium">
+            <span>{artifactDocument()?.filename ?? "Artifact"}</span>
+            <span class="text-text-weak">Workbench artifact · read-only</span>
+          </div>
+          <Show when={artifactError()} fallback={<pre class="mt-3 whitespace-pre-wrap font-mono text-12-regular text-text-weak">{artifactDocument()?.content}</pre>}>
+            <p class="mt-3 text-12-regular text-text-danger">{artifactError()}</p>
+          </Show>
+        </section>
+      </Show>
       <div data-component="session-workspace" class="relative flex-1 min-h-0 flex flex-col">
         <div data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>

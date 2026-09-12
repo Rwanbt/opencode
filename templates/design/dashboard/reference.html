@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #fafafa; color: #111; }
+      h1 { font-size: 22px; margin: 0 0 16px; }
+      .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .kpi { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; }
+      .kpi .value { font-size: 24px; font-weight: 600; }
+      .kpi .label { color: #666; font-size: 12px; text-transform: uppercase; }
+      .chart { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-top: 16px; }
+      table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 16px; }
+      th, td { padding: 8px 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 14px; }
+      th { cursor: pointer; user-select: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Operations dashboard</h1>
+    <div class="kpis">
+      <div class="kpi"><div class="value">1,284</div><div class="label">Active users</div></div>
+      <div class="kpi"><div class="value">99.4%</div><div class="label">Uptime</div></div>
+      <div class="kpi"><div class="value">$12.4k</div><div class="label">Revenue</div></div>
+    </div>
+    <div class="chart">
+      <svg viewBox="0 0 320 100" width="100%" height="100" role="img" aria-label="trend">
+        <polyline fill="none" stroke="#2563eb" stroke-width="2" points="0,80 40,70 80,72 120,60 160,55 200,40 240,42 280,30 320,20" />
+      </svg>
+    </div>
+    <table id="tbl">
+      <thead><tr><th data-key="name">Name</th><th data-key="value">Value</th></tr></thead>
+      <tbody>
+        <tr><td>Widget</td><td>42</td></tr>
+        <tr><td>Sprocket</td><td>17</td></tr>
+        <tr><td>Cog</td><td>8</td></tr>
+      </tbody>
+    </table>
+    <script>
+      const tbody = document.querySelector('#tbl tbody');
+      const headers = document.querySelectorAll('#tbl th');
+      headers.forEach((th) => {
+        th.addEventListener('click', () => {
+          const key = th.getAttribute('data-key');
+          const rows = Array.from(tbody.querySelectorAll('tr'));
+          rows.sort((a, b) => a.children[key === 'name' ? 0 : 1].textContent.localeCompare(b.children[key === 'name' ? 0 : 1].textContent));
+          rows.forEach((row) => tbody.appendChild(row));
+        });
+      });
+    </script>
+  </body>
+</html>

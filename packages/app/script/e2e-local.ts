@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
@@ -44,7 +45,13 @@ async function waitForHealth(url: string) {
 
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
-const opencodeDir = path.join(repoDir, "packages", "opencode")
+
+// A missing cwd is reported as an executable spawn failure, so validate the
+// renamed server package explicitly to keep path drift actionable.
+const serverDir = path.join(repoDir, "packages", "unifia")
+if (!existsSync(serverDir)) {
+  throw new Error(`Server package directory not found: ${serverDir}. Was packages/unifia renamed?`)
+}
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
@@ -54,16 +61,27 @@ const extraArgs = (() => {
 
 const [serverPort, webPort] = await Promise.all([freePort(), freePort()])
 
-const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
+const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "unifia-e2e-"))
 const keepSandbox = process.env.OPENCODE_E2E_KEEP_SANDBOX === "1"
 
 const serverEnv = {
   ...process.env,
-  OPENCODE_DISABLE_SHARE: process.env.OPENCODE_DISABLE_SHARE ?? "true",
-  OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
-  OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
-  OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
-  OPENCODE_TEST_HOME: path.join(sandbox, "home"),
+  UNIFIA_DISABLE_SHARE: process.env.UNIFIA_DISABLE_SHARE ?? "true",
+  UNIFIA_DISABLE_LSP_DOWNLOAD: "true",
+  // UNIFIA_DISABLE_LSP is deliberately NOT defaulted here — it is inherited
+  // from process.env above, so it stays available as an opt-in and nothing
+  // more.
+  //
+  // It was briefly defaulted to "true" on the claim that language servers were
+  // "the mechanism behind the suite's flakiness". Measurement refuted that:
+  // three local runs of the same two tests gave LSP on -> pass (43.7 s), LSP
+  // off -> fail, LSP off -> pass (37.3 s). The flag does remove four 45 s
+  // `initialize` timeouts and every `spawned lsp server` line, so it shortens
+  // the run — it does not make it deterministic. Defaulting it on would only
+  // have hidden any LSP regression from the suite for good.
+  UNIFIA_DISABLE_DEFAULT_PLUGINS: "true",
+  UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+  UNIFIA_TEST_HOME: path.join(sandbox, "home"),
   XDG_DATA_HOME: path.join(sandbox, "share"),
   XDG_CACHE_HOME: path.join(sandbox, "cache"),
   XDG_CONFIG_HOME: path.join(sandbox, "config"),
@@ -71,9 +89,9 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENCODE_E2E_MODEL: process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano",
-  OPENCODE_CLIENT: "app",
-  OPENCODE_STRICT_CONFIG_DEPS: "true",
+  ...(process.env.OPENCODE_E2E_MODEL ? { OPENCODE_E2E_MODEL: process.env.OPENCODE_E2E_MODEL } : {}),
+  UNIFIA_CLIENT: "app",
+  UNIFIA_STRICT_CONFIG_DEPS: "true",
 } satisfies Record<string, string>
 
 const runnerEnv = {
@@ -132,8 +150,13 @@ process.once("unhandledRejection", (error) => {
 let code = 1
 
 try {
-  seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
-    cwd: opencodeDir,
+  // An earlier version of this comment blamed PATH resolution for the
+  // `ENOENT: posix_spawn 'bun'` on the Linux runner. That was wrong: the cwd
+  // above did not exist, and posix_spawn attributes that ENOENT to the
+  // executable. `process.execPath` is kept because naming the interpreter
+  // already running this file is unambiguous, not because a bare "bun" fails.
+  seed = Bun.spawn([process.execPath, "script/seed-e2e.ts"], {
+    cwd: serverDir,
     env: serverEnv,
     stdout: "inherit",
     stderr: "inherit",
@@ -146,23 +169,23 @@ try {
     Object.assign(process.env, serverEnv)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
-    process.env.OPENCODE_PID = String(process.pid)
+    process.env.UNIFIA_PID = String(process.pid)
 
-    const log = await import("../../opencode/src/util/log")
-    const install = await import("../../opencode/src/installation")
+    const log = await import("../../unifia/src/util/log")
+    const install = await import("../../unifia/src/installation")
     await log.Log.init({
       print: true,
       dev: install.Installation.isLocal(),
       level: "WARN",
     })
 
-    const servermod = await import("../../opencode/src/server/server")
-    inst = await import("../../opencode/src/project/instance")
+    const servermod = await import("../../unifia/src/server/server")
+    inst = await import("../../unifia/src/project/instance")
     server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
-    console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
+    console.log(`unifia server listening on http://127.0.0.1:${serverPort}`)
 
     await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
-    runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+    runner = Bun.spawn([process.execPath, "test:e2e", ...extraArgs], {
       cwd: appDir,
       env: runnerEnv,
       stdout: "inherit",

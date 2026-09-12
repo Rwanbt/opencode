@@ -1,0 +1,62 @@
+[data-component="team-graph"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  [data-part="wave"] {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Nodes stay compact where there is a pointer, and grow to a 44px target
+     where there is not. Keyed on pointer coarseness rather than on width: a
+     tablet with a mouse wants the dense graph, and a narrow desktop window is
+     still driven by a cursor. */
+  [data-part="task"] {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+
+    @media (any-pointer: coarse) {
+      min-height: 44px;
+      padding: 0 12px;
+    }
+
+    border-radius: var(--radius-xs);
+    border: 0.5px solid var(--border-weak-base);
+    background: var(--surface-raised-base);
+    color: var(--text-base);
+
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    cursor: pointer;
+  }
+
+  /* Emphasis is carried by a data attribute rather than by a class the caller
+     computes, so the mapping from graph relation to appearance lives in one
+     place and cannot drift between the surfaces that use this component. */
+  [data-part="task"][data-emphasis="selected"] {
+    border-color: var(--border-strong-base);
+    color: var(--text-strong-base);
+  }
+
+  [data-part="task"][data-emphasis="ancestor"],
+  [data-part="task"][data-emphasis="descendant"] {
+    border-color: var(--border-base);
+  }
+
+  /* Dimmed, never hidden: a task removed from view reads as a task that is not
+     in the run, which is a different and much worse claim than "not related to
+     what you selected". */
+  [data-part="task"][data-emphasis="unrelated"] {
+    opacity: 0.45;
+  }
+
+  [data-part="task"][data-status="blocked"],
+  [data-part="task"][data-status="cancelled"] {
+    color: var(--text-weak);
+  }
+}

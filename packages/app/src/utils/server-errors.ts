@@ -30,8 +30,63 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
+  // Rejected SDK calls hand back a plain response object, not an Error. Those
+  // fell straight through to "Unknown error", so a failed bootstrap told the
+  // user only that something had failed — the toast was structurally incapable
+  // of naming the cause, and the detail existed nowhere a user could reach.
+  const described = describeErrorLike(error)
+  if (described) return described
   if (fallback) return fallback
   return tr(translate, "error.chain.unknown", "Unknown error")
+}
+
+/** Longest detail worth putting in a toast; enough for a message plus context. */
+const MAX_DESCRIPTION = 300
+
+/**
+ * Extracts something a human can act on from an error-shaped object.
+ *
+ * Deliberately conservative about what it reads: named fields that carry
+ * diagnostics, never a blind dump of the object. A response body can hold a
+ * token or a prompt, and a toast is the wrong place to discover that.
+ */
+function describeErrorLike(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined
+  const source = error as Record<string, unknown>
+  // The SDK nests the failure one level down; unwrap before reading.
+  const inner = isRecord(source.error) ? source.error : isRecord(source.data) ? source.data : undefined
+  const parts: string[] = []
+
+  const name = firstString(source.name, inner?.name)
+  const message = firstString(source.message, inner?.message)
+  const status = firstNumber(source.status, source.statusCode, inner?.status)
+  const statusText = firstString(source.statusText, inner?.statusText)
+
+  if (name && name !== "Error") parts.push(name)
+  if (status !== undefined) parts.push(statusText ? `HTTP ${status} ${statusText}` : `HTTP ${status}`)
+  if (message) parts.push(message)
+
+  if (parts.length === 0) return undefined
+  const out = parts.join(" — ")
+  return out.length > MAX_DESCRIPTION ? `${out.slice(0, MAX_DESCRIPTION - 1)}…` : out
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value
+  }
+  return undefined
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
@@ -69,7 +124,7 @@ function parseReadableProviderModelNotFoundError(errorInput: ProviderModelNotFou
   const m = errorInput.data.modelID.trim()
   const list = (errorInput.data.suggestions ?? []).map((v) => v.trim()).filter(Boolean)
   const body = tr(translator, "error.chain.modelNotFound", `Model not found: ${p}/${m}`, { provider: p, model: m })
-  const tail = tr(translator, "error.chain.checkConfig", "Check your config (opencode.json) provider/model names")
+  const tail = tr(translator, "error.chain.checkConfig", "Check your config (unifia.json) provider/model names")
   if (list.length) {
     const suggestions = list.slice(0, 5).join(", ")
     return [body, tr(translator, "error.chain.didYouMean", `Did you mean: ${suggestions}`, { suggestions }), tail].join(

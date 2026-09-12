@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+#
+# Fails when a committed brand asset no longer matches brand/unifia/brand-manifest.json —
+# a hand-edited icon, a stale generated file, or a master swapped without regenerating.
+#
+# Deliberately node-only: the check reads bytes and hashes them, so it needs no
+# bun install and no image toolchain. Regenerating does need Python + Pillow,
+# which is why generating is not part of this gate.
+name: brand
+
+on:
+  push:
+    paths:
+      - "brand/**"
+      - "scripts/brand/**"
+      - "packages/app/src/assets/brand/**"
+      - "packages/web/public/brand/**"
+      - "packages/desktop/src-tauri/icons/**"
+      - "packages/mobile/src-tauri/icons/**"
+      - ".github/workflows/brand.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Brand manifest and assets agree
+        run: node scripts/brand/check.mjs

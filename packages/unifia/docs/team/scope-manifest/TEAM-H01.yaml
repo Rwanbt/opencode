@@ -1,0 +1,10 @@
+card_id: TEAM-H01
+base_sha: f28f874eb6af879e7dfb2d0fd9af4a1d48f5417f
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/worker-runtime.ts
+  - packages/unifia/docs/team/scope-manifest/TEAM-H01.yaml
+protected_files:
+  - main
+  - dev
+  - opti-ui

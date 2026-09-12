@@ -1,0 +1,6 @@
+{
+  "attemptStatus": "UNKNOWN_EXTERNAL_STATE",
+  "providerCalled": 0,
+  "providerCallHistory": [],
+  "adapterTopology": "child-process"
+}

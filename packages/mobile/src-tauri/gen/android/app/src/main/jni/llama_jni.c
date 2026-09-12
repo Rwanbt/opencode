@@ -19,7 +19,7 @@ static volatile int g_abort = 0;
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 JNIEXPORT void JNICALL
-Java_ai_opencode_mobile_LlamaEngine_setenv(JNIEnv *env, jobject thiz, jstring name, jstring value) {
+Java_ai_unifia_mobile_LlamaEngine_setenv(JNIEnv *env, jobject thiz, jstring name, jstring value) {
     const char *n = (*env)->GetStringUTFChars(env, name, NULL);
     const char *v = (*env)->GetStringUTFChars(env, value, NULL);
     if (n && v) {
@@ -31,7 +31,7 @@ Java_ai_opencode_mobile_LlamaEngine_setenv(JNIEnv *env, jobject thiz, jstring na
 }
 
 JNIEXPORT void JNICALL
-Java_ai_opencode_mobile_LlamaEngine_initBackend(JNIEnv *env, jobject thiz) {
+Java_ai_unifia_mobile_LlamaEngine_initBackend(JNIEnv *env, jobject thiz) {
     // Directly register the CPU backend from the already-loaded libggml-cpu.so
     // ggml_backend_load_all() can't find it as a plugin (missing ggml_backend_init export)
     // but ggml_backend_cpu_reg() is available since we link against libggml-cpu.so
@@ -50,7 +50,7 @@ Java_ai_opencode_mobile_LlamaEngine_initBackend(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT jlong JNICALL
-Java_ai_opencode_mobile_LlamaEngine_loadModel(JNIEnv *env, jobject thiz, jstring path, jint nCtx, jint nThreads, jint mainGpu) {
+Java_ai_unifia_mobile_LlamaEngine_loadModel(JNIEnv *env, jobject thiz, jstring path, jint nCtx, jint nThreads, jint mainGpu) {
     const char *model_path = (*env)->GetStringUTFChars(env, path, NULL);
     if (!model_path) {
         LOGE("Failed to get model path string");
@@ -120,7 +120,7 @@ Java_ai_opencode_mobile_LlamaEngine_loadModel(JNIEnv *env, jobject thiz, jstring
 }
 
 JNIEXPORT void JNICALL
-Java_ai_opencode_mobile_LlamaEngine_unloadModel(JNIEnv *env, jobject thiz) {
+Java_ai_unifia_mobile_LlamaEngine_unloadModel(JNIEnv *env, jobject thiz) {
     pthread_mutex_lock(&g_mutex);
     if (g_ctx) { llama_free(g_ctx); g_ctx = NULL; }
     if (g_model) { llama_model_free(g_model); g_model = NULL; }
@@ -129,18 +129,18 @@ Java_ai_opencode_mobile_LlamaEngine_unloadModel(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_ai_opencode_mobile_LlamaEngine_isLoaded(JNIEnv *env, jobject thiz) {
+Java_ai_unifia_mobile_LlamaEngine_isLoaded(JNIEnv *env, jobject thiz) {
     return g_model != NULL && g_ctx != NULL;
 }
 
 JNIEXPORT void JNICALL
-Java_ai_opencode_mobile_LlamaEngine_abort(JNIEnv *env, jobject thiz) {
+Java_ai_unifia_mobile_LlamaEngine_abort(JNIEnv *env, jobject thiz) {
     g_abort = 1;
 }
 
 // Text generation with streaming callback
 JNIEXPORT jstring JNICALL
-Java_ai_opencode_mobile_LlamaEngine_generate(
+Java_ai_unifia_mobile_LlamaEngine_generate(
     JNIEnv *env, jobject thiz,
     jstring prompt_str, jint maxTokens, jfloat temperature, jobject callback
 ) {

@@ -1,7 +1,7 @@
-export const deepLinkEvent = "opencode:deep-link"
+export const deepLinkEvent = "unifia:deep-link"
 
 const parseUrl = (input: string) => {
-  if (!input.startsWith("opencode://")) return
+  if (!input.startsWith("unifia://")) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   try {
     return new URL(input)
@@ -32,7 +32,7 @@ const isAbsolutePath = (d: string) => {
 const isSafeDirectory = (d: string) => {
   if (!d || d.length > DIR_MAX) return false
   if (/[\0\r\n]/.test(d)) return false
-  // Catch javascript: / data: / opencode: masquerading as a path.
+  // Catch javascript: / data: / unifia: masquerading as a path.
   if (/^[a-z][a-z0-9+.-]*:/i.test(d) && !/^[a-zA-Z]:[\\/]/.test(d)) return false
   if (!isAbsolutePath(d)) return false
   return true
@@ -80,7 +80,7 @@ export type OAuthCallbackDeepLink = {
 
 /**
  * Parse an OAuth callback returned via custom URL scheme, e.g.
- * `opencode://oauth/callback?providerID=anthropic&code=xxx&state=yyy`.
+ * `unifia://oauth/callback?providerID=anthropic&code=xxx&state=yyy`.
  * The provider's authorize() step embeds this URL as the `redirect_uri`
  * so the browser lands back in the app and we can finish the token
  * exchange without the user copy-pasting a code.
@@ -88,7 +88,7 @@ export type OAuthCallbackDeepLink = {
 export const parseOAuthCallbackDeepLink = (input: string): OAuthCallbackDeepLink | undefined => {
   const url = parseUrl(input)
   if (!url) return
-  // `opencode://oauth/callback?...` → hostname="oauth", pathname="/callback"
+  // `unifia://oauth/callback?...` → hostname="oauth", pathname="/callback"
   if (url.hostname !== "oauth") return
   const path = url.pathname.replace(/^\/+|\/+$/g, "")
   if (path !== "callback") return
@@ -114,7 +114,7 @@ export const collectOAuthCallbackDeepLinks = (urls: string[]) =>
 // Window-level CustomEvent dispatched when an OAuth callback deep link is
 // received. The dialog-connect-provider dialog subscribes to it and
 // finishes the token exchange automatically.
-export const oauthCallbackEvent = "opencode:oauth-callback"
+export const oauthCallbackEvent = "unifia:oauth-callback"
 
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
@@ -133,7 +133,7 @@ export const drainPendingDeepLinks = (target: OpenCodeWindow) => {
 
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { onMount } from "solid-js"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@unifia/util/encode"
 import type { useProviders } from "@/hooks/use-providers"
 import type { useServer } from "@/context/server"
 import type { setSessionHandoff } from "@/pages/session/handoff"

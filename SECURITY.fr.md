@@ -10,17 +10,17 @@ Nous n'acceptons pas les rapports de sécurité générés par IA. Nous en recev
 
 ### Vue d'ensemble
 
-OpenCode est un assistant de codage assisté par IA qui s'exécute localement sur votre machine. Il fournit un système d'agents avec accès à des outils puissants incluant exécution shell, opérations sur fichiers et accès web.
+Unifia Workbench est un assistant de codage assisté par IA qui s'exécute localement sur votre machine. Il fournit un système d'agents avec accès à des outils puissants incluant exécution shell, opérations sur fichiers et accès web.
 
 ### Pas de sandbox
 
-OpenCode ne met **pas** l'agent en sandbox. Le système de permissions existe comme fonctionnalité d'UX pour tenir l'utilisateur informé des actions de l'agent — il demande confirmation avant d'exécuter des commandes, d'écrire des fichiers, etc. Cependant, il n'est pas conçu pour fournir une isolation de sécurité.
+Unifia Workbench ne met **pas** l'agent en sandbox. Le système de permissions existe comme fonctionnalité d'UX pour tenir l'utilisateur informé des actions de l'agent — il demande confirmation avant d'exécuter des commandes, d'écrire des fichiers, etc. Cependant, il n'est pas conçu pour fournir une isolation de sécurité.
 
-Si vous avez besoin d'une isolation réelle, exécutez OpenCode dans un conteneur Docker ou une VM.
+Si vous avez besoin d'une isolation réelle, exécutez Unifia Workbench dans un conteneur Docker ou une VM.
 
 ### Mode serveur
 
-Le mode serveur est opt-in uniquement. Lorsqu'activé, définissez `OPENCODE_SERVER_PASSWORD` pour imposer HTTP Basic Auth. Sans cela, le serveur tourne non authentifié (avec un avertissement). C'est à l'utilisateur final de sécuriser le serveur — toute fonctionnalité qu'il offre n'est pas une vulnérabilité.
+Le mode serveur est opt-in uniquement. Lorsqu'activé, définissez `UNIFIA_SERVER_PASSWORD` pour imposer HTTP Basic Auth. Sans cela, le serveur tourne non authentifié (avec un avertissement). C'est à l'utilisateur final de sécuriser le serveur — toute fonctionnalité qu'il offre n'est pas une vulnérabilité.
 
 ### Hors périmètre
 
@@ -38,7 +38,7 @@ Le mode serveur est opt-in uniquement. Lorsqu'activé, définissez `OPENCODE_SER
 
 Nous apprécions vos efforts pour divulguer vos découvertes de manière responsable et ferons tout notre possible pour reconnaître vos contributions.
 
-Pour signaler un problème, utilisez l'onglet GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new).
+Pour signaler un problème, utilisez l'onglet GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new).
 
 L'équipe enverra une réponse indiquant les prochaines étapes. Après la réponse initiale, l'équipe sécurité vous tiendra informé de la progression vers un correctif et l'annonce complète, et pourra demander des informations supplémentaires.
 

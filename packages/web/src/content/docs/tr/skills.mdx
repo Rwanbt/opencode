@@ -3,7 +3,7 @@ title: "Ajan becerileri"
 description: "SKILL.md ile tekrar kullanilabilir davranis tanimlayin"
 ---
 
-Ajan becerileri, opencode'un deponuzdan veya ev dizininizden tekrar kullanilabilir talimatlari kesfetmesini saglar.
+Ajan becerileri, unifia'un deponuzdan veya ev dizininizden tekrar kullanilabilir talimatlari kesfetmesini saglar.
 Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut becerileri gorur ve gerektiginde tam icerigi yukler.
 
 ---
@@ -11,7 +11,7 @@ Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut
 ## Dosyalari yerlestirin
 
 Her beceri adi icin bir klasor olusturun ve icine bir `SKILL.md` koyun.
-opencode su konumlari tarar:
+unifia su konumlari tarar:
 
 - Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md`
 - Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ opencode su konumlari tarar:
 
 ## Kesfi anlayin
 
-Proje yerel yollarinda opencode, mevcut calisma dizininizden baslayip git worktree kokune kadar yukari cikar.
+Proje yerel yollarinda unifia, mevcut calisma dizininizden baslayip git worktree kokune kadar yukari cikar.
 Bu sirada `skills/*/SKILL.md` altindaki eslesen `.opencode/` dosyalarini ve `.claude/skills/*/SKILL.md` ya da `.agents/skills/*/SKILL.md` dosyalarini yukler.
 
 Genel tanimlar da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` ve `~/.agents/skills/*/SKILL.md` yollarindan yuklenir.
@@ -80,7 +80,7 @@ Ajanin dogru secim yapmasi icin yeterince acik yazin.
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: unifia
 metadata:
   audience: maintainers
   workflow: github
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Arac aciklamasini taniyin
 
-opencode, `skill` araci aciklamasinda mevcut becerileri listeler.
+unifia, `skill` araci aciklamasinda mevcut becerileri listeler.
 Her kayitta beceri adi ve aciklamasi yer alir:
 
 ```xml
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Izinleri yapilandirin
 
-`opencode.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
+`unifia.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Yerlesik ajanlar icin** (`opencode.json` icinde):
+**Yerlesik ajanlar icin** (`unifia.json` icinde):
 
 ```json
 {

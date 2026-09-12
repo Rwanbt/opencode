@@ -1,0 +1,27 @@
+{
+  "id": "wf-fixture-schedule-trigger",
+  "version": 2,
+  "workspaceId": "ws-fixture",
+  "steps": [
+    {
+      "id": "schedule",
+      "capability": "schedule",
+      "input": { "cron": "0 2 * * *", "timezone": "Europe/Paris" }
+    },
+    {
+      "id": "fetch-metrics",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://metrics.example.com/daily" }
+    },
+    {
+      "id": "wait-an-hour",
+      "capability": "wait",
+      "input": { "ms": 3600000 }
+    },
+    {
+      "id": "fetch-rollup",
+      "capability": "http",
+      "input": { "method": "GET", "url": "https://metrics.example.com/daily/rollup" }
+    }
+  ]
+}

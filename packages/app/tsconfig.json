@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "composite": true,
@@ -21,6 +21,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "package.json"],
+  "include": ["src", "scripts", "package.json"],
   "exclude": ["dist", "ts-dist"]
 }

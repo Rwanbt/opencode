@@ -1,6 +1,6 @@
-import { FileDiff, Message, Model, Part, Session } from "@opencode-ai/sdk-shared"
-import { fn } from "@opencode-ai/util/fn"
-import { iife } from "@opencode-ai/util/iife"
+import { FileDiff, Message, Model, Part, Session } from "@unifia/sdk-shared"
+import { fn } from "@unifia/util/fn"
+import { iife } from "@unifia/util/iife"
 import z from "zod"
 import { Storage } from "./storage"
 

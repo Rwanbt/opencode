@@ -1,4 +1,5 @@
 import type { Platform } from "../../context/platform"
+import { trimTrailingSlashes } from "../../utils/url"
 
 export type CheckServerResult =
   | { ok: true }
@@ -17,11 +18,11 @@ export async function checkServerReachable(
   password?: string,
   timeoutMs = 10000,
 ): Promise<CheckServerResult> {
-  const cleanUrl = url.replace(/\/+$/, "")
+  const cleanUrl = trimTrailingSlashes(url)
   const fetchFn = platform.fetch ?? fetch
   const headers: Record<string, string> = {}
   if (password) {
-    headers["Authorization"] = "Basic " + btoa(`${username ?? "opencode"}:${password}`)
+    headers["Authorization"] = "Basic " + btoa(`${username ?? "unifia"}:${password}`)
   }
   try {
     const response = await fetchFn(`${cleanUrl}/doc`, {

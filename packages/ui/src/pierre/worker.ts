@@ -11,7 +11,7 @@ export function workerFactory(): Worker {
 // WHY here, not just in context/marked.tsx (where this theme registration
 // originated for markdown rendering): WorkerPoolManager resolves themes by
 // NAME on the main thread before handing them to the Shiki worker — with no
-// fallback if "OpenCode" isn't registered yet. Relying on marked.tsx's
+// fallback if "Unifia" isn't registered yet. Relying on marked.tsx's
 // module import as the only registration point meant opening a file before
 // any markdown had rendered left every syntax-highlighting span uncolored
 // (confirmed live: tokens present and correctly split, but a single uniform
@@ -26,13 +26,13 @@ function createPool(lineDiffType: "none" | "word-alt") {
       workerFactory,
       // poolSize defaults to 8. More workers = more parallelism but
       // also more memory. Too many can actually slow things down.
-      // NOTE: 2 is probably better for OpenCode, as I think 8 might be
+      // NOTE: 2 is probably better for Unifia, as I think 8 might be
       // a bit overkill, especially because Safari has a significantly slower
       // boot up time for workers
       poolSize: 2,
     },
     {
-      theme: "OpenCode",
+      theme: "Unifia",
       lineDiffType,
       preferredHighlighter: "shiki-wasm",
     },

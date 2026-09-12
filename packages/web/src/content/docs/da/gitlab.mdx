@@ -1,26 +1,26 @@
 ---
 title: GitLab
-description: Brug OpenCode i GitLab-problemer og Merge Requests.
+description: Brug Unifia i GitLab-problemer og Merge Requests.
 ---
 
-OpenCode integreres med din GitLab-arbejdsgang gennem din GitLab CI/CD-pipeline eller med GitLab Duo.
+Unifia integreres med din GitLab-arbejdsgang gennem din GitLab CI/CD-pipeline eller med GitLab Duo.
 
-I begge tilfælde vil OpenCode køre på dine GitLab-løbere.
+I begge tilfælde vil Unifia køre på dine GitLab-løbere.
 
 ---
 
 ## GitLab CI
 
-OpenCode fungerer i en almindelig GitLab-pipeline. Du kan bygge det ind i en pipeline som en [CI component](https://docs.gitlab.com/ee/ci/components/)
+Unifia fungerer i en almindelig GitLab-pipeline. Du kan bygge det ind i en pipeline som en [CI component](https://docs.gitlab.com/ee/ci/components/)
 
-Her bruger vi en community-skabt CI/CD-komponent til OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Her bruger vi en community-skabt CI/CD-komponent til Unifia — [nagyv/gitlab-unifia](https://gitlab.com/nagyv/gitlab-unifia).
 
 ---
 
 ### Funktioner
 
-- **Brug brugerdefineret konfiguration pr. job**: Konfigurer OpenCode med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. OpenCode påkald.
-- **Minimal opsætning**: CI-komponenten sætter OpenCode op i baggrunden, du behøver kun at oprette OpenCode-konfigurationen og den indledende prompt.
+- **Brug brugerdefineret konfiguration pr. job**: Konfigurer Unifia med en brugerdefineret konfigurationsmappe, for eksempel `./config/#custom-directory` for at aktivere eller deaktivere funktionalitet pr. Unifia påkald.
+- **Minimal opsætning**: CI-komponenten sætter Unifia op i baggrunden, du behøver kun at oprette OpenCode-konfigurationen og den indledende prompt.
 - **Fleksibel**: CI-komponenten understøtter flere input til at tilpasse dens adfærd
 
 ---
@@ -35,34 +35,34 @@ Her bruger vi en community-skabt CI/CD-komponent til OpenCode — [nagyv/gitlab-
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $UNIFIA_AUTH_JSON # The variable name for your Unifia authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-For flere input og use cases [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) for denne komponent.
+For flere input og use cases [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-unifia) for denne komponent.
 
 ---
 
 ## GitLab Duo
 
-OpenCode integreres med din GitLab-arbejdsgang.
-Nævn `@opencode` i en kommentar, og OpenCode vil udføre opgaver i din GitLab CI-pipeline.
+Unifia integreres med din GitLab-arbejdsgang.
+Nævn `@unifia` i en kommentar, og Unifia vil udføre opgaver i din GitLab CI-pipeline.
 
 ---
 
 ### Funktioner
 
-- **Triageproblemer**: Bed OpenCode om at undersøge et problem og forklare dig det.
-- **Ret og implementer**: Bed OpenCode om at løse et problem eller implementere en funktion.
+- **Triageproblemer**: Bed Unifia om at undersøge et problem og forklare dig det.
+- **Ret og implementer**: Bed Unifia om at løse et problem eller implementere en funktion.
   Det vil oprette en ny branch og rejse en Merge Request med ændringer.
-- **Sikker**: OpenCode kører på dine GitLab-løbere.
+- **Sikker**: Unifia kører på dine GitLab-løbere.
 
 ---
 
 ### Opsætning
 
-OpenCode kører i din GitLab CI/CD pipeline, her er hvad du skal bruge for at konfigurere det:
+Unifia kører i din GitLab CI/CD pipeline, her er hvad du skal bruge for at konfigurere det:
 
 :::tip
 Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for opdaterede instruktioner.
@@ -82,7 +82,7 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
+      - echo "Installing unifia"
       - npm install --global opencode-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
@@ -91,7 +91,7 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Unifia auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,13 +103,13 @@ Tjek [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_ass
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "unifia@gitlab.com"
+      - git config --global user.name "Unifia"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Unifia"
       - |
-        opencode run "
+        unifia run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ Du kan henvise til [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_age
 
 ### Eksempler
 
-Her er nogle eksempler på, hvordan du kan bruge OpenCode i GitLab.
+Her er nogle eksempler på, hvordan du kan bruge Unifia i GitLab.
 
 :::tip
-Du kan konfigurere til at bruge en anden udløsersætning end `@opencode`.
+Du kan konfigurere til at bruge en anden udløsersætning end `@unifia`.
 :::
 
 - **Forklar et problem**
@@ -169,27 +169,27 @@ Du kan konfigurere til at bruge en anden udløsersætning end `@opencode`.
   Tilføj denne kommentar i et GitLab-problem.
 
   ```
-  @opencode explain this issue
+  @unifia explain this issue
   ```
 
-  OpenCode vil læse spørgsmålet og svare med en klar forklaring.
+  Unifia vil læse spørgsmålet og svare med en klar forklaring.
 
 - **Løs et problem**
 
   I et GitLab-nummer skal du sige:
 
   ```
-  @opencode fix this
+  @unifia fix this
   ```
 
-  OpenCode vil oprette en ny branch, implementere ændringer og åbne en Merge Request med ændringer.
+  Unifia vil oprette en ny branch, implementere ændringer og åbne en Merge Request med ændringer.
 
 - **Gennemgå Merge Requests**
 
   Efterlad følgende kommentar til en GitLab-Merge Request.
 
   ```
-  @opencode review this merge request
+  @unifia review this merge request
   ```
 
-  OpenCode vil gennemgå din Merge Request og give feedback.
+  Unifia vil gennemgå din Merge Request og give feedback.

@@ -4,10 +4,54 @@ set -e
 # Pre-commit checks — fast gate before CI
 # Runs only on staged TypeScript/shell files to keep latency low.
 
+# 0. DO-NOT-IMPORT guard (P1-C120)
+# Refuse tout fichier dont le path match un pattern interdit
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+FORBIDDEN_PATHS='^.*/ee/.*|^.*/\.ee/.*|^packages/enterprise/.*|^.*/commercial/.*|^.*/private/.*'
+if echo "$STAGED" | grep -E "$FORBIDDEN_PATHS" >/dev/null 2>&1; then
+  echo "ERROR: forbidden path detected in staged files." >&2
+  echo "DO-NOT-IMPORT paths cannot be committed. See docs/autonomy/DO-NOT-IMPORT.md" >&2
+  echo "$STAGED" | grep -E "$FORBIDDEN_PATHS" >&2
+  exit 1
+fi
+
+# 0b. Refuse tout .env* (fuite de secrets)
+if echo "$STAGED" | grep -E '^\.env.*|/\.env.*' >/dev/null 2>&1; then
+  echo "ERROR: .env* file detected. Refused for security." >&2
+  exit 1
+fi
+
 # 1. Biome lint (staged files only via --changed)
 bunx biome check --changed --no-errors-on-unmatched .
 
 # 2. Shell scripts (only if shellcheck is available)
 if command -v shellcheck >/dev/null 2>&1; then
-  git diff --cached --name-only --diff-filter=ACM | grep '\.sh$' | xargs -r shellcheck
+  SHELL_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.sh$' || true)
+  if [ -n "$SHELL_FILES" ]; then
+    printf '%s\n' "$SHELL_FILES" | xargs -r shellcheck
+  fi
+fi
+
+# 3. SPDX-License-Identifier requis sur les nouveaux fichiers TS/TSX/RS/MD
+NEW_FILES=$(git diff --cached --name-only --diff-filter=A | grep -E '\.(ts|tsx|rs|md|mdx)$' || true)
+if [ -n "$NEW_FILES" ]; then
+  for f in $NEW_FILES; do
+    if [ -f "$f" ] && ! head -10 "$f" | grep -q 'SPDX-License-Identifier'; then
+      echo "ERROR: $f lacks SPDX-License-Identifier header." >&2
+      echo "Add one before committing. See docs/autonomy/ATTRIBUTION-TEMPLATE.md" >&2
+      exit 1
+    fi
+  done
+fi
+
+# 3. TEAM-G01: lease validate (skip if no lease is present)
+# A worker holding a lease MUST validate it is still ACTIVE before commit.
+# The lease id is read from .team/active_lease (if present); absent means
+# "not under a lease" and the check is skipped (fail-open: this is a CI gate
+# for workers, the integration gate is team:preintegrate-check on dev/Team).
+if [ -f .team/active_lease ]; then
+  LEASE_ID="$(cat .team/active_lease)"
+  WORKER_ID="$(cat .team/active_worker 2>/dev/null || echo unknown)"
+  bun run team validate --lease-id "$LEASE_ID" --worker "$WORKER_ID" --git-root "$(pwd)"
+  bun run team precommit-check --lease-id "$LEASE_ID" --git-root "$(pwd)" >/dev/null
 fi

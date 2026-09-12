@@ -5,9 +5,9 @@
  * - useSDKNotificationToasts : listens to SDK events and shows per-session toasts
  */
 import { createEffect, onCleanup, onMount, type Accessor } from "solid-js"
-import { showToast, toaster } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { showToast, toaster } from "@unifia/ui/toast"
+import { getFilename } from "@unifia/util/path"
+import { base64Encode } from "@unifia/util/encode"
 import { playSoundById } from "@/utils/sound"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { workspaceKey } from "./helpers"

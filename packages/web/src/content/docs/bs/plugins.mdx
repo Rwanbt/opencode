@@ -1,9 +1,9 @@
 ---
 title: Dodaci
-description: Napišite vlastite dodatke za proširenje OpenCode.
+description: Napišite vlastite dodatke za proširenje Unifia.
 ---
 
-Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode.
+Dodaci vam omogućavaju da proširite Unifia spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja Unifia.
 Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane zajednice.
 
 ---
@@ -26,7 +26,7 @@ Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
 Navedite npm pakete u vašoj konfiguracijskoj datoteci.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -50,7 +50,7 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
 
 1. Globalna konfiguracija (`~/.config/opencode/opencode.json`)
-2. Konfiguracija projekta (`opencode.json`)
+2. Konfiguracija projekta (`unifia.json`)
 3. Globalni direktorij dodataka (`~/.config/opencode/plugins/`)
 4. Direktorij dodataka projekta (`.opencode/plugins/`)
    Duplicirani npm paketi sa istim imenom i verzijom se učitavaju jednom. Međutim, lokalni dodatak i npm dodatak sa sličnim nazivima se učitavaju odvojeno.
@@ -76,7 +76,7 @@ Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `
 }
 ```
 
-OpenCode pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
+Unifia pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -111,7 +111,7 @@ Funkcija dodatka prima:
 - `project`: Trenutne informacije o projektu.
 - `directory`: Trenutni radni direktorij.
 - `worktree`: Putanja git radnog stabla.
-- `client`: Opencode SDK klijent za interakciju sa AI.
+- `client`: Unifia SDK klijent za interakciju sa AI.
 - `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) za izvršavanje naredbi.
 
 ---
@@ -121,7 +121,7 @@ Funkcija dodatka prima:
 Za TypeScript dodatke, možete uvesti tipove iz paketa dodataka:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -204,7 +204,7 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 ## Primjeri
 
-Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
+Evo nekoliko primjera dodataka koje možete koristiti za proširenje Unifia.
 
 ### Slanje obavještenja
 
@@ -216,7 +216,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -232,7 +232,7 @@ Ako alat dodatka koristi isto ime kao ugrađeni alat, alat dodatka ima prednost.
 
 ### .env zaštita
 
-Spriječite opencode da čita `.env` fajlove:
+Spriječite unifia da čita `.env` fajlove:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -267,10 +267,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Prilagođeni alati
 
-Dodaci također mogu dodati prilagođene alate u opencode:
+Dodaci također mogu dodati prilagođene alate u unifia:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -290,12 +290,12 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima funkciju Zod sheme i vraća definiciju alata sa:
+Pomoćnik `tool` kreira prilagođeni alat koji unifia može pozvati. Uzima funkciju Zod sheme i vraća definiciju alata sa:
 
 - `description`: Šta alat radi
 - `args`: Zod šema za argumente alata
 - `execute`: Funkcija koja se pokreće kada se pozove alat
-  Vaši prilagođeni alati će biti dostupni za opencode zajedno sa ugrađenim alatima.
+  Vaši prilagođeni alati će biti dostupni za unifia zajedno sa ugrađenim alatima.
 
 ---
 
@@ -323,7 +323,7 @@ Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https
 Prilagodite kontekst uključen kada se sesija zbije:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -346,7 +346,7 @@ Include any state that should persist across compaction:
 Također možete u potpunosti zamijeniti prompt za sabijanje postavljanjem `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

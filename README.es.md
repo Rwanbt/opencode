@@ -1,17 +1,10 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Unifia Workbench banner">
 </p>
 <p align="center">El agente de programación con IA de código abierto.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +32,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 <!-- WHY-FORK-MATRIX -->
 ## ¿Por qué este fork?
@@ -117,10 +110,14 @@ OpenCode (fork) — un agente de programación con IA que corre en **escritorio,
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia package or installer is published yet. Build from source:
+git clone https://github.com/Rwanbt/unifia.git
+cd unifia
+bun install
+bun run --cwd packages/opencode build --single
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### 8 cosas que solo este fork empaqueta
@@ -139,8 +136,9 @@ curl -fsSL https://opencode.ai/install | bash
 ### Ejecutar tu primera tarea
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+# This checkout still exposes the compatibility CLI name `opencode`.
+bun run --cwd packages/opencode dev
+bun run packages/opencode/src/index.ts run "fix the failing test in src/"
 ```
 
 > 💡 ¿Necesitas detalles? Cada sección a continuación está colapsada — haz clic para expandir solo las que te interesen.
@@ -157,7 +155,7 @@ opencode run "fix the failing test in src/"   # one-shot
 ## Funcionalidades del fork
 
 > Este es un fork de [anomalyco/opencode](https://github.com/anomalyco/opencode) mantenido por [Rwanbt](https://github.com/Rwanbt).
-> Sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/opencode/tree/dev) para los últimos cambios.
+> Sincronizado con upstream. Ver la [rama dev](https://github.com/Rwanbt/unifia/tree/dev) para los últimos cambios.
 
 #### IA local primero
 
@@ -501,18 +499,9 @@ Three major initiatives are planned on dedicated feature branches. Each is desig
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
 
 # Gestores de paquetes
-npm i -g opencode-ai@latest        # o bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS y Linux (recomendado, siempre al día)
-brew install opencode              # macOS y Linux (fórmula oficial de brew, se actualiza menos)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # cualquier sistema
-nix run nixpkgs#opencode           # o github:anomalyco/opencode para la rama dev más reciente
 ```
 
 > [!TIP]
@@ -520,7 +509,7 @@ nix run nixpkgs#opencode           # o github:anomalyco/opencode para la rama de
 
 ### App de escritorio (BETA)
 
-OpenCode también está disponible como aplicación de escritorio. Descárgala directamente desde la [página de releases](https://github.com/Rwanbt/opencode/releases) o desde [opencode.ai/download](https://opencode.ai/download).
+OpenCode también está disponible como aplicación de escritorio. Descárgala directamente desde la [página de releases](https://github.com/Rwanbt/unifia/releases) o desde [opencode.ai/download](https://github.com/Rwanbt/unifia/releases/latest).
 
 | Plataforma            | Descarga                              |
 | --------------------- | ------------------------------------- |
@@ -531,7 +520,6 @@ OpenCode también está disponible como aplicación de escritorio. Descárgala d
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
@@ -547,8 +535,8 @@ El script de instalación respeta el siguiente orden de prioridad para la ruta d
 
 ```bash
 # Ejemplos
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
+# No public Unifia installer is published; use the source build documented above.
 ```
 
 ### Agents
@@ -564,11 +552,11 @@ OpenCode incluye dos agents integrados que puedes alternar con la tecla `Tab`.
 Además, incluye un subagent **general** para búsquedas complejas y tareas de varios pasos.
 Se usa internamente y se puede invocar con `@general` en los mensajes.
 
-Más información sobre [agents](https://opencode.ai/docs/agents).
+Más información sobre [agents](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/agents).
 
 ### Documentación
 
-Para más información sobre cómo configurar OpenCode, [**ve a nuestra documentación**](https://opencode.ai/docs).
+Para más información sobre cómo configurar OpenCode, [**ve a nuestra documentación**](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs).
 
 ### Contribuir
 
@@ -585,7 +573,7 @@ Si estás trabajando en un proyecto relacionado con OpenCode y usas "opencode" c
 Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias clave:
 
 - 100% open source
-- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://opencode.ai/zen); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
+- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/providers.mdx); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
 - Soporte LSP listo para usar
 - Un enfoque en la TUI. OpenCode está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
 - Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar OpenCode en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.

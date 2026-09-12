@@ -14,7 +14,7 @@ Commits :
 ## Pré-requis
 
 - Device Android physique (Sprint 1 B3). Émulateur insuffisant — tester aussi sur OEM (Samsung, Xiaomi) si possible.
-- Accès à un serveur OpenCode LAN (`http://192.168.x.y:4096`) pour Sprint 1 B3.
+- Accès à un serveur Unifia LAN (`http://192.168.x.y:4096`) pour Sprint 1 B3.
 - Un projet test avec un dépôt Git, et pouvoir créer un symlink `ln -s`.
 - Deux serveurs MCP déclarés avec noms à risque (`github`, `github_enterprise`).
 - `curl` ou Postman pour les endpoints REST.
@@ -46,9 +46,9 @@ Commits :
 3. DevTools depuis `http://localhost:3000` → OK.
 
 ### W9 — Shell env allowlist
-1. `export FOO_API_KEY=xxx && opencode` → la variable **n'apparaît pas** dans l'env sidecar (check logs).
-2. `export LC_ALL=en_US.UTF-8 && opencode` → transmise.
-3. `export OPENCODE_LLAMA_MODELS_DIR=/custom && opencode` → transmise.
+1. `export FOO_API_KEY=xxx && unifia` → la variable **n'apparaît pas** dans l'env sidecar (check logs).
+2. `export LC_ALL=en_US.UTF-8 && unifia` → transmise.
+3. `export UNIFIA_LLAMA_MODELS_DIR=/custom && unifia` → transmise.
 4. ⚠️ Vérifier que les MCP qui dépendaient de `GITHUB_TOKEN` héritée fonctionnent toujours (ils devraient passer par config, pas env).
 
 ### W5 — Circuit breaker LLM (déjà en place)
@@ -60,7 +60,7 @@ Commits :
 
 ### B6 — Supply chain (CI)
 1. Push la branche → workflow **CodeQL** dans Actions, vert sur JS/TS.
-2. `Actions → SBOM → Run workflow` → artifacts `opencode-sbom.spdx.json` + `opencode-sbom.cyclonedx.json`.
+2. `Actions → SBOM → Run workflow` → artifacts `unifia-sbom.spdx.json` + `unifia-sbom.cyclonedx.json`.
 3. Settings → Security → Dependabot alerts : PRs weekly arrivent au prochain lundi.
 4. ⚠️ Prévoir un batch review du premier run Dependabot (monorepo = beaucoup de deps).
 
@@ -69,7 +69,7 @@ Commits :
 ## Sprint 2 — Hardening
 
 ### W1 — Cost-cap REST tasks
-1. `opencode.json` : `experimental.task.cost_cap: 0.01`.
+1. `unifia.json` : `experimental.task.cost_cap: 0.01`.
 2. Lancer une task, dépenser au-delà de $0.01.
 3. `POST /task/:id/followup` → **HTTP 429** `{error:"cost_cap_exceeded", used, cap}`.
 4. `GET /task/:id` → champs `costUsed` et `costCap` présents.
@@ -86,12 +86,12 @@ Commits :
 1. Démarrer llama-server. Inspecter les args lancés → doit contenir :
    `--mmap --slots --slot-save-path <tmp>/opencode-llm-14097/kv-slots --cache-reuse 256`.
 2. Déposer un `*-0.5B-*.gguf` à côté du modèle principal → logs doivent afficher `speculative decoding enabled` si VRAM ≥4 GiB, sinon `skipping speculative decoding`.
-3. `OPENCODE_DRAFT_MODEL=<abs>` → force le drafter indiqué.
-4. `OPENCODE_DRAFT_FORCE=1` → bypass le guard VRAM.
+3. `UNIFIA_DRAFT_MODEL=<abs>` → force le drafter indiqué.
+4. `UNIFIA_DRAFT_FORCE=1` → bypass le guard VRAM.
 5. ⚠️ Surveiller stderr sur petite VRAM (4 GiB est une heuristique).
 
 ### W6 — Semaphore background tasks
-1. `opencode.json` : `experimental.task.max_parallel: 2`.
+1. `unifia.json` : `experimental.task.max_parallel: 2`.
 2. Orchestrator lance 5 tâches `mode:"background"`.
 3. Les 2 premières passent `queued → busy`, les 3 autres **restent `queued`**.
 4. À chaque Completed/Failed/Cancelled, une tâche queued démarre **FIFO**.
@@ -114,7 +114,7 @@ Aucun test runtime — design inline dans `auth/index.ts`. Implémentation Sprin
 1. `curl -X GET localhost:4096/user/data/export` → stream JSON `{version, exportedAt, sessions:[…], providers:[…]}`.
 2. `curl -X DELETE localhost:4096/user/data` → **400** `missing_confirmation`.
 3. `curl -X DELETE -H "X-Confirm-Delete: yes" localhost:4096/user/data` → **204**.
-4. Vérifier : `auth.json`, `opencode.jsonc|json`, `config.json` supprimés.
+4. Vérifier : `auth.json`, `unifia.jsonc|json`, `config.json` supprimés.
 5. ⚠️ Limite connue : `<datadir>/crashes/`, la DB et les worktrees ne sont **pas** purgés (Sprint 4).
 
 ### I4 — Audit log
@@ -131,7 +131,7 @@ Aucun test runtime — design inline dans `auth/index.ts`. Implémentation Sprin
 4. Avec `experimental.dlp.scan_tool_outputs: true`, injecter dans un tool output `ignore previous instructions` → flag `prompt-injection`.
 
 ### I9 — Thermal listener (squelette)
-1. `OPENCODE_THERMAL_FORCE=1` + `invokeThermal` mocké retournant `"severe"`.
+1. `UNIFIA_THERMAL_FORCE=1` + `invokeThermal` mocké retournant `"severe"`.
 2. `detectProfile().thermalState` → `"critical"`.
 3. `deriveConfig` applique `thermalMult = 0.5`.
 4. ⚠️ Android physique : `get_thermal_state` renvoie toujours `"nominal"` (JNI non câblé, Sprint 4).
@@ -152,12 +152,12 @@ Aucun test runtime — design inline dans `auth/index.ts`. Implémentation Sprin
 ## Tests transverses avant merge
 
 ### Typecheck
-- [ ] `cd packages/opencode && bun run typecheck` → 0 erreurs.
+- [ ] `cd packages/unifia && bun run typecheck` → 0 erreurs.
 - [ ] `bun run typecheck` root → 0 erreurs sur les packages touchés.
 
 ### Tests unitaires
-- [ ] `bun test packages/opencode/test/security` → tous verts.
-- [ ] `bun test packages/opencode/test/e2e/dag-team.test.ts` → 3 passed.
+- [ ] `bun test packages/unifia/test/security` → tous verts.
+- [ ] `bun test packages/unifia/test/e2e/dag-team.test.ts` → 3 passed.
 - [ ] Suite globale `bun turbo test:ci` → vert.
 
 ### Rust
@@ -166,7 +166,7 @@ Aucun test runtime — design inline dans `auth/index.ts`. Implémentation Sprin
 - [ ] `cargo clippy -- -D warnings` → propre.
 
 ### Build
-- [ ] `cd packages/opencode && bun run build --single` → sidecar TS à jour (prérequis avant tauri build, cf. CLAUDE.md).
+- [ ] `cd packages/unifia && bun run build --single` → sidecar TS à jour (prérequis avant tauri build, cf. CLAUDE.md).
 - [ ] `bun tauri build` desktop → APK/MSI/dmg signés (quand cosign sera ajouté).
 - [ ] `bun tauri android build` → APK release (ORT_LIB_LOCATION à positionner, cf. memory).
 

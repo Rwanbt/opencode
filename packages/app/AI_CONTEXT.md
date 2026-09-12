@@ -4,7 +4,7 @@
 Frontend SolidJS partagé entre desktop, web et mobile WebView.
 Contient l'UI du chat (messages, terminal, saisie), les panels (modèles, settings, partage),
 le système de thèmes, l'internationalisation, et le routing.
-Communique avec le sidecar `packages/opencode` via SSE (events entrants) et REST (commandes).
+Communique avec le sidecar `packages/unifia` via SSE (events entrants) et REST (commandes).
 
 ## Thread model
 | Composant | Thread | Notes |
@@ -17,12 +17,12 @@ Communique avec le sidecar `packages/opencode` via SSE (events entrants) et REST
 ## Constraints
 - Le terminal utilise ghostty-web (canvas+textarea) — jamais chercher `.xterm-*` dans le DOM
 - Sur mobile, `100dvh` est instable sous MIUI au keyboard toggle — utiliser `var(--vvh, 100dvh)` + `visualViewport` listener
-- `process.env.OPENCODE_CLIENT === "mobile-embedded"` gate les comportements desktop vs mobile
-- Les imports de `packages/opencode` sont interdits dans ce package (couplage UI→backend)
+- `process.env.UNIFIA_CLIENT === "mobile-embedded"` gate les comportements desktop vs mobile
+- Les imports de `packages/unifia` sont interdits dans ce package (couplage UI→backend)
 - CSP WebView requiert `http://ipc.localhost` (connect-src) et `http://asset.localhost` (img-src)
 
 ## Forbidden
-- Jamais d'import direct depuis `packages/opencode/src/` (couplage circulaire)
+- Jamais d'import direct depuis `packages/unifia/src/` (couplage circulaire)
 - Jamais de `window.location.reload()` pour réinitialiser l'état — utiliser les signals SolidJS
 - Jamais de `console.log` non filtré sur les events Tauri decorum (MutationObserver)
 

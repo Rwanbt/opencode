@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "lockfile_version": "1.0",
+  "generated_at": "2026-07-31T08:30:00Z",
+  "generated_by": "Hermes Agent (MiniMax-M3) for Unifia Workbench V3",
+  "purpose": "Verrouillage des sources upstream importées dans Unifia. Toute modification d'une entrée doit être commitée séparément avec le message de commit contenant les trailers Upstream-*.",
+  "sources": {
+    "opencode_upstream": {
+      "url": "https://github.com/anomalyco/opencode.git",
+      "license": "MIT",
+      "copyright": "(c) 2025 opencode (anomalyco)",
+      "verified_at": "2026-07-31",
+      "current_head": null,
+      "notes": "Upstream originel. HEAD exact à vérifier après configuration de la remotes upstream-opencode (Plan V3 §12)."
+    },
+    "opencode_fork": {
+      "url": "https://github.com/Rwanbt/unifia.git",
+      "license": "MIT",
+      "copyright": "(c) 2025-2026 Rwanbt contributors",
+      "verified_at": "2026-07-31",
+      "current_head": "207ff452b8056ae11d1f71e23198e520835f70ed",
+      "branch_used": "main",
+      "notes": "Fork direct d'anomalyco/opencode, base d'Unifia. HEAD = commit de référence baseline."
+    },
+    "openwork_candidates": {
+      "primary": {
+        "url": "https://github.com/different-ai/openwork",
+        "head_sha": "2c558bcffb5b686148c30bbf3dd2af7ade99492a",
+        "default_branch": "dev",
+        "license": "MIT (repository root outside forbidden paths); FSL-1.1-MIT under /ee",
+        "copyright": "Copyright (c) 2026 Different AI, Inc.",
+        "stars_at_check": 19034,
+        "verified_at": "2026-08-03",
+        "ee_path_count": 1067,
+        "status": "EXCLUDE_FORBIDDEN_PATHS",
+        "notes": "Audit structurel corrigé depuis le bare clone verrouillé. Le dépôt contient 1067 chemins /ee/ ; aucun chemin /ee/, enterprise, commercial ou private ne peut être importé. La licence des chemins admissibles reste à auditer séparément."
+      },
+      "alternatives": [
+        {"url": "https://github.com/WILSCH-AI-SERVICES/openwork", "stars": 0, "status": "REJECTED (fork vide)"},
+        {"url": "https://github.com/ehsky/openwork", "stars": 0, "status": "REJECTED (fork vide)"},
+        {"url": "https://github.com/iraez/openwork", "stars": 0, "status": "REJECTED (fork vide)"}
+      ]
+    },
+    "open_cowork_candidates": {
+      "primary": {
+        "url": "https://github.com/OpenCoworkAI/open-cowork",
+        "license": "MIT (repository root; embedded components require per-path attribution review)",
+        "copyright": "Copyright (c) 2026 OpenCoworkAI",
+        "stars_at_check": 1954,
+        "size_kb": 78371,
+        "verified_at": "2026-07-31",
+        "status": "CANDIDATE_LICENCE_OK_PENDING_AUDIT",
+        "notes": "MIT confirmé via GitHub API. Mentionne explicitement Skills + MCP + sandbox isolation + Feishu/Slack — matche Plan V3 §3.2. Audit complet bloqué par BD-8."
+      },
+      "alternatives": [
+        {
+          "url": "https://github.com/eigent-ai/eigent",
+          "license": "Apache-2.0",
+          "stars": 14708,
+          "size_kb": 153763,
+          "status": "CANDIDATE_LICENCE_OK_BIGGER",
+          "notes": "Plus gros et plus actif, mais description moins alignée avec le plan V3 (pas de mention Skills/MCP/sandbox)."
+        },
+        {
+          "url": "https://github.com/AIDotNet/OpenCowork",
+          "license": "Apache-2.0",
+          "stars": 589,
+          "size_kb": 45229,
+          "status": "CANDIDATE"
+        }
+      ]
+    }
+  },
+  "forbidden_paths": [
+    "**/ee/**",
+    "**/.ee/**",
+    "**/enterprise/**",
+    "**/commercial/**",
+    "**/private/**"
+  ],
+  "exclusion_policy": {
+    "default": "Tout chemin contenant /ee/, /enterprise/, /commercial/, /private/ est exclu par défaut. Tout import depuis un tel chemin doit être autorisé explicitement par BD-2/BD-3 et tracé ici.",
+    "explicitly_excluded": [
+      {
+        "path_glob": "packages/enterprise/",
+        "reason": "BD-2 : possible code propriétaire non documenté",
+        "decided_by": "(par défaut, à confirmer)"
+      },
+      {
+        "path_glob": "packages/desktop-electron/",
+        "reason": "BD-3 : doublon Tauri, à déprécier",
+        "decided_by": "(par défaut, à confirmer)"
+      }
+    ]
+  },
+  "import_log": [
+    {
+      "date": null,
+      "unifia_path": null,
+      "source": null,
+      "license": null,
+      "card_id": null,
+      "notes": "Aucun import n'a encore été effectué. Phase 0 démarre après validation BD-1/BD-2/BD-3/BD-4/BD-5/BD-6/BD-7/BD-8."
+    }
+  ]
+}

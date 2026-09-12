@@ -1,13 +1,13 @@
-import { AppIcon } from "@opencode-ai/ui/app-icon"
-import { Button } from "@opencode-ai/ui/button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { showToast } from "@opencode-ai/ui/toast"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/util/path"
+import { AppIcon } from "@unifia/ui/app-icon"
+import { Button } from "@unifia/ui/button"
+import { DropdownMenu } from "@unifia/ui/dropdown-menu"
+import { Icon } from "@unifia/ui/icon"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Keybind } from "@unifia/ui/keybind"
+import { Spinner } from "@unifia/ui/spinner"
+import { showToast } from "@unifia/ui/toast"
+import { Tooltip, TooltipKeybind } from "@unifia/ui/tooltip"
+import { getFilename } from "@unifia/util/path"
 import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -18,6 +18,7 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { useTitlebarSlots } from "@/context/titlebar-slots"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -136,6 +137,7 @@ export function SessionHeader() {
   const language = useLanguage()
   const sync = useSync()
   const terminal = useTerminal()
+  const titlebarSlots = useTitlebarSlots()
   const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
@@ -263,12 +265,9 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
-  const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
-
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={titlebarSlots.center()}>
         {(mount) => (
           <Portal mount={mount()}>
             <Button
@@ -298,7 +297,7 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()}>
+      <Show when={titlebarSlots.right()}>
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
@@ -435,7 +434,14 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
 
-                <div class="hidden md:flex items-center gap-1 shrink-0">
+                {/* Was `hidden md:flex`, which dropped the review and file-tree
+                    toggles below 768px. The review panel defaults to open
+                    (context/layout.tsx: `store.review?.panelOpened ?? true`),
+                    so on a phone it appeared at launch with no control able to
+                    close it — the conversation stayed unreachable. The terminal
+                    toggle above is already visible at this width and opens the
+                    same kind of overlay, so showing these two is consistent. */}
+                <div class="flex items-center gap-1 shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

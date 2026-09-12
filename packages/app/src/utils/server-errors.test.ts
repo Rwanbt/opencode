@@ -36,7 +36,7 @@ describe("parseReadableConfigInvalidError", () => {
     const error = {
       name: "ConfigInvalidError",
       data: {
-        path: "opencode.config.ts",
+        path: "unifia.config.ts",
         issues: [
           { path: ["settings", "host"], message: "Required" },
           { path: ["mode"], message: "Invalid" },
@@ -47,7 +47,7 @@ describe("parseReadableConfigInvalidError", () => {
     const result = parseReadableConfigInvalidError(error, language.t)
 
     expect(result).toBe(
-      ["Arquivo de config em opencode.config.ts invalido: settings.host: Required", "mode: Invalid"].join("\n"),
+      ["Arquivo de config em unifia.config.ts invalido: settings.host: Required", "mode: Invalid"].join("\n"),
     )
   })
 
@@ -94,9 +94,14 @@ describe("formatServerError", () => {
     expect(formatServerError(0, language.t)).toBe("Erro desconhecido")
   })
 
-  test("falls back for unknown error objects and names", () => {
+  // Previously asserted "Erro desconhecido" here. An error object carrying a
+  // usable name was being flattened into a message that teaches the user
+  // nothing, which is how a failed bootstrap ended up reporting only that
+  // something had failed. Naming the type is strictly more actionable; the
+  // untyped `data` payload is still not surfaced, since it can hold anything.
+  test("names an unrecognised error type instead of hiding it", () => {
     expect(formatServerError({ name: "ServerTimeoutError", data: { seconds: 30 } }, language.t)).toBe(
-      "Erro desconhecido",
+      "ServerTimeoutError",
     )
   })
 
@@ -127,5 +132,49 @@ describe("formatServerError", () => {
     expect(formatServerError(error, language.t)).toBe(
       ["Modelo nao encontrado: x/y", "Voce quis dizer: x/y2, x/y3", "Revise provider/model no config"].join("\n"),
     )
+  })
+})
+
+// A failed bootstrap raises a toast whose description comes from
+// formatServerError. Rejected SDK calls hand back a plain response object, not
+// an Error, so every one of them fell through to "Unknown error" — the user was
+// told something failed and nothing else, and the cause existed nowhere they
+// could reach. These pin that the formatter reports what it knows.
+describe("formatServerError on error-shaped objects (not Error instances)", () => {
+  test("reports a plain object's message", () => {
+    expect(formatServerError({ message: "workspace is not registered" })).toBe("workspace is not registered")
+  })
+
+  test("unwraps the SDK's nested error envelope", () => {
+    expect(formatServerError({ data: undefined, error: { message: "session not found" } })).toBe("session not found")
+  })
+
+  test("names the error type alongside the message", () => {
+    expect(formatServerError({ name: "ProviderInitError", message: "no api key" })).toBe("ProviderInitError — no api key")
+  })
+
+  test("surfaces an HTTP status when that is all there is", () => {
+    expect(formatServerError({ status: 503, statusText: "Service Unavailable" })).toBe("HTTP 503 Service Unavailable")
+  })
+
+  test("omits the redundant name 'Error'", () => {
+    expect(formatServerError({ name: "Error", message: "boom" })).toBe("boom")
+  })
+
+  test("truncates a runaway message instead of flooding the toast", () => {
+    const out = formatServerError({ message: "x".repeat(500) })
+    expect(out.length).toBeLessThanOrEqual(300)
+    expect(out.endsWith("…")).toBe(true)
+  })
+
+  // Only named diagnostic fields are read: a response body can hold a token or
+  // a prompt, and a toast is the wrong place to discover that.
+  test("does not dump unknown fields", () => {
+    expect(formatServerError({ apiKey: "sk-secret", prompt: "private" })).toBe("Unknown error")
+  })
+
+  test("still falls back when there is genuinely nothing to say", () => {
+    expect(formatServerError({})).toBe("Unknown error")
+    expect(formatServerError(null)).toBe("Unknown error")
   })
 })

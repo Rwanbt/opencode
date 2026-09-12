@@ -18,3 +18,28 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun run typecheck
+
+# TEAM-G01: integration gate. If a push targets a protected branch (main, dev,
+# opti-ui, Team-build-opti-ui, Team), refuse unless the worker holds an
+# authorized lease and patch-id is stable.
+PROTECTED_BRANCHES='^(main|dev|opti-ui|Team-build-opti-ui|Team)$'
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  BRANCH="${REMOTE_REF#refs/heads/}"
+  if echo "$BRANCH" | grep -E "$PROTECTED_BRANCHES" >/dev/null 2>&1; then
+    echo "Refusing push to protected branch: $BRANCH" >&2
+    echo "All pushes to protected branches must go through a temporary push-ref" >&2
+    echo "and be cherry-picked by MM1, not pushed directly. TEAM-G01 enforces this." >&2
+    exit 2
+  fi
+done
+
+# If a worker holds a lease, run preintegrate-check (scope + patch-id).
+if [ -f .team/active_lease ]; then
+  LEASE_ID="$(cat .team/active_lease)"
+  WORKER_ID="$(cat .team/active_worker 2>/dev/null || echo unknown)"
+  BASE_SHA="$(cat .team/base_sha 2>/dev/null || echo )"
+  if [ -n "$BASE_SHA" ]; then
+    bun run team validate --lease-id "$LEASE_ID" --worker "$WORKER_ID" >/dev/null
+    bun run team preintegrate-check --lease-id "$LEASE_ID" --base "$BASE_SHA" --git-root "$(pwd)" >/dev/null
+  fi
+fi

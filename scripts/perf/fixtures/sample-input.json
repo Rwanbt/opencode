@@ -1,0 +1,4 @@
+{
+  "description": "Sample input for scripts/perf/windows-process-sampler.ps1",
+  "pids": [999999, 4]
+}

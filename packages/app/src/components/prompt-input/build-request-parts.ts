@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@unifia/util/path"
 import type { AgentPartInput, FilePartInput, Part, TextPartInput } from "../../types/sdk-shim"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"

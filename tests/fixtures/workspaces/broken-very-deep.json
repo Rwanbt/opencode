@@ -1,0 +1,18 @@
+{
+  "name": "broken-deep-nesting",
+  "description": "Workspace avec nesting tres profond (test recursion limits)",
+  "type": "broken",
+  "structure": {
+    "expected_files": [
+      "a/b/c/d/e/f/g/h/i/j/file.txt"
+    ],
+    "expected_count": "1 file (nested 10 levels deep)"
+  },
+  "errors": [
+    "deep_nesting"
+  ],
+  "agent_test_scenarios": [
+    "should_handle_deep_nesting",
+    "should_not_recursion_error"
+  ]
+}

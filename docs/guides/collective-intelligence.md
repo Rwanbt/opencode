@@ -36,7 +36,7 @@ C'est tout. Le système :
 | Groq | `GROQ_API_KEY` | — |
 | OpenRouter | `OPENROUTER_API_KEY` | — |
 
-La détection est automatique — si vous avez déjà configuré vos providers dans OpenCode, `/debate` les trouvera.
+La détection est automatique — si vous avez déjà configuré vos providers dans Unifia, `/debate` les trouvera.
 
 ---
 
@@ -97,7 +97,7 @@ Quand les IAs ne sont pas d'accord même après convergence.
 
 ## Configuration avancée
 
-Dans `opencode.json`, section `experimental.collective` :
+Dans `unifia.json`, section `experimental.collective` :
 
 ```json
 {

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "name": "Unifia",
+    "vendor": "Rwanbt",
+    "dataDirName": "unifia",
+    "configDirName": ".unifia",
+    "databaseFile": "unifia.db"
+  },
+  "protocols": {
+    "owned": ["unifia"],
+    "parseOnly": ["opencode"]
+  },
+  "cli": {
+    "command": "unifia",
+    "windowsBinary": "unifia.exe",
+    "npmPackage": "unifia",
+    "scope": "@unifia"
+  },
+  "surfaces": {
+    "tauri-desktop-dev": {
+      "file": "packages/desktop/src-tauri/tauri.conf.json",
+      "displayName": "Unifia Dev",
+      "appId": "ai.unifia.workbench.dev",
+      "mainBinaryName": "Unifia",
+      "sidecar": "sidecars/unifia-cli"
+    },
+    "tauri-desktop-beta": {
+      "file": "packages/desktop/src-tauri/tauri.beta.conf.json",
+      "displayName": "Unifia Beta",
+      "appId": "ai.unifia.workbench.beta"
+    },
+    "tauri-desktop-prod": {
+      "file": "packages/desktop/src-tauri/tauri.prod.conf.json",
+      "displayName": "Unifia",
+      "appId": "ai.unifia.desktop"
+    },
+    "tauri-mobile": {
+      "file": "packages/mobile/src-tauri/tauri.conf.json",
+      "displayName": "Unifia Mobile",
+      "appId": "ai.unifia.mobile"
+    },
+    "electron-preview-dev": {
+      "file": "packages/desktop-electron/electron-builder.config.ts",
+      "displayName": "Unifia Preview Dev",
+      "appId": "ai.unifia.desktop.preview.dev"
+    },
+    "electron-preview-beta": {
+      "file": "packages/desktop-electron/electron-builder.config.ts",
+      "displayName": "Unifia Preview Beta",
+      "appId": "ai.unifia.desktop.preview.beta"
+    },
+    "electron-preview": {
+      "file": "packages/desktop-electron/electron-builder.config.ts",
+      "displayName": "Unifia Preview",
+      "appId": "ai.unifia.desktop.preview"
+    }
+  },
+  "env": {
+    "prefix": "UNIFIA_",
+    "legacyPrefix": "OPENCODE_",
+    "classes": {
+      "isolated": [
+        "UNIFIA_KEYCHAIN_URL",
+        "UNIFIA_KEYCHAIN_TOKEN",
+        "UNIFIA_AUTH_STORAGE",
+        "UNIFIA_AUTH_ENCRYPTION_KEY",
+        "UNIFIA_CONFIG_DIR",
+        "UNIFIA_PTY_PORT",
+        "UNIFIA_SERVER_USERNAME",
+        "UNIFIA_SERVER_PASSWORD",
+        "UNIFIA_CLIENT"
+      ],
+      "safeDualRead": [
+        "UNIFIA_AUTO_SHARE",
+        "UNIFIA_DISABLE_AUTOUPDATE",
+        "UNIFIA_DISABLE_PRUNE",
+        "UNIFIA_DISABLE_TERMINAL_TITLE",
+        "UNIFIA_DISABLE_AUTOCOMPACT",
+        "UNIFIA_DISABLE_MODELS_FETCH",
+        "UNIFIA_DISABLE_LSP_DOWNLOAD",
+        "UNIFIA_EXPERIMENTAL",
+        "UNIFIA_MODELS_URL",
+        "UNIFIA_MODELS_PATH",
+        "UNIFIA_PERMISSION",
+        "UNIFIA_CONFIG",
+        "UNIFIA_CONFIG_CONTENT"
+      ],
+      "migrationOnly": []
+    }
+  }
+}

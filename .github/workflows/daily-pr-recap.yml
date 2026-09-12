@@ -20,17 +20,17 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
+      - name: Install unifia
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Check required secrets
         id: check-secrets
         env:
-          HAS_KEY: ${{ secrets.OPENCODE_API_KEY != '' }}
+          HAS_KEY: ${{ secrets.UNIFIA_API_KEY != '' }}
         run: |
           if [ "$HAS_KEY" != "true" ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Warning: OPENCODE_API_KEY not set, skipping PR recap generation"
+            echo "Warning: UNIFIA_API_KEY not set, skipping PR recap generation"
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
@@ -39,9 +39,9 @@ jobs:
         if: steps.check-secrets.outputs.skip != 'true'
         id: recap
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          UNIFIA_API_KEY: ${{ secrets.UNIFIA_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          UNIFIA_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -55,7 +55,7 @@ jobs:
         run: |
           TODAY=$(date -u +%Y-%m-%d)
 
-          opencode run -m opencode/claude-sonnet-4-5 "Generate a daily PR activity recap for the OpenCode repository.
+          unifia run -m opencode/claude-sonnet-4-5 "Generate a daily PR activity recap for the Unifia repository.
 
           TODAY'S DATE: ${TODAY}
 

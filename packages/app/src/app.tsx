@@ -1,12 +1,12 @@
 import "@/index.css"
-import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogOutlet, DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { File } from "@opencode-ai/ui/file"
-import { Font } from "@opencode-ai/ui/font"
-import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { I18nProvider } from "@unifia/ui/context"
+import { DialogOutlet, DialogProvider } from "@unifia/ui/context/dialog"
+import { FileComponentProvider } from "@unifia/ui/context/file"
+import { MarkedProvider } from "@unifia/ui/context/marked"
+import { File } from "@unifia/ui/file"
+import { Font } from "@unifia/ui/font"
+import { Splash } from "@unifia/ui/logo"
+import { ThemeProvider } from "@unifia/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -36,17 +36,21 @@ import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
+import { ModeProvider } from "@/context/mode"
+import { WorkspaceTabsProvider } from "@/context/workspace-tabs-provider"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SDKProvider } from "@/context/sdk"
 import { SettingsProvider } from "@/context/settings"
-import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { QUERY_FAMILY_STALE_TIME_MS, QUERY_DEFAULT_GC_TIME_MS, QUERY_DEFAULT_RETRY } from "@/context/workbench/query-invalidation"
+import { getWorkbenchListenerCount } from "@/context/workbench/provider"
+import { installPerfInstrumentation } from "@/utils/perf-instrumentation"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const loadSession = () => import("@/pages/session")
@@ -64,12 +68,15 @@ const SessionRoute = () => (
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
+const WorkbenchModeRoute = lazy(() => import("@/pages/workbench-mode"))
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
 }
 
+// `__UNIFIA_PERF__` est déclaré par `@/utils/perf-instrumentation`, qui en est
+// le propriétaire : le type y suit les compteurs réellement exposés.
 declare global {
   interface Window {
     __OPENCODE__?: {
@@ -84,7 +91,35 @@ declare global {
 }
 
 function QueryProvider(props: ParentProps) {
-  const client = new QueryClient()
+  // E14: per-family cache defaults. `staleTime: Infinity` for stable
+  // data means a refetch only happens when an SSE event explicitly
+  // invalidates the key (the E14 cache oracle). The 30-min gcTime
+  // outlasts a typical Work session; the conservative 2-retry budget
+  // surfaces persistent errors to the UI instead of looping.
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        gcTime: QUERY_DEFAULT_GC_TIME_MS,
+        retry: QUERY_DEFAULT_RETRY,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+      },
+      mutations: { retry: 0 },
+    },
+  })
+  for (const [family, staleTime] of Object.entries(QUERY_FAMILY_STALE_TIME_MS)) {
+    client.setQueryDefaults(["workbench", family], { staleTime })
+  }
+  // C4d — instrumentation de test, DEV uniquement. Elle était auparavant posée
+  // sous un simple `typeof window === "object"`, donc livrée en production,
+  // avec des noms qui promettaient plus large que ce qu'ils mesuraient
+  // (`listeners` comptait des flux Workbench, `queries` des entrées de cache).
+  const removePerfInstrumentation = installPerfInstrumentation({
+    client,
+    eventStreams: getWorkbenchListenerCount,
+  })
+  if (removePerfInstrumentation) onCleanup(removePerfInstrumentation)
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
@@ -95,7 +130,11 @@ function AppShellProviders(props: ParentProps) {
         <NotificationProvider>
           <CommandProvider>
             <HighlightsProvider>
-              <Layout>{props.children}</Layout>
+              <ModeProvider>
+                <WorkspaceTabsProvider>
+                  <Layout>{props.children}</Layout>
+                </WorkspaceTabsProvider>
+              </ModeProvider>
             </HighlightsProvider>
             <CommandPaletteMount />
           </CommandProvider>
@@ -107,15 +146,16 @@ function AppShellProviders(props: ParentProps) {
 
 function SessionProviders(props: ParentProps) {
   return (
-    <TerminalProvider>
-      {/* FileStoreProvider moved to DirectoryLayout — it must wrap EditorProvider,
-          which is rendered above the SessionRoute. See fix/pre-flight-0-filestore-scope. */}
-      <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
-      </FileProvider>
-    </TerminalProvider>
+    // TerminalProvider moved to DirectoryLayout — terminals are workspace-scoped
+    // and Design's Terminal tab lives under WorkbenchModeRoute, a sibling of
+    // SessionRoute that this wrapper never covered.
+    // FileStoreProvider moved to DirectoryLayout — it must wrap EditorProvider,
+    // which is rendered above the SessionRoute. See fix/pre-flight-0-filestore-scope.
+    <FileProvider>
+      <PromptProvider>
+        <CommentsProvider>{props.children}</CommentsProvider>
+      </PromptProvider>
+    </FileProvider>
   )
 }
 
@@ -406,6 +446,7 @@ export function AppInterface(props: {
       <Route path="/:dir" component={DirectoryLayout}>
         <Route path="/" component={SessionIndexRoute} />
         <Route path="/session/:id?" component={SessionRoute} />
+        <Route path="/:mode" component={WorkbenchModeRoute} />
       </Route>
     </Dynamic>
   )

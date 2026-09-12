@@ -1,0 +1,76 @@
+{
+  "measured": true,
+  "classification": "YES",
+  "invariants": {
+    "replayedCapture": true,
+    "replayedDerive": true,
+    "neverReReadAmbient": true,
+    "observedInitialMatches": true,
+    "stableKey": true,
+    "distinctAttempts": true,
+    "finalStateCanonical": true,
+    "completedEffectNotReexecuted": true
+  },
+  "failedInvariants": [],
+  "ambientIntent": {
+    "initial": {
+      "t": "2026-09-04T10:00:00.000Z",
+      "r": "alpha-4711",
+      "o": "ord-001"
+    },
+    "afterCrash": {
+      "t": "2026-09-04T10:05:00.000Z",
+      "r": "beta-8263",
+      "o": "ord-002"
+    }
+  },
+  "measurement": {
+    "measured": true,
+    "runId": "run-wf-fc32-1788558996384-9yeyl5",
+    "logicalInvocationId": "li-fc32-1788558996384",
+    "attemptIds": [
+      "att-fc32-run-wf-fc32-1788558996384-9yeyl5-1",
+      "att-fc32-run-wf-fc32-1788558996384-9yeyl5-2"
+    ],
+    "ambientObservedInitial": {
+      "t": "2026-09-04T10:00:00.000Z",
+      "r": "alpha-4711",
+      "o": "ord-001"
+    },
+    "ambientObservedAfterCrash": null,
+    "ambientReadsPerAttempt": [
+      {
+        "attemptId": "att-fc32-run-wf-fc32-1788558996384-9yeyl5-1",
+        "reads": 1
+      }
+    ],
+    "rootWorkflowInvocations": 2,
+    "stepBodyInvocations": {
+      "capture-ambient": 1,
+      "derive-effect-key": 1,
+      "execute-effect": 2,
+      "decide-branch": 1,
+      "materialize": 1
+    },
+    "stepReplays": {
+      "capture-ambient": 1,
+      "derive-effect-key": 1
+    },
+    "effectKeysObserved": [
+      "ek-fc32-2026-09-04T10:00:00.000Z-alpha-4711-ord-001"
+    ],
+    "externalEffectExecutions": 1,
+    "finalMaterializedState": {
+      "t": "2026-09-04T10:00:00.000Z",
+      "r": "alpha-4711",
+      "o": "ord-001",
+      "effectKey": "ek-fc32-2026-09-04T10:00:00.000Z-alpha-4711-ord-001",
+      "lineage": "attempt-1-capture"
+    }
+  },
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "UNIFIA_NATIVE",
+  "testId": "FC-32",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

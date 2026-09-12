@@ -1,0 +1,1004 @@
+import { Log } from "../util/log"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
+import os from "node:os"
+import { Process } from "../util/process"
+import z from "zod"
+import { mergeDeep, unique } from "remeda"
+import { Global } from "../global"
+import fsNode from "node:fs/promises"
+import { NamedError } from "@unifia/util/error"
+import { Flag } from "../flag/flag"
+import { Auth } from "../auth"
+import { Env } from "../env"
+import {
+  type ParseError as JsoncParseError,
+  applyEdits,
+  modify,
+  parse as parseJsonc,
+  printParseErrorCode,
+} from "jsonc-parser"
+import { Instance, type InstanceContext } from "../project/instance"
+import { PLUGIN_VERSION } from "@/installation/meta"
+import { ConfigMarkdown } from "./markdown"
+import { constants, existsSync } from "node:fs"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
+import { Event } from "../server/event"
+import { Glob } from "../util/glob"
+import { iife } from "@/util/iife"
+import { Account } from "@/account"
+import { isRecord } from "@/util/record"
+import { ConfigPaths } from "./paths"
+import { Filesystem } from "@/util/filesystem"
+import type { ConsoleState } from "./console-state"
+import { AppFileSystem } from "@/filesystem"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
+import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
+import { Flock } from "@/util/flock"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { Npm } from "@/npm"
+import { PLUGIN_PACKAGE, pluginTarget } from "./dependencies"
+
+import * as ConfigSchema from "./config-schema"
+export namespace Config {
+  // Schema re-exports — definitions live in ./config-schema.ts (see header there).
+  export const PluginSpec = ConfigSchema.PluginSpec
+  export const McpLocal = ConfigSchema.McpLocal
+  export const McpOAuth = ConfigSchema.McpOAuth
+  export const McpRemote = ConfigSchema.McpRemote
+  export const Mcp = ConfigSchema.Mcp
+  export const PermissionAction = ConfigSchema.PermissionAction
+  export const PermissionObject = ConfigSchema.PermissionObject
+  export const PermissionRule = ConfigSchema.PermissionRule
+  export const Permission = ConfigSchema.Permission
+  export const Command = ConfigSchema.Command
+  export const Skills = ConfigSchema.Skills
+  export const Agent = ConfigSchema.Agent
+  export const Keybinds = ConfigSchema.Keybinds
+  export const Server = ConfigSchema.Server
+  export const Layout = ConfigSchema.Layout
+  export const Provider = ConfigSchema.Provider
+  export const Info = ConfigSchema.Info
+  export type PluginOptions = ConfigSchema.PluginOptions
+  export type PluginSpec = ConfigSchema.PluginSpec
+  export type McpOAuth = ConfigSchema.McpOAuth
+  export type Mcp = ConfigSchema.Mcp
+  export type PermissionAction = ConfigSchema.PermissionAction
+  export type PermissionObject = ConfigSchema.PermissionObject
+  export type PermissionRule = ConfigSchema.PermissionRule
+  export type Permission = ConfigSchema.Permission
+  export type Command = ConfigSchema.Command
+  export type Skills = ConfigSchema.Skills
+  export type Agent = ConfigSchema.Agent
+  export type Layout = ConfigSchema.Layout
+  export type Provider = ConfigSchema.Provider
+  export type PluginScope = "global" | "local"
+  export type PluginOrigin = {
+    spec: PluginSpec
+    source: string
+    scope: PluginScope
+  }
+
+  const log = Log.create({ service: "config" })
+
+  // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
+  // These settings override all user and project settings
+  function systemManagedConfigDir(): string {
+    switch (process.platform) {
+      case "darwin":
+        return "/Library/Application Support/opencode"
+      case "win32":
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "unifia")
+      default:
+        return "/etc/opencode"
+    }
+  }
+
+  export function managedConfigDir() {
+    return process.env.UNIFIA_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
+  }
+
+  const managedDir = managedConfigDir()
+
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not Unifia config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into Unifia config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
+
+  // Custom merge function that concatenates array fields instead of replacing them
+  function mergeConfigConcatArrays(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+    if (target.instructions && source.instructions) {
+      merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
+    }
+    return merged
+  }
+
+  export type InstallInput = {
+    signal?: AbortSignal
+    waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
+  }
+
+  export async function installDependencies(dir: string, input?: InstallInput) {
+    if (!(await isWritable(dir))) return
+    await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
+      signal: input?.signal,
+      onWait: (tick) =>
+        input?.waitTick?.({
+          dir,
+          attempt: tick.attempt,
+          delay: tick.delay,
+          waited: tick.waited,
+        }),
+    })
+    input?.signal?.throwIfAborted()
+
+    const pkg = path.join(dir, "package.json")
+    const target = pluginTarget(PLUGIN_VERSION)
+    type Manifest = { dependencies?: Record<string, string> }
+    // Annotated rather than inferred: the catch fallback widened the union to
+    // `Record<string, string> | {}`, which cannot be indexed by name below.
+    const json: Manifest = await Filesystem.readJson<Manifest>(pkg).catch(() => ({ dependencies: {} }))
+    const declared: Record<string, string> = { ...json.dependencies }
+    json.dependencies = { ...declared, [PLUGIN_PACKAGE]: target }
+    await Filesystem.writeJson(pkg, json)
+
+    const gitignore = path.join(dir, ".gitignore")
+    const ignore = await Filesystem.exists(gitignore)
+    if (!ignore) {
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
+    }
+    await Npm.install(dir)
+  }
+
+  async function isWritable(dir: string) {
+    try {
+      await fsNode.access(dir, constants.W_OK)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function rel(item: string, patterns: string[]) {
+    const normalizedItem = item.replaceAll("\\", "/")
+    for (const pattern of patterns) {
+      const index = normalizedItem.indexOf(pattern)
+      if (index === -1) continue
+      return normalizedItem.slice(index + pattern.length)
+    }
+  }
+
+  function trim(file: string) {
+    const ext = path.extname(file)
+    return ext.length ? file.slice(0, -ext.length) : file
+  }
+
+  async function loadCommand(dir: string) {
+    const result: Record<string, Command> = {}
+    for (const item of await Glob.scan("{command,commands}/**/*.md", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse command ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load command", { command: item, err })
+        return undefined
+      })
+      if (!md) continue
+
+      // Both brands: without the current one the prefix never strips, and a
+      // nested command in .unifia/command/a/b.md would be named "b" instead of
+      // "a/b" through the basename fallback below.
+      const patterns = [
+        "/.unifia/command/",
+        "/.unifia/commands/",
+        "/.opencode/command/",
+        "/.opencode/commands/",
+        "/command/",
+        "/commands/",
+      ]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const name = trim(file)
+
+      const config = {
+        name,
+        ...md.data,
+        template: md.content.trim(),
+      }
+      const parsed = Command.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = parsed.data
+        continue
+      }
+      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+    }
+    return result
+  }
+
+  async function loadAgent(dir: string) {
+    const result: Record<string, Agent> = {}
+
+    for (const item of await Glob.scan("{agent,agents}/**/*.md", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse agent ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load agent", { agent: item, err })
+        return undefined
+      })
+      if (!md) continue
+
+      const patterns = [
+        "/.unifia/agent/",
+        "/.unifia/agents/",
+        "/.opencode/agent/",
+        "/.opencode/agents/",
+        "/agent/",
+        "/agents/",
+      ]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const agentName = trim(file)
+
+      const config = {
+        name: agentName,
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = parsed.data
+        continue
+      }
+      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+    }
+    return result
+  }
+
+  async function loadMode(dir: string) {
+    const result: Record<string, Agent> = {}
+    for (const item of await Glob.scan("{mode,modes}/*.md", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse mode ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load mode", { mode: item, err })
+        return undefined
+      })
+      if (!md) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = {
+          ...parsed.data,
+          mode: "primary" as const,
+        }
+      }
+    }
+    return result
+  }
+
+  async function loadPlugin(dir: string) {
+    const plugins: PluginSpec[] = []
+
+    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      plugins.push(pathToFileURL(item).href)
+    }
+    return plugins
+  }
+
+  export function pluginSpecifier(plugin: PluginSpec): string {
+    return Array.isArray(plugin) ? plugin[0] : plugin
+  }
+
+  export function pluginOptions(plugin: PluginSpec): PluginOptions | undefined {
+    return Array.isArray(plugin) ? plugin[1] : undefined
+  }
+
+  export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
+    const spec = pluginSpecifier(plugin)
+    if (!isPathPluginSpec(spec)) return plugin
+
+    const base = path.dirname(configFilepath)
+    const file = (() => {
+      if (spec.startsWith("file://")) return spec
+      if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
+      return pathToFileURL(path.resolve(base, spec)).href
+    })()
+
+    const resolved = await resolvePathPluginTarget(file).catch(() => file)
+
+    if (Array.isArray(plugin)) return [resolved, plugin[1]]
+    return resolved
+  }
+
+  export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
+    const seen = new Set<string>()
+    const list: PluginOrigin[] = []
+
+    for (const plugin of plugins.toReversed()) {
+      const spec = pluginSpecifier(plugin.spec)
+      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
+      if (seen.has(name)) continue
+      seen.add(name)
+      list.push(plugin)
+    }
+
+    return list.toReversed()
+  }
+
+
+  export type Info = z.output<typeof Info> & {
+    plugin_origins?: PluginOrigin[]
+  }
+
+  type State = {
+    config: Info
+    directories: string[]
+    deps: Promise<void>[]
+    consoleState: ConsoleState
+  }
+
+  export interface Interface {
+    readonly get: () => Effect.Effect<Info>
+    readonly getGlobal: () => Effect.Effect<Info>
+    readonly getConsoleState: () => Effect.Effect<ConsoleState>
+    readonly update: (config: Info) => Effect.Effect<void>
+    readonly updateGlobal: (config: Info) => Effect.Effect<Info>
+    readonly invalidate: (wait?: boolean) => Effect.Effect<void>
+    readonly directories: () => Effect.Effect<string[]>
+    readonly waitForDependencies: () => Effect.Effect<void>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
+
+  /**
+   * Config basenames, in merge order: later entries override earlier ones.
+   *
+   * `LEGACY_CONFIG_FILES` are the pre-rebrand names. MIGRATION-PLAN.md 4.2
+   * specifies accepting them with lower priority; the rebrand implemented only
+   * the current names, so an existing `opencode.json` stopped being read
+   * without any error — the file was simply never opened.
+   */
+  const CONFIG_FILES = ["unifia.json", "unifia.jsonc"]
+  const LEGACY_CONFIG_FILES = ["opencode.json", "opencode.jsonc"]
+
+  function globalConfigFile() {
+    // First match wins here, so the order is the reverse of the merge order:
+    // current names first, legacy only as a last resort.
+    const candidates = ["unifia.jsonc", "unifia.json", "config.json", ...LEGACY_CONFIG_FILES.toReversed()].map((file) =>
+      path.join(Global.Path.config, file),
+    )
+    for (const file of candidates) {
+      if (existsSync(file)) return file
+    }
+    return candidates[0]
+  }
+
+  function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
+    if (!isRecord(patch)) {
+      const edits = modify(input, path, patch, {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        },
+      })
+      return applyEdits(input, edits)
+    }
+
+    return Object.entries(patch).reduce((result, [key, value]) => {
+      if (value === undefined) return result
+      return patchJsonc(result, value, [...path, key])
+    }, input)
+  }
+
+  function writable(info: Info) {
+    const { plugin_origins, ...next } = info
+    return next
+  }
+
+  function parseConfig(text: string, filepath: string): Info {
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    if (errors.length) {
+      const lines = text.split("\n")
+      const errorDetails = errors
+        .map((e) => {
+          const beforeOffset = text.substring(0, e.offset).split("\n")
+          const line = beforeOffset.length
+          const column = beforeOffset[beforeOffset.length - 1].length + 1
+          const problemLine = lines[line - 1]
+
+          const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
+          if (!problemLine) return error
+
+          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
+        })
+        .join("\n")
+
+      throw new JsonError({
+        path: filepath,
+        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
+      })
+    }
+
+    const parsed = Info.safeParse(data)
+    if (parsed.success) return parsed.data
+
+    throw new InvalidError({
+      path: filepath,
+      issues: parsed.error.issues,
+    })
+  }
+
+  export const { JsonError, InvalidError } = ConfigPaths
+
+  export const ConfigDirectoryTypoError = NamedError.create(
+    "ConfigDirectoryTypoError",
+    z.object({
+      path: z.string(),
+      dir: z.string(),
+      suggestion: z.string(),
+    }),
+  )
+
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Service | Account.Service> =
+    Layer.effect(
+      Service,
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const authSvc = yield* Auth.Service
+        const accountSvc = yield* Account.Service
+
+        const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
+          return yield* fs.readFileString(filepath).pipe(
+            Effect.catchIf(
+              (e) => e.reason._tag === "NotFound",
+              () => Effect.succeed(undefined),
+            ),
+            Effect.orDie,
+          )
+        })
+
+        const loadConfig = Effect.fnUntraced(function* (
+          text: string,
+          options: { path: string } | { dir: string; source: string },
+        ) {
+          const original = text
+          const source = "path" in options ? options.path : options.source
+          const isFile = "path" in options
+          const data = yield* Effect.promise(() =>
+            ConfigPaths.parseText(
+              text,
+              "path" in options ? options.path : { source: options.source, dir: options.dir },
+            ),
+          )
+
+          const normalized = (() => {
+            if (!data || typeof data !== "object" || Array.isArray(data)) return data
+            const copy = { ...(data as Record<string, unknown>) }
+            const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
+            if (!hadLegacy) return copy
+            delete copy.theme
+            delete copy.keybinds
+            delete copy.tui
+            log.warn("tui keys in unifia config are deprecated; move them to tui.json", { path: source })
+            return copy
+          })()
+
+          const parsed = Info.safeParse(normalized)
+          if (parsed.success) {
+            if (!parsed.data.$schema && isFile) {
+              parsed.data.$schema = "https://opencode.ai/config.json"
+              const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+              yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
+            }
+            const data = parsed.data
+            if (data.plugin && isFile) {
+              const list = data.plugin
+              for (let i = 0; i < list.length; i++) {
+                list[i] = yield* Effect.promise(() => resolvePluginSpec(list[i], options.path))
+              }
+            }
+            return data
+          }
+
+          throw new InvalidError({
+            path: source,
+            issues: parsed.error.issues,
+          })
+        })
+
+        const loadFile = Effect.fnUntraced(function* (filepath: string) {
+          log.info("loading", { path: filepath })
+          const text = yield* readConfigFile(filepath)
+          if (!text) return {} as Info
+          return yield* loadConfig(text, { path: filepath })
+        })
+
+        const loadGlobal = Effect.fnUntraced(function* () {
+          let result: Info = {}
+          result = mergeDeep(result, yield* loadFile(path.join(Global.Path.config, "config.json")))
+          // Legacy before current: mergeDeep applies in order, last wins.
+          result = mergeDeep(result, yield* loadFile(path.join(Global.Path.config, "opencode.json")))
+          result = mergeDeep(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc")))
+          result = mergeDeep(result, yield* loadFile(path.join(Global.Path.config, "unifia.json")))
+          result = mergeDeep(result, yield* loadFile(path.join(Global.Path.config, "unifia.jsonc")))
+
+          const legacy = path.join(Global.Path.config, "config")
+          if (existsSync(legacy)) {
+            yield* Effect.promise(() =>
+              import(pathToFileURL(legacy).href, { with: { type: "toml" } })
+                .then(async (mod) => {
+                  const { provider, model, ...rest } = mod.default
+                  if (provider && model) result.model = `${provider}/${model}`
+                  result["$schema"] = "https://opencode.ai/config.json"
+                  result = mergeDeep(result, rest)
+                  await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+                  await fsNode.unlink(legacy)
+                })
+                .catch(() => {}),
+            )
+          }
+
+          return result
+        })
+
+        const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
+          loadGlobal().pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
+            ),
+            Effect.orElseSucceed((): Info => ({})),
+          ),
+          Duration.infinity,
+        )
+
+        const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+          return yield* cachedGlobal
+        })
+
+        const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+          const auth = yield* authSvc.all().pipe(Effect.orDie)
+
+          let result: Info = {}
+          const consoleManagedProviders = new Set<string>()
+          let activeOrgName: string | undefined
+
+          const scope = (source: string): PluginScope => {
+            if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+            if (source === "UNIFIA_CONFIG_CONTENT") return "local"
+            if (Instance.containsPath(source)) return "local"
+            return "global"
+          }
+
+          const track = (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) => {
+            if (!list?.length) return
+            const hit = kind ?? scope(source)
+            const plugins = deduplicatePluginOrigins([
+              ...(result.plugin_origins ?? []),
+              ...list.map((spec) => ({ spec, source, scope: hit })),
+            ])
+            result.plugin = plugins.map((item) => item.spec)
+            result.plugin_origins = plugins
+          }
+
+          const merge = (source: string, next: Info, kind?: PluginScope) => {
+            result = mergeConfigConcatArrays(result, next)
+            track(source, next.plugin, kind)
+          }
+
+          for (const [key, value] of Object.entries(auth)) {
+            if (value.type === "wellknown") {
+              const url = key.replace(/\/+$/, "")
+              process.env[value.key] = value.token
+              log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
+              const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
+              if (!response.ok) {
+                throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
+              }
+              const wellknown = (yield* Effect.promise(() => response.json())) as any
+              const remoteConfig = wellknown.config ?? {}
+              if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+              const source = `${url}/.well-known/opencode`
+              const next = yield* loadConfig(JSON.stringify(remoteConfig), {
+                dir: path.dirname(source),
+                source,
+              })
+              merge(source, next, "global")
+              log.debug("loaded remote config from well-known", { url })
+            }
+          }
+
+          const global = yield* getGlobal()
+          merge(Global.Path.config, global, "global")
+
+          if (Flag.UNIFIA_CONFIG) {
+            merge(Flag.UNIFIA_CONFIG, yield* loadFile(Flag.UNIFIA_CONFIG))
+            log.debug("loaded custom config", { path: Flag.UNIFIA_CONFIG })
+          }
+
+          const searchStop = ConfigPaths.searchStop({ worktree: ctx.worktree, vcs: ctx.project.vcs })
+
+          if (!Flag.UNIFIA_DISABLE_PROJECT_CONFIG) {
+            for (const file of yield* Effect.promise(() =>
+              ConfigPaths.projectFiles("unifia", ctx.directory, searchStop, "opencode"),
+            )) {
+              merge(file, yield* loadFile(file), "local")
+            }
+          }
+
+          result.agent = result.agent || {}
+          result.mode = result.mode || {}
+          result.plugin = result.plugin || []
+
+          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, searchStop))
+
+          if (Flag.UNIFIA_CONFIG_DIR) {
+            log.debug("loading config from UNIFIA_CONFIG_DIR", { path: Flag.UNIFIA_CONFIG_DIR })
+          }
+
+          const deps: Promise<void>[] = []
+
+          for (const dir of unique(directories)) {
+            if (ConfigPaths.isConfigDirectory(dir)) {
+              // Legacy basenames first: this loop merges in order, so the
+              // current brand must come last to win. The `.opencode` directory
+              // itself is still honoured (see ConfigPaths.directories), so the
+              // file inside it has to be too — reading the directory but
+              // ignoring its config was the inconsistency here.
+              for (const file of LEGACY_CONFIG_FILES.concat(CONFIG_FILES)) {
+                const source = path.join(dir, file)
+                log.debug(`loading config from ${source}`)
+                merge(source, yield* loadFile(source))
+                result.agent ??= {}
+                result.mode ??= {}
+                result.plugin ??= []
+              }
+            }
+
+            // Never into `.opencode`: that directory is read for backward
+            // compatibility, but it is also the separately-installed OpenCode's,
+            // and this wrote a package.json, a .gitignore and a node_modules
+            // tree into it on every load.
+            if (!ConfigPaths.isLegacyDirectory(dir)) {
+              const dep = iife(async () => {
+                await installDependencies(dir)
+              })
+              void dep.catch((err) => {
+                log.warn("background dependency install failed", { dir, error: err })
+              })
+              deps.push(dep)
+            }
+
+            result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
+            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
+            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
+            const list = yield* Effect.promise(() => loadPlugin(dir))
+            track(dir, list)
+          }
+
+          if (process.env.UNIFIA_CONFIG_CONTENT) {
+            const source = "UNIFIA_CONFIG_CONTENT"
+            const next = yield* loadConfig(process.env.UNIFIA_CONFIG_CONTENT, {
+              dir: ctx.directory,
+              source,
+            })
+            merge(source, next, "local")
+            log.debug("loaded custom config from UNIFIA_CONFIG_CONTENT")
+          }
+
+          const activeOrg = Option.getOrUndefined(
+            yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+          )
+          if (activeOrg) {
+            yield* Effect.gen(function* () {
+              const [configOpt, tokenOpt] = yield* Effect.all(
+                [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
+                { concurrency: 2 },
+              )
+              if (Option.isSome(tokenOpt)) {
+                process.env["UNIFIA_CONSOLE_TOKEN"] = tokenOpt.value
+                Env.set("UNIFIA_CONSOLE_TOKEN", tokenOpt.value)
+              }
+
+              activeOrgName = activeOrg.org.name
+
+              if (Option.isSome(configOpt)) {
+                const source = `${activeOrg.account.url}/api/config`
+                const next = yield* loadConfig(JSON.stringify(configOpt.value), {
+                  dir: path.dirname(source),
+                  source,
+                })
+                for (const providerID of Object.keys(next.provider ?? {})) {
+                  consoleManagedProviders.add(providerID)
+                }
+                merge(source, next, "global")
+              }
+            }).pipe(
+              Effect.catch((err) => {
+                log.debug("failed to fetch remote account config", {
+                  error: err instanceof Error ? err.message : String(err),
+                })
+                return Effect.void
+              }),
+            )
+          }
+
+          if (existsSync(managedDir)) {
+            for (const file of LEGACY_CONFIG_FILES.concat(CONFIG_FILES)) {
+              const source = path.join(managedDir, file)
+              merge(source, yield* loadFile(source), "global")
+            }
+          }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
+
+          for (const [name, mode] of Object.entries(result.mode ?? {})) {
+            result.agent = mergeDeep(result.agent ?? {}, {
+              [name]: {
+                ...mode,
+                mode: "primary" as const,
+              },
+            })
+          }
+
+          if (Flag.UNIFIA_PERMISSION) {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.UNIFIA_PERMISSION))
+          }
+
+          if (result.tools) {
+            const perms: Record<string, Config.PermissionAction> = {}
+            for (const [tool, enabled] of Object.entries(result.tools)) {
+              const action: Config.PermissionAction = enabled ? "allow" : "deny"
+              if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+                perms.edit = action
+                continue
+              }
+              perms[tool] = action
+            }
+            result.permission = mergeDeep(perms, result.permission ?? {})
+          }
+
+          // Migrate deprecated `mode` field to `agent`
+          if (result.mode) {
+            result.agent = mergeDeep(result.agent ?? {}, result.mode)
+            for (const [key, _value] of Object.entries(result.mode)) {
+              if (result.agent![key] && !(result.agent![key] as any).mode) {
+                ;(result.agent![key] as any).mode = "primary"
+              }
+            }
+          }
+
+          if (!result.username) result.username = os.userInfo().username
+
+          if (result.autoshare === true && !result.share) {
+            result.share = "auto"
+          }
+
+          if (Flag.UNIFIA_DISABLE_AUTOCOMPACT) {
+            result.compaction = { ...result.compaction, auto: false }
+          }
+          if (Flag.UNIFIA_DISABLE_PRUNE) {
+            result.compaction = { ...result.compaction, prune: false }
+          }
+
+          return {
+            config: result,
+            directories,
+            deps,
+            consoleState: {
+              consoleManagedProviders: Array.from(consoleManagedProviders),
+              activeOrgName,
+              switchableOrgCount: 0,
+            },
+          }
+        })
+
+        const state = yield* InstanceState.make<State>(
+          Effect.fn("Config.state")(function* (ctx) {
+            return yield* loadInstanceState(ctx)
+          }),
+        )
+
+        const get = Effect.fn("Config.get")(function* () {
+          return yield* InstanceState.use(state, (s) => s.config)
+        })
+
+        const directories = Effect.fn("Config.directories")(function* () {
+          return yield* InstanceState.use(state, (s) => s.directories)
+        })
+
+        const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+          return yield* InstanceState.use(state, (s) => s.consoleState)
+        })
+
+        const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+          yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
+        })
+
+        const update = Effect.fn("Config.update")(function* (config: Info) {
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
+          const existing = yield* loadFile(file)
+          yield* fs
+            .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+            .pipe(Effect.orDie)
+          yield* Effect.promise(() => Instance.dispose())
+        })
+
+        const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
+          yield* invalidateGlobal
+          const task = Instance.disposeAll()
+            .catch(() => undefined)
+            .finally(() =>
+              GlobalBus.emit("event", {
+                directory: "global",
+                payload: {
+                  type: Event.Disposed.type,
+                  properties: {},
+                },
+              }),
+            )
+          if (wait) yield* Effect.promise(() => task)
+          else void task
+        })
+
+        const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+          const file = globalConfigFile()
+          const before = (yield* readConfigFile(file)) ?? "{}"
+          const input = writable(config)
+
+          let next: Info
+          if (!file.endsWith(".jsonc")) {
+            const existing = parseConfig(before, file)
+            const merged = mergeDeep(writable(existing), input)
+            yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+            next = merged
+          } else {
+            const updated = patchJsonc(before, input)
+            next = parseConfig(updated, file)
+            yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+          }
+
+          yield* invalidate()
+          return next
+        })
+
+        return Service.of({
+          get,
+          getGlobal,
+          getConsoleState,
+          update,
+          updateGlobal,
+          invalidate,
+          directories,
+          waitForDependencies,
+        })
+      }),
+    )
+
+  export const defaultLayer = layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Account.defaultLayer),
+  )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function get() {
+    return runPromise((svc) => svc.get())
+  }
+
+  export async function getGlobal() {
+    return runPromise((svc) => svc.getGlobal())
+  }
+
+  export async function getConsoleState() {
+    return runPromise((svc) => svc.getConsoleState())
+  }
+
+  export async function update(config: Info) {
+    return runPromise((svc) => svc.update(config))
+  }
+
+  export async function updateGlobal(config: Info) {
+    return runPromise((svc) => svc.updateGlobal(config))
+  }
+
+  export async function invalidate(wait = false) {
+    return runPromise((svc) => svc.invalidate(wait))
+  }
+
+  export async function directories() {
+    return runPromise((svc) => svc.directories())
+  }
+
+  export async function waitForDependencies() {
+    return runPromise((svc) => svc.waitForDependencies())
+  }
+}

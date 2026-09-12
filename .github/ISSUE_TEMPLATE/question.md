@@ -17,5 +17,5 @@ What have you already tried? What's your setup?
 ## Environment
 
 - OS: 
-- OpenCode version: 
+- Unifia version: 
 - Platform: [Desktop / Mobile / Web]

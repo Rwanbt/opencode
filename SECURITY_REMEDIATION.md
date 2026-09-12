@@ -1,4 +1,4 @@
-# Plan de correction sécurité — OpenCode
+# Plan de correction sécurité — Unifia
 **Audit CSO du 2026-05-07** | Rapport : `.gstack/security-reports/2026-05-07-164646.json`
 
 ---
@@ -9,9 +9,9 @@
 |---|----------|-----------|---------|---------|
 | 1 | HIGH | 9/10 | XSS : LLM output non-sanitisé sur page de partage publique | `packages/web/src/components/share/content-markdown.tsx:44` |
 | 2 | MEDIUM | 9/10 | DOMPurify 3.3.1 vulnérable (7 CVEs mXSS, require >=3.3.2) | `packages/ui/package.json:56` |
-| 3 | HIGH | 8/10 | Action CI unpinnée `anomalyco/opencode@latest` + `OPENCODE_API_KEY` exposée | `.github/workflows/opencode.yml:29` |
+| 3 | HIGH | 8/10 | Action CI unpinnée `anomalyco/opencode@latest` + `UNIFIA_API_KEY` exposée | `.github/workflows/opencode.yml:29` |
 | 4 | HIGH | 8/10 | Action CI unpinnée `mitchellh/vouch@main` + `issues:write` | `.github/workflows/vouch-manage-by-issue.yml:32` |
-| 5 | HIGH | 8/10 | Fastify content-type bypass dans `opencode-gitlab-auth` (CVE GHSA-247c-9743-5963) | `packages/opencode/package.json` |
+| 5 | HIGH | 8/10 | Fastify content-type bypass dans `unifia-gitlab-auth` (CVE GHSA-247c-9743-5963) | `packages/unifia/package.json` |
 | 6 | MEDIUM | 8/10 | TLS `rejectUnauthorized: false` sur la DB console (MySQL prod) | `packages/console/core/drizzle.config.ts:17` |
 | 7 | LOW | 8/10 | `.gstack/` non gitignored → rapports sécurité exposables | `.gitignore` (**corrigé** lors de l'audit) |
 
@@ -71,7 +71,7 @@
 
 **Commande :**
 ```bash
-cd opencode
+cd unifia
 bun update dompurify
 ```
 Vérifier que la version dans `bun.lock` monte à >=3.3.2 (dernière stable : 3.3.3 à date d'audit).
@@ -86,7 +86,7 @@ Vérifier que la version dans `bun.lock` monte à >=3.3.2 (dernière stable : 3.
 
 **Problème :** Deux actions externes utilisent des refs mutables (`@latest`, `@main`) avec accès à des secrets.
 
-#### 3a — `anomalyco/opencode@latest` dans `opencode.yml`
+#### 3a — `anomalyco/opencode@latest` dans `unifia.yml`
 
 ```bash
 # Obtenir le SHA courant de l'action
@@ -147,9 +147,9 @@ ssl: {
 
 ## P2 — Prochaine sprint (< 2 semaines)
 
-### Fix #5 : Mettre à jour `opencode-gitlab-auth` (Fastify CVE)
+### Fix #5 : Mettre à jour `unifia-gitlab-auth` (Fastify CVE)
 
-**Problème :** `opencode-gitlab-auth@2.0.1` dépend de Fastify >=5.3.2 <=5.8.4, vulnérable au bypass de validation body via Content-Type header avec espace (GHSA-247c-9743-5963).
+**Problème :** `unifia-gitlab-auth@2.0.1` dépend de Fastify >=5.3.2 <=5.8.4, vulnérable au bypass de validation body via Content-Type header avec espace (GHSA-247c-9743-5963).
 
 **Vérification préalable :**
 ```bash
@@ -160,9 +160,9 @@ grep -r "listen\|port" node_modules/opencode-gitlab-auth/dist/ 2>/dev/null | hea
 ```
 
 **Action :**
-1. Contacter les mainteneurs ou ouvrir une issue sur le repo `opencode-gitlab-auth` pour demander la mise à jour Fastify >5.8.4.
+1. Contacter les mainteneurs ou ouvrir une issue sur le repo `unifia-gitlab-auth` pour demander la mise à jour Fastify >5.8.4.
 2. En attendant, vérifier que le callback OAuth est uniquement accessible en localhost (non exposé réseau).
-3. Quand une version corrigée est publiée : `bun update opencode-gitlab-auth`
+3. Quand une version corrigée est publiée : `bun update unifia-gitlab-auth`
 
 ---
 
@@ -173,16 +173,16 @@ grep -r "listen\|port" node_modules/opencode-gitlab-auth/dist/ 2>/dev/null | hea
 Aucun scanner de secrets n'est configuré. Créer `.gitleaks.toml` à la racine :
 
 ```toml
-title = "OpenCode Secret Scanner"
+title = "Unifia Secret Scanner"
 
 [extend]
 useDefault = true
 
 [[rules]]
-description = "OpenCode API Key"
-id = "opencode-api-key"
-regex = '''OPENCODE_API_KEY\s*=\s*['""]?[A-Za-z0-9_-]{20,}['""]?'''
-tags = ["key", "opencode"]
+description = "Unifia API Key"
+id = "unifia-api-key"
+regex = '''UNIFIA_API_KEY\s*=\s*['""]?[A-Za-z0-9_-]{20,}['""]?'''
+tags = ["key", "unifia"]
 
 [[rules]]
 description = "Anthropic API Key"  
@@ -192,8 +192,8 @@ tags = ["key", "anthropic"]
 
 [allowlist]
 paths = [
-  "packages/opencode/src/security/scanner.ts",
-  "packages/opencode/test/security/",
+  "packages/unifia/src/security/scanner.ts",
+  "packages/unifia/test/security/",
   ".gstack/",
 ]
 ```
@@ -232,10 +232,10 @@ Ajouter un step CI minimal pour `innerHTML` audit :
 [ ] P0-F1 : Test XSS payload sur share page → neutralisé
 [ ] P0-F1 : Entrée ajoutée dans .eslintrc.restrict.cjs
 [ ] P0-F2 : bun.lock contient dompurify@>=3.3.2
-[ ] P1-F3a : opencode.yml utilise un SHA, workflow /oc fonctionnel
+[ ] P1-F3a : unifia.yml utilise un SHA, workflow /oc fonctionnel
 [ ] P1-F3b : vouch-manage-by-issue.yml utilise un SHA, vouch fonctionnel
 [ ] P1-F4 : drizzle migrate sans erreur TLS, rejectUnauthorized absent
-[ ] P2-F5 : opencode-gitlab-auth mise à jour, OAuth GitLab testé
+[ ] P2-F5 : unifia-gitlab-auth mise à jour, OAuth GitLab testé
 [ ] P3-A1 : .gitleaks.toml créé, scan passant en CI
 [ ] P3-A2 : sst/opencode@latest pinné
 [ ] P3-A3 : ESLint innerHTML enforcement en CI

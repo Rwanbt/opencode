@@ -13,10 +13,10 @@ changes staged for review.
 ### What changed
 
 - Extracted the internal `computeWaves` helper from
-  `packages/opencode/src/tool/team.ts` into a new dependency-free module
-  `packages/opencode/src/tool/team-waves.ts`. `team.ts` re-imports from it
+  `packages/unifia/src/tool/team.ts` into a new dependency-free module
+  `packages/unifia/src/tool/team-waves.ts`. `team.ts` re-imports from it
   (strictly additive; `computeWaves` was never exported).
-- Added `packages/opencode/test/e2e/team-waves.test.ts` which drives the
+- Added `packages/unifia/test/e2e/team-waves.test.ts` which drives the
   PRODUCTION `computeWaves` through the exact `dispatchDag` simulator
   previously inlined in `dag-team.test.ts`. Any drift between the
   mirror-copy in `dag-team.test.ts` and the prod algorithm is caught here.
@@ -69,7 +69,7 @@ bun test ./test/e2e/dag-team.test.ts
 
 ### What changed
 
-- Added `packages/opencode/test/lib/mock-keychain-server.ts` — a Node
+- Added `packages/unifia/test/lib/mock-keychain-server.ts` — a Node
   `http.createServer` bound on `127.0.0.1:0` implementing the exact 4
   routes consumed by `KeychainStorage`:
   - `GET  /kc/:service`            → list keys
@@ -79,7 +79,7 @@ bun test ./test/e2e/dag-team.test.ts
   - Auth via `X-Keychain-Token`; mismatch → 401.
   - Exposes `{ url, token, store, close, kill }` where `kill()` force-shuts
     connections to simulate transport errors.
-- Added `packages/opencode/test/auth/keychain-storage.test.ts` with 9
+- Added `packages/unifia/test/auth/keychain-storage.test.ts` with 9
   assertions covering:
   - `available()` true/false based on env vars;
   - single-entry `set` / `get` round-trip;
@@ -95,7 +95,7 @@ bun test ./test/e2e/dag-team.test.ts
 `Auth.layer` captures its backend choice once, at layer evaluation, via
 `selectKeychain()` which reads the module-level `AUTH_STORAGE_BACKEND`
 constant set at `auth/index.ts` module-init. Flipping
-`OPENCODE_AUTH_STORAGE` mid-process does **not** affect the running
+`UNIFIA_AUTH_STORAGE` mid-process does **not** affect the running
 `ManagedRuntime` — the only way to exercise the keychain-backed
 `Auth.layer` in-process would be to rebuild the runtime, which the public
 API does not expose. Testing `KeychainStorage` directly covers the
@@ -137,6 +137,6 @@ bun test ./test/lib/
 | `bun test ./test/e2e/dag-team.test.ts`                      | 7 pass, 2 skip |
 | `bun test ./test/auth/keychain-storage.test.ts`             | 9/9 pass |
 | `bun test ./test/auth/ ./test/e2e/ ./test/lib/`             | 25 pass, 2 skip, 0 fail |
-| `bun test` (full `packages/opencode`, 176 files)            | 2129 pass, 26 skip, 1 todo, 0 fail |
+| `bun test` (full `packages/unifia`, 176 files)            | 2129 pass, 26 skip, 1 todo, 0 fail |
 
 No regressions introduced.

@@ -11,7 +11,7 @@
 
 import { invokeTauri, convertFileSrc } from "../../../app/src/hooks/speech-tauri-adapter"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { showToast, toaster } from "@opencode-ai/ui/toast"
+import { showToast, toaster } from "@unifia/ui/toast"
 
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
@@ -150,7 +150,7 @@ let ttsAborted = false
 
 function getAudioSettings() {
   try {
-    const raw = localStorage.getItem("opencode-audio-settings")
+    const raw = localStorage.getItem("unifia-audio-settings")
     return raw ? JSON.parse(raw) : {}
   } catch { return {} }
 }

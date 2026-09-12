@@ -2,7 +2,7 @@
  * sigsys_trace.c --- LD_PRELOAD shim that logs SIGSYS events to a FILE
  * (not stderr) so they survive forkpty redirection to the pseudo-TTY.
  *
- * Constructor opens /data/data/ai.opencode.mobile/tmp/sigsys.log in
+ * Constructor opens /data/data/ai.unifia.mobile/tmp/sigsys.log in
  * O_CREAT|O_APPEND|O_WRONLY mode and stores the fd.  Both the ctor
  * (proof-of-load) and the SIGSYS handler (syscall number) write to
  * this fd.  Pull with `adb pull`.
@@ -22,7 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LOG_DIR  "/data/data/ai.opencode.mobile/tmp"
+#define LOG_DIR  "/data/data/ai.unifia.mobile/tmp"
 #define LOG_PATH LOG_DIR "/sigsys.log"
 
 static int log_fd = -1;
@@ -76,7 +76,7 @@ static void sigsys_handler(int sig, siginfo_t *info, void *ctx) {
      * our constructor-opened log_fd. open(2) is async-signal-safe. */
     int fd = open(LOG_PATH, O_CREAT | O_APPEND | O_WRONLY, 0644);
     if (fd < 0) {
-        fd = open("/data/user/0/ai.opencode.mobile/runtime/sigsys.log",
+        fd = open("/data/user/0/ai.unifia.mobile/runtime/sigsys.log",
                   O_CREAT | O_APPEND | O_WRONLY, 0644);
     }
     if (fd >= 0) {
@@ -115,7 +115,7 @@ static void install_sigsys_handler(void) {
                   O_CREAT | O_APPEND | O_WRONLY,
                   0644);
     if (log_fd < 0) {
-        log_fd = open("/data/user/0/ai.opencode.mobile/runtime/sigsys.log",
+        log_fd = open("/data/user/0/ai.unifia.mobile/runtime/sigsys.log",
                       O_CREAT | O_APPEND | O_WRONLY,
                       0644);
     }

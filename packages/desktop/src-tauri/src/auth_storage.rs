@@ -1,17 +1,28 @@
 //! OS keychain-backed credential storage for OpenCode (B1 — Sprint 4).
 //!
 //! Exposes four Tauri commands consumed by the TypeScript sidecar's
-//! `KeychainStorage` adapter (see `packages/opencode/src/auth/index.ts`).
+//! `KeychainStorage` adapter (see `packages/unifia/src/auth/index.ts`).
 //!
 //! Backends (via the `keyring` crate v3):
 //!   - Windows : Credential Manager (wincred)
 //!   - macOS   : Keychain
 //!   - Linux   : Secret Service (libsecret — falls back to kwallet)
 //!
-//! The `service` argument is namespaced to `opencode.<service>` so that test
+//! The `service` argument is namespaced to `unifia.<service>` so that test
 //! runs and local dev do not collide with a production install on the same
-//! user profile. The `key` argument is typically the provider ID
+//! user profile. A legacy `opencode.<service>` namespace is also read and
+//! cleared so that an old install does not strand its credentials after the
+//! rebrand. The `key` argument is typically the provider ID
 //! (e.g. "anthropic", "openai", "copilot").
+//!
+//! Migration semantics (carte C8-B of the
+//! Runbook-Autonome-Independance-Unifia-2026-08-10):
+//!   - `get`  : try the new prefix first; on miss, try the legacy prefix and
+//!     if found, rewrite the value into the new prefix (do not delete the
+//!     legacy entry) so future reads hit the new prefix.
+//!   - `set`  : always the new prefix.
+//!   - `delete`: BOTH prefixes, so a logout cannot leave a phantom
+//!     credential in the legacy namespace.
 //!
 //! Error handling:
 //!   - `NoEntry` (key missing) is NOT an error for `get` — returns None so
@@ -25,7 +36,7 @@
 //! supports `SecItemCopyMatching`, libsecret has `secret_service_search`,
 //! but the semantics differ. We sidestep that by maintaining a JSON
 //! registry file at `<data_dir>/auth.keychain-index.json` that records the
-//! set of (service, key) tuples owned by OpenCode. Listing reads the
+//! set of (service, key) tuples owned by Unifia. Listing reads the
 //! registry and verifies each entry is still readable (drops stale ones).
 
 use keyring::Entry;
@@ -38,10 +49,25 @@ use std::sync::OnceLock;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
+use unifia_keyring_shim::{
+    keyring_delete as shim_keyring_delete, keyring_get as shim_keyring_get, keyring_set as shim_keyring_set, KeyringBackend, RealKeyringBackend,
+};
+
+/// The keyring backend the Tauri commands talk to.
+///
+/// The production process always uses `RealKeyringBackend` (a zero-sized
+/// type that delegates each call to the `keyring` crate). Tests would
+/// override this through a `OnceLock` if they needed to — see
+/// `packages/desktop/keyring-shim/tests/keychain_namespace.rs` for the
+/// in-process `MockBackend` used in unit tests.
+fn backend() -> &'static dyn KeyringBackend {
+    static INSTANCE: OnceLock<RealKeyringBackend> = OnceLock::new();
+    INSTANCE.get_or_init(|| RealKeyringBackend)
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct KeychainIndex {
-    /// service -> ordered list of keys known to OpenCode.
+    /// service -> ordered list of keys known to Unifia.
     entries: HashMap<String, Vec<String>>,
 }
 
@@ -71,21 +97,22 @@ fn save_index(app: &AppHandle, index: &KeychainIndex) -> Result<(), String> {
     fs::write(&p, bytes).map_err(|e| format!("write {p:?}: {e}"))
 }
 
-fn namespaced(service: &str) -> String {
-    format!("opencode.{service}")
+/// The new (Unifia) keychain service name for a logical `service`.
+///
+/// The brand prefix is owned by the `unifia-keyring-shim` crate; we only
+/// need the new name here for the `list` command, which peeks under the
+/// new prefix directly to filter stale entries. The legacy prefix is
+/// handled inside the shim by the read / write / delete operations.
+fn namespaced_new(service: &str) -> String {
+    use unifia_keyring_shim::KEYRING_PREFIX;
+    format!("{KEYRING_PREFIX}.{service}")
 }
 
 /// Fetch a credential. Returns `Ok(None)` when the entry does not exist.
 #[tauri::command]
 #[specta::specta]
 pub fn auth_storage_get(service: String, key: String) -> Result<Option<String>, String> {
-    let ns = namespaced(&service);
-    let entry = Entry::new(&ns, &key).map_err(|e| format!("entry: {e}"))?;
-    match entry.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("keyring get: {e}")),
-    }
+    shim_keyring_get(backend(), &service, &key)
 }
 
 #[tauri::command]
@@ -96,11 +123,7 @@ pub fn auth_storage_set(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    let ns = namespaced(&service);
-    let entry = Entry::new(&ns, &key).map_err(|e| format!("entry: {e}"))?;
-    entry
-        .set_password(&value)
-        .map_err(|e| format!("keyring set: {e}"))?;
+    shim_keyring_set(backend(), &service, &key, &value)?;
 
     // Update the logical-keys index so `auth_storage_list` can enumerate.
     let mut index = load_index(&app);
@@ -114,13 +137,7 @@ pub fn auth_storage_set(
 #[tauri::command]
 #[specta::specta]
 pub fn auth_storage_delete(app: AppHandle, service: String, key: String) -> Result<(), String> {
-    let ns = namespaced(&service);
-    let entry = Entry::new(&ns, &key).map_err(|e| format!("entry: {e}"))?;
-    match entry.delete_credential() {
-        Ok(()) => {}
-        Err(keyring::Error::NoEntry) => {}
-        Err(e) => return Err(format!("keyring delete: {e}")),
-    }
+    shim_keyring_delete(backend(), &service, &key)?;
     let mut index = load_index(&app);
     if let Some(keys) = index.entries.get_mut(&service) {
         keys.retain(|k| k != &key);
@@ -138,8 +155,11 @@ pub fn auth_storage_list(app: AppHandle, service: String) -> Result<Vec<String>,
     let Some(keys) = index.entries.get(&service).cloned() else {
         return Ok(Vec::new());
     };
-    // Filter stale entries: verify the credential is still readable.
-    let ns = namespaced(&service);
+    // Filter stale entries: verify the credential is still readable under
+    // the new prefix. Legacy entries are not enumerated here — they are
+    // surfaced through `auth_storage_get`, which rewrites them into the
+    // new namespace as it surfaces them.
+    let ns = namespaced_new(&service);
     let mut alive: Vec<String> = Vec::new();
     let mut changed = false;
     for k in keys {
@@ -180,8 +200,8 @@ pub fn auth_storage_list(app: AppHandle, service: String) -> Result<Vec<String>,
 //
 //   1. Generate a 128-bit token (UUID v4, hex).
 //   2. Bind a TcpListener on 127.0.0.1:0 and stash (url, token) in statics.
-//   3. Export them to the sidecar via `OPENCODE_KEYCHAIN_URL` and
-//      `OPENCODE_KEYCHAIN_TOKEN` env vars at spawn time (see cli.rs).
+//   3. Export them to the sidecar via `UNIFIA_KEYCHAIN_URL` and
+//      `UNIFIA_KEYCHAIN_TOKEN` env vars at spawn time (see cli.rs).
 //
 // Security:
 //   - Bound to 127.0.0.1 only — not reachable off-box.

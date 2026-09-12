@@ -1,0 +1,20 @@
+card_id: TEAM-D05
+base_sha: 00b38a27872ea749bf79d533ce418c82325cb3c5
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/events.ts
+  - packages/unifia/src/team/event-writer.ts
+  - packages/unifia/test/team/event-writer.test.ts
+  - docs/team/scope-manifest/TEAM-D05.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/team-store.ts
+  - packages/unifia/src/team/checkpoint-manager.ts
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/provider/auth.ts
+  - packages/unifia/src/auth/**
+  - main
+  - dev
+  - opti-ui

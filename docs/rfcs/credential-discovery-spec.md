@@ -1,9 +1,9 @@
-# RFC: Multi-Provider Credential Discovery for OpenCode VS Code Extension
+# RFC: Multi-Provider Credential Discovery for Unifia VS Code Extension
 
 ## Problem
 
 Users run multiple AI CLIs (Claude Code, Codex/ChatGPT, Gemini CLI) authenticated
-via their personal accounts (OAuth, not pay-per-token API keys). The OpenCode VS
+via their personal accounts (OAuth, not pay-per-token API keys). The Unifia VS
 Code extension needs to discover these existing credentials so users can switch
 between models without re-authenticating or pasting API keys.
 
@@ -423,7 +423,7 @@ const env = {
 
 ```typescript
 // Register a provider picker command
-vscode.commands.registerCommand('opencode.switchProvider', async () => {
+vscode.commands.registerCommand('unifia.switchProvider', async () => {
   const providers = discoverAll()
   const items = providers.map(p => ({
     label: `${p.provider} (${p.authType})`,
@@ -440,6 +440,6 @@ vscode.commands.registerCommand('opencode.switchProvider', async () => {
 // Status bar indicator showing active provider
 const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right)
 statusBar.text = '$(cloud) Claude Max'
-statusBar.command = 'opencode.switchProvider'
+statusBar.command = 'unifia.switchProvider'
 statusBar.show()
 ```

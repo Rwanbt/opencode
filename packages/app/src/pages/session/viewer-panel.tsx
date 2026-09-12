@@ -16,14 +16,14 @@
 
 import { createMemo, Match, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { checksum } from "@opencode-ai/util/encode"
-import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
+import { checksum } from "@unifia/util/encode"
+import { markViewerTiming } from "@unifia/util/viewer-timing"
+import { ScrollView } from "@unifia/ui/scroll-view"
+import { useFileComponent } from "@unifia/ui/context/file"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { showToast } from "@opencode-ai/ui/toast"
-import type { FileSearchHandle } from "@opencode-ai/ui/file"
+import { showToast } from "@unifia/ui/toast"
+import type { FileSearchHandle } from "@unifia/ui/file"
 import type { FileState } from "@/context/file/types"
 import type { SelectedLineRange } from "@/context/file/types"
 
@@ -83,7 +83,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
   const renderFile = (source: () => string) => {
     // FORK (PLAN-READONLY-VIEWER-REACTIVITY C2): this object used to be
     // built inline as a plain IIFE, re-run on EVERY read of props.file
-    // downstream in @opencode-ai/ui's file.tsx (text(), lineCount(), draw(),
+    // downstream in @unifia/ui's file.tsx (text(), lineCount(), draw(),
     // applySelection(), the notifyShadowReady readiness check — none of them
     // memoized, several fire on unrelated changes like a line selection).
     // Each read recomputed checksum(), an O(n) hash over the whole file, so

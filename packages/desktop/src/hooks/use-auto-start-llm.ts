@@ -13,13 +13,13 @@ function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> 
 
 /**
  * Read the most recently used model from the persisted global store.
- * The app keeps it in the Tauri store "opencode.global.dat" under key "model"
+ * The app keeps it in the Tauri store "unifia.global.dat" under key "model"
  * (JSON string: { user, recent: [{providerID, modelID}], variant }). Used to
  * decide whether a launch-time local warm-up is actually wanted.
  */
 async function getActiveModel(): Promise<{ providerID: string; modelID: string } | null> {
   try {
-    const store = await Store.load("opencode.global.dat")
+    const store = await Store.load("unifia.global.dat")
     const raw = await store.get<unknown>("model")
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
     const recent = (parsed as { recent?: Array<{ providerID?: string; modelID?: string }> } | null)?.recent

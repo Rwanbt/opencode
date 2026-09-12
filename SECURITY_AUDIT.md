@@ -1,7 +1,7 @@
-# Security Audit — OpenCode fork
+# Security Audit — Unifia fork
 
 **Date**: 2026-04-17
-**Scope**: fork OpenCode (Bun / SolidJS / Tauri 2.0, desktop + Android)
+**Scope**: fork Unifia (Bun / SolidJS / Tauri 2.0, desktop + Android)
 **Axes audited**: attack surface, resource leaks, input validation / edge cases, secrets & auth
 **Methodology**: 4 parallel code-exploration agents + targeted manual review + corroboration with prior A.*/B.* audits
 
@@ -41,13 +41,13 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S2.A1 — CORS wildcard on `*.opencode.ai` subdomains
 
-- **File**: [packages/opencode/src/server/server.ts:64-88](packages/opencode/src/server/server.ts#L64-L88)
-- **Cause**: regex `^https:\/\/([a-z0-9-]+\.)*opencode\.ai$` accepts
-  arbitrarily deep subdomains of `opencode.ai`. A hijacked preview
+- **File**: [packages/unifia/src/server/server.ts:64-88](packages/unifia/src/server/server.ts#L64-L88)
+- **Cause**: regex `^https:\/\/([a-z0-9-]+\.)*unifia\.ai$` accepts
+  arbitrarily deep subdomains of `unifia.ai`. A hijacked preview
   environment or a forgotten staging subdomain can CSRF the local dev
   server.
 - **Recommended fix**: explicit whitelist of the two or three trusted
-  subdomains (`opencode.ai`, `www.opencode.ai`, `app.opencode.ai`).
+  subdomains (`unifia.ai`, `www.opencode.ai`, `app.opencode.ai`).
   Deferred to a separate PR because it touches the production deployment
   config.
 
@@ -56,7 +56,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 - **File**: [packages/app/src/pages/layout/deep-links.ts:46-58](packages/app/src/pages/layout/deep-links.ts)
 - **Cause**: `parseOAuthCallbackDeepLink` accepts any non-empty
   `providerID` string. A malicious page could craft
-  `opencode://oauth/callback?providerID=../../..&code=x` and trigger
+  `unifia://oauth/callback?providerID=../../..&code=x` and trigger
   unexpected paths inside the dialog. Current mitigation is that the
   dialog compares `detail.providerID !== props.provider` before doing
   anything, but defense in depth still applies.
@@ -94,7 +94,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 - **File**: [packages/app/src/pages/layout/deep-links.ts:13-31](packages/app/src/pages/layout/deep-links.ts)
 - **Cause**: `parseDeepLink` returns any string as-is. A
-  `opencode://open-project?directory=../..` can open whatever the CLI is
+  `unifia://open-project?directory=../..` can open whatever the CLI is
   willing to treat as a project root.
 - **Recommended fix**: require the string to be absolute and resolve to
   a known project root via the local server's project list.
@@ -129,7 +129,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S2.L1 — SSE heartbeat double-stop race
 
-- **File**: [packages/opencode/src/server/routes/event.ts:46-58](packages/opencode/src/server/routes/event.ts)
+- **File**: [packages/unifia/src/server/routes/event.ts:46-58](packages/unifia/src/server/routes/event.ts)
 - **Cause**: `stop()` can be invoked twice under a proxy timeout +
   client disconnect race; `clearInterval` is idempotent but `unsub()`
   is not.
@@ -149,15 +149,15 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S1.V1 — Cost arithmetic underflow — already fixed (audit B.5)
 
-- **File**: [packages/opencode/src/session/index.ts:289](packages/opencode/src/session/index.ts)
+- **File**: [packages/unifia/src/session/index.ts:289](packages/unifia/src/session/index.ts)
 - **Status**: `Math.max(0, safe(inputTokens - cacheSum))` is in place and
   a warning is logged if the raw count would have gone negative
-  ([line 282](packages/opencode/src/session/index.ts#L282)). Flagged by
+  ([line 282](packages/unifia/src/session/index.ts#L282)). Flagged by
   the audit agent from a stale report; verified on current tree.
 
 ### S1.V2 — Fetch calls without timeout (Ollama, OAuth token exchange)
 
-- **Files**: [packages/opencode/src/mcp/oauth-callback.ts](packages/opencode/src/mcp/oauth-callback.ts) (token POST), `packages/opencode/src/local-models/ollama.ts` (if present)
+- **Files**: [packages/unifia/src/mcp/oauth-callback.ts](packages/unifia/src/mcp/oauth-callback.ts) (token POST), `packages/unifia/src/local-models/ollama.ts` (if present)
 - **Cause**: a misconfigured Ollama server or a malicious IdP can hang
   these calls indefinitely. The main thread is not blocked, but the
   Effect scope is held forever, leaking file descriptors and SSE
@@ -167,7 +167,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S1.V3 — `File.read` does not normalize symlinks
 
-- **File**: [packages/opencode/src/file/index.ts:305-665](packages/opencode/src/file/index.ts)
+- **File**: [packages/unifia/src/file/index.ts:305-665](packages/unifia/src/file/index.ts)
 - **Cause**: `Instance.containsPath(resolved)` protects against `..`
   traversal but not against a symlink planted inside the project that
   points outside (e.g. `project/docs -> /etc`). Since the CLI invites the
@@ -179,7 +179,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S2.V1 — RPC worker response map races on ID reuse
 
-- **File**: [packages/opencode/src/util/rpc.ts:24-64](packages/opencode/src/util/rpc.ts)
+- **File**: [packages/unifia/src/util/rpc.ts:24-64](packages/unifia/src/util/rpc.ts)
 - **Cause**: `pending.set(id, handler)` / `pending.delete(id)` are not
   atomic around the `resolve()` call, and `id` overflows after 2^53 so
   reuse is theoretically possible. In practice IDs do not overflow in
@@ -189,7 +189,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S2.V2 — No Zod validation on embedding provider responses
 
-- **File**: [packages/opencode/src/rag/embed.ts:26-88](packages/opencode/src/rag/embed.ts)
+- **File**: [packages/unifia/src/rag/embed.ts:26-88](packages/unifia/src/rag/embed.ts)
 - **Cause**: the result of `embed({ model, value })` is trusted verbatim;
   an HF endpoint that starts returning a different shape crashes the
   `Float32Array()` constructor on nested undefined.
@@ -201,7 +201,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S1.S1 — WebSocket auth via `?authorization=` query param
 
-- **File**: [packages/opencode/src/server/auth-jwt.ts:110-145](packages/opencode/src/server/auth-jwt.ts)
+- **File**: [packages/unifia/src/server/auth-jwt.ts:110-145](packages/unifia/src/server/auth-jwt.ts)
 - **Cause**: browsers and WebView2 silently strip the `Authorization`
   header from WebSocket upgrades, so the codebase passes it as a query
   parameter. That parameter is then visible to any intermediary logging
@@ -217,7 +217,7 @@ commit `29d6836c1`), not inherited from the prior audit reports.
 
 ### S1.S2 — `auth.json` tokens stored in plaintext
 
-- **File**: [packages/opencode/src/auth/index.ts](packages/opencode/src/auth/index.ts)
+- **File**: [packages/unifia/src/auth/index.ts](packages/unifia/src/auth/index.ts)
 - **Cause**: tokens are written to disk with mode 0o600. That is enough
   to protect against a curious non-root user on the same host, but a full
   disk image or a backup utility that copies home directories will

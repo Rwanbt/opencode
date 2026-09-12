@@ -1,0 +1,27 @@
+{
+  "name": "monorepo-rust",
+  "description": "Workspace mono-repo Rust (Cargo workspaces)",
+  "type": "monorepo",
+  "language": "rust",
+  "structure": {
+    "root": "Cargo.toml",
+    "expected_files": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/*/Cargo.toml",
+      "crates/*/src/lib.rs"
+    ],
+    "expected_count": "3-30 crates"
+  },
+  "git": {
+    "expected_main_branch": "main"
+  },
+  "size": "medium",
+  "agent_test_scenarios": [
+    "list_crates",
+    "build_all",
+    "test_all",
+    "add_new_crate",
+    "update_dependency"
+  ]
+}

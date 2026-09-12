@@ -1,12 +1,12 @@
-# Glossaire OpenCode
+# Glossaire Unifia
 
-Définitions opérationnelles des termes utilisés dans le code. Pour chaque terme, la définition précise dans le contexte OpenCode, pas une définition générique.
+Définitions opérationnelles des termes utilisés dans le code. Pour chaque terme, la définition précise dans le contexte Unifia, pas une définition générique.
 
 ## Session
 
 Une conversation agent ↔ LLM dans un répertoire donné. Identifiée par un UUID. Stockée dans SQLite via Drizzle ORM. Une session a un `directory`, un `title` autogénéré, et un état (`idle | running | error`).
 
-**Module** : `packages/opencode/src/session/session.ts`
+**Module** : `packages/unifia/src/session/session.ts`
 
 ## Workspace / Worktree
 
@@ -18,7 +18,7 @@ Un répertoire de travail git worktree associé à un projet. Le workspace racin
 
 Un service LLM (Anthropic, OpenAI, Gemini, local-llm, etc.) configuré par l'utilisateur. Résolu à l'exécution depuis la config cascade. Le pseudo-provider `local-llm` gère le lifecycle du processus llama-server.
 
-**Module** : `packages/opencode/src/provider/provider.ts`
+**Module** : `packages/unifia/src/provider/provider.ts`
 
 ## Session Key
 
@@ -36,10 +36,10 @@ Pattern d'extraction : `createXxx(deps: XxxDeps)` installe ses propres effects e
 
 ## MCP
 
-Model Context Protocol — protocole JSON-RPC permettant aux LLMs d'appeler des outils externes via des serveurs MCP. OpenCode agit comme client MCP.
+Model Context Protocol — protocole JSON-RPC permettant aux LLMs d'appeler des outils externes via des serveurs MCP. Unifia agit comme client MCP.
 
-**Module** : `packages/opencode/src/mcp/`
+**Module** : `packages/unifia/src/mcp/`
 
 ## Sidecar
 
-Le binaire TypeScript `opencode-cli` compilé avec Bun (`bun run build --single --baseline`). Embarqué dans l'application Tauri, expose l'API REST + SSE sur le port local.
+Le binaire TypeScript `unifia-cli` compilé avec Bun (`bun run build --single --baseline`). Embarqué dans l'application Tauri, expose l'API REST + SSE sur le port local.

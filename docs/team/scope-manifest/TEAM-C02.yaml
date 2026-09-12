@@ -1,0 +1,39 @@
+# TEAM-C02 scope manifest — WAVE-POST-T0-003
+card_id: TEAM-C02
+title: "Connecteur catalogue provider générique"
+gate: T2
+risk: medium
+depends_on: [C01]
+depends_on_satisfied: true # C01 CLOSED+INTEGRATED (D-036, retry confiance 96)
+base_sha: 7b229eeae7e404f12efd27368bbaae2ffb9f3af4
+branch: c-C02/45ea603a
+worktree: D:\App\OpenCode\.team-worktrees\C02-45ea603a
+fencing_token_provisional: 148
+
+allowed_create:
+  - packages/unifia/src/model-intelligence/connectors/types.ts
+  - packages/unifia/src/model-intelligence/connectors/registry.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C02.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/registry.ts # C01 core, figé, consommer ne pas réécrire
+  - packages/unifia/src/model-intelligence/schema.ts # C01 core, figé
+  - packages/unifia/src/multi-model/** # scope B01/B02, simultanée cette vague
+  - packages/unifia/src/team/** # scope G01/G02, figé
+  - toute branche protégée: main, dev, opti-ui, Team
+
+acceptance_criteria:
+  - "Tests de contrat couvrent succès, erreurs, versions et données inconnues"
+  - "Champs inconnus gérés sans perte ni exécution implicite"
+  - "Échec de connecteur restaure le dernier snapshot valide"
+  - "Aucun fichier hors manifest"
+  - "bunx tsc --noEmit -p . -> 0 erreur dans src/model-intelligence/connectors/**"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsc --noEmit -p ."
+    - "bun test test/model-intelligence/ (baseline 59/59 maintenue + nouveaux tests connectors)"
+    - "git diff --check"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct"

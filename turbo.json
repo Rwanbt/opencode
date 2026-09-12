@@ -1,37 +1,49 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "UNIFIA_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "UNIFIA_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
-      "dependsOn": ["^build"],
+    // The knowledge e2e (test/knowledge/e2e/cli-process.test.ts) exists to catch
+    // the bundler dropping a module from the shipped binary — the defect that
+    // once removed the whole Sovereign Knowledge Core from dist/ while 883
+    // tests stayed green. It can only do that against a binary, so building one
+    // is a dependency of the test task, not a step someone remembers to run.
+    // Not cached: the output is a single ~186 MB executable, and CI stores this
+    // cache per commit under a 10 GB repo-wide budget. Rebuilding costs ~1 min;
+    // evicting every other cache entry costs every job on the repo.
+    "unifia#build": {
+      "outputs": ["dist/**"],
+      "cache": false
+    },
+    "unifia#test": {
+      "dependsOn": ["^build", "build"],
       "outputs": [],
       "passThroughEnv": ["*"]
     },
-    "opencode#test:ci": {
+    "unifia#test:ci": {
+      "dependsOn": ["^build", "build"],
+      "outputs": [".artifacts/unit/junit.xml"],
+      "passThroughEnv": ["*"]
+    },
+    "@unifia/app#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@unifia/app#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/app#test": {
+    "@unifia/mobile#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/app#test:ci": {
-      "dependsOn": ["^build"],
-      "outputs": [".artifacts/unit/junit.xml"],
-      "passThroughEnv": ["*"]
-    },
-    "@opencode-ai/mobile#test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@opencode-ai/mobile#test:ci": {
+    "@unifia/mobile#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"]
     }

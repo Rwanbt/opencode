@@ -1,10 +1,10 @@
-import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
-import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
+import { Database, eq, and, sql, inArray } from "@unifia/console-core/drizzle/index.js"
+import { IpRateLimitTable } from "@unifia/console-core/schema/ip.sql.js"
 import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
 import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
+import { Subscription } from "@unifia/console-core/subscription.js"
 
 export function createRateLimiter(
   modelId: string,

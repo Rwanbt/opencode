@@ -2,7 +2,7 @@
 type: plan
 status: ready-for-review
 created: 2026-06-29
-project: opencode-desktop
+project: unifia-desktop
 feature: Auto-exit edit mode after successful save (UX)
 related: PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md (persistence fix round 3)
 ---
@@ -291,7 +291,7 @@ Idem pour `missing` et `error`.
 2. `bun test packages/app/src/context/editor/` → tous pass
 3. `bun run typecheck -F packages/app` → 0 erreur
 4. `bun run build` + `bun run tauri build --no-bundle`
-5. Lance `OpenCode.exe`
+5. Lance `Unifia.exe`
 6. **Tests runtime critiques** :
    - Ouvre un fichier (double-click) → edit mode
    - Modifie du contenu
@@ -391,7 +391,7 @@ Le diff est ~2 lignes — rollback trivial.
 ## Annexe B — Convention de nommage (suit les plans précédents)
 
 - Fichier plan : `PLAN-EDITEUR-IDE-AUTOEXIT-EDIT-ON-SAVE-2026-06-29.md` (parallèle à `PLAN-EDITEUR-IDE-FIX-SAVE-2026-06-28.md`)
-- Frontmatter `type: plan`, `status: ready-for-review`, `project: opencode-desktop`
+- Frontmatter `type: plan`, `status: ready-for-review`, `project: unifia-desktop`
 - Commit message : `feat(editor): ...` (conventional commits, scope = editor)
 - Pas de bump VERSION — c'est une feature additive, pas un breaking change.
 
@@ -399,7 +399,7 @@ Le diff est ~2 lignes — rollback trivial.
 
 ## Annexe C — Note pédagogique
 
-Ce plan illustre un pattern important du codebase opencode :
+Ce plan illustre un pattern important du codebase unifia :
 
 **Le signal `editing` est local à `FileTabContent`** — c'est un choix architectural délibéré. Chaque tab a son propre mode (on peut être en train d'éditer file A en mode édition et lire file B en mode viewer dans le même workspace). Le mode n'est PAS centralisé dans un store global parce que ça n'a pas de sens cross-tab.
 

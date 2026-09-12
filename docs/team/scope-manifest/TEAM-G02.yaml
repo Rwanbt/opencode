@@ -1,0 +1,66 @@
+card_id: TEAM-G02
+version: 1
+created_at_utc: 2026-07-21T03:20:00Z
+schema_version: "1.0.0"
+lease_id: LEASE-G02-20260721032000-team-g02-worktree-manager
+base_sha: 4ed89083c8d19089df9401f8b39f3dea870fff68
+scope_mode: E2_REQUIRED
+
+allowed_files:
+  - packages/unifia/src/team/worktree-manager.ts
+  - packages/unifia/src/team/hooks.ts
+  - packages/unifia/src/team/team-cli.ts
+  - packages/unifia/src/team/index.ts
+  - packages/unifia/test/team/worktree-manager.test.ts
+  - packages/unifia/test/team/hooks.test.ts
+  - packages/unifia/test/team/integration/wt-01-creation.test.ts
+  - packages/unifia/test/team/integration/wt-02-double-creation.test.ts
+  - packages/unifia/test/team/integration/wt-03-attach-existing.test.ts
+  - packages/unifia/test/team/integration/wt-04-detach-clean.test.ts
+  - packages/unifia/test/team/integration/wt-05-detach-dirty.test.ts
+  - packages/unifia/test/team/integration/wt-06-hooks-pre-commit.test.ts
+  - packages/unifia/test/team/integration/wt-07-hooks-pre-push.test.ts
+  - packages/unifia/test/team/integration/wt-08-fail-closed-path.test.ts
+  - packages/unifia/test/team/integration/wt-09-concurrent-creation.test.ts
+  - packages/unifia/test/team/integration/wt-10-base-sha-mismatch.test.ts
+  - docs/team/worktrees.md
+  - .husky/_/.gitignore
+
+protected_files:
+  - .gitattributes
+  - package.json
+  - bun.lock
+  - bunfig.toml
+  - tsconfig.json
+  - turbo.json
+  - sst.config.ts
+  - sst-env.d.ts
+  - .gitignore
+  - .github/workflows/**
+
+forbidden_files:
+  - "**/*.generated.*"
+  - "**/secrets/**"
+  - ".git/**"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+
+reserved_files:
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/team/fencing.ts
+  - packages/unifia/src/team/scope-monitor.ts
+  - packages/unifia/src/team/db/migrations/001_leases.sql
+  - packages/unifia/src/team/db/migrations/002_fencing.sql
+
+symlink_policy: REJECT
+case_policy: REJECT_DUPLICATE_CASE
+long_path_policy: FAIL_OVER_260
+eol_policy: LF_NORMALIZED
+
+exclusions:
+  - "**/node_modules/**"
+  - "**/.git/objects/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - ".locks/**"

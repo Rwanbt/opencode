@@ -58,7 +58,7 @@ Rejected because these instructions encode the user's engineering methodology an
 
 ## Implementation
 
-- `estimateAdaptiveContext()` in `packages/opencode/src/local-llm-server/auto-config.ts`
+- `estimateAdaptiveContext()` in `packages/unifia/src/local-llm-server/auto-config.ts`
 - Extended `readGgufMeta()` in the same file: now reads tensor-info section to count `blk.N.attn_k.weight` occurrences
-- Tests: `packages/opencode/test/local-llm-server/auto-config.test.ts` (13 tests, including exact KV prediction)
+- Tests: `packages/unifia/test/local-llm-server/auto-config.test.ts` (13 tests, including exact KV prediction)
 - See `docs/LOCAL-LLM-ADAPTIVE-CONTEXT.md` for the full technical reference

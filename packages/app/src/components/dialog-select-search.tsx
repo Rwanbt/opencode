@@ -12,11 +12,11 @@
 // shape (one row per match, not per file) and the auto-jump-to-line UX are
 // different enough that a dedicated modal is clearer than another mode flag.
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { List } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { Dialog } from "@unifia/ui/dialog"
+import { FileIcon } from "@unifia/ui/file-icon"
+import { List } from "@unifia/ui/list"
+import { getDirectory, getFilename } from "@unifia/util/path"
 import type { JSXElement } from "solid-js"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"

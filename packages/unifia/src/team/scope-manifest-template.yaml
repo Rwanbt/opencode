@@ -1,0 +1,41 @@
+# Scope Manifest Template — TEAM-G01 (Locking Git/worktrees)
+#
+# This file is a YAML-shaped JSON manifest. It is intentionally conservative
+# to drive the scope monitor before any new code is committed.
+#
+# Update the `manifest_hash` field after any modification by running:
+#   bun run packages/unifia/src/team/team-cli.ts validate --lease-id <id> --fencing-token <n>
+
+{
+  "schema_version": "1.0.0",
+  "card_id": "TEAM-G01",
+  "lease_id": "LEASE-G01-20260721030000-team-g01-locking",
+  "base_sha": "ef48e5d5c5cc0aff802a519950e15aeb3786e1c6",
+  "scope_mode": "E2_REQUIRED",
+  "allowed_files": [
+    "packages/unifia/src/team/**/*.ts",
+    "packages/unifia/test/team/**/*.test.ts",
+    "packages/unifia/.gitignore",
+    "packages/unifia/package.json",
+    ".husky/pre-commit",
+    ".husky/pre-push",
+    "docs/team/**/*.md",
+    "docs/team/scope-manifest/*.yaml"
+  ],
+  "protected_files": [
+    "packages/unifia/src/provider/models.ts",
+    "packages/unifia/src/collective/**/*.ts",
+    "Execution/00-EXECUTION-STATE.md",
+    "Execution/01-TASK-BOARD.md",
+    "Execution/02-DECISIONS.md",
+    "Execution/03-RISK-REGISTER.md"
+  ],
+  "reserved_paths": [
+    "Execution/NightShift/2026-07-21/RUN-IMPLEMENTATION"
+  ],
+  "symlink_policy": "REJECT",
+  "case_policy": "REJECT_DUPLICATE_CASE",
+  "long_path_policy": "FAIL_OVER_260",
+  "eol_policy": "LF_NORMALIZED",
+  "exclusions": []
+}

@@ -20,7 +20,7 @@ import type {
   PermissionListResponses,
   QuestionListResponses,
   SessionStatusResponses,
-} from "@opencode-ai/sdk/v2"
+} from "@unifia/sdk/v2"
 import type {
   Command,
   PermissionRequest,

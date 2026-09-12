@@ -1,0 +1,38 @@
+{
+  "name": "polyrepo-microservices",
+  "description": "Espace de travail multi-repos (microservices)",
+  "type": "polyrepo",
+  "structure": {
+    "repos": [
+      {
+        "name": "service-auth",
+        "language": "go",
+        "path": "services/auth/"
+      },
+      {
+        "name": "service-billing",
+        "language": "python",
+        "path": "services/billing/"
+      },
+      {
+        "name": "service-frontend",
+        "language": "typescript",
+        "path": "services/frontend/"
+      },
+      {
+        "name": "infra",
+        "language": "terraform",
+        "path": "infra/"
+      }
+    ],
+    "expected_count": "3-20 repos"
+  },
+  "size": "large",
+  "agent_test_scenarios": [
+    "list_repos",
+    "clone_missing_repos",
+    "build_all",
+    "test_all",
+    "cross_repo_dependency"
+  ]
+}

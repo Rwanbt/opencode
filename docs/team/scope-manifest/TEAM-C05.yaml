@@ -1,0 +1,54 @@
+# TEAM-C05 scope manifest — WAVE-POST-T0-006
+card_id: TEAM-C05
+title: "Ingestion benchmarks avec provenance"
+gate: T2
+risk: medium
+depends_on: [C01, A05]
+depends_on_satisfied: true # C01 (D-036) + A05 (D-029) CLOSED+INTEGRATED
+base_sha: fe4b8237fe8a75a6f2fd07692683bf6c460e8ee5
+branch: c-C05/3fd48b42
+worktree: D:\App\OpenCode\.team-worktrees\C05-3fd48b42
+fencing_token: 152
+
+allowed_create:
+  - packages/unifia/src/model-intelligence/benchmarks.ts
+  - packages/unifia/test/model-intelligence/benchmarks.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-C05.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/registry.ts   # C01 core, figé — import/lecture seule
+  - packages/unifia/src/model-intelligence/schema.ts     # C01 core, figé — import/lecture seule
+  - packages/unifia/src/model-intelligence/connectors/**  # C02/C03 domaine, figé — import seulement si nécessaire
+  - packages/unifia/src/model-intelligence/pricing.ts    # C04, en cours cette même vague, ne pas toucher/importer
+  - packages/unifia/src/multi-model/**                   # domaine B, figé
+  - packages/unifia/src/team/**                          # figé
+  - toute branche protégée: main, dev, opti-ui, Team
+
+acceptance_criteria:
+  - "Chaque BenchmarkResult porte un benchmarkID + benchmarkVersion + harness (id+version) explicites — jamais un score anonyme"
+  - "mapBenchmarkLabelToModel() retourne une MappingConfidence explicite (exact|probable|ambiguous) — jamais un mapping 1:1 supposé"
+  - "Un label ambigu (multi-candidats ou aucun candidat) est surfacé resolved=null + candidates, jamais force-mappé ni silencieusement abandonné"
+  - "Toute BenchmarkResult porte une provenance complète (sourceID+sourceURL+ingestedAtUTC, publishedAtUTC nullable si réellement inconnu)"
+  - "ingestBenchmarkResults() rejette (jamais n'accepte silencieusement) les entrées invalides et les doublons (fingerprint)"
+  - "Aucune fonction n'agrège les résultats multi-benchmarks en un score unique/composite — ModelBenchmarkProfile.results reste vectoriel"
+  - "0 erreur tsc dans src/model-intelligence/benchmarks.ts"
+  - "0 TODO/FIXME/HACK/TEMP"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsc --noEmit -p ."
+    - "bun test test/model-intelligence/benchmarks.test.ts --timeout 60000 (100% pass)"
+    - "bun test test/model-intelligence/ --timeout 60000 (baseline 198 [197 pass + 1 flaky connue] maintenue + 32 nouveaux tests, 0 régression)"
+    - "bunx biome check src/model-intelligence/benchmarks.ts"
+    - "git diff --check"
+    - "grep -rn 'from.*multi-model/' src/model-intelligence/benchmarks.ts → 0 match"
+    - "grep -rn 'from.*/team/' src/model-intelligence/benchmarks.ts → 0 match"
+    - "marker commit : '[PROVISIONAL][UNREVIEWED][TEAM-C05]'"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct de la vague"
+
+execution_notes:
+  - "TEAM-C05.yaml n'existait pas dans le worktree au démarrage (contrairement à l'attendu) — créé ici en suivant le format TEAM-C03.yaml."
+  - "node_modules absent du worktree au démarrage — bun install exécuté (2305 packages), aucun impact sur bun.lock, seul .husky/_/.gitignore modifié transitoirement puis restauré (git checkout --) avant le commit."
+  - "Test pré-existant test/model-intelligence/connectors/http.test.ts::'offline=true with corrupted snapshot on disk → kind=cache_corrupted' confirmé non-déterministe (fail puis pass sur runs successifs sans modification) — hors scope C05, domaine C03 figé."

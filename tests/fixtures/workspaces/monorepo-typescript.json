@@ -1,0 +1,36 @@
+{
+  "name": "monorepo-typescript",
+  "description": "Workspace mono-repo TypeScript standard (Nx ou Turborepo)",
+  "type": "monorepo",
+  "language": "typescript",
+  "structure": {
+    "root": "package.json",
+    "packages_dir": "packages/",
+    "expected_files": [
+      "package.json",
+      "tsconfig.json",
+      "packages/*/package.json",
+      "packages/*/src/index.ts"
+    ],
+    "expected_count": "5-50 packages"
+  },
+  "git": {
+    "expected_main_branch": "main",
+    "expected_initial_sha": "abc123"
+  },
+  "size": "medium",
+  "agent_test_scenarios": [
+    "list_packages",
+    "build_all",
+    "test_all",
+    "add_new_package",
+    "update_dependency"
+  ],
+  "expected_outcomes": {
+    "list_packages": "returns 5-50 packages",
+    "build_all": "executes tsc/build script",
+    "test_all": "runs test runner",
+    "add_new_package": "creates new package skeleton",
+    "update_dependency": "updates package.json + lockfile"
+  }
+}

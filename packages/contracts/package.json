@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@unifia/contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./workbench-wire": "./src/workbench-wire/index.ts",
+    "./artifact-manifest": "./src/artifact-manifest.ts",
+    "./knowledge": "./src/knowledge/index.ts",
+    "./knowledge/*": "./src/knowledge/*.ts"
+  },
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "3.2.7"
+  }
+}

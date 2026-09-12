@@ -13,7 +13,7 @@ import {
   ServerConnection,
   useCommand,
   useGlobalSDK,
-} from "@opencode-ai/app"
+} from "@unifia/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
@@ -37,6 +37,7 @@ import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep, type RemoteConnectionInfo } from "./bindings"
+import { createDesktopWorkbenchBridge } from "./workbench"
 
 function toRemoteAccessInfo(info: RemoteConnectionInfo) {
   return { ...info, tlsFingerprint: info.tlsFingerprint ?? undefined }
@@ -52,7 +53,7 @@ void initI18n()
 
 let update: Update | null = null
 
-const deepLinkEvent = "opencode:deep-link"
+const deepLinkEvent = "unifia:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -92,6 +93,16 @@ const createPlatform = (): Platform => {
     platform: "desktop",
     os,
     version: pkg.version,
+    windowControls:
+      os === "windows"
+        ? {
+            startDragging: () => getCurrentWindow().startDragging(),
+            minimize: () => getCurrentWindow().minimize(),
+            toggleMaximize: () => getCurrentWindow().toggleMaximize(),
+            close: () => getCurrentWindow().close(),
+          }
+        : undefined,
+    workbench: createDesktopWorkbenchBridge(),
 
     async openDirectoryPickerDialog(opts) {
       const defaultPath = await wslHome()
@@ -456,7 +467,7 @@ void listenForDeepLinks()
 render(() => {
   const platform = createPlatform()
   const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
+    const current = await platform.storage?.("unifia.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
     if (!raw) return

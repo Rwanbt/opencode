@@ -67,7 +67,7 @@ export default function Home() {
               <span>
                 <span>curl -fsSL </span>
                 <span data-slot="protocol">https://</span>
-                <span data-slot="highlight">opencode.ai/install</span>
+                <span data-slot="highlight">unifia.ai/install</span>
                 <span> | bash</span>
               </span>
               <CopyStatus />
@@ -113,7 +113,7 @@ export default function Home() {
             <h3 data-component="title">npm</h3>
             <button data-copy data-slot="button">
               <span>
-                npm install -g <strong>opencode-ai</strong>
+                npm install -g <strong>unifia-ai</strong>
               </span>
               <CopyStatus />
             </button>
@@ -122,7 +122,7 @@ export default function Home() {
             <h3 data-component="title">bun</h3>
             <button data-copy data-slot="button">
               <span>
-                bun install -g <strong>opencode-ai</strong>
+                bun install -g <strong>unifia-ai</strong>
               </span>
               <CopyStatus />
             </button>
@@ -131,7 +131,7 @@ export default function Home() {
             <h3 data-component="title">homebrew</h3>
             <button data-copy data-slot="button">
               <span>
-                brew install <strong>opencode</strong>
+                brew install <strong>unifia</strong>
               </span>
               <CopyStatus />
             </button>
@@ -140,7 +140,7 @@ export default function Home() {
             <h3 data-component="title">paru</h3>
             <button data-copy data-slot="button">
               <span>
-                paru -S <strong>opencode-bin</strong>
+                paru -S <strong>unifia-bin</strong>
               </span>
               <CopyStatus />
             </button>

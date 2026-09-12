@@ -1,0 +1,15 @@
+card_id: TEAM-F06
+base_sha: 6221de06facc5ebef15511c6aa91869e8a87a77a
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/routing-eval.ts
+  - packages/unifia/test/team/routing-eval.test.ts
+  - packages/unifia/docs/team/scope-manifest/TEAM-F06.yaml
+protected_files:
+  - packages/unifia/src/team/model-router.ts
+  - packages/unifia/src/team/performance-estimator.ts
+  - packages/unifia/src/team/contextual-router.ts
+  - packages/unifia/src/model-intelligence/**
+  - main
+  - dev
+  - opti-ui

@@ -1,8 +1,55 @@
+# AGENTS.md — Unifia Workbench
+
+> **Unifia Workbench** is the rebranded continuation of [OpenCode](https://github.com/anomalyco/opencode) (via the [Rwanbt/unifia](https://github.com/Rwanbt/unifia) fork). All conventions below apply to the Unifia codebase.
+>
+> **Repository:** `Rwanbt/unifia`.
+> **Brand identity:** Unifia (logo, color tokens, typography defined in `brand/unifia/`).
+> **Conventions:** derived from upstream OpenCode, adapted to Unifia naming.
+
+This document is read by **every** AI coding agent working on this repo (Hermes, Claude Code, Codex, Cursor, etc.). Follow it strictly.
+
+## Branches
+
+- This repository's **GitHub default branch is `main`** — verified with
+  `gh api repos/Rwanbt/unifia --jq .default_branch`. The previous claim that it
+  was `dev` (and that a local `main` ref might not exist) was inherited from
+  upstream and is wrong here: both branches exist and have diverged.
+- `dev` is the **integration branch**: feature work targets it, and it is where
+  the rebrand lands before `main`.
+- Rebrand work stacks on `feat/unifia-*` branches merged into
+  `feat/unifia-rebrand-complete`, which is what opens a PR against `dev`.
+- Diff against whichever of `origin/dev` or `origin/main` your change targets;
+  they are not interchangeable.
+
+## Project Layout
+
+- `packages/unifia/` — CLI core (binary: `unifia`)
+- `packages/app/` — Web app (SolidJS)
+- `packages/desktop/` — Tauri 2 desktop (identifier: `ai.unifia.workbench.dev`)
+- `packages/mobile/` — Tauri 2 mobile
+- `packages/console/` — Web console (5 sub-packages)
+- `packages/sdk/` — JavaScript SDK
+- `packages/ui/`, `packages/util/`, `packages/storybook/` — shared libraries
+- `brand/unifia/` — **Unifia brand kit** (logos, tokens, theme)
+- `docs/autonomy/` — Hermes governance documents (this rebrand pack)
+- `.hermes/`, `agent/*` branches — Unifia Workbench integration layer
+
+## Required Tools
+
+- **Bun** ≥ 1.3 (`packageManager: bun@1.3.11`)
+- **Node** 22+ (for tooling)
+- **Rust + Cargo** (for Tauri desktop/mobile)
+- **shellcheck** (optional, for `.sh` files)
+- **Docker** (optional, for sandbox backends)
+
+## Workflow
+
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+
 
 ## Style Guide
 
@@ -121,8 +168,8 @@ const table = sqliteTable("session", {
 
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
-- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/unifia`.
 
 ## Type Checking
 
-- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+- Always run `bun typecheck` from package directories (e.g., `packages/unifia`), never `tsc` directly.

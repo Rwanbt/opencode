@@ -42,15 +42,15 @@ Utilice el comando escribiendo `/` seguido del nombre del comando.
 
 ## Configuración
 
-Puede agregar comandos personalizados a través de la configuración OpenCode o creando archivos de Markdown en el directorio `commands/`.
+Puede agregar comandos personalizados a través de la configuración Unifia o creando archivos de Markdown en el directorio `commands/`.
 
 ---
 
 ### JSON
 
-Utilice la opción `command` en su OpenCode [config](/docs/config):
+Utilice la opción `command` en su Unifia [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Veamos las opciones de configuración en detalle.
 
 La opción `template` define el mensaje que se enviará al LLM cuando se ejecute el comando.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Esta es una opción de configuración **obligatoria**.
 
 Utilice la opción `description` para proporcionar una breve descripción de lo que hace el comando.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Utilice la configuración `agent` para especificar opcionalmente qué [agente](/
 Si se trata de un [subagente](/docs/agents/#subagents), el comando activará una invocación de subagente de forma predeterminada.
 Para desactivar este comportamiento, establezca `subtask` en `false`.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Utilice el booleano `subtask` para forzar que el comando active una invocación 
 Esto es útil si desea que el comando no contamine su contexto principal y **obligue** al agente a actuar como subagente.
 incluso si `mode` está configurado en `primary` en la configuración de [agente](/docs/agents).
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Esta es una opción de configuración **opcional**.
 
 Utilice la configuración `model` para anular el modelo predeterminado para este comando.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Esta es una opción de configuración **opcional**.
 
 ## Integrados
 
-opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
+unifia incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
 
 :::note
 Los comandos personalizados pueden anular los comandos integrados.

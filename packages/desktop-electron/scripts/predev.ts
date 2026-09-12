@@ -1,17 +1,13 @@
 import { $ } from "bun"
 
-import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
+import { stageSidecar } from "./utils"
 
-await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
+await $`bun ./scripts/copy-icons.ts ${process.env.UNIFIA_CHANNEL ?? "dev"}`
 
-const RUST_TARGET = Bun.env.RUST_TARGET
-
-const sidecarConfig = getCurrentSidecar(RUST_TARGET)
-
-const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
-
-await (sidecarConfig.ocBinary.includes("-baseline")
-  ? $`cd ../opencode && bun run build --single --baseline`
-  : $`cd ../opencode && bun run build --single`)
-
-await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)
+// Always rebuilds: `predev` exists so a dev session runs against the CLI in the
+// working tree, not whatever `dist/` happens to hold. The staging itself is
+// shared with `prepare` and `prepackage` so all three agree on the path and the
+// binary name — the hand-composed variant here assumed the "-baseline"
+// directory always exists and pointed at the pre-rebrand `bin/opencode`, so it
+// never matched what the build had just written.
+await stageSidecar({ rebuild: true })

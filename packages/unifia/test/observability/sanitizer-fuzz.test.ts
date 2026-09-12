@@ -1,0 +1,158 @@
+import { describe, expect, test } from "bun:test"
+import { captureContent, sanitizeText, SANITIZER_BOUNDS } from "../../src/observability/sanitizer"
+
+// Phase 4 (plan §14/§18: "fuzz sanitizer"). The unit tests in sanitizer.test.ts
+// cover specific known-shape inputs (a real AWS key, a real path, a real
+// email...). This file instead throws structurally adversarial/random input
+// at the same two entry points and checks the properties that must hold for
+// ANY input, not just the ones we thought to name: never throws, never
+// exceeds its size bound, never runs unboundedly long (ReDoS), and — for
+// captureContent specifically — never leaks a known secret needle verbatim
+// through the "redacted" level regardless of where/how it's embedded.
+//
+// Deterministic PRNG (mulberry32) instead of Math.random(): a fuzz failure
+// must be reproducible from the printed seed, not a one-off CI flake.
+function mulberry32(seed: number) {
+  let a = seed
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Written as escapes, not as the literal characters. The literal NUL made git
+// classify this file as binary, so every diff on it — including the fuzz
+// budget change above — showed as "0 insertions, 0 deletions" and could not be
+// reviewed. Identical values, identical behaviour, readable diff.
+const CONTROL_CHARS = ["\u0000", "\u0007", "\u001b", "\u200b", "\u200e", "\ufeff"]
+const SURROGATE_HALVES = ["\ud83d", "\ude00", "\ud800", "\udc00"] // lone + paired surrogates
+const REDOS_BAIT = ["a".repeat(5000), "0".repeat(5000), " ".repeat(5000), "-".repeat(5000), "sk-".repeat(2000)]
+
+function randomChar(rand: () => number): string {
+  const bucket = rand()
+  if (bucket < 0.15) return CONTROL_CHARS[Math.floor(rand() * CONTROL_CHARS.length)]!
+  if (bucket < 0.3) return SURROGATE_HALVES[Math.floor(rand() * SURROGATE_HALVES.length)]!
+  if (bucket < 0.45) return String.fromCharCode(Math.floor(rand() * 0x10000))
+  return String.fromCharCode(0x20 + Math.floor(rand() * 95)) // printable ASCII
+}
+
+function randomString(rand: () => number, maxLength: number): string {
+  const length = Math.floor(rand() * maxLength)
+  let out = ""
+  for (let i = 0; i < length; i++) out += randomChar(rand)
+  if (rand() < 0.2) out += REDOS_BAIT[Math.floor(rand() * REDOS_BAIT.length)]
+  return out
+}
+
+const ITERATIONS = 120
+const MAX_INPUT_LENGTH = 4_000 // keeps the whole suite fast while still exercising the chunker across many random shapes
+// What these budgets are for: catching catastrophic backtracking, not measuring
+// performance. A ReDoS blows up by orders of magnitude — seconds on a 4 KB
+// input — so the threshold only has to sit clearly above scheduler noise and
+// clearly below a blow-up.
+//
+// 200 ms per iteration did not. It failed once on `unit (windows)` (run
+// 31501895233) while passing twice in isolation on the same machine, which is
+// the signature of a GC pause or a preemption on a shared runner, not of a
+// pathological input. A single stalled iteration must not fail the suite.
+//
+// So the per-iteration ceiling moves to ReDoS scale, and a total budget is
+// added alongside it: one hiccup cannot trip either, while a sanitizer that
+// became slow across the board still fails on the total, and a single
+// pathological input still fails on the ceiling.
+const TIME_BUDGET_MS = 2_000
+const TOTAL_BUDGET_MS = 200 * ITERATIONS
+
+describe("sanitizer fuzz (Phase 4)", () => {
+  test("sanitizeText never throws, never returns content, stays within its time budget", () => {
+    const rand = mulberry32(0xc0ffee)
+    let total = 0
+    for (let i = 0; i < ITERATIONS; i++) {
+      const text = randomString(rand, MAX_INPUT_LENGTH)
+      const start = performance.now()
+      let result: ReturnType<typeof sanitizeText>
+      try {
+        result = sanitizeText({ text })
+      } catch (error) {
+        throw new Error(`sanitizeText threw on seed iteration ${i} (input length ${text.length}): ${error}`)
+      }
+      const elapsed = performance.now() - start
+      total += elapsed
+      expect(elapsed).toBeLessThan(TIME_BUDGET_MS)
+      expect(result.storedSizeBytes).toBe(0)
+      expect(["metadata_only", "failed_closed"]).toContain(result.redactionStatus)
+      expect(result.classes.every((c) => ["secret", "path", "email", "username", "binary"].includes(c))).toBe(true)
+    }
+    expect(total).toBeLessThan(TOTAL_BUDGET_MS)
+  })
+
+  test("captureContent never throws, always bounds output to CONTENT_CAPTURE_MAX_BYTES, stays within its time budget", () => {
+    const rand = mulberry32(0x5eed)
+    const MAX_CONTENT_BYTES = 32 * 1024
+    let total = 0
+    for (let i = 0; i < ITERATIONS; i++) {
+      const text = randomString(rand, MAX_INPUT_LENGTH)
+      const level = rand() < 0.5 ? "local_content_redacted" : "local_full"
+      const start = performance.now()
+      let result: ReturnType<typeof captureContent>
+      try {
+        result = captureContent({ text, level })
+      } catch (error) {
+        throw new Error(`captureContent threw on seed iteration ${i} (level ${level}, input length ${text.length}): ${error}`)
+      }
+      const elapsed = performance.now() - start
+      total += elapsed
+      expect(elapsed).toBeLessThan(TIME_BUDGET_MS)
+      if (result.content !== undefined) {
+        expect(Buffer.byteLength(result.content, "utf8")).toBeLessThanOrEqual(MAX_CONTENT_BYTES)
+      }
+    }
+    expect(total).toBeLessThan(TOTAL_BUDGET_MS)
+  })
+
+  test("sanitizeText bound (maxSanitizerScanBytes) holds for adversarially large input without OOM or timeout", () => {
+    const huge = "x".repeat(SANITIZER_BOUNDS.maxSanitizerScanBytes * 4) // far beyond the scan bound
+    const start = performance.now()
+    const result = sanitizeText({ text: huge })
+    expect(performance.now() - start).toBeLessThan(1000)
+    expect(result.payloadTruncated).toBe(true)
+    expect(result.storedSizeBytes).toBe(0)
+  })
+
+  test("known secret needle embedded at a random offset in random noise is always redacted at local_content_redacted level", () => {
+    const rand = mulberry32(0xbadc0de)
+    const NEEDLE = "AKIAABCDEFGHIJKLMNOP" // matches the AKIA[0-9A-Z]{16} pattern
+    for (let i = 0; i < 100; i++) {
+      const prefix = randomString(rand, 500)
+      const suffix = randomString(rand, 500)
+      const text = `${prefix} ${NEEDLE} ${suffix}`
+      const result = captureContent({ text, level: "local_content_redacted" })
+      if (result.content === undefined) continue // binary/base64 short-circuit is a valid outcome, nothing to check
+      expect(result.content).not.toContain(NEEDLE)
+    }
+  })
+
+  test("known email needle embedded at a random offset is always redacted at local_content_redacted level", () => {
+    const rand = mulberry32(0xfeed)
+    const NEEDLE = "victim.user@example-corp.internal"
+    for (let i = 0; i < 100; i++) {
+      const prefix = randomString(rand, 500)
+      const suffix = randomString(rand, 500)
+      const text = `${prefix} contact ${NEEDLE} for access ${suffix}`
+      const result = captureContent({ text, level: "local_content_redacted" })
+      if (result.content === undefined) continue
+      expect(result.content).not.toContain(NEEDLE)
+    }
+  })
+
+  test("local_full level never redacts — documented Phase 3 exemption (plan invariant 8) holds under fuzz too", () => {
+    const NEEDLE = "AKIAABCDEFGHIJKLMNOP"
+    const text = `some text ${NEEDLE} more text`
+    const result = captureContent({ text, level: "local_full" })
+    expect(result.content).toContain(NEEDLE)
+    expect(result.redacted).toBe(false)
+  })
+})

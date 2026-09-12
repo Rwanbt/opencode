@@ -180,13 +180,34 @@ pub(super) fn prepare_toolchain_wrappers(
 
     let bash_exec = nlib_dir.join("libbash_exec.so");
     let musl_linker = nlib_dir.join("libmusl_linker.so");
+    let git_dispatch = nlib_dir.join("libgit_dispatch.so");
 
-    if !bash_exec.exists() || !musl_linker.exists() {
+    if !bash_exec.exists() || !musl_linker.exists() || !git_dispatch.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "libbash_exec.so or libmusl_linker.so not found in nativeLibraryDir",
+            "Android native exec helpers are incomplete in nativeLibraryDir",
         ));
     }
+
+    // LD_LIBRARY_PATH injected into every wrapper script. The binfmt_script →
+    // libbash_exec.so → libmusl_linker.so chain re-execs the .elf64 from
+    // scratch, so the script's own env (not git's env at exec time) is what
+    // the dynamic linker sees. Without this, ELF helpers under
+    // usr/libexec/git-core/ (git-remote-http, git-http-fetch, …) can't
+    // resolve libcurl.so.4 / libpcre2-8.so.0 / libz.so.1 / libssl.so.3 /
+    // libcrypto.so.3 even though they exist in <rootfs>/usr/lib/ — verified
+    // on-device: with LD_LIBRARY_PATH unset the linker reports
+    // "Error loading shared library libcurl.so.4"; with it set the helper
+    // starts cleanly and waits for the git remote-helper protocol on stdin.
+    // Includes usr/libexec/git-core so helpers there find their dependencies
+    // when the loader is invoked with no LD_LIBRARY_PATH from the parent.
+    // Also includes llvm19/lib (clang-extra-tools) and the JDK lib dir so
+    // java finds libjli.so + libz.so.1 — same set as the entry-point
+    // wrappers further down for consistency.
+    let ld_path = format!(
+        "{r}/usr/lib:{r}/lib:{r}/usr/libexec/git-core:{r}/usr/lib/llvm19/lib:{r}/usr/lib/jvm/java-21-openjdk/lib",
+        r = rootfs_dir.display()
+    );
 
     // Wrap one ELF binary as a shebang-script that re-execs through linker.
     // Idempotent: if `<file>.elf64` already exists we assume `file` is
@@ -218,6 +239,10 @@ pub(super) fn prepare_toolchain_wrappers(
         // APK hash, so a wrapper from a prior install points to a now-dead
         // `libbash_exec.so` path and `cc: cannot execute: required file not
         // found`. Always re-write so the shebang tracks the current install.
+        // Also: the script MUST export LD_LIBRARY_PATH so the dynamic linker
+        // (libmusl_linker.so) can resolve libcurl.so.4 / libpcre2-8.so.0 /
+        // libz.so.1 for git-core helpers, and libstdc++.so.6 for cargo/rustc
+        // binutils spawned by absolute path.
         if backup.exists() {
             if let Ok(meta) = &meta_res {
                 if meta.file_type().is_symlink() {
@@ -225,8 +250,9 @@ pub(super) fn prepare_toolchain_wrappers(
                 }
             }
             let script = format!(
-                "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+                "#!{bash}\nexport LD_LIBRARY_PATH=\"{ld}:${{LD_LIBRARY_PATH}}\"\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
                 bash = bash_exec.display(),
+                ld = ld_path,
                 linker = musl_linker.display(),
                 backup = backup.display(),
             );
@@ -268,8 +294,9 @@ pub(super) fn prepare_toolchain_wrappers(
         }
         fs::rename(file, &backup)?;
         let script = format!(
-            "#!{bash}\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
+            "#!{bash}\nexport LD_LIBRARY_PATH=\"{ld}:${{LD_LIBRARY_PATH}}\"\nexec \"{linker}\" \"{backup}\" \"$@\"\n",
             bash = bash_exec.display(),
+            ld = ld_path,
             linker = musl_linker.display(),
             backup = backup.display(),
         );
@@ -340,6 +367,116 @@ pub(super) fn prepare_toolchain_wrappers(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // 1b. Wrap git-core internals (git-remote-https, git-remote-http,
+    //     git-http-backend, git-http-fetch, …) — spawned by `git` via an
+    //     absolute path resolved from its own exec-path (`usr/libexec/git-core`
+    //     on Alpine), exactly like cc1/collect2 above. Without this, `git
+    //     clone`/`push`/`pull` over https:// fail with SIGSYS ("Bad system
+    //     call") or EACCES ("Permission denied") because the kernel's direct
+    //     execve of an unwrapped app_data_file ELF is blocked/unsafe under the
+    //     untrusted_app SELinux policy — the musl hidden-visibility issue
+    //     means an LD_PRELOAD execve hook never sees this spawn either.
+    let git_core_root = rootfs_dir.join("usr/libexec/git-core");
+
+    // Git first re-execs itself through the exec-path before invoking an HTTPS
+    // helper. Scripts under app_data_file work from run-as but SELinux denies
+    // them in the real untrusted_app domain. Point the dispatcher at an
+    // APK-extracted PIE executable, which routes usr/bin/git back through
+    // libmusl_linker.so.
+    let git_dispatcher = git_core_root.join("git");
+    let git_binary = rootfs_dir.join("usr/bin/git");
+    if git_binary.exists() {
+        let already_native = fs::read_link(&git_dispatcher)
+            .map(|target| target == git_dispatch)
+            .unwrap_or(false);
+        if !already_native {
+            if fs::symlink_metadata(&git_dispatcher).is_ok() {
+                fs::remove_file(&git_dispatcher)?;
+            }
+            std::os::unix::fs::symlink(&git_dispatch, &git_dispatcher)?;
+        }
+    }
+
+    let wrap_git_core = |file: &Path| -> std::io::Result<()> {
+        if file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.ends_with(".elf64"))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        let backup = PathBuf::from(format!("{}.elf64", file.display()));
+        let metadata = fs::symlink_metadata(file)?;
+        if metadata.file_type().is_symlink() {
+            // nativeLibraryDir is per-install (its path embeds a hash that
+            // changes on every APK reinstall/update). A symlink already
+            // pointing at libgit_dispatch.so from a PRIOR install is stale —
+            // that hash directory is gone once the old install is replaced,
+            // making the symlink dangling (exec fails with ENOENT, surfaced
+            // to the user as "git-upload-pack: inaccessible or not found").
+            // Comparing only the target's basename ("== git") never catches
+            // this because a stale libgit_dispatch.so target also has that
+            // basename — must compare the full resolved path against the
+            // CURRENT run's git_dispatch to detect staleness.
+            let current_target = fs::read_link(file).ok();
+            let is_dispatch_style = current_target
+                .as_ref()
+                .and_then(|target| target.file_name())
+                .map(|name| name == "git" || name == "libgit_dispatch.so")
+                .unwrap_or(false);
+            let already_current = current_target.as_deref() == Some(git_dispatch.as_path());
+            if is_dispatch_style && !already_current {
+                fs::remove_file(file)?;
+                std::os::unix::fs::symlink(&git_dispatch, file)?;
+            }
+            return Ok(());
+        }
+
+        if backup.exists() {
+            fs::remove_file(file)?;
+            std::os::unix::fs::symlink(&git_dispatch, file)?;
+            return Ok(());
+        }
+        if !metadata.is_file() || metadata.len() < 1024 {
+            return Ok(());
+        }
+
+        let mut magic = [0u8; 4];
+        {
+            use std::io::Read;
+            let mut input = fs::File::open(file)?;
+            let _ = input.read(&mut magic);
+        }
+        if magic != [0x7f, b'E', b'L', b'F'] {
+            return Ok(());
+        }
+
+        fs::rename(file, &backup)?;
+        std::os::unix::fs::symlink(&git_dispatch, file)?;
+        Ok(())
+    };
+    if let Ok(entries) = fs::read_dir(&git_core_root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            // Skip .so plugins and symlinks (e.g. git-remote-https -> git-remote-http);
+            // wrap_one already skips symlinks itself, but .so has no extension
+            // gate here since git-core ships none — kept for parity with the
+            // gcc libexec loop in case a future Alpine build adds one.
+            if p.extension().and_then(|e| e.to_str()) == Some("so") {
+                continue;
+            }
+            if let Err(e) = wrap_git_core(&p) {
+                log::warn!(
+                    "[OpenCode] prepare_toolchain_wrappers: failed to wrap git-core {}: {} — git clone/push/pull over https will fail",
+                    p.display(),
+                    e
+                );
             }
         }
     }
@@ -417,6 +554,9 @@ pub(super) fn prepare_toolchain_wrappers(
         // Existing core toolchain
         "rustc", "cargo", "python", "python3", "node", "npm", "node-gyp",
         "pip", "pip3", "rustup",
+        // Git (push/pull/fetch over https; internal git-core helpers wrapped
+        // separately above since they're spawned by absolute path, not PATH)
+        "git",
         // Phase 1 extension: debug + profiling
         "gdb", "lldb", "strace", "ltrace",
         // PHP stack

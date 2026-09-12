@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-08-24T13:13:58.296Z",
+  "summary": {
+    "pass": 3,
+    "fail": 0,
+    "deferred": 4,
+    "manual": 0,
+    "total": 7
+  },
+  "gates": [
+    {
+      "name": "Z10 LOC",
+      "status": "PASS",
+      "detail": "loc-gate: 7 file(s) in the warning zone (800-1500 LOC):\n   1472  packages/app/src/components/prompt-input.tsx\n   1164  packages/app/src/pages/layout.tsx\n   1097  packages/app/src/pages/session.tsx\n   1042  packages/app/src/components/terminal.tsx\n   1020  packages/app/src/pages/session/message-timeline.tsx\n   1019  packages/app/src/context/layout.tsx\n    835  packages/app/src/pages/workbench/design-surface.tsx\n\nloc-gate: OK — 314 files scanned in packages/app/src, none over 1500 LOC."
+    },
+    {
+      "name": "H10 bundle",
+      "status": "PASS",
+      "detail": "bundle-manifest: wrote D:\\App\\unifia\\unifia-work-design\\docs\\perf-baselines\\bundle-manifest.json\n  total: 16.30 MB across 452 files\n  other             12556.6 KB   438 files  [ok]\n  entry              2504.2 KB    11 files  [OVER BUDGET]\n  terminal           1459.6 KB     2 files  [OVER BUDGET]\n  mode                168.1 KB     1 files  [ok]"
+    },
+    {
+      "name": "A02 sampler",
+      "status": "PASS",
+      "detail": "{\r\n  \"selftest\": [\r\n    {\r\n      \"name\": \"non-existent-pid\",\r\n      \"passed\": true\r\n    },\r\n    {\r\n      \"name\": \"self-pid\",\r\n      \"passed\": true\r\n    },\r\n    {\r\n      \"name\": \"stable-output\",\r\n      \"passed\": true\r\n    },\r\n    {\r\n      \"name\": \"key-order\",\r\n      \"passed\": true\r\n    }\r\n  ],\r\n  \"allPassed\": true\r\n}"
+    },
+    {
+      "name": "G6 UI modes (F13 e2e + F10 lazy boundary + F12 cache)",
+      "status": "DEFERRED",
+      "detail": "Run `bun test e2e/modes/mode-performance.spec.ts` with the desktop runtime; expect heap delta < 1 MB across 10 cycles, listeners/queries not growing. E10/E11/E14 code paths covered by 1 023 unit tests (1023/1023 pass)."
+    },
+    {
+      "name": "G7 sidecar (G10 watcher observability + G11 attribution)",
+      "status": "DEFERRED",
+      "detail": "Run the PowerShell block in `docs/perf-baselines/sidecar-attribution.md` on the desktop runtime; expect RSS ≤ 450 Mo with 4 workspaces, plateau 30 min delta < 10 Mo. G10 code paths (callback error counter, getStats/resetStats) covered by 2 watcher tests + 9 ignore tests."
+    },
+    {
+      "name": "G8 bundle (H10 manifest + H11 warnings + H12 Design Sketch)",
+      "status": "DEFERRED",
+      "detail": "Run `bun run build` in packages/app; expect 0 ERROR-level warnings. Manifest at `docs/perf-baselines/bundle-manifest.json` shows current numbers; H12 decision is to keep static bundling (see design-sketch-packaging.md)."
+    },
+    {
+      "name": "G9 final (Z11 report + control-neg + soak)",
+      "status": "DEFERRED",
+      "detail": "This report is the input to G9. Soak = 30 min idle + 30 min active, human-rated. Control-neg = 12 file LOC + 1 unit test break each gate individually (unit tests prove this; see loc-gate.test.ts for the control-neg pattern)."
+    }
+  ]
+}

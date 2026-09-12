@@ -1,5 +1,5 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { createSimpleContext } from "@unifia/ui/context"
+import { base64Encode } from "@unifia/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -12,6 +12,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { visibleAgents } from "./global-sync/utils"
 import { modelKey, type DebateSelection, validateDebateSelection } from "@/components/debate-selection"
+import { normalizeTeamSelection, validateTeamSelection, type TeamSelection } from "@/context/team-selection"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -29,6 +30,15 @@ const WORKSPACE_KEY = "__workspace__"
 const handoff = new Map<string, State>()
 
 const handoffKey = (dir: string, id: string) => `${dir}\n${id}`
+
+// WHY: a schema-validation 400 and a network failure otherwise raise the exact same opaque
+// message, which is what made the Team minimum-models rejection unreadable on device — the
+// toast said "failed to save" and never that the server had refused a one-model selection.
+const saveConfigError = (label: string, error: unknown) => {
+  if (error === undefined || error === null) return new Error(`Failed to save global ${label} configuration`)
+  const detail = typeof error === "string" ? error : JSON.stringify(error)
+  return new Error(`Failed to save global ${label} configuration: ${detail}`)
+}
 
 const migrate = (value: unknown) => {
   if (!value || typeof value !== "object") return { session: {} }
@@ -404,11 +414,51 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           primary: selection.primary,
           participants: selection.participants,
         })
-        if (response.error || !response.data) throw new Error("Failed to save global Debate configuration")
+        if (response.error || !response.data) throw saveConfigError("Debate", response.error)
         setDebateStore("selection", response.data)
         return response.data
       },
       loading: () => debateStore.loading,
+    }
+
+    const [teamStore, setTeamStore] = createStore<{ selection?: TeamSelection; loading: boolean }>({ loading: false })
+
+    const team = {
+      current: () => teamStore.selection,
+      async load() {
+        if (teamStore.loading) return teamStore.selection
+        setTeamStore("loading", true)
+        try {
+          const response = await sdk.client.team.getConfig()
+          if (response.error) throw new Error("Failed to load global Team configuration")
+          const selection = normalizeTeamSelection(response.data)
+          setTeamStore("selection", selection)
+          return selection
+        } finally {
+          setTeamStore("loading", false)
+        }
+      },
+      set(selection: TeamSelection | undefined) {
+        setTeamStore("selection", normalizeTeamSelection(selection))
+      },
+      isValid(selection: TeamSelection | undefined) {
+        const available = new Set(
+          providers
+            .connected()
+            .flatMap((provider) =>
+              Object.values(provider.models).map((item) => modelKey({ providerID: provider.id, modelID: item.id })),
+            ),
+        )
+        return validateTeamSelection(normalizeTeamSelection(selection), available)
+      },
+      async save(selection: TeamSelection) {
+        const response = await sdk.client.team.config({ models: selection.models })
+        const saved = normalizeTeamSelection(response.data)
+        if (response.error || !saved) throw saveConfigError("Team", response.error)
+        setTeamStore("selection", saved)
+        return saved
+      },
+      loading: () => teamStore.loading,
     }
 
     const result = {
@@ -416,6 +466,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       debate,
+      team,
       session: {
         reset() {
           setStore("draft", undefined)

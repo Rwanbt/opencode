@@ -1,0 +1,21 @@
+schema_version: "1.0.0"
+card_id: TEAM-H04
+lease_id: LEASE-H04-20260727183200-team-h04-budget-v3
+base_sha: 8fe0fe6aaed201be1f6cb708423faed5db8fd02d
+scope_mode: E2_REQUIRED
+allowed_files:
+  - docs/team/scope-manifest/TEAM-H04.yaml
+  - packages/unifia/src/team/budget-tracker.ts
+  - packages/unifia/test/team/budget-tracker.test.ts
+protected_files:
+  - packages/unifia/src/team/worker-runtime.ts
+  - packages/unifia/src/team/task-planner.ts
+  - packages/unifia/src/team/model-router.ts
+  - packages/unifia/src/team/checkpoint-manager.ts
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/events.ts
+reserved_paths: []
+symlink_policy: REJECT
+case_policy: REJECT_DUPLICATE_CASE
+long_path_policy: FAIL_OVER_260
+eol_policy: LF_NORMALIZED

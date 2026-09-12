@@ -1,0 +1,15 @@
+research
+dist
+gen
+app.log
+src/provider/models-snapshot.js
+src/provider/models-snapshot.d.ts
+
+# TEAM-G01: lock manager artifacts
+Execution/Locks/.locks/
+Execution/Locks/*.lock.tmp
+Execution/Locks/*.db
+Execution/Locks/*.db-journal
+Execution/Locks/*.db-wal
+Execution/Locks/*.db-shm
+Execution/Locks/leases.db-*

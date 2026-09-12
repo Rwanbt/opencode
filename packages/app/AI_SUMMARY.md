@@ -8,7 +8,7 @@
 Frontend SolidJS partagé entre desktop, web et mobile WebView.
 Contient l'UI du chat (messages, terminal, saisie), les panels (modèles, settings, partage),
 le système de thèmes, l'internationalisation, et le routing.
-Communique avec le sidecar `packages/opencode` via SSE (events entrants) et REST (commandes).
+Communique avec le sidecar `packages/unifia` via SSE (events entrants) et REST (commandes).
 
 ## Common failure modes
 - **Cache WebView stale** : `adb install -r` garde le cache — toujours `pm clear` + reinstall pour tester des modifs frontend ([référence](~/.claude/projects/d--App-OpenCode/memory/reference_android_webview_cache_stale.md))

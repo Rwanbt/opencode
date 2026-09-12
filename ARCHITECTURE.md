@@ -29,7 +29,7 @@ packages/
 ├── tui/           # Terminal UI (ink-based)
 └── util/          # Shared Zod schemas + utilities
 crates/
-└── opencode-kokoro-shared/  # Rust: Kokoro TTS ONNX engine
+└── unifia-kokoro-shared/  # Rust: Kokoro TTS ONNX engine
 ```
 
 ## Request flow
@@ -44,9 +44,9 @@ SolidJS UI  →  POST /session/:id/stream (SSE, Hono server)
 
 ## Key architectural decisions
 
-- **Mobile gate**: all llama-server spawn logic gated via `process.env.OPENCODE_CLIENT === "mobile-embedded"` — Android owns the process through `LlamaService` (JNI), not the sidecar.
+- **Mobile gate**: all llama-server spawn logic gated via `process.env.UNIFIA_CLIENT === "mobile-embedded"` — Android owns the process through `LlamaService` (JNI), not the sidecar.
 - **Config cascade** (lowest → highest priority): `~/.opencode/config.json` → `./opencode.json` → MDM profile (macOS) → environment variables.
 - **CSP/IPC (Windows)**: `connect-src` must whitelist `http://ipc.localhost` (Tauri IPC) and `http://asset.localhost` (static assets).
-- **Sidecar build**: `bun tauri build` does NOT rebuild the TypeScript sidecar. Always run `bun run build --single --baseline` in `packages/opencode` first.
+- **Sidecar build**: `bun tauri build` does NOT rebuild the TypeScript sidecar. Always run `bun run build --single --baseline` in `packages/unifia` first.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture document including thread model, data flow, and fork-specific additions.

@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Utilice OpenCode en problemas GitLab y solicitudes de fusión.
+description: Utilice Unifia en problemas GitLab y solicitudes de fusión.
 ---
 
-OpenCode se integra con su flujo de trabajo GitLab a través de su canal de CI/CD GitLab o con GitLab Duo.
+Unifia se integra con su flujo de trabajo GitLab a través de su canal de CI/CD GitLab o con GitLab Duo.
 
-En ambos casos, OpenCode se ejecutará en tus corredores GitLab.
+En ambos casos, Unifia se ejecutará en tus corredores GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode funciona en una tubería GitLab normal. Puede integrarlo en una canalización como un [componente de CI](https://docs.gitlab.com/ee/ci/components/)
+Unifia funciona en una tubería GitLab normal. Puede integrarlo en una canalización como un [componente de CI](https://docs.gitlab.com/ee/ci/components/)
 
-Aquí estamos utilizando un componente CI/CD creado por la comunidad para OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Aquí estamos utilizando un componente CI/CD creado por la comunidad para Unifia — [nagyv/gitlab-unifia](https://gitlab.com/nagyv/gitlab-unifia).
 
 ---
 
 ### Características
 
-- **Usar configuración personalizada por trabajo**: configure OpenCode con un directorio de configuración personalizado, por ejemplo `./config/#custom-directory` para habilitar o deshabilitar la funcionalidad por invocación de OpenCode.
-- **Configuración mínima**: el componente CI configura OpenCode en segundo plano, solo necesita crear la configuración OpenCode y el mensaje inicial.
+- **Usar configuración personalizada por trabajo**: configure Unifia con un directorio de configuración personalizado, por ejemplo `./config/#custom-directory` para habilitar o deshabilitar la funcionalidad por invocación de Unifia.
+- **Configuración mínima**: el componente CI configura Unifia en segundo plano, solo necesita crear la configuración Unifia y el mensaje inicial.
 - **Flexible**: el componente CI admite varias entradas para personalizar su comportamiento
 
 ---
 
 ### Configuración
 
-1. Guarde su OpenCode autenticación JSON como variables de entorno de CI de tipo de archivo en **Configuración** > **CI/CD** > **Variables**. Asegúrate de marcarlos como "Enmascarados y ocultos".
+1. Guarde su Unifia autenticación JSON como variables de entorno de CI de tipo de archivo en **Configuración** > **CI/CD** > **Variables**. Asegúrate de marcarlos como "Enmascarados y ocultos".
 2. Agregue lo siguiente a su archivo `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,34 +35,34 @@ Aquí estamos utilizando un componente CI/CD creado por la comunidad para OpenCo
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $UNIFIA_AUTH_JSON # The variable name for your Unifia authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Para obtener más entradas y casos de uso, [consulte los documentos](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) de este componente.
+Para obtener más entradas y casos de uso, [consulte los documentos](https://gitlab.com/explore/catalog/nagyv/gitlab-unifia) de este componente.
 
 ---
 
 ## GitLab Duo
 
-OpenCode se integra con su flujo de trabajo GitLab.
-Mencione `@opencode` en un comentario y OpenCode ejecutará tareas dentro de su canal de CI GitLab.
+Unifia se integra con su flujo de trabajo GitLab.
+Mencione `@unifia` en un comentario y Unifia ejecutará tareas dentro de su canal de CI GitLab.
 
 ---
 
 ### Características
 
-- **Clasificación de problemas**: Pídele a OpenCode que investigue un problema y te lo explique.
-- **Reparar e implementar**: pídale a OpenCode que solucione un problema o implemente una función.
+- **Clasificación de problemas**: Pídele a Unifia que investigue un problema y te lo explique.
+- **Reparar e implementar**: pídale a Unifia que solucione un problema o implemente una función.
   Creará una nueva rama y generará una solicitud de fusión con los cambios.
-- **Seguro**: OpenCode se ejecuta en tus corredores GitLab.
+- **Seguro**: Unifia se ejecuta en tus corredores GitLab.
 
 ---
 
 ### Configuración
 
-OpenCode se ejecuta en su canalización de CI/CD GitLab. Esto es lo que necesitará para configurarlo:
+Unifia se ejecuta en su canalización de CI/CD GitLab. Esto es lo que necesitará para configurarlo:
 
 :::tip
 Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) para obtener instrucciones actualizadas.
@@ -82,7 +82,7 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
+      - echo "Installing unifia"
       - npm install --global opencode-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
@@ -91,7 +91,7 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Unifia auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,13 +103,13 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "unifia@gitlab.com"
+      - git config --global user.name "Unifia"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Unifia"
       - |
-        opencode run "
+        unifia run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ Puede consultar los [GitLab CLI documentos de los agentes](https://docs.gitlab.c
 
 ### Ejemplos
 
-A continuación se muestran algunos ejemplos de cómo puede utilizar OpenCode en GitLab.
+A continuación se muestran algunos ejemplos de cómo puede utilizar Unifia en GitLab.
 
 :::tip
-Puede configurarlo para utilizar una frase de activación diferente a `@opencode`.
+Puede configurarlo para utilizar una frase de activación diferente a `@unifia`.
 :::
 
 - **Explica un problema**
@@ -169,27 +169,27 @@ Puede configurarlo para utilizar una frase de activación diferente a `@opencode
   Agregue este comentario en una edición GitLab.
 
   ```
-  @opencode explain this issue
+  @unifia explain this issue
   ```
 
-  OpenCode leerá el problema y responderá con una explicación clara.
+  Unifia leerá el problema y responderá con una explicación clara.
 
 - **Solucionar un problema**
 
   En un problema GitLab, diga:
 
   ```
-  @opencode fix this
+  @unifia fix this
   ```
 
-  OpenCode creará una nueva rama, implementará los cambios y abrirá una solicitud de fusión con los cambios.
+  Unifia creará una nueva rama, implementará los cambios y abrirá una solicitud de fusión con los cambios.
 
 - **Revisar solicitudes de fusión**
 
   Deje el siguiente comentario sobre una solicitud de fusión GitLab.
 
   ```
-  @opencode review this merge request
+  @unifia review this merge request
   ```
 
-  OpenCode revisará la solicitud de fusión y brindará comentarios.
+  Unifia revisará la solicitud de fusión y brindará comentarios.

@@ -42,15 +42,15 @@ Focus on the failing tests and suggest fixes.
 
 ## Yapılandırma
 
-opencode işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosyalarının oluşturulması özel komutlar ile yapılabilir.
+unifia işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosyalarının oluşturulması özel komutlar ile yapılabilir.
 
 ---
 
 ### JSON
 
-opencode [config](/docs/config)'deki `command` seçeneğini kullanın:
+unifia [config](/docs/config)'deki `command` seçeneğini kullanın:
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Yapılandırma seçeneklerine ayrıntılı olarak bakalım.
 
 `template` seçeneği, komut yürütüldüğünde LLM'ye gönderilecek olan istemi tanımlar.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Bu **gerekli** bir yapılandırma seçeneğidir.
 
 Komutun ne yaptığına ilişkin kısa bir açıklama sağlamak için `description` seçeneğini kullanın.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Bu, komutu yazdığınızda TUI içindeki açıklama olarak gösterilir.
 Bu bir [subagent](/docs/agents/#subagents) ise, komut varsayılan olarak bir alt aracı çağrısını tetikleyecektir.
 Bu davranışı devre dışı bırakmak için `subtask` öğesini `false` olarak ayarlayın.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Komutu bir [subagent](/docs/agents/#subagents) çağrısını tetiklemeye zorlam
 Bu, komutun birincil bağlamınızı kirletmemesini ve aracıyı bir alt aracı olarak davranmaya **zorlamasını** istiyorsanız kullanışlıdır.
 `mode`, [agent](/docs/agents) yapılandırmasında `primary` olarak ayarlanmış olsa bile.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
 
 Bu parçanın varsayılan kodu geçersiz için `model` kontrolünü kullanın.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
 
 ## Yerleşik
 
-opencode, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
+unifia, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
 
 :::note
 Özel komutlar yerleşik komutları geçersiz kılabilir.

@@ -1,57 +1,55 @@
-# Code of Conduct
+# Code of Conduct — Unifia Workbench
 
-## Our Pledge
+## Notre engagement
 
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, caste, color, religion, or sexual
-identity and orientation.
+Unifia Workbench est un projet open-source qui vise à créer un environnement accueillant et inclusif pour tous, indépendamment de :
 
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
+- L'âge, l'apparence physique, le handicap
+- L'origine ethnique, la nationalité, la langue
+- Le niveau d'expérience, le genre, l'identité
+- Les opinions politiques, la religion
 
-## Our Standards
+## Comportements attendus
 
-Examples of behavior that contributes to a positive environment:
+- ✅ Avoir de l'empathie envers les autres
+- ✅ Respecter les opinions divergentes
+- ✅ Accepter les critiques constructives
+- ✅ Se concentrer sur ce qui est meilleur pour la communauté
+- ✅ Montrer de l'empathie envers les autres membres
 
-- Demonstrating empathy and kindness toward other people
-- Being respectful of differing opinions, viewpoints, and experiences
-- Giving and gracefully accepting constructive feedback
-- Accepting responsibility and apologizing to those affected by our mistakes
-- Focusing on what is best not just for us as individuals, but for the overall
-  community
+## Comportements inacceptables
 
-Examples of unacceptable behavior:
+- ❌ Harcèlement, discrimination, intimidation
+- ❌ Commentaires désobligeants, trolling, insults
+- ❌ Publications publiques d'informations privées sans permission
+- ❌ Spam, flood, advertising
+- ❌ Toute conduite inappropriée dans un contexte professionnel
 
-- The use of sexualized language or imagery, and sexual attention or advances of
-  any kind
-- Trolling, insulting or derogatory comments, and personal or political attacks
-- Public or private harassment
-- Publishing others' private information without their explicit permission
-- Other conduct which could reasonably be considered inappropriate in a
-  professional setting
+## Application
 
-## Enforcement Responsibilities
+Les mainteneurs de projet sont responsables de clarifier et faire respecter nos standards. Ils peuvent prendre des actions appropriées en réponse à des comportements inacceptables, incluant :
 
-Project maintainers are responsible for clarifying and enforcing our standards
-of acceptable behavior and will take appropriate and fair corrective action in
-response to any behavior that they deem inappropriate, threatening, offensive,
-or harmful.
+- Avertissement
+- Bannissement temporaire
+- Bannissement permanent
 
-## Scope
+## Signalement
 
-This Code of Conduct applies within all community spaces, and also applies when
-an individual is officially representing the community in public spaces.
+Pour signaler un comportement inacceptable, utilisez un signalement privé sur
+GitHub : [nouveau signalement privé](https://github.com/Rwanbt/unifia/security/advisories/new),
+ou contactez directement le mainteneur [@Rwanbt](https://github.com/Rwanbt).
 
-## Enforcement
+Le projet ne contrôle aucun nom de domaine et n'expose donc aucune adresse de
+contact e-mail ; toute adresse en `@unifia.ai` serait invalide.
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers. All complaints will be reviewed and
-investigated promptly and fairly.
+Toutes les complaints seront revues et traitées rapidement et équitablement.
 
 ## Attribution
 
-This Code of Conduct is adapted from the
-[Contributor Covenant](https://www.contributor-covenant.org), version 2.1.
+Ce Code of Conduct est adapté du [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.
+
+## Voir aussi
+
+- [SECURITY.md](SECURITY.md) — sécurité
+- [CONTRIBUTING.md](CONTRIBUTING.md) — comment contribuer
+- [GOVERNANCE.md](GOVERNANCE.md) — gouvernance

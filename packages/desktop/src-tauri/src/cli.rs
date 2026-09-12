@@ -40,8 +40,14 @@ impl CommandWrapper for WinCreationFlags {
     }
 }
 
-const CLI_INSTALL_DIR: &str = ".opencode/bin";
-const CLI_BINARY_NAME: &str = "opencode";
+// Where "Install CLI" puts the binary. This was `.opencode/bin` + `opencode`,
+// which is the path the official OpenCode installer owns — the desktop app
+// silently overwrote the user's real `opencode` binary with this fork's
+// sidecar, and `is_cli_installed()` reported true when only OpenCode was
+// present. Must stay in step with INSTALL_DIR and APP in the repository-root
+// `install` script, which this command executes.
+const CLI_INSTALL_DIR: &str = ".unifia/bin";
+const CLI_BINARY_NAME: &str = "unifia";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Config surface kept for future UI that surfaces the resolved CLI config.
@@ -76,6 +82,9 @@ pub struct TerminatedPayload {
 #[derive(Clone, Debug)]
 pub struct CommandChild {
     kill: mpsc::Sender<()>,
+    /// PID of the spawned process, so the supervisor can take a lease on it and
+    /// later prove the process it is about to kill is still this one.
+    pid: Option<u32>,
 }
 
 impl CommandChild {
@@ -83,6 +92,10 @@ impl CommandChild {
         self.kill
             .try_send(())
             .map_err(|e| std::io::Error::other(e.to_string()))
+    }
+
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
     }
 }
 
@@ -120,7 +133,7 @@ pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("opencode-cli")
+        .join("unifia-cli")
 }
 
 fn is_cli_installed() -> bool {
@@ -143,7 +156,7 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
         return Err("Sidecar binary not found".to_string());
     }
 
-    let temp_script = std::env::temp_dir().join("opencode-install.sh");
+    let temp_script = std::env::temp_dir().join("unifia-install.sh");
     std::fs::write(&temp_script, INSTALL_SCRIPT)
         .map_err(|e| format!("Failed to write install script: {}", e))?;
 
@@ -432,8 +445,8 @@ pub fn spawn_command(
             "OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(),
             "true".to_string(),
         ),
-        ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
-        ("OPENCODE_AUTH_STORAGE".to_string(), "keychain".to_string()),
+        ("UNIFIA_CLIENT".to_string(), "desktop".to_string()),
+        ("UNIFIA_AUTH_STORAGE".to_string(), "keychain".to_string()),
         (
             "XDG_STATE_HOME".to_string(),
             state_dir.to_string_lossy().to_string(),
@@ -451,6 +464,21 @@ pub fn spawn_command(
             app_data.join("models").to_string_lossy().to_string(),
         ),
     ];
+
+    // The sidecar otherwise resolves the Design skill templates against its own
+    // process.cwd(), which is whatever directory launched the app — for a
+    // Windows shortcut that is C:\WINDOWS\system32. discoverTemplates() answers
+    // "not a directory" by returning an empty list, so the composer's skill
+    // picker was simply always empty in an installed build, with no error to
+    // notice. Same class as the audit-log path, fixed the same way: hand the
+    // sidecar an absolute path instead of letting it guess from cwd.
+    match app.path().resolve("templates/design", BaseDirectory::Resource) {
+        Ok(templates) => envs.push((
+            "UNIFIA_DESIGN_TEMPLATES_DIR".to_string(),
+            templates.to_string_lossy().to_string(),
+        )),
+        Err(error) => tracing::warn!(%error, "design skill templates are not bundled; the skill picker will be empty"),
+    }
     envs.extend(
         extra_env
             .iter()
@@ -461,36 +489,40 @@ pub fn spawn_command(
     // If the endpoint did not start (boot failure or feature disabled), these
     // vars are omitted and the sidecar falls back to FileStorage.
     if let Some(ep) = crate::auth_storage::endpoint() {
-        envs.push(("OPENCODE_KEYCHAIN_URL".to_string(), ep.url.clone()));
-        envs.push(("OPENCODE_KEYCHAIN_TOKEN".to_string(), ep.token.clone()));
+        envs.push(("UNIFIA_KEYCHAIN_URL".to_string(), ep.url.clone()));
+        envs.push(("UNIFIA_KEYCHAIN_TOKEN".to_string(), ep.token.clone()));
     }
 
     let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
             tracing::info!("WSL is enabled, spawning CLI server in WSL");
-            let version = app.package_info().version.to_string();
+            let _version = app.package_info().version.to_string();
+            // WHY this no longer bootstraps itself: the missing-binary branch used
+            // to `curl https://opencode.ai/install | bash`, which downloads the
+            // upstream OpenCode CLI into WSL and then runs it as this app's
+            // backend — a different product, fetched from a domain this fork does
+            // not control. Refusing with an actionable message is the only honest
+            // option until the fork ships its own WSL bootstrap.
             let mut script = vec![
                 "set -e".to_string(),
-                "BIN=\"$HOME/.opencode/bin/opencode\"".to_string(),
+                "BIN=\"$HOME/.unifia/bin/unifia\"".to_string(),
                 "if [ ! -x \"$BIN\" ]; then".to_string(),
-                format!(
-                    "  curl -fsSL https://opencode.ai/install | bash -s -- --version {} --no-modify-path",
-                    shell_escape(&version)
-                ),
+                "  echo \"Unifia is not installed in WSL. Run the repository's ./install script inside your WSL distribution, then start Unifia again.\" >&2".to_string(),
+                "  exit 127".to_string(),
                 "fi".to_string(),
             ];
 
             let mut env_prefix = vec![
                 "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true".to_string(),
                 "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
-                "OPENCODE_CLIENT=desktop".to_string(),
+                "UNIFIA_CLIENT=desktop".to_string(),
                 "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
             ];
             env_prefix.extend(
                 envs.iter()
                     .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
                     .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
-                    .filter(|(key, _)| key != "OPENCODE_CLIENT")
+                    .filter(|(key, _)| key != "UNIFIA_CLIENT")
                     .filter(|(key, _)| key != "XDG_STATE_HOME")
                     .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
             );
@@ -534,7 +566,14 @@ pub fn spawn_command(
 
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    cmd.stdin(Stdio::null());
+    // A pipe, not null: the sidecar treats end-of-stdin as "my host is gone"
+    // and exits. This is the parent-death signal that actually works on
+    // Windows -- checking the parent pid does not, because a terminated
+    // process whose handle is still held stays openable, so OpenProcess (and
+    // therefore process.kill(pid, 0)) keeps reporting it alive. Measured
+    // 2026-08-24: exitCode 4294967295, not STILL_ACTIVE, yet OpenProcess
+    // succeeded. The OS closes this pipe when the host dies, however it dies.
+    cmd.stdin(Stdio::piped());
 
     let mut wrap = CommandWrap::from(cmd);
 
@@ -549,6 +588,8 @@ pub fn spawn_command(
     }
 
     let mut child = wrap.spawn()?;
+    // Captured before `child` moves into the wait task below.
+    let child_pid = child.id();
     let guard = Arc::new(tokio::sync::RwLock::new(()));
     let (tx, rx) = mpsc::channel(256);
     let (kill_tx, mut kill_rx) = mpsc::channel(1);
@@ -606,7 +647,13 @@ pub fn spawn_command(
     let event_stream = ReceiverStream::new(rx);
     let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
 
-    Ok((event_stream, CommandChild { kill: kill_tx }))
+    Ok((
+        event_stream,
+        CommandChild {
+            kill: kill_tx,
+            pid: child_pid,
+        },
+    ))
 }
 
 fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
@@ -633,8 +680,8 @@ pub fn serve(
     tracing::info!(port, tls_enabled, "Spawning sidecar");
 
     let mut envs = vec![
-        ("OPENCODE_SERVER_USERNAME", username.to_string()),
-        ("OPENCODE_SERVER_PASSWORD", password.to_string()),
+        ("UNIFIA_SERVER_USERNAME", username.to_string()),
+        ("UNIFIA_SERVER_PASSWORD", password.to_string()),
     ];
 
     // Pass TLS cert/key paths to the sidecar when Internet mode is active.
@@ -650,9 +697,9 @@ pub fn serve(
     // WARN was too aggressive — it silently dropped every log.info() call
     // across the whole sidecar (including local-llm-server's "llama-server
     // ready" confirmation) before it ever reached this pipe, confirmed via
-    // packages/opencode/src/util/log.ts's shouldLog() gate. But omitting
+    // packages/unifia/src/util/log.ts's shouldLog() gate. But omitting
     // --log-level entirely defaults to DEBUG in local dev builds (see
-    // packages/opencode/src/index.ts's Log.init() call) — verified
+    // packages/unifia/src/index.ts's Log.init() call) — verified
     // regression: DEBUG-level output during startup is heavy enough that
     // the sidecar never finished initializing within the health-check
     // timeout (100+s CPU burned, HTTP server never started listening).
@@ -813,8 +860,8 @@ mod tests {
             Some(shell_env),
             vec![
                 ("PATH".to_string(), "/desktop/path".to_string()),
-                ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
-                ("OPENCODE_AUTH_STORAGE".to_string(), "keychain".to_string()),
+                ("UNIFIA_CLIENT".to_string(), "desktop".to_string()),
+                ("UNIFIA_AUTH_STORAGE".to_string(), "keychain".to_string()),
             ],
         )
         .into_iter()
@@ -822,7 +869,7 @@ mod tests {
 
         assert_eq!(merged.get("PATH"), Some(&"/desktop/path".to_string()));
         assert_eq!(merged.get("HOME"), Some(&"/tmp/home".to_string()));
-        assert_eq!(merged.get("OPENCODE_CLIENT"), Some(&"desktop".to_string()));
+        assert_eq!(merged.get("UNIFIA_CLIENT"), Some(&"desktop".to_string()));
     }
 
     #[test]

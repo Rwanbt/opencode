@@ -2,14 +2,6 @@ import { usePlatform } from "@/context/platform"
 import type { ServerConnection } from "@/context/server"
 import { createSdkForServer } from "./server"
 
-// Persistent debug logging for mobile (writes to file via Tauri invoke)
-function debugLog(msg: string) {
-  try {
-    const inv = (window as any).__TAURI_INTERNALS__?.invoke
-    if (inv) inv("write_debug_log", { message: msg }).catch(() => {})
-  } catch {}
-}
-
 export type ServerHealth = { healthy: boolean; version?: string }
 
 interface CheckServerHealthOptions {
@@ -95,24 +87,18 @@ export async function checkServerHealth(
       signal,
     })
       .global.health()
-      .then((x) => {
-        const msg = "[health] url=" + server.url + " user=" + (server.username ?? "-") + " hasPass=" + !!server.password + " error=" + JSON.stringify(x.error) + " data=" + JSON.stringify(x.data)
-        console.log(msg)
-        debugLog(msg)
-        return x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }
-      })
-      .catch((error) => {
-        const msg = "[health] CATCH url=" + server.url + " user=" + (server.username ?? "-") + " hasPass=" + !!server.password + " error=" + String(error)
-        console.log(msg)
-        debugLog(msg)
-        return next(count, error)
-      })
+      .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
+      .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
 }
 
 export function useCheckServerHealth() {
   const platform = usePlatform()
-  const fetcher = platform.fetch ?? globalThis.fetch
+  // Bound before it travels: this reference is handed to the SDK, which stores
+  // it and calls it back. An unbound global fetch invoked with any other
+  // receiver raises "Illegal invocation" — the same defect that blocked the
+  // Workbench handshake, so the fallback is closed here rather than trusted.
+  const fetcher = platform.fetch ?? globalThis.fetch.bind(globalThis)
 
   return (http: ServerConnection.HttpBase) => {
     const key = cacheKey(http)

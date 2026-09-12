@@ -1,9 +1,9 @@
 ---
 title: Eklentiler
-description: OpenCode'u genişletmek için kendi eklentilerinizi yazın.
+description: Unifia'u genişletmek için kendi eklentilerinizi yazın.
 ---
 
-Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek OpenCode'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya OpenCode'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
+Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek Unifia'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya Unifia'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
 
 Örnekler için topluluk tarafından oluşturulan [eklentilere](/docs/ecosystem#plugins) göz atın.
 
@@ -30,7 +30,7 @@ Bu dizinlerdeki dosyalar başlangıçta otomatik olarak yüklenir.
 
 Yapılandırma dosyanızda npm paketlerini belirtin.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -56,7 +56,7 @@ Hem normal hem de kapsamlı npm paketleri desteklenir.
 Eklentiler tüm kaynaklardan yüklenir ve tüm kancalar sırayla çalışır. Yükleme sırası şöyledir:
 
 1. Global config (`~/.config/opencode/opencode.json`)
-2. Project config (`opencode.json`)
+2. Project config (`unifia.json`)
 3. Global eklenti dizini (`~/.config/opencode/plugins/`)
 4. Proje eklenti dizini (`.opencode/plugins/`)
 
@@ -82,7 +82,7 @@ Yerel eklentiler ve özel araçlar harici npm paketlerini kullanabilir. İhtiyac
 }
 ```
 
-OpenCode bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
+Unifia bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -117,7 +117,7 @@ Eklenti işlevi şunları alır:
 - `project`: Mevcut proje bilgisi.
 - `directory`: Güncel çalışma dizini.
 - `worktree`: Git çalışma ağacı yolu.
-- `client`: Yapay zeka ile etkileşim kurmak için bir OpenCode SDK istemcisi.
+- `client`: Yapay zeka ile etkileşim kurmak için bir Unifia SDK istemcisi.
 - `$`: Bun'un komutları yürütmek için kullandığı [shell API](https://bun.com/docs/runtime/shell).
 
 ---
@@ -127,7 +127,7 @@ Eklenti işlevi şunları alır:
 TypeScript eklentileri için türleri eklenti paketinden içe aktarabilirsiniz:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -210,7 +210,7 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 
 ## Örnekler
 
-OpenCode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
+Unifia'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
 
 ---
 
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -234,14 +234,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 macOS'ta AppleScript'i çalıştırmak için `osascript` kullanıyoruz. Burada bildirim göndermek için kullanıyoruz.
 
 :::note
-OpenCode masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
+Unifia masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
 :::
 
 ---
 
 ### .env Koruması
 
-OpenCode'un `.env` dosyalarını okumasını önleyin:
+Unifia'un `.env` dosyalarını okumasını önleyin:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -276,10 +276,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Özel araçlar
 
-Eklentiler ayrıca OpenCode'a özel araçlar da ekleyebilir:
+Eklentiler ayrıca Unifia'a özel araçlar da ekleyebilir:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -299,13 +299,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` yardımcısı, OpenCode'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
+`tool` yardımcısı, Unifia'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
 
 - `description`: Araç ne yapar?
 - `args`: Aracın argümanları için Zod şeması
 - `execute`: Araç çağrıldığında çalışan fonksiyon
 
-Özel araçlarınız, yerleşik araçların yanı sıra OpenCode'a da hazır olacaktır.
+Özel araçlarınız, yerleşik araçların yanı sıra Unifia'a da hazır olacaktır.
 
 :::note
 Eğer bir eklenti aracı yerleşik bir araçla aynı adı kullanırsa, eklenti aracı öncelik kazanır.
@@ -339,7 +339,7 @@ Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK belgelerine
 Bir oturum sıkıştırıldığında içerilen bağlamı özelleştirin:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 Ayrıca `output.prompt` ayarını yaparak sıkıştırma istemini tamamen değiştirebilirsiniz:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

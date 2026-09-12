@@ -3,10 +3,10 @@ name: observability-sdk-drift
 on:
   pull_request:
     paths:
-      - 'packages/opencode/src/server/routes/observability.ts'
+      - 'packages/unifia/src/server/routes/observability.ts'
       - 'packages/sdk/**'
       - 'script/generate.ts'
-      - 'packages/opencode/package.json'
+      - 'packages/unifia/package.json'
       - 'packages/sdk/js/package.json'
       - '.github/workflows/observability-sdk-drift.yml'
   workflow_dispatch:

@@ -1,11 +1,11 @@
 ---
-project: opencode
+project: unifia
 type: roadmap
-tags: [opencode, desktop, android, auto, debate, observability]
+tags: [unifia, desktop, android, auto, debate, observability]
 summary: "Plan de convergence CLI, Desktop et Android pour la visibilité des agents, Auto, Debate et l’observabilité mobile."
 created: 2026-07-13
 updated: 2026-07-13
-related: [[OpenCode/Codex|OpenCode AGENTS.md/Codex]], [[OpenCode/Handoff-CLI-Auto-Debate-CloudLean-2026-07-12|CLI Auto/Debate handoff]], [[OpenCode/Plan-Native-Observability-V3-2026-07-10|Native observability V3]], [[OpenCode/Roadmap-IDE-Android-Dual-Mode|Android dual-mode roadmap]]
+related: [[OpenCode/Codex|Unifia AGENTS.md/Codex]], [[OpenCode/Handoff-CLI-Auto-Debate-CloudLean-2026-07-12|CLI Auto/Debate handoff]], [[OpenCode/Plan-Native-Observability-V3-2026-07-10|Native observability V3]], [[OpenCode/Roadmap-IDE-Android-Dual-Mode|Android dual-mode roadmap]]
 ---
 
 # Plan de convergence CLI, Desktop et Android
@@ -96,8 +96,8 @@ Les composants et la navigation mobile existent déjà. Le travail commence donc
 
 **Fichiers probables**
 
-- `packages/opencode/src/agent/agent.ts`
-- `packages/opencode/src/config/config-schema.ts`
+- `packages/unifia/src/agent/agent.ts`
+- `packages/unifia/src/config/config-schema.ts`
 - `packages/app/src/context/local.tsx`
 - génération SDK si le schéma public change
 - tests ciblés agent et contexte local
@@ -248,7 +248,7 @@ Chaque PR vise moins de 400 LOC modifiées. Si le configurateur Debate dépasse 
 
 **Commandes minimales par PR**
 
-- `packages/opencode`: `bun typecheck`, tests ciblés `agent` et `debate`, puis test TUI Debate existant ;
+- `packages/unifia`: `bun typecheck`, tests ciblés `agent` et `debate`, puis test TUI Debate existant ;
 - `packages/app`: `bun typecheck`, `bun test`, puis Playwright ciblé si le parcours traverse un redémarrage ;
 - `packages/mobile`: `bun test`, build Android `aarch64`, installation et smoke test ;
 - après modification des relations de modules : `graphify update .`.

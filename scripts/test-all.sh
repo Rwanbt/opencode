@@ -12,7 +12,7 @@ echo ""
 
 # Phase 1: Unit tests (fast, no LLM needed)
 echo "=== Phase 1: Unit Tests (bun test) ==="
-cd packages/opencode || exit 1
+cd packages/unifia || exit 1
 UNIT_RESULT=$(bun test test/tool/preflight-guards.test.ts 2>&1)
 UNIT_PASS=$(echo "$UNIT_RESULT" | grep -o '[0-9]* pass' | head -1)
 UNIT_FAIL=$(echo "$UNIT_RESULT" | grep -o '[0-9]* fail' | head -1)

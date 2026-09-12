@@ -1,0 +1,20 @@
+{
+  "name": "large-monorepo",
+  "description": "Workspace stress test (1000+ fichiers)",
+  "type": "monorepo",
+  "structure": {
+    "expected_count": "1000+ files",
+    "packages_count": "100+ packages"
+  },
+  "size": "large",
+  "agent_test_scenarios": [
+    "list_everything",
+    "search_files",
+    "build_incremental"
+  ],
+  "expected_outcomes": {
+    "list_everything": "< 5 seconds",
+    "search_files": "< 1 second",
+    "build_incremental": "uses cache"
+  }
+}

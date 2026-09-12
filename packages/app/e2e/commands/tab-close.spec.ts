@@ -17,7 +17,7 @@ test("mod+w closes the active file tab", async ({ page, gotoSession }) => {
   await expect(dialog).toBeVisible()
 
   await dialog.getByRole("textbox").first().fill("package.json")
-  const item = dialog.locator('[data-slot="list-item"][data-key^="file:"]').first()
+  const item = dialog.locator('[data-slot="list-item"][data-key="file:package.json"]')
   await expect(item).toBeVisible({ timeout: 30_000 })
   await item.click()
   await expect(dialog).toHaveCount(0)

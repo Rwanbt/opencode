@@ -10,13 +10,13 @@ Le frontend SolidJS est servi depuis `packages/app`.
 | Composant | Process | Notes |
 |---|---|---|
 | Tauri Rust core | Main process | `lib.rs` — commandes invoke Tauri |
-| Sidecar opencode-cli | Child process | `opencode-cli-x86_64-pc-windows-msvc.exe` |
+| Sidecar unifia-cli | Child process | `unifia-cli-x86_64-pc-windows-msvc.exe` |
 | llama-server | Child process | `llm.rs` — spawn/stop, port configurable |
 | Speech workers | Threads async Rust | `speech.rs` — Kokoro + Parakeet |
 | TLS proxy | Async task | `tls.rs` — certificats auto-signés |
 
 ## Constraints
-- Le sidecar `opencode-cli.exe` N'est PAS recompilé par `bun tauri build` — toujours `bun run build --single --baseline` dans `packages/opencode` d'abord, puis copier dans `sidecars/`
+- Le sidecar `unifia-cli.exe` N'est PAS recompilé par `bun tauri build` — toujours `bun run build --single --baseline` dans `packages/unifia` d'abord, puis copier dans `sidecars/`
 - `debuggable=true` en release via `build.gradle.kts buildTypes.release`, PAS dans le manifest
 - `bun tauri build` (pas `cargo build --release`) — sinon webview cassée (devUrl localhost:1430)
 - La config LLM est poussée via `invoke("set_llm_config", {...})` — les 12 champs sont obligatoires
@@ -24,11 +24,11 @@ Le frontend SolidJS est servi depuis `packages/app`.
 
 ## Forbidden
 - Jamais de `cargo build --release` direct (casse Tauri 2 webview)
-- Jamais de modifier `opencode-cli.exe` dans `sidecars/` sans recompiler le source TypeScript d'abord
+- Jamais de modifier `unifia-cli.exe` dans `sidecars/` sans recompiler le source TypeScript d'abord
 - Jamais de push sur `main` sans tester le build desktop complet
 
 ## Common failure modes
-- **Sidecar stale** : code TypeScript modifié mais `opencode-cli.exe` pas recompilé → comportement old version sans erreur visible ([référence](~/.claude/projects/d--App-OpenCode/memory/reference_sidecar_baseline_build.md))
+- **Sidecar stale** : code TypeScript modifié mais `unifia-cli.exe` pas recompilé → comportement old version sans erreur visible ([référence](~/.claude/projects/d--App-OpenCode/memory/reference_sidecar_baseline_build.md))
 - **TLS HTTPS scope manquant** : `https://*:*/*` absent du `tauri.conf.json` scope → les appels HTTPS échouent silencieusement en mode Internet
 - **Deep-link non détecté** : scheme absent de `plugins.deep-link.mobile` dans `tauri.conf.json` — le manifest intent-filter seul est silencieusement ignoré
 - **Config LLM non propagée** : `pushConfigToEnv` ne propage rien si les 12 champs ne sont pas tous présents dans l'invoke

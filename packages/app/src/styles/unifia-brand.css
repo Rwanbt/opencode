@@ -1,0 +1,49 @@
+:root {
+  --unifia-code: #4885F3;
+  --unifia-indigo: #424BD5;
+  --unifia-design: #9068E9;
+  --unifia-bridge: #BD5852;
+  --unifia-work: #EC7C39;
+  --unifia-amber: #FAAB52;
+
+  --unifia-void: #010308;
+  --unifia-obsidian: #070A13;
+  --unifia-ink: #111422;
+  --unifia-graphite: #1D202F;
+  --unifia-slate: #2C2E3E;
+  --unifia-steel: #404356;
+  --unifia-ash: #73707E;
+  --unifia-mist: #B6B3C2;
+  --unifia-pearl: #E2DEDC;
+  --unifia-ivory: #F2EFED;
+
+  --color-success: #39C58A;
+  --color-warning: #F0A44B;
+  --color-danger: #EF5D68;
+  --color-info: #4885F3;
+  --color-focus: #7F8CFF;
+
+  --surface-canvas: var(--unifia-obsidian);
+  --surface-panel: var(--unifia-ink);
+  --surface-card: var(--unifia-graphite);
+  --surface-elevated: var(--unifia-slate);
+
+  --text-primary: var(--unifia-ivory);
+  --text-secondary: var(--unifia-mist);
+  --text-tertiary: var(--unifia-ash);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  --motion-instant: 80ms;
+  --motion-fast: 160ms;
+  --motion-normal: 240ms;
+  --motion-slow: 420ms;
+
+  --font-sans: "Manrope", "Inter", "Noto Sans", "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", "Cascadia Mono", "SFMono-Regular", monospace;
+}

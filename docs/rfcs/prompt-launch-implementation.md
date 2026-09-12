@@ -1,14 +1,14 @@
 # Prompt de lancement — session d'implémentation
 
 > Copier-coller ce prompt tel quel dans une nouvelle session Claude Code
-> ouverte dans `D:\App\OpenCode\opencode\`.
+> ouverte dans `D:\App\Unifia\unifia\`.
 
 ---
 
 ## Le prompt
 
 ```
-Je travaille sur mon fork d'OpenCode (terminal agentique IA, Bun + Effect + SolidJS + Tauri).
+Je travaille sur mon fork d'Unifia (terminal agentique IA, Bun + Effect + SolidJS + Tauri).
 Je veux implémenter une feature "Collective Intelligence" / "Blind Spot Hunter" — un mode
 /debate qui fait dialoguer N modèles IA en parallèle, extrait les claims atomiques, identifie
 les blind spots (insights qu'un seul modèle a vus), et produit un rapport structuré.
@@ -23,33 +23,33 @@ La spec complète et le plan d'implémentation sont dans :
 Commence par lire ces 3 fichiers. Ensuite :
 
 1. Étudie les patterns Effect existants du codebase pour que le code s'intègre naturellement :
-   - packages/opencode/src/agent/agent.ts — comment les agents sont déclarés (Agent.Info, Service)
-   - packages/opencode/src/provider/provider.ts — comment les providers résolvent les modèles
-   - packages/opencode/src/session/llm.ts — comment le streaming LLM fonctionne
-   - packages/opencode/src/skill/index.ts — comment les skills sont enregistrées
-   - packages/opencode/src/auth/index.ts — comment l'auth est gérée (Schema.TaggedErrorClass)
-   - packages/opencode/src/storage/storage.ts — pattern de persistance
-   - packages/opencode/src/bus/index.ts — pattern événements (BusEvent.define + PubSub)
-   - packages/opencode/src/session/session.sql.ts — schéma drizzle existant
+   - packages/unifia/src/agent/agent.ts — comment les agents sont déclarés (Agent.Info, Service)
+   - packages/unifia/src/provider/provider.ts — comment les providers résolvent les modèles
+   - packages/unifia/src/session/llm.ts — comment le streaming LLM fonctionne
+   - packages/unifia/src/skill/index.ts — comment les skills sont enregistrées
+   - packages/unifia/src/auth/index.ts — comment l'auth est gérée (Schema.TaggedErrorClass)
+   - packages/unifia/src/storage/storage.ts — pattern de persistance
+   - packages/unifia/src/bus/index.ts — pattern événements (BusEvent.define + PubSub)
+   - packages/unifia/src/session/session.sql.ts — schéma drizzle existant
 
 2. Implémente la Phase P0 (fondations) puis P1 (MVP) du plan. Concrètement :
 
    P0 — Fondations :
-   - packages/opencode/src/collective/types.ts (types Zod: Claim, DebateReport, DebateConfig)
-   - packages/opencode/src/collective/debate-store.sql.ts (schéma drizzle)
-   - packages/opencode/src/collective/debate-store.ts (service Effect CRUD)
-   - packages/opencode/src/collective/budget-tracker.ts (estimation + kill-switch)
+   - packages/unifia/src/collective/types.ts (types Zod: Claim, DebateReport, DebateConfig)
+   - packages/unifia/src/collective/debate-store.sql.ts (schéma drizzle)
+   - packages/unifia/src/collective/debate-store.ts (service Effect CRUD)
+   - packages/unifia/src/collective/budget-tracker.ts (estimation + kill-switch)
    - Bus events (DebateStarted, DebateCompleted)
 
    P1 — MVP :
-   - packages/opencode/src/collective/provider-discovery.ts (cascade auth)
-   - packages/opencode/src/collective/claim-extractor.ts (extraction + vérif exhaustivité)
-   - packages/opencode/src/collective/synthesis-judge.ts (Phase 4)
-   - packages/opencode/src/collective/orchestrator.ts (Phases 1+2+4)
-   - packages/opencode/src/collective/debate-agent.ts (Agent.Info)
-   - packages/opencode/src/collective/index.ts (exports)
+   - packages/unifia/src/collective/provider-discovery.ts (cascade auth)
+   - packages/unifia/src/collective/claim-extractor.ts (extraction + vérif exhaustivité)
+   - packages/unifia/src/collective/synthesis-judge.ts (Phase 4)
+   - packages/unifia/src/collective/orchestrator.ts (Phases 1+2+4)
+   - packages/unifia/src/collective/debate-agent.ts (Agent.Info)
+   - packages/unifia/src/collective/index.ts (exports)
    - Enregistrement de l'agent dans agent/agent.ts
-   - Skill: packages/opencode/skills/debate/SKILL.md
+   - Skill: packages/unifia/skills/debate/SKILL.md
 
 Patterns obligatoires (tirés du codebase existant) :
 - Services: ServiceMap.Service<S, Interface>()("@opencode/Collective")

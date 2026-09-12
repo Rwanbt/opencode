@@ -1,0 +1,20 @@
+card_id: TEAM-E01
+base_sha: 661da34f9093102ef12469785abd9f4b89dc95cd
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/intake.ts
+  - packages/unifia/test/team/intake.test.ts
+  - docs/team/scope-manifest/TEAM-E01.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/events.ts
+  - packages/unifia/src/team/event-writer.ts
+  - packages/unifia/src/team/team-store.ts
+  - packages/unifia/src/team/checkpoint-manager.ts
+  - packages/unifia/src/team/permission-broker.ts
+  - packages/unifia/src/model-intelligence/**
+  - packages/unifia/src/provider/auth.ts
+  - packages/unifia/src/auth/**
+  - main
+  - dev
+  - opti-ui

@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-08-04T23:36:39.858Z",
+  "scope": "local reproducible checks only; excludes external audit, pentest and signed release",
+  "excludedTests": {
+    "packages/browser-runtime/test/playwright-driver.e2e.ts": "requires a real browser; not runnable offline in this gate"
+  },
+  "results": [
+    {
+      "name": "supply-chain/forbidden-paths",
+      "ok": true,
+      "detail": "no undeclared forbidden path (38 inherited files excluded from the build by declaration)"
+    },
+    {
+      "name": "supply-chain/excluded-imports",
+      "ok": true,
+      "detail": "101 owned source files import no excluded path"
+    },
+    {
+      "name": "supply-chain/spdx-headers",
+      "ok": true,
+      "detail": "101 owned source files carry an SPDX header"
+    },
+    {
+      "name": "supply-chain/manifest-licenses",
+      "ok": true,
+      "detail": "23 manifests declare an allowed licence"
+    },
+    {
+      "name": "supply-chain/dependency-provenance",
+      "ok": true,
+      "detail": "runtime dependencies are workspace, catalog or exactly pinned"
+    },
+    {
+      "name": "quality/lint",
+      "ok": true,
+      "detail": "23 owned packages lint clean"
+    },
+    {
+      "name": "quality/typecheck",
+      "ok": true,
+      "detail": "Tasks:    32 successful, 32 total"
+    },
+    {
+      "name": "quality/tests",
+      "ok": true,
+      "detail": "38 suites passed (36 bun + 2 vitest, 1 browser suite(s) skipped, pass --with-browser to include), 1 excluded with a stated reason"
+    }
+  ],
+  "verdict": "PASS"
+}

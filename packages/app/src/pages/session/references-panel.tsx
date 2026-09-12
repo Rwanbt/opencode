@@ -10,7 +10,7 @@
 // "Références" for behavior parity).
 
 import { For, Show } from "solid-js"
-import type { LspLocation } from "@opencode-ai/ui/code-mirror-lsp"
+import type { LspLocation } from "@unifia/ui/code-mirror-lsp"
 import { useLanguage } from "@/context/language"
 
 export interface ReferencesPanelProps {

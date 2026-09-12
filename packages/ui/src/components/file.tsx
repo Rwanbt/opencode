@@ -1,5 +1,5 @@
-import { sampledChecksum } from "@opencode-ai/util/encode"
-import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
+import { sampledChecksum } from "@unifia/util/encode"
+import { markViewerTiming } from "@unifia/util/viewer-timing"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,

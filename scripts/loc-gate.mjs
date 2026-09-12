@@ -14,7 +14,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 
-const ROOT = "packages/app/src"
+const ROOT = process.argv[2] ?? "packages/app/src"
 const BLOCK = 1500
 const WARN = 800
 const EXTENSIONS = new Set([".ts", ".tsx"])

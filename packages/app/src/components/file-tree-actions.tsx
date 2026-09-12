@@ -1,8 +1,8 @@
 import { Show, type JSX } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { ContextMenu } from "@opencode-ai/ui/context-menu"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ContextMenu } from "@unifia/ui/context-menu"
+import { DropdownMenu } from "@unifia/ui/dropdown-menu"
+import { IconButton } from "@unifia/ui/icon-button"
 import { useLanguage } from "@/context/language"
 import type { FileNode } from "../types/sdk-shim"
 

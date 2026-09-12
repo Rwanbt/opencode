@@ -1,4 +1,4 @@
-# Known Failure Patterns — OpenCode
+# Known Failure Patterns — Unifia
 
 > Patterns de bugs récurrents validés sur le terrain. Avant tout debug, scanner cette liste.
 > Mis à jour : 2026-05-27.
@@ -10,7 +10,7 @@
 #### Sidecar stale après modification TypeScript
 **Symptôme** : l'app desktop se comporte comme avant la modification, sans erreur.
 **Cause** : `bun tauri build` ne recompile pas `opencode-cli.exe` automatiquement.
-**Fix** : `bun run build --single --baseline` dans `packages/opencode`, puis copier dans `sidecars/`.
+**Fix** : `bun run build --single --baseline` dans `packages/unifia`, puis copier dans `sidecars/`.
 **Fichier** : [packages/desktop/src-tauri/src/server.rs](../packages/desktop/src-tauri/src/server.rs)
 
 #### Android build hang sur pipe
@@ -46,7 +46,7 @@
 **Symptôme** : `cargo check`/`build` échouent systématiquement en agent mode, 5+ retries identiques.
 **Cause** : Gemma-4 E4B envoie `dry_run` au lieu de `description` requis dans le schema bash tool.
 **Fix** : patcher `tool/bash.ts` — field `description` obligatoire, ignorer `dry_run`.
-**Fichier** : [packages/opencode/src/tool/bash.ts](../packages/opencode/src/tool/bash.ts)
+**Fichier** : [packages/unifia/src/tool/bash.ts](../packages/unifia/src/tool/bash.ts)
 
 #### OpenCL Adreno K-quants crash
 **Symptôme** : llama-server exit 134 (`SET_ROWS`) avec Q4_K_M sur Adreno.
@@ -144,11 +144,11 @@ Deux étages :
 - `Not a valid dynamic program` → double-wrap (`.elf64.elf64`).
 - Échec silencieux d'un `force_symlink`/`repair_rootfs_hardlinks` → un binaire
   critique (gcc/g++) absent ; depuis D-12/D-13 ces échecs sont loggés
-  (`[OpenCode] … failed to …`), donc à scanner dans `adb logcat`.
+  (`[Unifia] … failed to …`), donc à scanner dans `adb logcat`.
 - Échec silencieux d'un `wrap_one` (cc1/collect2/binutils/rustlib) ou de la
   réécriture du wrapper / restauration `liblto_plugin.so` : depuis le
   durcissement Phase 0+ ces `let _ =` sont eux aussi loggés
-  (`[OpenCode] prepare_toolchain_wrappers: failed to …`). Un seul wrap raté
+  (`[Unifia] prepare_toolchain_wrappers: failed to …`). Un seul wrap raté
   n'avorte plus la passe (best-effort par binaire), mais laisse une trace.
 
 ---
@@ -195,12 +195,12 @@ Deux étages :
 
 #### CORS regex trop permissif
 **Pattern** : `*.opencode.ai` accepte des sous-domaines arbitraires.
-**Fichier** : [packages/opencode/src/server/server.ts](../packages/opencode/src/server/server.ts)
+**Fichier** : [packages/unifia/src/server/server.ts](../packages/unifia/src/server/server.ts)
 
 #### WebSocket auth en query param
 **Pattern** : `?authorization=` visible dans les logs réseau.
-**Fichier** : [packages/opencode/src/server/auth-jwt.ts](../packages/opencode/src/server/auth-jwt.ts)
+**Fichier** : [packages/unifia/src/server/auth-jwt.ts](../packages/unifia/src/server/auth-jwt.ts)
 
 #### `auth.json` plaintext
 **Pattern** : tokens stockés en clair avec mode 0o600.
-**Fichier** : [packages/opencode/src/auth/index.ts](../packages/opencode/src/auth/index.ts)
+**Fichier** : [packages/unifia/src/auth/index.ts](../packages/unifia/src/auth/index.ts)

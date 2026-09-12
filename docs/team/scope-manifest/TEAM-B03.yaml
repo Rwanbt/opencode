@@ -1,0 +1,129 @@
+# TEAM-B03 scope manifest — WAVE-POST-T0-005 (RELANCE CORRECTIVE v2)
+card_id: TEAM-B03
+title: "ModelInvoker, usage et coûts canoniques (RELANCE CORRECTIVE v2)"
+gate: T1
+risk: high
+depends_on: [B01]
+depends_on_satisfied: true # B01 CLOSED+INTEGRATED (D-040, cherry-pick 7b229eeae7)
+base_sha: fe4b8237fe8a75a6f2fd07692683bf6c460e8ee5
+branch: c-B03/8d3bfc1d
+worktree: D:\App\OpenCode\.team-worktrees\B03-8d3bfc1d
+fencing_token_provisional: 150
+assignment_generation: post-t0-005-v1
+
+# Findings to correct (vague 004 review by OpenCode-Agent Claude Sonnet 4)
+findings_to_correct:
+  F-B03-001: "BLOCKING — no implementation delivered, zero commits above base in previous worktrees. MUST implement ModelInvoker + UsageNormalizer + CostCatalog."
+  F-B03-003: "INFO — duplicate worktrees B03-5d89de12 + B03-0ec8bc6f exist. USE ONLY this worktree B03-8d3bfc1d. Previous worktrees are dormant (D-008 stricte) but worker MUST NOT touch them."
+
+allowed_create:
+  - packages/unifia/src/multi-model/model-invoker.ts
+  - packages/unifia/src/multi-model/usage-normalizer.ts
+  - packages/unifia/src/multi-model/cost-catalog.ts
+  - packages/unifia/test/multi-model/invoker.test.ts
+allowed_modify_existing:
+  - docs/team/scope-manifest/TEAM-B03.yaml
+
+forbidden:
+  - packages/unifia/src/model-intelligence/** # scope C01/C02/C03/C04, figé
+  - packages/unifia/src/team/** # scope G01/G02, figé
+  - packages/unifia/src/collective/** # scope Debate, figé
+  - packages/unifia/src/multi-model/provider-discovery.ts # B02, consommer seulement
+  - packages/unifia/src/multi-model/types.ts # B01, consommer seulement
+  - packages/unifia/src/multi-model/model-ref.ts # B01, consommer seulement
+  - packages/unifia/src/multi-model/prompt-registry.ts # B04 future carte, figé pour cette vague
+  - toute branche protégée: main, dev, opti-ui, Team
+  - previous worktrees B03-5d89de12 and B03-0ec8bc6f (D-008 stricte — dormants, jamais toucher)
+
+acceptance_criteria:
+  - "ModelInvoker : interface InvocationRequest → InvocationResult avec AbortSignal, timeout, retry, streaming"
+  - "UsageNormalizer : format canonique tokens/coût/durée"
+  - "CostCatalog : lecture seule via C01 registry, zéro duplication"
+  - "0 erreur tsc dans src/multi-model/{model-invoker,usage-normalizer,cost-catalog}.ts et test/multi-model/invoker.test.ts"
+  - "bun test test/multi-model/ — baseline 65 tests + nouveaux tests contrat"
+  - "Aucun fichier hors manifest"
+  - "Zéro second registry, zéro catalogue de modèles statique"
+  - "Imports interdits depuis team/, collective/, model-intelligence/ — vérifier via grep"
+  - "Worker DOIT utiliser UNIQUEMENT le worktree B03-8d3bfc1d (cf. F-B03-003)"
+
+validations_required:
+  before_commit:
+    - "cd packages/unifia && bunx tsc --noEmit -p ."
+    - "bun test test/multi-model/ --timeout 60000"
+    - "git diff --check"
+    - "marker commit : '[PROVISIONAL][UNREVIEWED][TEAM-B03]'"
+    - "grep -r 'from.*team/' packages/unifia/src/multi-model/ — 0 résultat"
+    - "grep -r 'from.*collective/' packages/unifia/src/multi-model/ — 0 résultat"
+    - "grep -r 'from.*model-intelligence/' packages/unifia/src/multi-model/ — 0 résultat"
+  before_integration:
+    - "E2 review APPROVED ou APPROVED_WITH_FOLLOWUP, reviewer distinct de OpenCode-Agent Claude Sonnet 4 (vague 004) — rotation D-010 §6"
+    - "validations before_commit re-exécutées dans worktree integration (post-cherry-pick)"
+
+# --- Execution record (v2 corrective, worker MM2) -------------------------
+execution_record:
+  status: DONE
+  worker_id: MM2
+  files_created:
+    - packages/unifia/src/multi-model/model-invoker.ts
+    - packages/unifia/src/multi-model/usage-normalizer.ts
+    - packages/unifia/src/multi-model/cost-catalog.ts
+    - packages/unifia/test/multi-model/invoker.test.ts
+  files_modified:
+    - docs/team/scope-manifest/TEAM-B03.yaml
+  design_decisions:
+    - "ModelInvoker never calls a real provider directly: callers inject a\
+      \ ModelExecutor/ModelStreamExecutor. This is what keeps the invoker\
+      \ deterministically testable (fake executors, zero network calls)\
+      \ while still owning the real invocation contract: cancellation\
+      \ (AbortSignal linking external signal + internal timeout controller),\
+      \ retry/backoff (opt-in, default no-retry, transient-code allowlist\
+      \ E_TIMEOUT/E_RATE_LIMIT/E_UNAVAILABLE, E_CANCELLED never retried),\
+      \ and streaming (invokeStream is an async generator yielding\
+      \ StreamChunk and returning the final InvocationResult via a\
+      \ caller-supplied StreamAggregator, since the Output encoding is\
+      \ generic and cannot be aggregated generically inside this module)."
+    - "discoverAvailableProviders (B02) is consumed via an opt-in\
+      \ availabilityCheck config on ModelInvoker: when enabled with\
+      \ explicitParticipants it takes discovery's own explicit\
+      \ short-circuit branch (>=2 explicit participants), which never\
+      \ touches Provider.list()/Auth.all()/env/CLI — keeping this card's\
+      \ own tests network-free while still genuinely wiring B02 into B03\
+      \ (not just importing the type)."
+    - "CostCatalog dependency-injection resolution: acceptance criteria\
+      \ require BOTH 'CostCatalog reads C01, zero duplication' AND 'zero\
+      \ import of model-intelligence/ from multi-model/'. Resolved by\
+      \ having cost-catalog.ts accept a CostLookupFn (or a\
+      \ costLookupFromRegistry(getModel) adapter built around a\
+      \ structurally-typed RegistryModelLike/RegistryGetModelFn — a local\
+      \ type mirror of C01's Model.pricing shape, NOT a re-import or a\
+      \ second value table) as an injected parameter. Production wiring\
+      \ that binds a real C01-backed lookup (e.g. unwrapping\
+      \ Registry.getModel's Effect into a Promise) lives OUTSIDE\
+      \ multi-model/, in a future integration/bootstrap card — this card\
+      \ only defines the injection point and the adapter shape."
+    - "usage-normalizer.ts reconciles OpenAI-style (promptTokens/\
+      \ completionTokens) and Anthropic-style\
+      \ (cacheReadInputTokens/cacheCreationInputTokens) field-naming\
+      \ schemes into B01's single canonical TokenUsage shape, and computes\
+      \ cost from injected CostRates (never fabricating a zero-cost result\
+      \ for an unknown rate — returns null instead)."
+  deviations_from_spec: []
+  validation_summary:
+    tsc: "PASS (0 errors in the 4 new/modified files; 1 pre-existing unrelated\
+      \ error in src/provider/models.ts confirmed present on base_sha before\
+      \ any change, via git stash)"
+    tests: "PASS — baseline 86 tests (measured directly, not the 65 assumed\
+      \ in the assignment doc) + 39 new tests = 125 pass / 0 fail / 1343\
+      \ expect() calls, 6 files"
+    biome: "PASS — 0 findings on the 3 new source files"
+    git_diff_check: "PASS — no whitespace errors"
+    grep_team: "PASS on the 4 files this card owns (0 real or comment\
+      \ matches). NOTE: the literal directory-wide grep\
+      \ 'from.*team/|collective/|model-intelligence/' over the whole\
+      \ src/multi-model/ still matches DOC-COMMENT text (not real imports)\
+      \ inside the pre-existing B01/B02 files (types.ts, model-ref.ts,\
+      \ provider-discovery.ts) — those files predate this card, are\
+      \ import-only for us, and are out of allowed_modify_existing scope."
+  f_b03_001_resolved: true
+  f_b03_003_resolved: true
+  second_registry_introduced: false

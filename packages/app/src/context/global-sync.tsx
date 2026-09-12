@@ -1,14 +1,14 @@
 import type {
   Config,
-  OpencodeClient,
+  UnifiaClient,
   Path,
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
   Todo,
 } from "../types/sdk-shim"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { showToast } from "@unifia/ui/toast"
+import { getFilename } from "@unifia/util/path"
 import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -47,7 +47,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
-  const sdkCache = new Map<string, OpencodeClient>()
+  const sdkCache = new Map<string, UnifiaClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -171,6 +171,16 @@ function createGlobalSync() {
       sdkCache.delete(directory)
       clearProviderRev(directory)
       clearSessionPrefetchDirectory(directory)
+    },
+    // C13: server-side dispose notification. Fire-and-forget fetch to
+    // /instance/dispose. The server's lease/refcount (C12) handles the
+    // actual disposal: the last release triggers the dispose.
+    onServerDispose: (directory) => {
+      void globalSDK.client.instance.dispose({ directory }).then((result) => {
+        if (result.error) console.warn("Failed to dispose server instance", result.error)
+      }).catch((error) => {
+        console.warn("Failed to dispose server instance", error)
+      })
     },
     translate: language.t,
   })

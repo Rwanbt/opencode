@@ -18,7 +18,7 @@ import { dict as th } from "./th"
 import { dict as zh } from "./zh"
 import { dict as zht } from "./zht"
 import { dict as tr } from "./tr"
-import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
+import { dict as uiEn } from "@unifia/ui/i18n/en"
 
 const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, tr, zh, zht]
 const namedLocales: Record<string, typeof en> = { ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, tr, zh, zht }
@@ -55,6 +55,12 @@ const AUDITED_SCOPE_PREFIXES = [
   "dialog.debate.",
   "dialog.model.",
   "provider.",
+  // 2026-08-16: Workbench multimode (Work / Design / Automate) surfaces and
+  // connection lifecycle. Every locale must translate these keys, not fall
+  // back to English, otherwise a French user sees "Retry connection" instead
+  // of "Reconnecter" and "Selected operation" instead of "Opération
+  // sélectionnée" in the new V3 §20 surfaces.
+  "workbench.",
 ]
 
 // Legitimately identical across en/fr/zh: technical acronyms, proper nouns,
@@ -124,6 +130,29 @@ const TECHNICAL_ALLOWLIST = new Set([
   "settings.fork.plugins.serverNamePlaceholder",
   "settings.fork.plugins.commandPlaceholderExample",
   "settings.fork.plugins.urlPlaceholderExample",
+  "settings.fork.githubAuth.title",
+  "settings.fork.githubAuth.diagnosticsHttpsHelperLabel",
+  "settings.fork.githubAuth.gitHttpsStatusLabel",
+  "settings.fork.githubAuth.apiStatusLabel",
+  // 2026-08-16: Workbench Design preview caption. {{label}} · {{width}}px is
+  // a templated visual figure caption; the middle-dot separator and the px
+  // unit are typographic constants shared across all locales, so the
+  // string itself is intentionally identical to the English source.
+  "workbench.design.previewCaption",
+  // 2026-08-16: International technical loan-words. "Design" (fr/de/ja/ko
+  // surface forms may differ, but pt-BR/bs/da/keep the English token as a
+  // lexical borrowing), "Trace" (used in de/no/ru as an engineering
+  // term), "Export" (fr/de/ru/ja surface forms are the same English
+  // spelling), and "Send" (the imperative of "to send" in da/no), plus
+  // "Assistant" and "Documents" which are identical in fr. These are
+  // legitimate identical spellings, not silent fallbacks.
+  "workbench.design.title",
+  "workbench.operations.trace",
+  "workbench.operations.export",
+  "workbench.chat.send",
+  "workbench.chat.assistant",
+  "workbench.operations.documents",
+  "workbench.operations.documentsCount",
 ])
 
 // Recursively collect every language.t("literal.key") call from the
@@ -177,12 +206,22 @@ describe("i18n parity", () => {
     }
   })
 
-  test("every language.t() key referenced in components exists in en.ts or the UI package dictionary", () => {
-    const componentsDir = join(import.meta.dir, "..", "components")
-    const used = collectUsedKeys(componentsDir)
-    const missing = [...used].filter((key) => !(key in en) && !(key in uiEn)).sort()
-    expect(missing).toEqual([])
-  })
+  // WHY both trees are scanned: until 2026-08-18 this test walked only
+  // `components/`, so the twelve `design.*` keys introduced by the Workbench
+  // Design surfaces under `pages/workbench/` were never checked. They existed
+  // in no locale, `i18n.translator` returned undefined for each, and the whole
+  // right-hand column of Design mode rendered as blank paragraphs while every
+  // guard stayed green. Any directory that calls `language.t()` belongs here.
+  const T_CALLER_DIRS = ["components", "pages"] as const
+
+  for (const dirName of T_CALLER_DIRS) {
+    test(`every language.t() key referenced in ${dirName} exists in en.ts or the UI package dictionary`, () => {
+      const dir = join(import.meta.dir, "..", dirName)
+      const used = collectUsedKeys(dir)
+      const missing = [...used].filter((key) => !(key in en) && !(key in uiEn)).sort()
+      expect(missing, `${dirName}: keys used in code but absent from every dictionary`).toEqual([])
+    })
+  }
 
   test("audited settings scope (Audio/Configuration/Benchmark/Android/Plugins/RemoteAccess/GitAuth/LocalAI/Debate) has dedicated translations in every locale", () => {
     const scopeKeys = Object.keys(en).filter((key) => AUDITED_SCOPE_PREFIXES.some((prefix) => key.startsWith(prefix)))

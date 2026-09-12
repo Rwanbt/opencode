@@ -48,9 +48,9 @@ Sie können benutzerdefinierte Befehle über die OpenCode-Konfiguration hinzufü
 
 ### JSON
 
-Verwenden Sie die Option `command` in Ihrem OpenCode [config](/docs/config):
+Verwenden Sie die Option `command` in Ihrem Unifia [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -222,7 +222,7 @@ Schauen wir uns die Konfigurationsmöglichkeiten im Detail an.
 
 Die Option `template` die Eingabeaufforderung, die an LLM gesendet wird, wenn der Befehl ausgeführt wird.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ Dies ist eine **erforderliche** Konfigurationsoption.
 
 Verwenden Sie die Option `description`, um eine kurze Beschreibung der Funktion des Befehls bereitzustellen.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Verwenden Sie die `agent`-Konfiguration, um optional anzugeben, welche [agent](/
 Wenn es sich um einen [subagent](/docs/agents/#subagents) handelt, löst der Befehl standardmäßig einen Subagentenaufruf aus.
 Um dieses Verhalten zu deaktivieren, setzen Sie `subtask` auf `false`.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Verwenden Sie den booleschen Wert `subtask`, um zu erzwingen, dass der Befehl ei
 Dies ist nützlich, wenn Sie möchten, dass der Befehl Ihren primären Kontext nicht verunreinigt und den Agenten dazu zwingt, als Subagent zu fungieren.
 auch wenn `mode` in der [agent](/docs/agents)-Konfiguration auf `primary` gesetzt ist.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Dies ist eine **optionale** Konfigurationsoption.
 
 Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Befehl zu überschreiben.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -314,7 +314,7 @@ Dies ist eine **optionale** Konfigurationsoption.
 
 ## Integriert
 
-OpenCode enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [mehr erfahren](/docs/tui#commands).
+Unifia enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [mehr erfahren](/docs/tui#commands).
 
 :::note
 Benutzerdefinierte Befehle können integrierte Befehle überschreiben.

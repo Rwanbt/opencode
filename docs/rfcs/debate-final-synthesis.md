@@ -1,4 +1,4 @@
-# Synthèse finale — Collective Intelligence pour OpenCode
+# Synthèse finale — Collective Intelligence pour Unifia
 
 > 3 rounds, 8 modèles, 20+ réponses. Ce document clôt le débat et produit
 > la **spec d'implémentation définitive**. Après ceci, on code.
@@ -226,7 +226,7 @@ if (marginalGain < 0.1 && marginalCost > 0.2) → STOP
 ### Architecture
 
 ```
-packages/opencode/src/collective/
+packages/unifia/src/collective/
 ├── index.ts              — Export public, enregistrement de l'agent
 ├── types.ts              — Claim, DebateReport, DebateError, DebateConfig
 ├── debate-agent.ts       — Agent natif (Agent.Info)

@@ -61,7 +61,7 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `page` - Playwright page
 - `llm` - Mock LLM server for queuing responses (`text`, `tool`, `toolMatch`, `textMatch`, etc.)
 - `project` - Golden-path project fixture (call `project.open()` first, then use `project.sdk`, `project.prompt(...)`, `project.gotoSession(...)`, `project.trackSession(...)`)
-- `sdk` - OpenCode SDK client for API calls (worker-scoped, shared directory)
+- `sdk` - Unifia SDK client for API calls (worker-scoped, shared directory)
 - `gotoSession(sessionID?)` - Navigate to session (worker-scoped, shared directory)
 
 ### Helper Functions

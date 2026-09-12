@@ -15,7 +15,7 @@
 
 Avant de commencer le QA, vérifier :
 
-- [ ] `bun run build --single` dans `packages/opencode` effectué
+- [ ] `bun run build --single` dans `packages/unifia` effectué
       (sidecar TS recompilé — voir memory `feedback_opencode_build_process`).
 - [ ] `ORT_LIB_LOCATION` exporté (voir memory `reference_ort_android_build`).
 - [ ] `bun tauri android build` exit 0 (5+ min, ne pas compiler sans
@@ -52,13 +52,13 @@ cocher au fur et à mesure.
 
 ### T1 — Install & first-run
 
-1. `adb install -r opencode.apk`
+1. `adb install -r unifia.apk`
 2. Lancer l'app depuis le launcher.
 3. Vérifier qu'aucun crash immédiat n'apparaît (watch `logcat | grep AndroidRuntime`).
 
 ### T2 — B3 Cleartext LAN (Sprint 1)
 
-1. Démarrer un serveur `opencode serve --port 14097 --host 0.0.0.0` sur
+1. Démarrer un serveur `unifia serve --port 14097 --host 0.0.0.0` sur
    un PC du même Wi-Fi.
 2. Dans l'app, mode "Remote Server" → coller `http://<IP LAN>:14097`.
 3. **Attendu** : la connexion s'établit (RFC1918 autorisé par
@@ -75,7 +75,7 @@ version ROM et ouvrir un ticket.
 1. Démarrer une session longue (LLM local ou remote).
 2. Mettre l'app en background (home button).
 3. Vérifier qu'Android affiche la notification persistante
-   "OpenCode is running".
+   "Unifia is running".
 4. **Attendu** : aucun kill du service dans les 10 minutes.
 
 ### T4 — Thermal listener (I9, Sprint 3)
@@ -145,7 +145,7 @@ Device : `________________` | ROM : `________________` | Tester : `______` | Dat
 - [ ] T7 Remote Server auth passthrough
 - [ ] T8 Deep-link scheme
 - [ ] T9 Background 10 min + reprise
-- [ ] **OneUI spécifique** : settings → Battery → ajouter OpenCode en
+- [ ] **OneUI spécifique** : settings → Battery → ajouter Unifia en
       "Unrestricted". Re-tester T3 avec restriction.
 - [ ] **OneUI spécifique** : Autostart on.
 
@@ -171,7 +171,7 @@ Device : `________________` | ROM : `________________` | Tester : `______` | Dat
       si tests ADB input requis (memory `reference_miui_adb_input`).
 - [ ] **MIUI spécifique** : Autostart on.
 - [ ] **MIUI spécifique** : Battery Saver → "No restrictions" pour
-      OpenCode. Re-tester T3.
+      Unifia. Re-tester T3.
 - [ ] **MIUI spécifique** : "Lock in recent apps" activé.
 
 Initiales : `______` | Verdict : `[ ] GO  [ ] NO-GO`

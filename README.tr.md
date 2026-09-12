@@ -1,17 +1,10 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Unifia Workbench banner">
 </p>
 <p align="center">Açık kaynaklı yapay zeka kodlama asistanı.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +32,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 <!-- WHY-FORK-MATRIX -->
 ## Neden bu fork?
@@ -117,10 +110,14 @@ OpenCode (fork) — **masaüstü, sunucu ve telefonda** çalışan, uçtan uca y
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia package or installer is published yet. Build from source:
+git clone https://github.com/Rwanbt/unifia.git
+cd unifia
+bun install
+bun run --cwd packages/opencode build --single
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### Yalnızca bu fork'un bir arada sunduğu 8 şey
@@ -139,8 +136,9 @@ curl -fsSL https://opencode.ai/install | bash
 ### İlk görevini çalıştır
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+# This checkout still exposes the compatibility CLI name `opencode`.
+bun run --cwd packages/opencode dev
+bun run packages/opencode/src/index.ts run "fix the failing test in src/"
 ```
 
 > 💡 Ayrıntılar mı gerek? Aşağıdaki her bölüm katlı — yalnızca ilgilendiğini aç.
@@ -157,7 +155,7 @@ opencode run "fix the failing test in src/"   # one-shot
 ## Fork Özellikleri
 
 > Bu, [anomalyco/opencode](https://github.com/anomalyco/opencode) projesinin [Rwanbt](https://github.com/Rwanbt) tarafından sürdürülen bir fork'udur.
-> Upstream ile senkronize tutulmaktadır. En son değişiklikler için [dev dalına](https://github.com/Rwanbt/opencode/tree/dev) bakın.
+> Upstream ile senkronize tutulmaktadır. En son değişiklikler için [dev dalına](https://github.com/Rwanbt/unifia/tree/dev) bakın.
 
 #### Yerel Öncelikli AI
 
@@ -648,18 +646,9 @@ Yapılandırma: `experimental.anythingllm.enabled: true`
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
 
 # Paket yöneticileri
-npm i -g opencode-ai@latest        # veya bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS ve Linux (önerilir, her zaman güncel)
-brew install opencode              # macOS ve Linux (resmi brew formülü, daha az güncellenir)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Tüm işletim sistemleri
-nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için github:anomalyco/opencode
 ```
 
 > [!TIP]
@@ -667,7 +656,7 @@ nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için git
 
 ### Masaüstü Uygulaması (BETA)
 
-OpenCode ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm sayfasından](https://github.com/Rwanbt/opencode/releases) veya [opencode.ai/download](https://opencode.ai/download) adresinden indirebilirsiniz.
+OpenCode ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm sayfasından](https://github.com/Rwanbt/unifia/releases) veya [opencode.ai/download](https://github.com/Rwanbt/unifia/releases/latest) adresinden indirebilirsiniz.
 
 | Platform              | İndirme                               |
 | --------------------- | ------------------------------------- |
@@ -678,7 +667,6 @@ OpenCode ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm 
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
@@ -694,8 +682,8 @@ Kurulum betiği (install script), kurulum yolu (installation path) için aşağ�
 
 ```bash
 # Örnekler
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
+# No public Unifia installer is published; use the source build documented above.
 ```
 
 ### Ajanlar
@@ -711,11 +699,11 @@ OpenCode, `Tab` tuşuyla aralarında geçiş yapabileceğiniz iki yerleşik (bui
 Ayrıca, karmaşık aramalar ve çok adımlı görevler için bir **genel** alt ajan bulunmaktadır.
 Bu dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.
 
-[Ajanlar](https://opencode.ai/docs/agents) hakkında daha fazla bilgi edinin.
+[Ajanlar](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/agents) hakkında daha fazla bilgi edinin.
 
 ### Dokümantasyon
 
-OpenCode'u nasıl yapılandıracağınız hakkında daha fazla bilgi için [**dokümantasyonumuza göz atın**](https://opencode.ai/docs).
+OpenCode'u nasıl yapılandıracağınız hakkında daha fazla bilgi için [**dokümantasyonumuza göz atın**](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs).
 
 ### Katkıda Bulunma
 
@@ -732,7 +720,7 @@ OpenCode ile ilgili bir proje üzerinde çalışıyorsanız ve projenizin adın�
 Yetenekler açısından Claude Code'a çok benzer. İşte temel farklar:
 
 - %100 açık kaynak
-- Herhangi bir sağlayıcıya bağlı değil. [OpenCode Zen](https://opencode.ai/zen) üzerinden sunduğumuz modelleri önermekle birlikte; OpenCode, Claude, OpenAI, Google veya hatta yerel modellerle kullanılabilir. Modeller geliştikçe aralarındaki farklar kapanacak ve fiyatlar düşecek, bu nedenle sağlayıcıdan bağımsız olmak önemlidir.
+- Herhangi bir sağlayıcıya bağlı değil. [OpenCode Zen](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/providers.mdx) üzerinden sunduğumuz modelleri önermekle birlikte; OpenCode, Claude, OpenAI, Google veya hatta yerel modellerle kullanılabilir. Modeller geliştikçe aralarındaki farklar kapanacak ve fiyatlar düşecek, bu nedenle sağlayıcıdan bağımsız olmak önemlidir.
 - Kurulum gerektirmeyen hazır LSP desteği
 - TUI odaklı yaklaşım. OpenCode, neovim kullanıcıları ve [terminal.shop](https://terminal.shop)'un geliştiricileri tarafından geliştirilmektedir; terminalde olabileceklerin sınırlarını zorlayacağız.
 - İstemci/sunucu (client/server) mimarisi. Bu, örneğin OpenCode'un bilgisayarınızda çalışması ve siz onu bir mobil uygulamadan uzaktan yönetmenizi sağlar. TUI arayüzü olası istemcilerden sadece biridir.

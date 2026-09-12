@@ -31,24 +31,24 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("unifia://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })
 
   test("ignores non-project deep links", () => {
-    expect(parseDeepLink("opencode://other?directory=/tmp/demo")).toBeUndefined()
+    expect(parseDeepLink("unifia://other?directory=/tmp/demo")).toBeUndefined()
     expect(parseDeepLink("https://example.com")).toBeUndefined()
   })
 
   test("ignores malformed deep links safely", () => {
-    expect(() => parseDeepLink("opencode://open-project/%E0%A4%A%")).not.toThrow()
-    expect(parseDeepLink("opencode://open-project/%E0%A4%A%")).toBeUndefined()
+    expect(() => parseDeepLink("unifia://open-project/%E0%A4%A%")).not.toThrow()
+    expect(parseDeepLink("unifia://open-project/%E0%A4%A%")).toBeUndefined()
   })
 
   test("parses links when URL.canParse is unavailable", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
     try {
-      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+      expect(parseDeepLink("unifia://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
     } finally {
       if (original) Object.defineProperty(URL, "canParse", original)
       if (!original) Reflect.deleteProperty(URL, "canParse")
@@ -56,63 +56,63 @@ describe("layout deep links", () => {
   })
 
   test("ignores open-project deep links without directory", () => {
-    expect(parseDeepLink("opencode://open-project")).toBeUndefined()
-    expect(parseDeepLink("opencode://open-project?directory=")).toBeUndefined()
+    expect(parseDeepLink("unifia://open-project")).toBeUndefined()
+    expect(parseDeepLink("unifia://open-project?directory=")).toBeUndefined()
   })
 
   test("collects only valid open-project directories", () => {
     const result = collectOpenProjectDeepLinks([
-      "opencode://open-project?directory=/a",
-      "opencode://other?directory=/b",
-      "opencode://open-project?directory=/c",
+      "unifia://open-project?directory=/a",
+      "unifia://other?directory=/b",
+      "unifia://open-project?directory=/c",
     ])
     expect(result).toEqual(["/a", "/c"])
   })
 
   test("parses new-session deep links with optional prompt", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+    expect(parseNewSessionDeepLink("unifia://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
+    expect(parseNewSessionDeepLink("unifia://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
       directory: "/tmp/demo",
       prompt: "hello world",
     })
   })
 
   test("ignores new-session deep links without directory", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
+    expect(parseNewSessionDeepLink("unifia://new-session")).toBeUndefined()
+    expect(parseNewSessionDeepLink("unifia://new-session?directory=")).toBeUndefined()
   })
 
   test("collects only valid new-session deep links", () => {
     const result = collectNewSessionDeepLinks([
-      "opencode://new-session?directory=/a",
-      "opencode://open-project?directory=/b",
-      "opencode://new-session?directory=/c&prompt=ship%20it",
+      "unifia://new-session?directory=/a",
+      "unifia://open-project?directory=/b",
+      "unifia://new-session?directory=/c&prompt=ship%20it",
     ])
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
   })
 
   test("parses oauth callback deep links", () => {
     expect(
-      parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=anthropic&code=abc123"),
+      parseOAuthCallbackDeepLink("unifia://oauth/callback?providerID=anthropic&code=abc123"),
     ).toEqual({ providerID: "anthropic", code: "abc123", state: undefined })
     expect(
-      parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=openai&code=xyz&state=st"),
+      parseOAuthCallbackDeepLink("unifia://oauth/callback?providerID=openai&code=xyz&state=st"),
     ).toEqual({ providerID: "openai", code: "xyz", state: "st" })
   })
 
   test("ignores malformed oauth callback deep links", () => {
-    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback")).toBeUndefined()
-    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback?code=abc")).toBeUndefined()
-    expect(parseOAuthCallbackDeepLink("opencode://oauth/callback?providerID=anthropic")).toBeUndefined()
-    expect(parseOAuthCallbackDeepLink("opencode://oauth/other?providerID=x&code=y")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("unifia://oauth/callback")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("unifia://oauth/callback?code=abc")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("unifia://oauth/callback?providerID=anthropic")).toBeUndefined()
+    expect(parseOAuthCallbackDeepLink("unifia://oauth/other?providerID=x&code=y")).toBeUndefined()
     expect(parseOAuthCallbackDeepLink("https://example.com")).toBeUndefined()
   })
 
   test("collects only valid oauth callback deep links", () => {
     const result = collectOAuthCallbackDeepLinks([
-      "opencode://oauth/callback?providerID=a&code=1",
-      "opencode://open-project?directory=/b",
-      "opencode://oauth/callback?providerID=b&code=2&state=s",
+      "unifia://oauth/callback?providerID=a&code=1",
+      "unifia://open-project?directory=/b",
+      "unifia://oauth/callback?providerID=b&code=2&state=s",
     ])
     expect(result).toEqual([
       { providerID: "a", code: "1", state: undefined },
@@ -123,11 +123,11 @@ describe("layout deep links", () => {
   test("drains global deep links once", () => {
     const target = {
       __OPENCODE__: {
-        deepLinks: ["opencode://open-project?directory=/a"],
+        deepLinks: ["unifia://open-project?directory=/a"],
       },
     } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
 
-    expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
+    expect(drainPendingDeepLinks(target)).toEqual(["unifia://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
   })
 })

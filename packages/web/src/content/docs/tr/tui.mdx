@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: OpenCode terminal kullanıcı arayüzünü kullanma.
+description: Unifia terminal kullanıcı arayüzünü kullanma.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode, projelerinizde LLM ile çalışmak için etkileşimli bir terminal arayüzü (TUI) sunar.
+Unifia, projelerinizde LLM ile çalışmak için etkileşimli bir terminal arayüzü (TUI) sunar.
 
-OpenCode'u çalıştırdığınızda mevcut dizin için TUI başlar.
+Unifia'u çalıştırdığınızda mevcut dizin için TUI başlar.
 
 ```bash
-opencode
+unifia
 ```
 
 İsterseniz belirli bir çalışma dizini için de başlatabilirsiniz.
 
 ```bash
-opencode /path/to/project
+unifia /path/to/project
 ```
 
 TUI içine girdiğinizde, bir mesajla istem gönderebilirsiniz.
@@ -57,7 +57,7 @@ Komut çıktısı bir araç sonucu olarak konuşmaya eklenir.
 
 ## Komutlar
 
-OpenCode TUI kullanırken `/` ve ardından komut adını yazarak hızlı eylemler çalıştırabilirsiniz. Örneğin:
+Unifia TUI kullanırken `/` ve ardından komut adını yazarak hızlı eylemler çalıştırabilirsiniz. Örneğin:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Komutların çoğu, lider tuşu `ctrl+x` olan bir kısayola da sahiptir. [Daha f
 
 ### connect
 
-OpenCode'a bir sağlayıcı ekler. Mevcut sağlayıcıları seçip API anahtarları eklemenizi sağlar.
+Unifia'a bir sağlayıcı ekler. Mevcut sağlayıcıları seçip API anahtarları eklemenizi sağlar.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Mesaj yazmak için harici editör açar. `EDITOR` ortam değişkeninde ayarlı e
 
 ### exit
 
-OpenCode'dan çıkar. _Takma adlar_: `/quit`, `/q`
+Unifia'dan çıkar. _Takma adlar_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -358,7 +358,7 @@ TUI davranışını `tui.json` (veya `tui.jsonc`) aracılığıyla özelleştire
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "theme": "unifia",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -370,7 +370,7 @@ TUI davranışını `tui.json` (veya `tui.jsonc`) aracılığıyla özelleştire
 }
 ```
 
-Bu, sunucu/çalışma zamanı davranışını yapılandıran `opencode.json` dosyasından ayrıdır.
+Bu, sunucu/çalışma zamanı davranışını yapılandıran `unifia.json` dosyasından ayrıdır.
 
 ### Seçenekler
 
@@ -380,7 +380,7 @@ Bu, sunucu/çalışma zamanı davranışını yapılandıran `opencode.json` dos
 - `scroll_speed` - Kaydırma komutlarını kullanırken TUI'nin ne kadar hızlı kaydırılacağını kontrol eder (minimum: `0.001`, ondalık değerleri destekler). Varsayılan değer `3`'tür. **Not: `scroll_acceleration.enabled` `true` olarak ayarlanmışsa bu yok sayılır.**
 - `diff_style` - Fark (diff) oluşturmayı kontrol eder. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunlu bir düzen gösterir.
 
-Özel bir TUI yapılandırma yolu yüklemek için `OPENCODE_TUI_CONFIG` kullanın.
+Özel bir TUI yapılandırma yolu yüklemek için `UNIFIA_TUI_CONFIG` kullanın.
 
 ---
 

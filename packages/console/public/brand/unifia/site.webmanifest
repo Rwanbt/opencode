@@ -1,0 +1,19 @@
+{
+  "name": "Unifia",
+  "short_name": "Unifia",
+  "icons": [
+    {
+      "src": "unifia-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "unifia-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#070A13",
+  "background_color": "#070A13",
+  "display": "standalone"
+}

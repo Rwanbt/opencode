@@ -1,10 +1,10 @@
 import { type Component, createSignal, For, type JSX, onMount, Show } from "solid-js"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Select } from "@opencode-ai/ui/select"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Switch } from "@unifia/ui/switch"
+import { Select } from "@unifia/ui/select"
+import { Button } from "@unifia/ui/button"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Tooltip } from "@unifia/ui/tooltip"
+import { showToast } from "@unifia/ui/toast"
 import { SettingsList } from "./settings-list"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
@@ -50,7 +50,7 @@ function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> 
   return tauri.core.invoke(cmd, args)
 }
 
-const STORAGE_KEY = "opencode-audio-settings"
+const STORAGE_KEY = "unifia-audio-settings"
 
 export function loadAudioSettings(): AudioSettings {
   try {
@@ -248,7 +248,7 @@ export const SettingsAudio: Component = () => {
           </SettingsList>
           <div class="text-11-regular text-text-weak mt-2 px-1">
             <Show when={settings.ttsProvider === "kokoro"} fallback={
-              <>{language.t("settings.fork.audio.poweredPocket")}</>
+              language.t("settings.fork.audio.poweredPocket")
             }>
               {language.t("settings.fork.audio.poweredKokoro")}
             </Show>

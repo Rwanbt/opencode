@@ -1,0 +1,45 @@
+{
+  "measured": true,
+  "concurrentRace": true,
+  "distinctOsProcesses": 2,
+  "winnerProcessLocalOwnerId": "owner-B-1788558995680-pdfc27",
+  "loserProcessLocalOwnerId": "owner-A-1788558995680-n98z6q",
+  "currentPersistedAuthorityOwnerId": "owner-B-1788558995680-pdfc27",
+  "winnerOwnerId": "owner-B-1788558995680-pdfc27",
+  "loserOwnerId": "owner-B-1788558995680-pdfc27",
+  "winnerPid": 24720,
+  "loserPid": 27180,
+  "finalGeneration": 1,
+  "winnerMutate": {
+    "accepted": true,
+    "generation": 1,
+    "authorityOwnerId": "owner-B-1788558995680-pdfc27"
+  },
+  "loserMutate": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY",
+    "currentGeneration": 1,
+    "currentAuthorityOwnerId": "owner-B-1788558995680-pdfc27"
+  },
+  "winnerDispatch": {
+    "accepted": true,
+    "effectKey": "ek-fc14-1788558996022",
+    "generation": 1,
+    "authorityOwnerId": "owner-B-1788558995680-pdfc27"
+  },
+  "loserDispatch": {
+    "accepted": false,
+    "reason": "STALE_AUTHORITY",
+    "currentGeneration": 1,
+    "currentAuthorityOwnerId": "owner-B-1788558995680-pdfc27"
+  },
+  "winnerMutateAccepted": true,
+  "loserMutateRejected": true,
+  "winnerDispatchAccepted": true,
+  "loserDispatchRejected": true,
+  "qualificationGenerationId": "gen-1788558994599-5wgygg",
+  "candidate": "UNIFIA_NATIVE",
+  "testId": "FC-14",
+  "evidenceFreshness": "CURRENT",
+  "nonCanonicalDiagnostic": false
+}

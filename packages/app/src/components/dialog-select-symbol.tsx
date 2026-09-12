@@ -12,9 +12,9 @@
 // backed by LSP. Mixing them would tangle the search backend and the
 // auto-close-then-jump UX.
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { Dialog } from "@unifia/ui/dialog"
+import { List } from "@unifia/ui/list"
 import { createMemo, createResource, Show, type JSXElement } from "solid-js"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"

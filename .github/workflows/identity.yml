@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+#
+# Fails when any surface that names the product disagrees with config/identity.json:
+# a Tauri identifier, an electron-builder appId, a product name, or a stale
+# generated adapter. Also rejects any app ID left in the upstream ai.opencode.*
+# namespace, which is what would make this fork install over the official app
+# instead of beside it.
+name: identity
+
+on:
+  push:
+    paths:
+      - "config/identity.json"
+      - "scripts/identity/**"
+      - "packages/desktop/src-tauri/tauri*.conf.json"
+      - "packages/mobile/src-tauri/tauri.conf.json"
+      - "packages/desktop-electron/electron-builder.config.ts"
+      - "packages/util/src/identity.generated.ts"
+      - "packages/desktop/src-tauri/src/identity_generated.rs"
+      - ".github/workflows/identity.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Product identities agree
+        run: node scripts/identity/check.mjs

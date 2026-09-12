@@ -10,17 +10,17 @@ Nie akceptujemy raportów bezpieczeństwa generowanych przez SI. Otrzymujemy ich
 
 ### Przegląd
 
-OpenCode to asystent programowania oparty na SI, który działa lokalnie na Twoim komputerze. Oferuje system agentów z dostępem do potężnych narzędzi, w tym wykonywania powłoki, operacji na plikach i dostępu do sieci.
+Unifia Workbench to asystent programowania oparty na SI, który działa lokalnie na Twoim komputerze. Oferuje system agentów z dostępem do potężnych narzędzi, w tym wykonywania powłoki, operacji na plikach i dostępu do sieci.
 
 ### Brak sandboxa
 
-OpenCode **nie** umieszcza agenta w sandboxie. System uprawnień istnieje jako funkcja UX, aby pomóc użytkownikom być świadomymi działań agenta — prosi o potwierdzenie przed wykonaniem poleceń, zapisem plików itp. Nie jest jednak zaprojektowany do zapewniania izolacji bezpieczeństwa.
+Unifia Workbench **nie** umieszcza agenta w sandboxie. System uprawnień istnieje jako funkcja UX, aby pomóc użytkownikom być świadomymi działań agenta — prosi o potwierdzenie przed wykonaniem poleceń, zapisem plików itp. Nie jest jednak zaprojektowany do zapewniania izolacji bezpieczeństwa.
 
-Jeśli potrzebujesz prawdziwej izolacji, uruchom OpenCode wewnątrz kontenera Docker lub maszyny wirtualnej.
+Jeśli potrzebujesz prawdziwej izolacji, uruchom Unifia Workbench wewnątrz kontenera Docker lub maszyny wirtualnej.
 
 ### Tryb serwera
 
-Tryb serwera jest wyłącznie opt-in. Po włączeniu ustaw `OPENCODE_SERVER_PASSWORD`, aby wymagać HTTP Basic Auth. Bez tego serwer działa bez uwierzytelniania (z ostrzeżeniem). Zabezpieczenie serwera jest obowiązkiem użytkownika końcowego — jakakolwiek funkcjonalność, którą oferuje, nie jest podatnością.
+Tryb serwera jest wyłącznie opt-in. Po włączeniu ustaw `UNIFIA_SERVER_PASSWORD`, aby wymagać HTTP Basic Auth. Bez tego serwer działa bez uwierzytelniania (z ostrzeżeniem). Zabezpieczenie serwera jest obowiązkiem użytkownika końcowego — jakakolwiek funkcjonalność, którą oferuje, nie jest podatnością.
 
 ### Poza zakresem
 
@@ -38,7 +38,7 @@ Tryb serwera jest wyłącznie opt-in. Po włączeniu ustaw `OPENCODE_SERVER_PASS
 
 Doceniamy wysiłki odpowiedzialnego ujawniania znalezisk i dołożymy wszelkich starań, aby docenić Twój wkład.
 
-Aby zgłosić problem bezpieczeństwa, użyj zakładki GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new).
+Aby zgłosić problem bezpieczeństwa, użyj zakładki GitHub Security Advisory ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new).
 
 Zespół prześle odpowiedź wskazującą kolejne kroki. Po pierwszej odpowiedzi zespół bezpieczeństwa będzie Cię informował o postępach w kierunku poprawki i pełnego ogłoszenia oraz może prosić o dodatkowe informacje.
 

@@ -1,5 +1,6 @@
 import type { Component, ComponentProps } from "solid-js"
-import { createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { splitProps } from "solid-js"
+import { useColorScheme } from "./color-scheme"
 import type { IconName } from "./app-icons/types"
 
 import androidStudio from "../assets/icons/app/android-studio.svg"
@@ -44,30 +45,13 @@ const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
   },
 }
 
-const scheme = () => {
-  if (typeof document !== "object") return "light" as const
-  if (document.documentElement.dataset.colorScheme === "dark") return "dark" as const
-  return "light" as const
-}
-
 export type AppIconProps = Omit<ComponentProps<"img">, "src"> & {
   id: IconName
 }
 
 export const AppIcon: Component<AppIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["id", "class", "classList", "alt", "draggable"])
-  const [mode, setMode] = createSignal(scheme())
-
-  onMount(() => {
-    const sync = () => setMode(scheme())
-    const observer = new MutationObserver(sync)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-color-scheme"],
-    })
-    sync()
-    onCleanup(() => observer.disconnect())
-  })
+  const mode = useColorScheme()
 
   return (
     <img

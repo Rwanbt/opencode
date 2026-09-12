@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { createFileStore } from "../file/store"
-import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
+import type { CodeMirrorHandle } from "@unifia/ui/code-mirror"
 
 // FORK (round 3, PLAN-FIX-CLOSE-GUARD-SAVE): the close-guard reads the live
 // CM buffer through the draft-getter that editor-panel.tsx registers on

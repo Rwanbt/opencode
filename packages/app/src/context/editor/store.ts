@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
+import { markViewerTiming } from "@unifia/util/viewer-timing"
 import type { FileStore } from "../file/store"
 
 /**

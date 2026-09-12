@@ -80,7 +80,7 @@ pub async fn extract_runtime(app: AppHandle) -> Result<(), String> {
 fn check_extraction_progress(dir: &Path) -> f32 {
     // Only non-executable assets need extraction now
     let checks = [
-        dir.join("opencode-cli.js"),
+        dir.join(CLI_BUNDLE_FILE),
         dir.join(".native_lib_dir"),
     ];
     let done = checks.iter().filter(|p| p.exists()).count();
@@ -90,14 +90,14 @@ fn check_extraction_progress(dir: &Path) -> f32 {
 /// Check if the runtime binaries are present, ignoring schema version.
 /// Used during the extraction polling loop before write_schema_version is called.
 pub(super) fn is_ready_without_schema_check(dir: &Path) -> bool {
-    dir.join("opencode-cli.js").exists()
+    dir.join(CLI_BUNDLE_FILE).exists()
         && dir.join(".native_lib_dir").exists()
         && native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
 }
 
 pub(super) fn is_runtime_ready(dir: &Path) -> bool {
     // Executables are in nativeLibraryDir (JNI libs), we just need the JS bundle
-    if !dir.join("opencode-cli.js").exists()
+    if !dir.join(CLI_BUNDLE_FILE).exists()
         || !dir.join(".native_lib_dir").exists()
         || !native_lib_dir(dir).map(|d| d.join("libbun_exec.so").exists()).unwrap_or(false)
     {

@@ -28,7 +28,7 @@ Launch a multi-model debate to get diverse AI perspectives on a question.
 
 ## Configuration
 
-In `opencode.json` or via the debate config:
+In `unifia.json` or via the debate config:
 
 ```json
 {

@@ -31,7 +31,7 @@ export default defineConfig({
     configSchema(),
     solidJs(),
     starlight({
-      title: "OpenCode",
+      title: "Unifia",
       defaultLocale: "root",
       locales: {
         root: {
@@ -300,9 +300,10 @@ export default defineConfig({
         SiteTitle: "./src/components/SiteTitle.astro",
       },
       plugins: [
-        theme({
+        // toolbeam-docs-theme 0.4.8 declares Starlight 0.34 types while its runtime remains compatible with the pinned Astro 7 stack.
+        /** @type {any} */ (theme({
           headerLinks: config.headerLinks,
-        }),
+        })),
       ],
     }),
   ],
@@ -314,7 +315,13 @@ function configSchema() {
     hooks: {
       "astro:build:done": async () => {
         console.log("generating config schema")
-        spawnSync("../opencode/script/schema.ts", ["./dist/config.json", "./dist/tui.json"])
+        // `../unifia/...`, not `../opencode/...`: the C9 rename moved the
+        // package and missed this path. spawnSync reports a missing program
+        // through `error` rather than throwing, and nothing here read it, so
+        // the build kept succeeding while emitting no schema at all.
+        const schema = spawnSync("../unifia/script/schema.ts", ["./dist/config.json", "./dist/tui.json"])
+        if (schema.error) throw schema.error
+        if (schema.status !== 0) throw new Error(`config schema generation exited ${schema.status}`)
       },
     },
   }

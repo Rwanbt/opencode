@@ -1,4 +1,4 @@
-# Plan de débat multi-IA — "Collective Intelligence" pour OpenCode
+# Plan de débat multi-IA — "Collective Intelligence" pour Unifia
 
 > Ce document est conçu pour être envoyé tel quel à plusieurs IAs (Claude, GPT,
 > Gemini, DeepSeek, Qwen, Mistral, etc.) afin de recueillir leurs perspectives
@@ -9,7 +9,7 @@
 
 ## Contexte
 
-**OpenCode** est un terminal agentique IA open-source (Bun + SolidJS + Tauri 2.0).
+**Unifia** est un terminal agentique IA open-source (Bun + SolidJS + Tauri 2.0).
 Il supporte déjà 20+ providers LLM via Vercel AI SDK, un système d'agents
 (build, plan, explore, orchestrator, critic...), des plugins, et le protocole MCP.
 
@@ -24,10 +24,10 @@ problèmes différents.
 
 ---
 
-## Architecture existante d'OpenCode (résumé technique)
+## Architecture existante d'Unifia (résumé technique)
 
 ```
-packages/opencode/src/
+packages/unifia/src/
 ├── provider/provider.ts    — 20+ providers, Vercel AI SDK, Effect runtime
 ├── agent/agent.ts          — Agents natifs: build, plan, explore, orchestrator, critic
 ├── session/prompt.ts       — Boucle de session, routing de modèles
@@ -45,7 +45,7 @@ packages/opencode/src/
 4. Wrapper LLM pour appels parallèles
 5. Skill `.md` déclenchant le mode débat
 
-**Contrainte clé** : OpenCode utilise Effect (TypeScript) pour la composition
+**Contrainte clé** : Unifia utilise Effect (TypeScript) pour la composition
 async et le dependency injection. Toute architecture proposée doit être
 compatible avec ce runtime.
 

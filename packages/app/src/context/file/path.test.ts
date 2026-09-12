@@ -111,7 +111,7 @@ describe("encodeFilePath", () => {
 
   describe("Windows paths", () => {
     test("should handle Windows absolute path with backslashes", () => {
-      const windowsPath = "D:\\dev\\projects\\opencode\\README.bs.md"
+      const windowsPath = "D:\\dev\\projects\\unifia\\README.bs.md"
       const result = encodeFilePath(windowsPath)
       const fileUrl = `file://${result}`
 
@@ -121,17 +121,17 @@ describe("encodeFilePath", () => {
       const url = new URL(fileUrl)
       expect(url.protocol).toBe("file:")
       expect(url.pathname).toContain("README.bs.md")
-      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/unifia/README.bs.md")
     })
 
     test("should handle mixed separator path (Windows + Unix)", () => {
       // This is what happens in build-request-parts.ts when concatenating paths
-      const mixedPath = "D:\\dev\\projects\\opencode/README.bs.md"
+      const mixedPath = "D:\\dev\\projects\\unifia/README.bs.md"
       const result = encodeFilePath(mixedPath)
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/unifia/README.bs.md")
     })
 
     test("should handle Windows path with spaces", () => {
@@ -172,13 +172,13 @@ describe("encodeFilePath", () => {
 
     test("should NOT create invalid URL like the bug report", () => {
       // This is the exact scenario from bug report by @alexyaroshuk
-      const windowsPath = "D:\\dev\\projects\\opencode\\README.bs.md"
+      const windowsPath = "D:\\dev\\projects\\unifia\\README.bs.md"
       const result = encodeFilePath(windowsPath)
       const fileUrl = `file://${result}`
 
-      // The bug was creating: file://D%3A%5Cdev%5Cprojects%5Copencode/README.bs.md
+      // The bug was creating: file://D%3A%5Cdev%5Cprojects%5Cunifia/README.bs.md
       expect(result).not.toContain("%5C") // Should not have encoded backslashes
-      expect(result).not.toBe("D%3A%5Cdev%5Cprojects%5Copencode/README.bs.md")
+      expect(result).not.toBe("D%3A%5Cdev%5Cprojects%5Cunifia/README.bs.md")
 
       // Should be valid
       expect(() => new URL(fileUrl)).not.toThrow()

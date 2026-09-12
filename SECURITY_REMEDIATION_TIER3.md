@@ -30,14 +30,14 @@
 
 #### Tier 1 — patches directs
 - [x] `diff` 8.0.2 → 8.0.3 (catalog)
-- [x] `minimatch` 10.0.3 → 10.2.1 (`packages/opencode/package.json`)
+- [x] `minimatch` 10.0.3 → 10.2.1 (`packages/unifia/package.json`)
 - [x] `@astrojs/cloudflare` 12.6.3 → 12.6.6 (`packages/web/package.json`)
 
 #### Tier 2 — overrides transitives (root `package.json`)
 - [x] 11 overrides ajoutées : `diff: 8.0.3`, `minimatch: 10.2.1`, `axios: 1.16.0`, `follow-redirects: 1.16.0`, `postcss: 8.5.14`, `uuid: 13.0.1`, `defu: 6.1.7`, `seroval: 1.5.4`, `react-router: 6.30.2`, `wrangler: 4.89.1`, `ip-address: 10.2.0`
 - [x] Toutes les transitives unifiées en 1 seule version par package
 - [x] `bun typecheck` 14/14 ✅
-- [x] `bun test` opencode : 2140 pass / 0 fail / 26 skip / 1 todo (177 fichiers)
+- [x] `bun test` unifia : 2140 pass / 0 fail / 26 skip / 1 todo (177 fichiers)
 
 **CVE delta cumulé : 144 → 114 (−30, −21%)**
 
@@ -52,7 +52,7 @@
 - `bun install` ✅ 34 paquets ajoutés
 - `bun typecheck` ✅ 14/14 (4m03s)
 - `bun --cwd packages/web build` ✅ exit 0 (`Server built in 72.73s, Complete!`)
-- Tests opencode ✅ exit 0
+- Tests unifia ✅ exit 0
 - Warning préexistant `pagefind windows-x64` non lié à l'upgrade
 **CVE résiduelle** : `define:vars XSS` → `T4.6` (pas de backport 5.x, et `define:vars` non utilisé dans codebase = non-exploitable)
 
@@ -123,7 +123,7 @@ cd packages/desktop-electron && bun run build  # ou commande équivalente
 #### ~~T3.3 — `file-type` 16.5.4 → 21.3.1~~ → déplacé en Tier 4 (2026-05-07)
 **Diagnostic** : tiré par `@jimp/core@1.6.0 (requires ^16.0.0)` (chaîne `@jimp/core → jimp → @opentui/core`).
 Override à 21.3.1 viole le contrat semver de jimp (API ESM-only depuis v17, breaking changes).
-Aucun consumer direct dans le code OpenCode. Surface : fichiers utilisateur lus par @opentui/core (terminal). 1 CVE moderate (infinite loop ASF parser malformé) — exploitabilité quasi-nulle.
+Aucun consumer direct dans le code Unifia. Surface : fichiers utilisateur lus par @opentui/core (terminal). 1 CVE moderate (infinite loop ASF parser malformé) — exploitabilité quasi-nulle.
 **Action** : ACCEPT RISK, documenter dans SECURITY.md (cf. T4.5 ci-dessous).
 
 ---
@@ -206,7 +206,7 @@ Aucun consumer direct dans le code OpenCode. Surface : fichiers utilisateur lus 
 .gitignore                                       # .gstack/
 .gitleaks.toml                                   # nouveau
 package.json                                     # +11 overrides
-packages/opencode/package.json                   # minimatch 10.2.1
+packages/unifia/package.json                   # minimatch 10.2.1
 packages/web/package.json                        # @astrojs/cloudflare 12.6.6 + astro 5.18.1
 packages/desktop-electron/package.json           # electron 40.8.5 (T3.2)
 packages/console/core/drizzle.config.ts          # ssl: {}

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "Unifia CLI/TUI Lockup",
+  "status": "user-approved-final",
+  "widthColumns": 38,
+  "heightRows": 5,
+  "compactBelowColumns": 42,
+  "cellModel": {
+    "fullBlock": "██",
+    "halfWidth": "█",
+    "upperHalf": "▀▀",
+    "lowerLeftCorner": "▄█",
+    "letterGap": "  "
+  },
+  "colors": {
+    "purple": "#8700FF",
+    "blue": "#0068FF",
+    "orange": "#FF8000",
+    "wordmark": "#FFFFFF"
+  },
+  "symbol": [
+    { "text": "██    ██", "colors": "PP    OO" },
+    { "text": "██    ██", "colors": "PP    OO" },
+    { "text": "██    ██", "colors": "PP    OO" },
+    { "text": "██    ██", "colors": "PP    OO" },
+    { "text": "████████", "colors": "PPPBBOOO" }
+  ],
+  "wordmark": [
+    "        ▀▀  ████  ▀▀        ",
+    "██████  ██  ██    ██  ▄█████",
+    "██  ██  ██  ████  ██  ██  ██",
+    "██  ██  ██  ██    ██  ██  ██",
+    "██  ██  ██  ██    ██  ███ ██"
+  ]
+}

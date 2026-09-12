@@ -1,12 +1,12 @@
 import { createSignal, createResource, For, Show, onMount, onCleanup } from "solid-js"
 import z from "zod"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tag } from "@opencode-ai/ui/tag"
+import { Button } from "@unifia/ui/button"
+import { useDialog } from "@unifia/ui/context/dialog"
+import { Dialog } from "@unifia/ui/dialog"
+import { Icon } from "@unifia/ui/icon"
+import { IconButton } from "@unifia/ui/icon-button"
+import { ProviderIcon } from "@unifia/ui/provider-icon"
+import { Tag } from "@unifia/ui/tag"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 
@@ -284,7 +284,7 @@ export function DialogLocalLLM() {
       const modelConfig = configRaw ? JSON.parse(configRaw) : {}
 
       // "auto" must match the ceiling actually passed to llama-server via
-      // --ctx-size (packages/opencode/src/local-llm-server/auto-config.ts
+      // --ctx-size (packages/unifia/src/local-llm-server/auto-config.ts
       // ::deriveConfig — RAM-tiered, maxes out at 16384). Advertising the
       // model's much larger native context (e.g. 131072) here caused
       // compaction to plan around a budget the server was never configured

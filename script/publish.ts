@@ -1,8 +1,21 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@unifia/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
+
+// Upstream's full release: it commits, tags and force-pushes, then hands off to
+// packages/unifia/script/publish.ts, which targets registries this fork does
+// not own. Unreachable here by workflow gating (.github/workflows/publish.yml
+// runs only on `anomalyco/opencode`), and kept byte-compatible so the monthly
+// upstream sync stays conflict-free — but a manual run would still fire.
+// Unifia releases through .github/workflows/release.yml.
+if (!process.env["UNIFIA_ALLOW_UPSTREAM_PUBLISH"]) {
+  throw new Error(
+    "script/publish.ts is upstream's release path and pushes to infrastructure this fork does not own. " +
+      "Unifia releases via .github/workflows/release.yml; npm alone via packages/unifia/script/publish-npm.ts.",
+  )
+}
 
 const highlightsTemplate = `
 <!--
@@ -47,12 +60,11 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
+// The Zed extension is gone from this fork, along with script/sync-zed.ts and
+// the release-triggered workflow that submitted it to zed-industries/extensions.
+// Its manifest advertised Unifia's version against anomalyco/opencode download
+// URLs, and the sync workflow carried no repository gate — a release published
+// here would have opened a pull request on a third-party registry.
 
 await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)
@@ -74,10 +86,16 @@ if (Script.release) {
 }
 
 console.log("\n=== cli ===\n")
-await import(`../packages/opencode/script/publish.ts`)
+await import(`../packages/unifia/script/publish.ts`)
 
+// Dependency order: sdk-shared depends on sdk, and plugin on both. npm rejects
+// nothing here, but a consumer installing an earlier one would hit a 404 on the
+// dependency until the later publishes land.
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
+
+console.log("\n=== sdk-shared ===\n")
+await import(`../packages/sdk-shared/script/publish.ts`)
 
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)

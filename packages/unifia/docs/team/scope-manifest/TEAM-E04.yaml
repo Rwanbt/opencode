@@ -1,0 +1,15 @@
+card_id: TEAM-E04
+base_sha: 4292e63e1c4f29b9590130c2d10741aa54954c5a
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/plan-repair.ts
+  - packages/unifia/src/team/prompts/plan-repair.txt
+  - packages/unifia/docs/team/scope-manifest/TEAM-E04.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/task-planner.ts
+  - packages/unifia/src/team/graph-validator.ts
+  - packages/unifia/src/team/intake.ts
+  - main
+  - dev
+  - opti-ui

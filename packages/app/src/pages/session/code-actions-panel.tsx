@@ -10,7 +10,7 @@
 // en.ts/fr.ts (formerly hardcoded FR for behavior parity).
 
 import { For, Show } from "solid-js"
-import type { LspCodeAction } from "@opencode-ai/ui/code-mirror-lsp"
+import type { LspCodeAction } from "@unifia/ui/code-mirror-lsp"
 import { useLanguage } from "@/context/language"
 
 export interface CodeActionPos {

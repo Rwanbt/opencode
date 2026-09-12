@@ -4,7 +4,7 @@
 
 ## Contexte
 
-Les routes OpenCode passent déjà par `JwtAuth.middleware()` dans `packages/opencode/src/server/server.ts:43`. Le middleware accepte Bearer JWT, Basic Auth configurée et, pour les WebSockets, des tickets courts. Les routes d’observabilité ne doivent pas inventer une seconde autorité.
+Les routes OpenCode passent déjà par `JwtAuth.middleware()` dans `packages/unifia/src/server/server.ts:43`. Le middleware accepte Bearer JWT, Basic Auth configurée et, pour les WebSockets, des tickets courts. Les routes d’observabilité ne doivent pas inventer une seconde autorité.
 
 ## Décision
 
@@ -17,9 +17,9 @@ Les routes OpenCode passent déjà par `JwtAuth.middleware()` dans `packages/ope
 
 ## Preuves de code
 
-- `packages/opencode/src/server/server.ts:43` installe `JwtAuth.middleware()` sur le control plane.
-- `packages/opencode/src/server/auth-jwt.ts:164-259` implémente Bearer JWT, Basic Auth et le rejet `401`.
-- `packages/opencode/src/server/instance.ts:57-61` montre le routage réel des sessions/projets à réutiliser pour l’ownership.
+- `packages/unifia/src/server/server.ts:43` installe `JwtAuth.middleware()` sur le control plane.
+- `packages/unifia/src/server/auth-jwt.ts:164-259` implémente Bearer JWT, Basic Auth et le rejet `401`.
+- `packages/unifia/src/server/instance.ts:57-61` montre le routage réel des sessions/projets à réutiliser pour l’ownership.
 
 ## Conséquences
 

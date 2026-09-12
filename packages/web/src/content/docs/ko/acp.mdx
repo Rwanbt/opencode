@@ -1,6 +1,6 @@
 ---
 title: ACP Support
-description: Use OpenCode in any ACP-compatible editor.
+description: Use Unifia in any ACP-compatible editor.
 ---
 
 OpenCode는 [Agent Client Protocol](https://agentclientprotocol.com)(ACP)을 지원하므로, ACP 호환 편집기와 IDE에서 OpenCode를 직접 사용할 수 있습니다.
@@ -15,7 +15,7 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실행하도록 config를 설정하세요.
+ACP로 OpenCode를 사용하려면, 편집기에서 `unifia acp` 명령을 실행하도록 config를 설정하세요.
 
 이 명령은 OpenCode를 ACP 호환 subprocess로 시작하며, stdio 기반 JSON-RPC를 통해 편집기와 통신합니다.
 
@@ -30,8 +30,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "Unifia": {
+      "command": "unifia",
       "args": ["acp"]
     }
   }
@@ -51,9 +51,9 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Unifia",
               "command": {
-                "command": "opencode",
+                "command": "unifia",
                 "args": ["acp"]
               }
             }
@@ -74,7 +74,7 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Unifia": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 }
 ```
 
-열려면 AI Chat agent selector에서 새 `OpenCode` agent를 선택하세요.
+열려면 AI Chat agent selector에서 새 `Unifia` agent를 선택하세요.
 
 ---
 
@@ -93,8 +93,8 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["unifia"] = {
+      command = "unifia",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["unifia"] = {
+      command = "unifia",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        UNIFIA_API_KEY = os.getenv("UNIFIA_API_KEY")
       }
     }
   }
@@ -128,7 +128,7 @@ require("codecompanion").setup({
   interactions = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "unifia",
         model = "claude-sonnet-4",
       },
     },
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 이 config는 chat에서 OpenCode를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
 
-환경 변수(`OPENCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
+환경 변수(`UNIFIA_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
 
 ## 지원
 
@@ -150,7 +150,7 @@ OpenCode는 ACP를 통해서도 터미널과 동일하게 동작합니다. 다�
 
 - 내장 tool(파일 작업, terminal 명령 등)
 - 사용자 정의 tool과 slash command
-- OpenCode config에 설정한 MCP 서버
+- Unifia config에 설정한 MCP 서버
 - `AGENTS.md`의 프로젝트별 규칙
 - 사용자 정의 formatter와 linter
 - agent 및 권한 시스템

@@ -8,9 +8,11 @@ import {
   type DragEvent,
 } from "@thisbeyond/solid-dnd"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Tooltip, TooltipKeybind } from "@unifia/ui/tooltip"
 import type { LocalProject } from "@/context/layout"
+import type { ShellMode } from "@unifia/workbench-shell/modes"
+import { ensureModeLoaded } from "@/pages/workbench-mode-loader"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -31,6 +33,11 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  modes: Accessor<readonly ShellMode[]>
+  activeMode: Accessor<ShellMode>
+  onMode: (mode: ShellMode) => void
+  modesLabel: string
+  modeLabel: (mode: ShellMode) => string
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -63,6 +70,32 @@ export const SidebarContent = (props: {
             <DragDropSensors />
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+              <nav aria-label={props.modesLabel} class="flex flex-col items-center gap-3">
+                <For each={props.modes()}>
+                  {(mode) => (
+                    <Tooltip placement={placement()} value={props.modeLabel(mode)}>
+                      <IconButton
+                        icon={mode === "code" ? "code" : mode === "work" ? "folder" : mode === "design" ? "edit" : "checklist"}
+                        variant={props.activeMode() === mode ? "primary" : "ghost"}
+                        size="large"
+                        // Contrat technique de sélection pour les tests, stable
+                        // quelle que soit la locale. L'`aria-label` ci-dessous
+                        // vient de `modeLabel`, donc il est traduit : la suite
+                        // e2e tourne en anglais et rend "work mode" là où
+                        // l'application en français rend "Mode Travail".
+                        // Accessibilité et contrat de test sont deux
+                        // responsabilités distinctes, on garde les deux.
+                        data-mode={mode}
+                        onClick={() => props.onMode(mode)}
+                        onMouseEnter={() => { if (mode !== "code") void ensureModeLoaded(mode) }}
+                        onFocus={() => { if (mode !== "code") void ensureModeLoaded(mode) }}
+                        aria-label={props.modeLabel(mode)}
+                        aria-pressed={props.activeMode() === mode}
+                      />
+                    </Tooltip>
+                  )}
+                </For>
+              </nav>
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>

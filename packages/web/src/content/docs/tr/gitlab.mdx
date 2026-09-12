@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: GitLab sorunlarında ve birleştirme isteklerinde opencode'u kullanın.
+description: GitLab sorunlarında ve birleştirme isteklerinde unifia'u kullanın.
 ---
 
-opencode, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
+unifia, GitLab CI/CD işlem hattınız veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
 
-Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktır.
+Her iki durumda da unifia, GitLab çalıştırıcılarınızda çalışacaktır.
 
 ---
 
 ## GitLab CI
 
-opencode normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
+unifia normal bir GitLab işlem hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir işlem hattına oluşturabilirsiniz.
 
-Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Burada unifia için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-unifia](https://gitlab.com/nagyv/gitlab-unifia).
 
 ---
 
 ### Özellikler
 
-- **İş başına özel işlemleri kullanın**: opencode parçalarının kullanıma veya devre dışı bırakmak için opencode'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
-- **Minimum kurulum**: CI bileşeni opencode'u arka planda kurar; yalnızca opencode yapılandırmasını ve ilk istemi oluşturmanız gerekir.
+- **İş başına özel işlemleri kullanın**: unifia parçalarının kullanıma veya devre dışı bırakmak için unifia'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
+- **Minimum kurulum**: CI bileşeni unifia'u arka planda kurar; yalnızca unifia yapılandırmasını ve ilk istemi oluşturmanız gerekir.
 - **Esnek**: CI bileşeni, davranışını özelleştirmek için çeşitli girişleri destekler
 
 ---
 
 ### Kurulum
 
-1. opencode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
+1. unifia kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
 2. Aşağıdakileri `.gitlab-ci.yml` dosyanıza ekleyin.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,34 +35,34 @@ Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kull
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $UNIFIA_AUTH_JSON # The variable name for your Unifia authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode).
+Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-unifia).
 
 ---
 
 ## GitLab Duo
 
-opencode, GitLab iş akışınızla bütünleşir.
-Bir yorumda `@opencode`'dan bahsedin; opencode, GitLab CI işlem hattınızdaki görevleri yürütecektir.
+unifia, GitLab iş akışınızla bütünleşir.
+Bir yorumda `@unifia`'dan bahsedin; unifia, GitLab CI işlem hattınızdaki görevleri yürütecektir.
 
 ---
 
 ### Özellikler
 
-- **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
-- **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
+- **Sorunları önceliklendirin**: unifia'dan bir sorunu araştırıp size açıklamasını isteyin.
+- **Düzelt ve uygula**: unifia'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
   Yeni bir dal oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
-- **Güvenli**: opencode, GitLab çalıştırıcılarınızda çalışır.
+- **Güvenli**: unifia, GitLab çalıştırıcılarınızda çalışır.
 
 ---
 
 ### Yapılandırma
 
-opencode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
+unifia, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
 
 :::tip
 Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)'a göz atın.
@@ -82,7 +82,7 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
+      - echo "Installing unifia"
       - npm install --global opencode-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
@@ -91,7 +91,7 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Unifia auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,13 +103,13 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "unifia@gitlab.com"
+      - git config --global user.name "Unifia"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Unifia"
       - |
-        opencode run "
+        unifia run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ Ayrıntılı talimatlar için [GitLab CLI agents docs](https://docs.gitlab.com/u
 
 ### Örnekler
 
-GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
+GitLab'da unifia'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
 :::tip
-`@opencode`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
+`@unifia`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
 :::
 
 - **Bir sorunu açıklama**
@@ -169,27 +169,27 @@ GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   Bu yorumu bir GitLab sayısına ekleyin.
 
   ```
-  @opencode explain this issue
+  @unifia explain this issue
   ```
 
-  opencode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
+  unifia konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
 
 - **Bir sorunu düzeltme**
 
   In a GitLab issue, say:
 
   ```
-  @opencode fix this
+  @unifia fix this
   ```
 
-  opencode yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
+  unifia yeni bir dal oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
 
 - **Birleştirme isteklerini inceleme**
 
   GitLab birleştirme isteğine aşağıdaki yorumu bırakın.
 
   ```
-  @opencode review this merge request
+  @unifia review this merge request
   ```
 
-  opencode, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.
+  unifia, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.

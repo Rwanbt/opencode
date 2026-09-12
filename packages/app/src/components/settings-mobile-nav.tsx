@@ -1,7 +1,7 @@
 import { type Component, For, Show, createSignal } from "solid-js"
 import { Dialog as KobalteDialog } from "@kobalte/core/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@unifia/ui/icon"
+import { IconButton } from "@unifia/ui/icon-button"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneral } from "./settings-general"
@@ -14,6 +14,7 @@ import { SettingsBenchmark } from "./settings-benchmark"
 import { SettingsPlugins } from "./settings-plugins"
 import { SettingsAndroid } from "./settings-android"
 import { SettingsObservability } from "./settings-observability"
+import { SettingsMemory } from "./settings-memory"
 
 type CategoryId =
   | "general"
@@ -24,6 +25,7 @@ type CategoryId =
   | "configuration"
   | "benchmark"
   | "plugins"
+  | "memory"
   | "observability"
   | "android"
 
@@ -44,6 +46,7 @@ export const SettingsMobileNav: Component = () => {
     { value: "models" as const, icon: "models" as const, label: language.t("settings.models.title") },
     { value: "configuration" as const, icon: "console" as const, label: language.t("settings.localConfig.title") },
     { value: "benchmark" as const, icon: "speedometer" as const, label: language.t("settings.fork.benchmark.title") },
+    { value: "memory" as const, icon: "brain" as const, label: language.t("settings.fork.memory.title") },
     { value: "plugins" as const, icon: "mcp" as const, label: language.t("settings.fork.plugins.title") },
     { value: "observability" as const, icon: "eye" as const, label: language.t("settings.fork.observability.title") },
     ...(platform.os === "android"
@@ -71,6 +74,8 @@ export const SettingsMobileNav: Component = () => {
         return <SettingsBenchmark />
       case "plugins":
         return <SettingsPlugins />
+      case "memory":
+        return <SettingsMemory />
       case "observability":
         return <SettingsObservability />
       case "android":

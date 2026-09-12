@@ -1,0 +1,17 @@
+{
+  "name": "broken-no-package-json",
+  "description": "Workspace corrompu : pas de package.json (devrait échouer gracefully)",
+  "type": "broken",
+  "structure": {
+    "expected_files": [],
+    "expected_count": "0 files"
+  },
+  "errors": [
+    "no_package_json"
+  ],
+  "agent_test_scenarios": [
+    "should_detect_missing_package_json",
+    "should_not_crash_on_load",
+    "should_report_error_audit"
+  ]
+}

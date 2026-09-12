@@ -1,6 +1,6 @@
 import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import type { PermissionRequest } from "../types/sdk-shim"
 import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use opencode_kokoro_shared::{g2p, tokenizer};
+use unifia_kokoro_shared::{g2p, tokenizer};
 
 const STYLE_DIM: usize = 256;
 
@@ -198,13 +198,30 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    /// Where the manually-run tests below look for the Kokoro model.
+    ///
+    /// This was one developer's absolute home directory, under an app id the
+    /// rebrand has since retired — nobody else could run these. The default now
+    /// derives from the current bundle identifier; set UNIFIA_KOKORO_MODEL_DIR
+    /// to point somewhere else.
     fn model_dir() -> PathBuf {
-        PathBuf::from(r"C:\Users\barat\AppData\Roaming\ai.opencode.desktop.dev\speech\kokoro")
+        if let Ok(dir) = std::env::var("UNIFIA_KOKORO_MODEL_DIR") {
+            return PathBuf::from(dir);
+        }
+        let app_id = if cfg!(debug_assertions) {
+            crate::identity_generated::TAURI_DESKTOP_DEV_APP_ID
+        } else {
+            crate::identity_generated::TAURI_DESKTOP_PROD_APP_ID
+        };
+        dirs::data_dir()
+            .expect("no data directory")
+            .join(app_id)
+            .join("speech")
+            .join("kokoro")
     }
 
-    // These tests require a local Kokoro model at a hardcoded Windows path.
-    // They are intentionally ignored in CI and must be run manually with
-    // `cargo test -- --ignored` on a machine with the model installed.
+    // These tests need a local Kokoro model, which CI does not have. They stay
+    // ignored and are run manually with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_kokoro_load() {

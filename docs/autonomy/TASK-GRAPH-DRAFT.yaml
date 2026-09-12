@@ -1,0 +1,507 @@
+# TASK-GRAPH DRAFT — Unifia Workbench rebrand
+#
+# STATUT : DRAFT (à valider après lecture de AUDIT_REPORT.md + EXECUTION_PLAN.md du fork,
+#         et après fourniture du Plan Directeur V3 Unifia)
+# Portée : rebrand opencode → unifia (Core + Workbench)
+# Toutes les cartes respectent : ≤ 400 lignes modifiées, ≤ 8 fichiers, 1 seule autorité.
+# Chaque carte référence une exigence (plan_sections à compléter quand le Plan V3 sera fourni).
+
+metadata:
+  schema_version: "1.0"
+  generated_by: "Hermes Agent (MiniMax-M3)"
+  generated_at: "2026-07-31T08:30:00Z"
+  baseline_sha: "207ff452b8056ae11d1f71e23198e520835f70ed"
+  status: "DRAFT"
+  awaiting_inputs:
+    - "Plan Directeur V3 Unifia Workbench (manquant dans le pack)"
+    - "Lecture de AUDIT_REPORT.md du fork (pour ne pas dupliquer)"
+    - "Lecture de EXECUTION_PLAN.md du fork (idem)"
+    - "Décision utilisateur sur packages/enterprise/ (EXCLUDE par défaut)"
+    - "Décision utilisateur sur packages/desktop-electron/ (DEPRECATE par défaut)"
+
+# ============================================================================
+# PHASE 0 — FONDATIONS (à exécuter en premier, séquentiel)
+# ============================================================================
+
+cards:
+  # --------------------------------------------------------------------------
+  - id: "P0-C001"
+    phase: "0"
+    title: "Créer la baseline et la branche d'intégration agent/integration"
+    status: "READY"
+    objective: "Branche d'intégration locale `agent/integration` créée depuis la baseline SHA 207ff452, avec merge --no-ff de la branche de travail agent/unifia-workbench-v3-20260731-082811-207ff452."
+    rationale: "Référence unique pour toutes les intégrations carte par carte."
+    scope:
+      allowed_paths: ["docs/autonomy/BASELINE.md"]
+      max_changed_non_generated_lines: 50
+      max_implementation_files: 1
+    commands:
+      preflight: ["git rev-parse HEAD", "git status --short --branch"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Branche agent/integration existe et contient BASELINE.md commité"
+        evidence: "git log --oneline agent/integration"
+    rollback:
+      strategy: "Suppression de la branche locale"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: [], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C002"
+    phase: "0"
+    title: "Renommer le package racine : package.json name + description"
+    status: "PROPOSED"
+    objective: "package.json racine : name 'opencode' → 'unifia-workbench' et description 'AI-powered development tool' → 'Unifia Workbench — AI-powered development environment'."
+    rationale: "Identité NPM et métadonnées du monorepo. Premier commit visible."
+    scope:
+      allowed_paths: ["package.json"]
+      forbidden_paths: ["packages/*/package.json"]
+      max_changed_non_generated_lines: 5
+      max_implementation_files: 1
+    commands:
+      preflight: ["cat package.json | head -10"]
+      static_checks: ["bun install --dry-run"]
+    acceptance:
+      - id: "AC-1"
+        statement: "package.json name == 'unifia-workbench'"
+        evidence: "grep '\"name\"' package.json"
+      - id: "AC-2"
+        statement: "Description commence par 'Unifia Workbench'"
+        evidence: "grep '\"description\"' package.json"
+    rollback:
+      strategy: "Revert atomique du commit"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C001"], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C003"
+    phase: "0"
+    title: "Renommer les 22 packages workspaces : @unifia/* → @unifia/*"
+    status: "PROPOSED"
+    objective: "Renommer les 22 noms de packages sous packages/*/package.json. @unifia/app → @unifia/app, etc. Ne PAS toucher aux scopes privés (commençant par @)."
+    rationale: "Cohérence d'écosystème NPM. Identité du SDK public (`@unifia/sdk`)."
+    scope:
+      allowed_paths: ["packages/*/package.json"]
+      max_changed_non_generated_lines: 30
+      max_implementation_files: 22
+    commands:
+      preflight: ["find packages -name 'package.json' -not -path '*/node_modules/*' | wc -l"]
+      static_checks: ["bun install"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Aucun package.json ne contient plus '@unifia/'"
+        evidence: "grep -r '@unifia/' packages/*/package.json | wc -l == 0"
+      - id: "AC-2"
+        statement: "Tous les cross-references internes pointent vers @unifia/*"
+        evidence: "bun install exit 0 (catalog resolution)"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C002"], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C004"
+    phase: "0"
+    title: "Renommer le binaire CLI opencode → unifia"
+    status: "PROPOSED"
+    objective: "packages/unifia/package.json : bin.opencode = './bin/opencode' → './bin/unifia'. Renommer le fichier entry. Adapter les imports internes qui référencent 'opencode' comme nom de binaire."
+    rationale: "Le binaire CLI est le premier point de contact utilisateur (commande shell)."
+    scope:
+      allowed_paths: ["packages/unifia/package.json", "packages/unifia/bin/**"]
+      max_changed_non_generated_lines: 50
+      max_implementation_files: 4
+    commands:
+      preflight: ["ls packages/unifia/bin/"]
+      targeted_tests: ["cd packages/unifia && bun test --timeout 30000 --filter cli"]
+      static_checks: ["cd packages/unifia && tsgo --noEmit"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Le binaire s'appelle 'unifia'"
+        evidence: "test: bunx ./packages/unifia/bin/unifia --version exit 0"
+      - id: "AC-2"
+        statement: "Plus aucune référence 'opencode' dans bin/"
+        evidence: "grep -r 'opencode' packages/unifia/bin/ | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C003"], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C005"
+    phase: "0"
+    title: "Tauri identifier + scheme + sidecar : opencode → unifia"
+    status: "PROPOSED"
+    objective: "packages/desktop/src-tauri/tauri.conf.json : identifier 'ai.opencode.desktop.dev' → 'ai.unifia.workbench.dev'. externalBin 'sidecars/opencode-cli' → 'sidecars/unifia-cli'. URL scheme 'opencode' → 'unifia'."
+    rationale: "Identifiant Tauri = nom légal macOS pour signature/notarisation. Changement = renouveau certifs requis (gate externe)."
+    scope:
+      allowed_paths:
+        - "packages/desktop/src-tauri/tauri.conf.json"
+        - "packages/desktop/src-tauri/tauri.beta.conf.json"
+        - "packages/desktop/src-tauri/capabilities/**"
+      max_changed_non_generated_lines: 80
+      max_implementation_files: 8
+    commands:
+      preflight: ["grep -rn 'opencode' packages/desktop/src-tauri/tauri.conf.json"]
+      static_checks: ["cd packages/desktop && bun run typecheck"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus aucune mention de 'opencode' dans tauri.conf.json et tauri.beta.conf.json"
+        evidence: "grep -E 'opencode' packages/desktop/src-tauri/tauri*.conf.json | wc -l == 0"
+    security:
+      risk: "HIGH"
+      threat_cases: ["URL scheme changé casse les deep links existants", "Identifier changé = re-certification macOS requise"]
+      permissions_changed: false
+      secrets_touched: false
+      network_changed: false
+      migration_changed: false
+      kill_switch_required: false
+    provenance:
+      imports_third_party_code: false
+      sources: []
+      notices_required: []
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      external_e2_required: true  # notarisation macOS = externe
+      max_cycles: 3
+    dependencies: { hard: ["P0-C003"], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C006"
+    phase: "0"
+    title: "README.md racine : rebrand titre, banner, URLs"
+    status: "PROPOSED"
+    objective: "Remplacer 'OpenCode' par 'Unifia' dans README.md (racine). Supprimer la bannière 'Bannière OpencodeX.png' (1.5 MB) et la remplacer par une référence au logo Unifia. Adapter les URLs `Rwanbt/unifia` vers `Rwanbt/unifia` (ou nouveau repo)."
+    rationale: "Premier fichier lu par un visiteur du repo."
+    scope:
+      allowed_paths: ["README.md"]
+      forbidden_paths: ["README.*.md (i18n traités en P1)"]
+      max_changed_non_generated_lines: 60
+      max_implementation_files: 1
+    commands:
+      preflight: ["wc -l README.md"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus de 'OpenCode' (sauf dans URL upstream explicitement signalée)"
+        evidence: "grep -i 'opencode' README.md | wc -l <= 1 (ligne 'upstream')"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C002"], soft: [] }
+
+  # --------------------------------------------------------------------------
+  - id: "P0-C007"
+    phase: "0"
+    title: "Supprimer Bannière OpencodeX.png (1.5 MB binaire)"
+    status: "PROPOSED"
+    objective: "git rm Bannière OpencodeX.png (racine) et retirer la référence dans README.md (sera fait conjointement avec P0-C006)."
+    rationale: "Asset binaire hors charte graphique Unifia."
+    scope:
+      allowed_paths: ["Bannière OpencodeX.png"]
+      max_changed_non_generated_lines: 1
+      max_implementation_files: 1
+    commands:
+      preflight: ["git ls-files | grep -i 'bannière'"]
+      static_checks: ["git status --short --branch"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Le fichier n'est plus tracké par Git"
+        evidence: "git ls-files | grep -i 'bannière\\|banniere' | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: ["P0-C006"], soft: [] }
+
+# ============================================================================
+# PHASE 1 — i18n, UI strings, providers
+# ============================================================================
+  - id: "P1-C010"
+    phase: "1"
+    title: "i18n 21 langues README + CONTRIBUTING + LICENSE + SECURITY"
+    status: "PROPOSED"
+    objective: "Renommer 'OpenCode' → 'Unifia' dans les 84 fichiers i18n racine. URLs Rwanbt/unifia → à adapter. Stricte limite : recherche/remplacement par regex validée."
+    rationale: "Cohérence multilingue du rebrand."
+    scope:
+      allowed_paths: ["README.*.md", "CONTRIBUTING.*.md", "LICENSE.*.md", "SECURITY.*.md"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 84
+    commands:
+      preflight: ["ls README.*.md | wc -l"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Aucun fichier i18n racine ne contient 'OpenCode' (sauf si upstream explicite)"
+        evidence: "grep -l 'OpenCode' README.*.md CONTRIBUTING.*.md LICENSE.*.md SECURITY.*.md | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 3
+    dependencies: { hard: ["P0-C006"], soft: [] }
+
+  - id: "P1-C011"
+    phase: "1"
+    title: "i18n 21 langues packages/desktop/src/i18n/"
+    status: "PROPOSED"
+    objective: "Renommer 'opencode' → 'unifia' dans les 21 fichiers TS d'i18n desktop."
+    rationale: "Cohérence multilingue UI desktop."
+    scope:
+      allowed_paths: ["packages/desktop/src/i18n/*"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 21
+    commands:
+      preflight: ["ls packages/desktop/src/i18n/*.ts | wc -l"]
+      static_checks: ["cd packages/desktop && tsgo -b"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus de 'opencode' dans les libellés (identifiants techniques internes OK)"
+        evidence: "grep -c 'opencode' packages/desktop/src/i18n/en.ts <= 2 (gardé pour identifiants logiques)"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P1-C010"], soft: [] }
+
+  - id: "P1-C020"
+    phase: "1"
+    title: "Renames app/src/ (185 fichiers SolidJS)"
+    status: "PROPOSED"
+    objective: "Renommer les occurrences 'opencode' visibles dans 185 fichiers de packages/app/src/. Découpage en 24 sous-cartes de 7-8 fichiers max chacune (cf. carte P1-C020-SUB-*)."
+    rationale: "UI publique web. Volume le plus important du rebrand."
+    scope:
+      allowed_paths: ["packages/app/src/**/*.{ts,tsx}"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 8  # par sous-carte
+    commands:
+      preflight: ["grep -rl 'opencode' packages/app/src/ | wc -l"]
+      static_checks: ["cd packages/app && tsgo -b"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus de 'opencode' comme libellé utilisateur dans packages/app/src/"
+        evidence: "grep -E 'opencode' packages/app/src/**/*.{ts,tsx} | grep -v 'import\\|from\\|require' | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique par sous-carte"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 3
+    dependencies: { hard: ["P0-C004"], soft: [] }
+    note: "Cette carte est un GABARIT. À instancier en ~24 sous-cartes de ≤ 8 fichiers."
+
+  - id: "P1-C030"
+    phase: "1"
+    title: "Provider opencode : renommage interne du provider par défaut"
+    status: "PROPOSED"
+    objective: "packages/unifia/src/provider/provider.ts et modèles : adapter le nom de provider par défaut 'opencode' → 'unifia'. Conserver la compatibilité ascendante (alias 'opencode' → 'unifia')."
+    rationale: "Le provider par défaut est référencé dans toute l'app."
+    scope:
+      allowed_paths: ["packages/unifia/src/provider/**"]
+      max_changed_non_generated_lines: 200
+      max_implementation_files: 6
+    commands:
+      targeted_tests: ["cd packages/unifia && bun test --timeout 60000 --filter provider"]
+      static_checks: ["cd packages/unifia && tsgo --noEmit"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Provider 'unifia' résolu correctement, alias 'opencode' fonctionne toujours"
+        evidence: "bun test: 'provider alias resolution'"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C004"], soft: [] }
+
+# ============================================================================
+# PHASE 2 — Assets, documentation, gouvernance
+# ============================================================================
+  - id: "P2-C040"
+    phase: "2"
+    title: "AGENTS.md racine : réécriture pour Unifia"
+    status: "PROPOSED"
+    objective: "Réécrire AGENTS.md racine pour refléter l'identité Unifia. Conserver la structure (sections standard agent-friendly), changer le nom de produit, les références au fork Rwanbt."
+    rationale: "Document lu par tout agent IA. Identité produit critique."
+    scope:
+      allowed_paths: ["AGENTS.md"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 1
+    commands:
+      preflight: ["wc -l AGENTS.md"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "AGENTS.md mentionne 'Unifia' au moins 3 fois et plus 'OpenCode' comme nom de produit"
+        evidence: "grep -c -i 'unifia' AGENTS.md >= 3"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C006"], soft: [] }
+
+  - id: "P2-C041"
+    phase: "2"
+    title: "CLAUDE.md racine : overrides Claude Code pour Unifia"
+    status: "PROPOSED"
+    objective: "Adapter CLAUDE.md aux instructions Unifia. Conserver les règles non-négociables (zéro alloc callback audio, etc. si pertinents) et changer les références produit."
+    rationale: "Override Claude Code = lu en priorité par cet agent spécifique."
+    scope:
+      allowed_paths: ["CLAUDE.md"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 1
+    commands:
+      preflight: ["wc -l CLAUDE.md"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "CLAUDE.md cohérent avec AGENTS.md (Unifia)"
+        evidence: "diff manuel"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P2-C040"], soft: [] }
+
+  - id: "P2-C050"
+    phase: "2"
+    title: "Renames des 42 workflows GitHub (.github/workflows/*.yml)"
+    status: "PROPOSED"
+    objective: "Renommer 'opencode' → 'unifia' dans les 42 workflows. ATTENTION : les URLs d'artefacts et de release doivent pointer vers le bon repo."
+    rationale: "CI cohérente."
+    scope:
+      allowed_paths: [".github/workflows/**"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 8
+    commands:
+      preflight: ["ls .github/workflows/*.yml | wc -l"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Aucun workflow ne référence 'opencode' sauf si explicitement upstream"
+        evidence: "grep -l 'opencode' .github/workflows/*.yml | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C003"], soft: [] }
+    note: "Probablement 6 sous-cartes de 7 workflows."
+
+  - id: "P2-C060"
+    phase: "2"
+    title: "Documentation MDX (643 fichiers packages/docs/) : rebrand par script"
+    status: "PROPOSED"
+    objective: "Recherche/remplacement contrôlé 'OpenCode' → 'Unifia' dans 643 fichiers MDX. Garde-fou : ne pas toucher aux blocs de code qui pourraient référencer l'ancien nom pour des raisons de compatibilité."
+    rationale: "Site de documentation public."
+    scope:
+      allowed_paths: ["packages/docs/**"]
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 8
+    commands:
+      preflight: ["find packages/docs -name '*.mdx' | wc -l"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus de 'OpenCode' dans la doc (sauf blocs de compat)"
+        evidence: "grep -l 'OpenCode' packages/docs/**/*.mdx | wc -l <= 5"
+    rollback:
+      strategy: "Revert atomique par sous-carte"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 3
+    dependencies: { hard: ["P0-C006"], soft: [] }
+    note: "Probablement 80+ sous-cartes. À scripter."
+
+# ============================================================================
+# PHASE 9 — EXCLUSIONS & DEFERRED
+# ============================================================================
+  - id: "P9-C900"
+    phase: "9"
+    title: "packages/enterprise/ : EXCLUDE par défaut"
+    status: "DEFERRED"
+    objective: "Marquer packages/enterprise/ comme EXCLUDE du rebrand tant que l'audit upstream n'a pas confirmé la licence. Aucun fichier touché."
+    rationale: "Risque de contamination de code propriétaire upstream."
+    scope:
+      allowed_paths: ["packages/enterprise/"]
+      max_changed_non_generated_lines: 0
+      max_implementation_files: 0
+    commands:
+      preflight: ["ls packages/enterprise/"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Aucun commit ne touche packages/enterprise/ pendant la phase rebrand"
+        evidence: "git log --diff-filter=M --name-only | grep 'packages/enterprise/' | wc -l == 0"
+    rollback:
+      strategy: "N/A (carte no-op, aucun fichier modifié)"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: [], soft: [] }
+
+  - id: "P9-C901"
+    phase: "9"
+    title: "packages/desktop-electron/ : DEPRECATE"
+    status: "DEFERRED"
+    objective: "Décision utilisateur requise : (a) rebrand desktop-electron/ ou (b) marquer DEPRECATE avec README annonçant la migration Tauri. Par défaut : DEPRECATE."
+    rationale: "Doublon fonctionnel avec Tauri, complexité de maintenance."
+    scope:
+      allowed_paths: ["packages/desktop-electron/"]
+      max_changed_non_generated_lines: 50
+      max_implementation_files: 1
+    commands:
+      preflight: ["ls packages/desktop-electron/"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "README.md de desktop-electron annonce la dépréciation et pointe vers Tauri"
+        evidence: "grep -i 'deprecat\\|Tauri' packages/desktop-electron/README.md"
+    rollback:
+      strategy: "Revert atomique du commit README"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: [], soft: [] }
+    blocked_decision: "DEPRECATE vs REBRAND desktop-electron — décision utilisateur"
+
+# ============================================================================
+# Résumé
+# ============================================================================
+summary:
+  total_cards_draft: 17
+  ready: 1
+  proposed: 14
+  deferred: 2
+  phases:
+    "0": 7   # P0-C001 à P0-C007
+    "1": 4   # P1-C010, C011, C020, C030
+    "2": 4   # P2-C040, C041, C050, C060
+    "9": 2   # P9-C900, C901
+  estimated_total_subcards: 200  # P1-C020 (24) + P2-C050 (6) + P2-C060 (80+) + autres
+  expected_duration: "à calibrer après première carte READY exécutée"
+  blocked_on:
+    - "Plan Directeur V3 Unifia (validation requirements)"
+    - "Lecture AUDIT_REPORT.md fork (validation absence duplication)"
+    - "Décision enterprise + desktop-electron"
+
+# =============================================================================
+# DEPRECATED 2026-07-31 — voir TASK-GRAPH-v1.0.yaml
+# Cette v0.1 est conservée pour traçabilité mais n'est plus la source de vérité.
+# Le TASK-GRAPH v1.0 est aligné sur le Plan directeur V3 (22 phases + 3 gates).
+# =============================================================================

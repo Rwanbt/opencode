@@ -1,0 +1,27 @@
+{
+  "name": "@unifia/workbench-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./modes": "./src/modes.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test --timeout 30000"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*",
+    "@unifia/design-system-runtime": "workspace:*",
+    "@unifia/skill-hub": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@unifia/spec-runtime": "workspace:*",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

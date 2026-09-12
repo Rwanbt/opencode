@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Écrivez vos propres plugins pour étendre OpenCode.
+description: Écrivez vos propres plugins pour étendre Unifia.
 ---
 
-Les plugins vous permettent d'étendre OpenCode en vous connectant à divers événements et en personnalisant le comportement. Vous pouvez créer des plugins pour ajouter de nouvelles fonctionnalités, intégrer des services externes ou modifier le comportement par défaut de OpenCode.
+Les plugins vous permettent d'étendre Unifia en vous connectant à divers événements et en personnalisant le comportement. Vous pouvez créer des plugins pour ajouter de nouvelles fonctionnalités, intégrer des services externes ou modifier le comportement par défaut de Unifia.
 
 Pour des exemples, consultez les [plugins](/docs/ecosystem#plugins) créés par la communauté.
 
@@ -30,7 +30,7 @@ Les fichiers de ces répertoires sont automatiquement chargés au démarrage.
 
 Spécifiez les packages npm dans votre fichier de configuration.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -56,7 +56,7 @@ Les **plugins locaux** sont chargés directement depuis le répertoire des plugi
 Les plugins sont chargés à partir de toutes les sources et tous les hooks s'exécutent dans l'ordre. L'ordre de chargement est le suivant :
 
 1. Configuration globale (`~/.config/opencode/opencode.json`)
-2. Configuration du projet (`opencode.json`)
+2. Configuration du projet (`unifia.json`)
 3. Répertoire global des plugins (`~/.config/opencode/plugins/`)
 4. Répertoire des plugins du projet (`.opencode/plugins/`)
 
@@ -82,7 +82,7 @@ Les plugins locaux et les outils personnalisés peuvent utiliser des packages np
 }
 ```
 
-OpenCode exécute `bun install` au démarrage pour les installer. Vos plugins et outils peuvent ensuite les importer.
+Unifia exécute `bun install` au démarrage pour les installer. Vos plugins et outils peuvent ensuite les importer.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -117,7 +117,7 @@ La fonction plugin reçoit :
 - `project` : informations sur le projet actuel.
 - `directory` : le répertoire de travail actuel.
 - `worktree` : le chemin de l'arbre de travail git.
-- `client` : un client SDK opencode pour interagir avec l'IA.
+- `client` : un client SDK unifia pour interagir avec l'IA.
 - `$` : [shell API](https://bun.com/docs/runtime/shell) de Bun pour l'exécution de commandes.
 
 ---
@@ -127,7 +127,7 @@ La fonction plugin reçoit :
 Pour les plugins TypeScript, vous pouvez importer des types à partir du package du plugin :
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -210,7 +210,7 @@ Les plugins peuvent s'abonner à des événements comme indiqué ci-dessous dans
 
 ## Exemples
 
-Voici quelques exemples de plugins que vous pouvez utiliser pour étendre opencode.
+Voici quelques exemples de plugins que vous pouvez utiliser pour étendre unifia.
 
 ---
 
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -234,14 +234,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Nous utilisons `osascript` pour exécuter AppleScript sur macOS. Ici, nous l'utilisons pour envoyer des notifications.
 
 :::note
-Si vous utilisez l'application de bureau OpenCode, elle peut envoyer automatiquement des notifications système lorsqu'une réponse est prête ou en cas d'erreur de session.
+Si vous utilisez l'application de bureau Unifia, elle peut envoyer automatiquement des notifications système lorsqu'une réponse est prête ou en cas d'erreur de session.
 :::
 
 ---
 
 ### Protection .env
 
-Empêchez opencode de lire les fichiers `.env` :
+Empêchez unifia de lire les fichiers `.env` :
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -276,10 +276,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Outils personnalisés
 
-Les plugins peuvent également ajouter des outils personnalisés à opencode :
+Les plugins peuvent également ajouter des outils personnalisés à unifia :
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -299,13 +299,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-L'assistant `tool` crée un outil personnalisé que opencode peut appeler. Il prend une fonction de schéma Zod et renvoie une définition d'outil avec :
+L'assistant `tool` crée un outil personnalisé que unifia peut appeler. Il prend une fonction de schéma Zod et renvoie une définition d'outil avec :
 
 - `description` : ce que fait l'outil
 - `args` : schéma Zod pour les arguments de l'outil
 - `execute` : Fonction qui s'exécute lorsque l'outil est appelé
 
-Vos outils personnalisés seront disponibles pour opencode aux côtés des outils intégrés.
+Vos outils personnalisés seront disponibles pour unifia aux côtés des outils intégrés.
 
 ---
 
@@ -335,7 +335,7 @@ Niveaux : `debug`, `info`, `warn`, `error`. Voir la [documentation du SDK](https
 Personnalisez le contexte inclus lorsqu'une session est compactée :
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -359,7 +359,7 @@ Le hook `experimental.session.compacting` se déclenche avant que le LLM ne gén
 Vous pouvez également remplacer entièrement le prompt de compactage en définissant `output.prompt` :
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

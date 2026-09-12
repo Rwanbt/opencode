@@ -1,0 +1,24 @@
+{
+  "name": "@unifia/digest-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Canonicalization + content digest (JCS-v1 + SHA-256) runtime per ADR-001.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*",
+    "canonicalize": "4.0.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -21,6 +21,11 @@ export function createChildStoreManager(input: {
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
+  // C13: server-side dispose notification. The frontend has the only
+  // refcount in its current architecture; releasing the last frontend handle
+  // triggers the server's `/instance/dispose` call. The server uses the C12
+  // lease/refcount to know when to truly dispose the underlying instance.
+  onServerDispose?: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
@@ -101,6 +106,10 @@ export function createChildStoreManager(input: {
     }
     delete children[directory]
     input.onDispose(directory)
+    // C13: notify the server so its lease can drop to 0 and dispose the
+    // instance. This is fire-and-forget; eviction must not block on a slow
+    // network round-trip.
+    input.onServerDispose?.(directory)
     return true
   }
 

@@ -136,11 +136,11 @@ optimization is worth widening it.
 
 ## Implementation
 
-- `packages/opencode/src/provider/cache.ts` — `PromptCache` namespace (new)
-- `packages/opencode/src/provider/transform.ts` — flag-gated dispatch + budget reservation
-- `packages/opencode/src/session/message-v2.ts` — compaction-summary marker
-- `packages/opencode/src/session/llm.ts` — tool canonicalization + tool breakpoint
-- `packages/opencode/src/flag/flag.ts` — `OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING`
+- `packages/unifia/src/provider/cache.ts` — `PromptCache` namespace (new)
+- `packages/unifia/src/provider/transform.ts` — flag-gated dispatch + budget reservation
+- `packages/unifia/src/session/message-v2.ts` — compaction-summary marker
+- `packages/unifia/src/session/llm.ts` — tool canonicalization + tool breakpoint
+- `packages/unifia/src/flag/flag.ts` — `OPENCODE_EXPERIMENTAL_PROMPT_CACHE_ANCHORING`
 - Tests: `test/provider/cache.test.ts`, `test/session/prompt-cache.test.ts`,
   `test/session/prompt-cache-characterization.test.ts` (Phase 0 baseline,
   updated in Phase 2 where the plan intentionally changes prior behavior)

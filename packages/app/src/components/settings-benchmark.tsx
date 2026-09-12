@@ -13,8 +13,8 @@
  * UI will iterate over CPU / OpenCL / Vulkan / Hexagon and show a table.
  */
 import { type Component, createSignal, createResource, createMemo, For, Show, } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
+import { Button } from "@unifia/ui/button"
+import { Select } from "@unifia/ui/select"
 import { useLanguage } from "@/context/language"
 
 function invokeTauri(cmd: string, args?: Record<string, unknown>): Promise<any> {
@@ -38,7 +38,7 @@ type BenchResult = {
   error?: string
 }
 
-const HISTORY_KEY = "opencode-benchmark-history"
+const HISTORY_KEY = "unifia-benchmark-history"
 const MAX_HISTORY = 20
 const BENCH_PROMPT =
   "Write a short technical paragraph (about 200 words) explaining how a CPU's branch predictor works, focusing on the difference between static and dynamic prediction strategies."

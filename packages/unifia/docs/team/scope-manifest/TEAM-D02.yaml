@@ -1,0 +1,17 @@
+card_id: TEAM-D02
+base_sha: cbb8e4124912a184f50d1b30bec4ee26ff563330
+scope_mode: E2_REQUIRED
+allowed_files:
+  - packages/unifia/src/team/team-store.sql.ts
+  - packages/unifia/src/team/team-store.ts
+  - packages/unifia/test/team/team-store.test.ts
+  - packages/unifia/migration/20260726193000_team_store/migration.sql
+  - docs/team/scope-manifest/TEAM-D02.yaml
+protected_files:
+  - packages/unifia/src/team/types.ts
+  - packages/unifia/src/team/lock-manager.ts
+  - packages/unifia/src/team/worktree-manager.ts
+  - packages/unifia/src/model-intelligence/**
+  - main
+  - dev
+  - opti-ui

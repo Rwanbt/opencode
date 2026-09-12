@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   # schedule trigger disabled: this syncs "beta"-labeled team PRs, which this
   # solo fork doesn't receive, and its blacksmith-4vcpu-ubuntu-2404 runner was
-  # never migrated (see fork-release.yml / build-tauri using ubuntu-latest),
+  # never migrated (see release.yml / build-tauri using ubuntu-latest),
   # so hourly runs queued forever without executing.
   # - cron: "0 * * * *"
 
@@ -27,14 +27,14 @@ jobs:
         id: setup-git-committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          unifia-app-id: ${{ vars.UNIFIA_APP_ID }}
+          unifia-app-secret: ${{ secrets.UNIFIA_APP_SECRET }}
 
-      - name: Install OpenCode
-        run: bun i -g opencode-ai
+      - name: Install Unifia
+        run: bun i -g unifia-ai
 
       - name: Sync beta branch
         env:
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          UNIFIA_API_KEY: ${{ secrets.UNIFIA_API_KEY }}
         run: bun script/beta.ts

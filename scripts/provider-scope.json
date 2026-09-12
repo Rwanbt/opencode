@@ -1,6 +1,6 @@
 {
   "$schema": "scripts/provider-scope.schema.json",
-  "_comment": "Static registry of SolidJS Context Providers in OpenCode. Each entry maps a hook to its Provider, source location, mount location, and scope (app|shell|directory|session). The check-provider-scope.ps1 script uses this registry to verify structural invariants — preventing the bug class 'consumer without an ancestor Provider'.",
+  "_comment": "Static registry of SolidJS Context Providers in Unifia. Each entry maps a hook to its Provider, source location, mount location, and scope (app|shell|directory|session). The check-provider-scope.ps1 script uses this registry to verify structural invariants — preventing the bug class 'consumer without an ancestor Provider'.",
   "version": 1,
   "updated": "2026-06-27",
   "scopes": {

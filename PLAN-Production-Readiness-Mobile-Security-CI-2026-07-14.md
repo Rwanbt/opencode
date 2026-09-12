@@ -1,11 +1,11 @@
 ---
-project: opencode
+project: unifia
 type: roadmap
-tags: [opencode, production, mobile, android, security, ci, observability]
+tags: [unifia, production, mobile, android, security, ci, observability]
 summary: "Plan d’achèvement production pour aligner mobile et desktop, sécuriser les dépendances, fiabiliser GitHub et valider le parcours E2E."
 created: 2026-07-14
 updated: 2026-07-14
-related: [[OpenCode/Codex|OpenCode AGENTS.md]], [[OpenCode/Plan-Convergence-CLI-Desktop-Android-Auto-Debate-Observability-2026-07-13|Plan convergence CLI/Desktop/Android]], [[OpenCode/observability|Observability]], [[INDEX]], [[LOG]]
+related: [[OpenCode/Codex|Unifia AGENTS.md]], [[OpenCode/Plan-Convergence-CLI-Desktop-Android-Auto-Debate-Observability-2026-07-13|Plan convergence CLI/Desktop/Android]], [[OpenCode/observability|Observability]], [[INDEX]], [[LOG]]
 ---
 
 # Plan — Production readiness mobile, sécurité et CI
@@ -14,7 +14,7 @@ related: [[OpenCode/Codex|OpenCode AGENTS.md]], [[OpenCode/Plan-Convergence-CLI-
 
 **In progress — validation partielle effectuée le 2026-07-14**  
 Branche cible : `dev`  
-Worktree cible : `D:\App\OpenCode\opencode-cache-verification`  
+Worktree cible : `D:\App\Unifia\unifia-cache-verification`  
 Règle : aucun push automatique; les commits de phase sont ciblés et les changements utilisateur sont préservés.
 
 ## Progression d’implémentation
@@ -31,9 +31,9 @@ Règle : aucun push automatique; les commits de phase sont ciblés et les change
 
 ## Diagnostic vérifié
 
-- L’interface mobile importe `@opencode-ai/app`; les écrans observability desktop/mobile ont donc une source commune.
-- Le backend mobile est le bundle généré depuis `packages/opencode/src/mobile-entry.ts`.
-- Le bundle mobile contient les migrations observability, le stockage local, la rétention/cache et les métadonnées `OPENCODE_VERSION=1.3.15`, `OPENCODE_CHANNEL=latest`.
+- L’interface mobile importe `@unifia/app`; les écrans observability desktop/mobile ont donc une source commune.
+- Le backend mobile est le bundle généré depuis `packages/unifia/src/mobile-entry.ts`.
+- Le bundle mobile contient les migrations observability, le stockage local, la rétention/cache et les métadonnées `UNIFIA_VERSION=1.3.15`, `UNIFIA_CHANNEL=latest`.
 - CLI production et desktop production ont été buildés localement; le raccourci Windows pointe vers le binaire production du worktree cible.
 - Android production a été buildé et installé avec une signature debug locale; le téléphone a lancé `ai.opencode.mobile`.
 - Typechecks core/app/mobile : OK. Tests mobile : `64/64`. Tests observability ciblés : `134/134` après exécution hors sandbox.
@@ -64,7 +64,7 @@ Obtenir une branche `dev` reproductible et publiable où :
                  |                    |
         CLI production sidecar   mobile-entry bundle
                  \                    /
-              packages/opencode core/backend
+              packages/unifia core/backend
                        |
              SQLite observability + cache
                        |
@@ -78,7 +78,7 @@ Principes : une source de vérité pour l’UI, une source de vérité pour le b
 ### Phase 0 — Préparer et isoler les artefacts
 
 - Vérifier le worktree actif, la branche `dev`, les worktrees voisins et les changements utilisateur.
-- Ne jamais modifier `D:\App\OpenCode\opencode` ni les worktrees de sauvegarde.
+- Ne jamais modifier `D:\App\Unifia\unifia` ni les worktrees de sauvegarde.
 - Identifier les artefacts générés Android (`gen/`, `target/`, APK, bibliothèques natives) et les distinguer des fichiers versionnés.
 - Documenter les versions : Bun, Rust, Tauri CLI, Android SDK/NDK, CMake, JDK, ORT et llama.cpp.
 - Ajouter une checklist de provenance/hash pour chaque bibliothèque native livrée.
@@ -114,7 +114,7 @@ Principes : une source de vérité pour l’UI, une source de vérité pour le b
 
 - Créer/choisir le keystore release officiel et documenter son stockage hors dépôt.
 - Remplacer la signature debug par une signature release dans le pipeline local/CI.
-- Définir la version Android et le `versionCode` depuis une source unique liée à la version OpenCode.
+- Définir la version Android et le `versionCode` depuis une source unique liée à la version Unifia.
 - Produire APK de test et AAB de distribution; ne pas confondre l’APK de test local avec un artefact publiable.
 - Ajouter une vérification qui refuse de publier un artefact signé debug.
 - Documenter l’installation locale, la mise à jour sans perte de données et la procédure de rollback.
@@ -198,7 +198,7 @@ Chaque phase doit rester buildable, testable et commitable indépendamment. Aucu
 - Migration complète vers une nouvelle architecture mobile.
 - Réécriture de llama.cpp ou du moteur ORT.
 - Publication publique sans décision sur le keystore et le canal de distribution.
-- Correction de vulnérabilités sans rapport direct avec les dépendances ou chemins activés par OpenCode, sauf exigence du policy gate.
+- Correction de vulnérabilités sans rapport direct avec les dépendances ou chemins activés par Unifia, sauf exigence du policy gate.
 
 ## Risques et décisions à confirmer avant exécution
 
@@ -206,7 +206,7 @@ Chaque phase doit rester buildable, testable et commitable indépendamment. Aucu
 - **Artefacts natifs :** choisir entre compilation CI depuis les sources épinglées ou artefacts internes signés; recommandation : compilation reproductible + hash.
 - **Bundles générés :** recommandation : une seule source de génération, validation CI et versionnement uniquement si le runtime offline l’exige.
 - **Vulnérabilités transitives :** les mises à jour peuvent modifier des APIs; chaque groupe doit être isolé avec tests et rollback.
-- **CI deploy :** le provider Stripe doit être rendu déterministe ou retiré des jobs de validation OpenCode.
+- **CI deploy :** le provider Stripe doit être rendu déterministe ou retiré des jobs de validation Unifia.
 
 ## Checklist d’acceptation finale
 

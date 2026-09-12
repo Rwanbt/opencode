@@ -1,4 +1,4 @@
-# ANDROID AUDIT — OpenCode Mobile (2026-04-17)
+# ANDROID AUDIT — Unifia Mobile (2026-04-17)
 
 > Audit ciblé de `packages/mobile` pour un fonctionnement sans bug sur Android, avec réactivité et gestion correcte du lifecycle.
 
@@ -41,7 +41,7 @@ onTrimMemory(CRITICAL)→ unload model, garder sidecar connecté
 
 ### 2.2 — État actuel dans le code
 
-- [packages/opencode/src/local-llm-server/index.ts:262-281](packages/opencode/src/local-llm-server/index.ts#L262-L281) : handlers `SIGTERM`/`SIGINT`/`exit` → `syncCleanup()`.
+- [packages/unifia/src/local-llm-server/index.ts:262-281](packages/unifia/src/local-llm-server/index.ts#L262-L281) : handlers `SIGTERM`/`SIGINT`/`exit` → `syncCleanup()`.
 - [packages/mobile/src-tauri/src/lib.rs](packages/mobile/src-tauri/src/lib.rs) : à lire pour confirmer si un `RunEvent::Exit` ou `OnPause` hook est implémenté.
 - [packages/mobile/src/entry.tsx](packages/mobile/src/entry.tsx) : pas de `document.addEventListener("visibilitychange", ...)` — aucun signal côté JS quand l'app passe en background.
 
@@ -51,19 +51,19 @@ onTrimMemory(CRITICAL)→ unload model, garder sidecar connecté
 
 ## 3. Deep-links — cohérence config ↔ manifeste
 
-- [packages/mobile/src-tauri/tauri.conf.json:44-49](packages/mobile/src-tauri/tauri.conf.json#L44-L49) déclare `scheme: ["opencode"]`.
-- [AndroidManifest.xml:40-61](packages/mobile/src-tauri/gen/android/app/src/main/AndroidManifest.xml#L40-L61) contient **deux** `intent-filter` : `https://opencode.ai/mobile` (auto-verify) + `opencode://`.
+- [packages/mobile/src-tauri/tauri.conf.json:44-49](packages/mobile/src-tauri/tauri.conf.json#L44-L49) déclare `scheme: ["unifia"]`.
+- [AndroidManifest.xml:40-61](packages/mobile/src-tauri/gen/android/app/src/main/AndroidManifest.xml#L40-L61) contient **deux** `intent-filter` : `https://opencode.ai/mobile` (auto-verify) + `unifia://`.
 
-Incohérence : le manifeste est auto-généré par le plugin Tauri `deep-link` selon la config, mais le second intent-filter https ne provient pas du scheme `opencode`. Soit il y a eu un override manuel, soit un autre plugin l'a ajouté.
+Incohérence : le manifeste est auto-généré par le plugin Tauri `deep-link` selon la config, mais le second intent-filter https ne provient pas du scheme `unifia`. Soit il y a eu un override manuel, soit un autre plugin l'a ajouté.
 
 **Risque** :
-- L'auto-verify `https` nécessite `.well-known/assetlinks.json` hébergé sur `opencode.ai`. Si absent, Android ignore l'intent et ouvre le navigateur.
-- Pour un fork qui ne contrôle pas `opencode.ai`, cet intent-filter devrait être supprimé ou remplacé par un domaine contrôlé.
+- L'auto-verify `https` nécessite `.well-known/assetlinks.json` hébergé sur `unifia.ai`. Si absent, Android ignore l'intent et ouvre le navigateur.
+- Pour un fork qui ne contrôle pas `unifia.ai`, cet intent-filter devrait être supprimé ou remplacé par un domaine contrôlé.
 
 **Actions** :
-1. Vérifier si `opencode.ai/.well-known/assetlinks.json` contient le SHA256 du signing key APK du fork.
-2. Sinon : ne conserver que `opencode://` (custom scheme), retirer l'intent-filter `https` du manifeste.
-3. Mettre à jour la doc de pairing pour ne mentionner que `opencode://`.
+1. Vérifier si `unifia.ai/.well-known/assetlinks.json` contient le SHA256 du signing key APK du fork.
+2. Sinon : ne conserver que `unifia://` (custom scheme), retirer l'intent-filter `https` du manifeste.
+3. Mettre à jour la doc de pairing pour ne mentionner que `unifia://`.
 
 ---
 
@@ -75,7 +75,7 @@ D'après les notes `_memory/memory.md` du vault :
 
 **Points à auditer** :
 - Resync après `onResume` : le socket TCP survit-il à un `onPause` long ? Sinon, handshake de reconnexion automatique.
-- Timeout du deep-link `opencode://...?fp=...&pw=...` : la ligne [entry.tsx:119-120](packages/mobile/src/entry.tsx#L119-L120) pousse `setPrivateServerFp(fp)` — vérifier que le scoping est per-session, pas globalement persisté.
+- Timeout du deep-link `unifia://...?fp=...&pw=...` : la ligne [entry.tsx:119-120](packages/mobile/src/entry.tsx#L119-L120) pousse `setPrivateServerFp(fp)` — vérifier que le scoping est per-session, pas globalement persisté.
 - Rotation du fingerprint TLS (desktop side) : si le desktop rotate sa CA (via [tls.rs:76-126](packages/desktop/src-tauri/src/tls.rs#L76-L126), cert 10 ans — pas urgent), le client Android doit redemander le pairing plutôt que d'échouer silencieusement.
 
 ---
@@ -127,7 +127,7 @@ Pour chaque release candidate :
 | Inference continue 10 min | Flagship | Tokens/s dégrade <20 % |
 | Appairage QR desktop-mobile | Tous | Fingerprint stocké, requête OK |
 | Permissions refusées (storage, notif) | Tous | UI de fallback, pas de crash |
-| Deep-link `opencode://pair?…` depuis navigateur | Tous | Ouvre l'app, pré-remplit le pairing |
+| Deep-link `unifia://pair?…` depuis navigateur | Tous | Ouvre l'app, pré-remplit le pairing |
 | Batterie 15 % démarrage inference | Flagship | Warning affiché |
 
 **Automatisation** : `maestro` (Mobile.dev) supporte Tauri WebView. Écrire 8 scénarios YAML correspondants → CI nightly sur émulateur Android 14 + 1 device physique via Firebase Test Lab.

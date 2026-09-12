@@ -6,11 +6,11 @@
 // common case. Extend this component, not the API, if workspace-scope UI is
 // ever needed.
 import { type Component, createResource, createSignal, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@unifia/ui/button"
+import { Select } from "@unifia/ui/select"
+import { TextField } from "@unifia/ui/text-field"
+import { Icon } from "@unifia/ui/icon"
+import { showToast } from "@unifia/ui/toast"
 import { useSDK } from "@/context/sdk"
 import { unwrap } from "@/utils/sdk-unwrap"
 import { SettingsList } from "./settings-list"

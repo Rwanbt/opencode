@@ -1,0 +1,584 @@
+# TASK-GRAPH v1.0 — Unifia Workbench (aligné Plan V3)
+#
+# Plan V3 : 22 phases (Phase -2 à Phase 19) + 3 gates (A, B, C)
+# Plan V3 source : docs/autonomy/PLAN-DIRECTEUR-V3.md (49 575 bytes)
+# Audit Phase -1 : 7 livrables dans docs/autonomy/{TRI-REPO-*,FEATURE-OWNERSHIP-*,DUPLICATION-*,PORTABILITY-*,SECURITY-GAP-*,IMPORT-CANDIDATES,DO-NOT-IMPORT}.md
+# Audit Phase -2 : 5 livrables dans docs/autonomy/{LICENSE-AUDIT-UNIFIA,THIRD-PARTY-NOTICES,UPSTREAM-PROVENANCE,UPSTREAM-SOURCES.lock.json,ATTRIBUTION-TEMPLATE}.md
+# Statut v1.0 : cartes détaillées pour Phase 0-3, gabarits pour Phase 4-19
+# Clones upstream verrouillés : OpenWork 2c558bcff, Open Cowork ec5bd27
+
+metadata:
+  schema_version: "2.0"  # bump: v1.0 aligné Plan V3
+  generated_by: "Hermes Agent (MiniMax-M3)"
+  generated_at: "2026-07-31T09:40:00Z"
+  baseline_sha: "207ff452b8056ae11d1f71e23198e520835f70ed"
+  plan_v3_sha: "(non versionné, snapshot local dans docs/autonomy/PLAN-DIRECTEUR-V3.md)"
+  status: "v1.0_DRAFT"
+  replaces: "TASK-GRAPH-DRAFT.yaml (v0.1 inventé, sous-dimensionné)"
+
+phases_plan_v3:
+  - id: "M2"     # Phase -2
+    name: "Audit licences et provenance"
+    status: "COMPLETE"
+    deliverables: 5
+  - id: "M1"     # Phase -1
+    name: "Audit comparatif des trois codebases"
+    status: "COMPLETE"
+    deliverables: 7
+  - id: "P0"     # Phase 0
+    name: "Rebrand Unifia, gouvernance et stratégie upstream"
+    status: "READY"
+  - id: "P1"     # Phase 1
+    name: "CI, tests, builds et harness multi-runtime"
+    status: "PROPOSED"
+  - id: "P2"     # Phase 2
+    name: "Contrats Unifia et adaptateurs"
+    status: "PROPOSED"
+  - id: "P3"     # Phase 3
+    name: "Security foundation, capabilities et ApprovalBroker"
+    status: "PROPOSED"
+  - id: "P4"     # Phase 4
+    name: "WorkspaceRuntime, stockage et migrations"
+    status: "DEFERRED"
+  - id: "P5"     # Phase 5
+    name: "Extraction OpenWork : serveur, orchestrateur et multi-workspace"
+    status: "DEFERRED"
+  - id: "P6"     # Phase 6
+    name: "Extraction Open Cowork : documents et artefacts bureautiques"
+    status: "DEFERRED"
+  - id: "GA"     # Gate A
+    name: "Workbench headless stable"
+    status: "DEFERRED"
+  - id: "P7"     # Phase 7
+    name: "Shell Unifia et expérience Code/Work"
+    status: "DEFERRED"
+  - id: "P8"     # Phase 8
+    name: "SandboxBroker multi-backend"
+    status: "DEFERRED"
+  - id: "P9"     # Phase 9
+    name: "Remote bridges contrôlés"
+    status: "DEFERRED"
+  - id: "P10"    # Phase 10
+    name: "Browser et Computer Use contrôlés"
+    status: "DEFERRED"
+  - id: "GB"     # Gate B
+    name: "Cowork local-first sécurisé"
+    status: "DEFERRED"
+  - id: "P11"    # Phase 11
+    name: "Spec-driven development et OpenDesign"
+    status: "DEFERRED"
+  - id: "P12"    # Phase 12
+    name: "Artifact Studio"
+    status: "DEFERRED"
+  - id: "P13"    # Phase 13
+    name: "Memory et session intelligence"
+    status: "DEFERRED"
+  - id: "P14"    # Phase 14
+    name: "Workflow automation"
+    status: "DEFERRED"
+  - id: "P15"    # Phase 15
+    name: "Skill Hub et Marketplace"
+    status: "DEFERRED"
+  - id: "P16"    # Phase 16
+    name: "MCP UI Control et Generative UI"
+    status: "DEFERRED"
+  - id: "GC"     # Gate C
+    name: "Plateforme extensible stabilisée"
+    status: "DEFERRED"
+  - id: "P17"    # Phase 17
+    name: "Release hardening"
+    status: "DEFERRED"
+  - id: "P18"    # Phase 18
+    name: "Release publique"
+    status: "DEFERRED"
+  - id: "P19"    # Phase 19
+    name: "Modules stratégiques post-production"
+    status: "DEFERRED"
+
+# =============================================================================
+# PHASE 0 — REBRAND, GOUVERNANCE, STRATÉGIE UPSTREAM (détaillée)
+# =============================================================================
+cards:
+  # P0-C001 reste la même que l'ancien DRAFT
+  - id: "P0-C001"
+    phase: "0"
+    title: "Créer la baseline et la branche d'intégration agent/integration"
+    status: "READY"
+    objective: "Branche d'intégration locale `agent/integration` créée depuis la baseline SHA 207ff452, avec merge --no-ff de la branche de travail."
+    rationale: "Référence unique pour toutes les intégrations carte par carte."
+    scope:
+      allowed_paths: ["docs/autonomy/BASELINE.md"]
+      max_changed_non_generated_lines: 50
+      max_implementation_files: 1
+    commands:
+      preflight: ["git rev-parse HEAD", "git status --short --branch"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Branche agent/integration existe et contient BASELINE.md commité"
+        evidence: "git log --oneline agent/integration"
+    rollback:
+      strategy: "Suppression de la branche locale"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: [], soft: [] }
+
+  - id: "P0-C002"
+    phase: "0"
+    title: "Renommer le package racine : package.json name + description"
+    status: "PROPOSED"
+    objective: "package.json racine : name 'opencode' → 'unifia-workbench', description → 'Unifia Workbench — AI-powered development environment'."
+    rationale: "Identité NPM et métadonnées du monorepo. Premier commit visible."
+    scope:
+      allowed_paths: ["package.json"]
+      forbidden_paths: ["packages/*/package.json"]
+      max_changed_non_generated_lines: 5
+      max_implementation_files: 1
+    commands:
+      preflight: ["cat package.json | head -10"]
+      static_checks: ["bun install --dry-run"]
+    acceptance:
+      - id: "AC-1"
+        statement: "package.json name == 'unifia-workbench'"
+        evidence: "grep '\"name\"' package.json"
+    rollback:
+      strategy: "Revert atomique du commit"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C001"], soft: [] }
+
+  - id: "P0-C003"
+    phase: "0"
+    title: "Renommer les 22 packages workspaces : @unifia/* → @unifia/*"
+    status: "PROPOSED"
+    objective: "Renommer les 22 noms de packages sous packages/*/package.json."
+    rationale: "Cohérence d'écosystème NPM. Identité du SDK public."
+    scope:
+      allowed_paths: ["packages/*/package.json"]
+      max_changed_non_generated_lines: 30
+      max_implementation_files: 22
+    commands:
+      preflight: ["find packages -name 'package.json' -not -path '*/node_modules/*' | wc -l"]
+      static_checks: ["bun install"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Aucun package.json ne contient plus '@unifia/'"
+        evidence: "grep -r '@unifia/' packages/*/package.json | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C002"], soft: [] }
+
+  - id: "P0-C004"
+    phase: "0"
+    title: "Renommer le binaire CLI opencode → unifia"
+    status: "PROPOSED"
+    objective: "packages/unifia/bin/opencode → packages/unifia/bin/unifia. Adapt imports internes."
+    rationale: "Le binaire CLI est le premier point de contact utilisateur."
+    scope:
+      allowed_paths: ["packages/unifia/package.json", "packages/unifia/bin/**"]
+      max_changed_non_generated_lines: 50
+      max_implementation_files: 4
+    commands:
+      preflight: ["ls packages/unifia/bin/"]
+      targeted_tests: ["cd packages/unifia && bun test --timeout 30000 --filter cli"]
+      static_checks: ["cd packages/unifia && tsgo --noEmit"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Le binaire s'appelle 'unifia'"
+        evidence: "test: bunx ./packages/unifia/bin/unifia --version exit 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C003"], soft: [] }
+
+  - id: "P0-C005"
+    phase: "0"
+    title: "Tauri identifier + scheme + sidecar : opencode → unifia"
+    status: "PROPOSED"
+    objective: "Tauri identifier 'ai.opencode.desktop.dev' → 'ai.unifia.workbench.dev'. externalBin et URL scheme alignés."
+    rationale: "Identifiant Tauri = nom légal macOS pour signature/notarisation."
+    scope:
+      allowed_paths: ["packages/desktop/src-tauri/tauri.conf.json", "packages/desktop/src-tauri/tauri.beta.conf.json", "packages/desktop/src-tauri/capabilities/**"]
+      max_changed_non_generated_lines: 80
+      max_implementation_files: 8
+    commands:
+      preflight: ["grep -rn 'opencode' packages/desktop/src-tauri/tauri.conf.json"]
+      static_checks: ["cd packages/desktop && bun run typecheck"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus aucune mention de 'opencode' dans tauri*.conf.json"
+        evidence: "grep -E 'opencode' packages/desktop/src-tauri/tauri*.conf.json | wc -l == 0"
+    security:
+      risk: "HIGH"
+      threat_cases: ["URL scheme changé casse les deep links", "Identifier = re-certification macOS"]
+      permissions_changed: false
+      secrets_touched: false
+      network_changed: false
+      migration_changed: false
+      kill_switch_required: false
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      external_e2_required: true
+      max_cycles: 3
+    dependencies: { hard: ["P0-C003"], soft: [] }
+
+  - id: "P0-C006"
+    phase: "0"
+    title: "README.md racine : rebrand titre, banner, URLs"
+    status: "PROPOSED"
+    objective: "Remplacer 'OpenCode' par 'Unifia' dans README.md (racine). URLs alignées."
+    rationale: "Premier fichier lu par un visiteur du repo."
+    scope:
+      allowed_paths: ["README.md"]
+      forbidden_paths: ["README.*.md (i18n traités en P1)"]
+      max_changed_non_generated_lines: 60
+      max_implementation_files: 1
+    commands:
+      preflight: ["wc -l README.md"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Plus de 'OpenCode' (sauf dans URL upstream explicitement signalée)"
+        evidence: "grep -i 'opencode' README.md | wc -l <= 1"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 2
+    dependencies: { hard: ["P0-C002"], soft: [] }
+
+  - id: "P0-C007"
+    phase: "0"
+    title: "Supprimer Bannière OpencodeX.png (1.5 MB binaire)"
+    status: "PROPOSED"
+    objective: "git rm Bannière OpencodeX.png (asset hors charte Unifia, non audité)."
+    rationale: "Asset binaire non audité (DO-NOT-IMPORT §2)."
+    scope:
+      allowed_paths: ["Bannière OpencodeX.png"]
+      max_changed_non_generated_lines: 1
+      max_implementation_files: 1
+    commands:
+      preflight: ["git ls-files | grep -i 'bannière'"]
+      static_checks: ["git status --short --branch"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Le fichier n'est plus tracké par Git"
+        evidence: "git ls-files | grep -i 'bannière\\|banniere' | wc -l == 0"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: ["P0-C006"], soft: [] }
+
+  # P0-C008 : NOUVELLE carte i18n utilisateur (cf. message utilisateur)
+  - id: "P-1-I18N-USER-SOURCE"
+    phase: "M1"
+    title: "Inventaire de la traduction utilisateur Open Cowork"
+    status: "BLOCKED_MISSING_SOURCE"
+    objective: "Inventorier le snapshot i18n personnalisé Open Cowork de l'utilisateur (non encore dans l'env). À l'arrivée des fichiers : inventaire complet, détection format, comptage langues, hashes, clés, namespaces, diff vs Open Cowork upstream, provenance, licence, validation."
+    rationale: "Exigence utilisateur explicite. Préserver intégralement la traduction."
+    scope:
+      allowed_paths: []  # À définir quand les fichiers arriveront
+      max_changed_non_generated_lines: 0  # read-only
+      max_implementation_files: 0
+    commands:
+      preflight: ["# aucun (sources manquantes)"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Rapport d'inventaire i18n généré"
+        evidence: "docs/autonomy/I18N-USER-INVENTORY.md"
+    rollback:
+      strategy: "N/A (read-only)"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 1
+    dependencies: { hard: [], soft: [] }
+    blocked_decision: "Fichiers i18n utilisateur non disponibles dans l'environnement"
+
+  - id: "P7-I18N-MIGRATION"
+    phase: "7"
+    title: "Migration i18n Open Cowork utilisateur vers Unifia"
+    status: "BLOCKED_DEPENDENCY"
+    objective: "Adapter et intégrer la traduction personnalisée dans le système i18n canonique Unifia. Préserver contenu, langues, clés, attributions. Mapping traçable Open Cowork → Unifia."
+    rationale: "Intégration de l'overlay utilisateur dans le Shell Unifia (Phase 7)."
+    scope:
+      allowed_paths: []  # À définir
+      max_changed_non_generated_lines: 400
+      max_implementation_files: 8
+    commands:
+      preflight: ["# après P-1-I18N-USER-SOURCE"]
+      static_checks: []
+    acceptance:
+      - id: "AC-1"
+        statement: "Toutes les langues utilisateur intégrées"
+        evidence: "test: chargement de chaque locale"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 3
+    dependencies: { hard: ["P-1-I18N-USER-SOURCE"], soft: [] }
+
+  - id: "P7-I18N-REGRESSION"
+    phase: "7"
+    title: "Test de non-régression i18n Unifia"
+    status: "BLOCKED_DEPENDENCY"
+    objective: "Critères : aucune langue perdue, aucun fallback silencieux, formats valides, tests de chargement par locale, rapport couverture avant/après, provenance, rollback."
+    rationale: "Gates obligatoires avant validation de la surface utilisateur."
+    scope:
+      allowed_paths: ["packages/desktop/src/i18n/**", "tests/**"]
+      max_changed_non_generated_lines: 200
+      max_implementation_files: 4
+    commands:
+      preflight: ["bun test:session"]
+      static_checks: ["bun turbo typecheck"]
+    acceptance:
+      - id: "AC-1"
+        statement: "Tous les tests i18n passent"
+        evidence: "bun test:opencode --filter i18n"
+    rollback:
+      strategy: "Revert atomique"
+    review:
+      reviewer_mode: "fresh-context-read-only"
+      max_cycles: 3
+    dependencies: { hard: ["P-1-I18N-USER-SOURCE", "P7-I18N-MIGRATION"], soft: [] }
+
+# =============================================================================
+# Phase 1-19 : GABARITS (à détailler carte par carte quand on entre en phase)
+# =============================================================================
+  # Phase 1 — CI, tests, builds et harness multi-runtime
+  - id: "P1-C100"
+    phase: "1"
+    title: "PHASE 1 GABARIT — Harness multi-runtime"
+    status: "DEFERRED"
+    objective: "FakeRuntime + OpenCodeRuntimeAdapter test fixture + conformance suite (10 scénarios du Plan V3 §13)."
+    rationale: "Préalable à tout import (PORTABILITY §5)."
+    scope: { allowed_paths: ["packages/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "Conformance suite verte sur 3 runtimes", evidence: "bun test:conformance" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: [], soft: ["P0-C001..P0-C007"] }
+    note: "À détailler en 5-8 sous-cartes quand on entre en Phase 1."
+
+  - id: "P1-C110"
+    phase: "1"
+    title: "PHASE 1 GABARIT — SBOM + audit deps"
+    status: "DEFERRED"
+    objective: "npm sbom + cargo about + lockfile des sources upstream. CI bloquante sur deps non whitelisted."
+    rationale: "Plan V3 §13 livrable 'dependency scan' + 'SBOM initiale'."
+    scope: { allowed_paths: [".github/workflows/**", "scripts/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "SBOM généré, scan CI actif", evidence: "gh workflow run sbom.yml" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P1-C100"], soft: [] }
+    note: "À détailler en 2-3 sous-cartes."
+
+  - id: "P1-C120"
+    phase: "1"
+    title: "PHASE 1 GABARIT — Verrous DO-NOT-IMPORT en CI"
+    status: "DEFERRED"
+    objective: "Implémenter les verrous techniques de DO-NOT-IMPORT §6 (refus /ee/, .env*, patterns dangereux, SPDX headers)."
+    rationale: "Application technique de l'audit Phase -1."
+    scope: { allowed_paths: [".husky/**", ".github/workflows/**", "scripts/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "Hook pre-commit refuse les patterns interdits", evidence: "test: tentative d'ajout d'un fichier /ee/ bloquée" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P1-C100"], soft: [] }
+    note: "À détailler en 3-5 sous-cartes."
+
+  # Phase 2 — Contrats Unifia et adaptateurs
+  - id: "P2-C200"
+    phase: "2"
+    title: "PHASE 2 GABARIT — @unifia/contracts + RuntimeAdapter"
+    status: "DEFERRED"
+    objective: "Implémenter les 6 ports du Plan V3 §7 (RuntimeAdapter, WorkspacePort, CapabilityPort, ArtifactPort, SandboxPort, RemoteTransportPort) en TS typé strict."
+    rationale: "Frontière canonique Unifia Core / Workbench."
+    scope: { allowed_paths: ["packages/contracts/**", "packages/sdk/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:contracts"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "6 ports typés + contract tests verts", evidence: "bun test:contracts" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P1-C100"], soft: [] }
+    note: "À détailler en 6+ sous-cartes (1 par port + adaptateurs)."
+
+  # Phase 3 — Security foundation
+  - id: "P3-C300"
+    phase: "3"
+    title: "PHASE 3 GABARIT — PolicyEngine + ApprovalBroker + SecretStore + AuditRuntime"
+    status: "DEFERRED"
+    objective: "Implémenter les 4 autorités GOV du Plan V3 §5. Default-deny sur les 9 surfaces de SECURITY-GAP-MATRIX §2. Bloquer les 6 combinaisons critiques §3."
+    rationale: "Gates obligatoires avant activation de computer use / remote / browser."
+    scope: { allowed_paths: ["packages/core/governance/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:security"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "PolicyEngine bloque les 9 surfaces par défaut", evidence: "bun test:security" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P2-C200"], soft: [] }
+    note: "À détailler en 8-12 sous-cartes. SECURITY-CRITICAL."
+
+  # Phase 4 — WorkspaceRuntime
+  - id: "P4-C400"
+    phase: "4"
+    title: "PHASE 4 GABARIT — WorkspaceRuntime + stockage versionné"
+    status: "DEFERRED"
+    objective: "Modèle WorkspaceId/ProjectId/SessionId/FileSessionId/ArtifactId/CapabilityId/PolicyId/AuditEventId/RemoteIdentityId. Transactions, migrations, crash recovery, file sessions, watchers, inbox/outbox, export/reset."
+    rationale: "Workspace canonique avant Phase 5 (portage OpenWork server)."
+    scope: { allowed_paths: ["packages/workspace-runtime/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:workspace"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "WorkspaceRuntime passe la conformance", evidence: "bun test:workspace" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P2-C200"], soft: ["P3-C300"] }
+    note: "À détailler en 10+ sous-cartes."
+
+  # Phase 5 — Extraction OpenWork server
+  - id: "P5-C500"
+    phase: "5"
+    title: "PHASE 5 GABARIT — Portage apps/server OpenWork → OpenCodeRuntimeAdapter"
+    status: "DEFERRED"
+    objective: "Importer apps/server d'OpenWork en refactorant en OpenCodeRuntimeAdapter (Plan V3 §7.1). Préserver multi-workspace comme feature Unifia. INTERDIT d'importer /ee/."
+    rationale: "OW-S1 (IMPORT-CANDIDATES) — ADAPT phase 5."
+    scope: { allowed_paths: ["packages/server/**", "packages/sdk/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:server"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "OpenCodeRuntimeAdapter passe la conformance", evidence: "bun test:server" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P4-C400"], soft: [] }
+    note: "À détailler en 8-12 sous-cartes. INTERDIT toute branche ee/*."
+
+  # Phase 6 — Extraction Open Cowork skills
+  - id: "P6-C600"
+    phase: "6"
+    title: "PHASE 6 GABARIT — Skills bureautiques Open Cowork en Capability Packs"
+    status: "DEFERRED"
+    objective: "Convertir les 4 skills Open Cowork (DOCX/PPTX/XLSX/PDF, 78 XSD) en Capability Packs unifia.document.{docx,pptx,xlsx,pdf}. Chaque pack chargeable sans modifier le core."
+    rationale: "OCW-S1 (IMPORT-CANDIDATES) — ADOPT phase 6."
+    scope: { allowed_paths: ["capability-packs/**", "packages/contracts/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:capabilities"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "4 packs chargeables", evidence: "bun test:capabilities --filter docx,pptx,xlsx,pdf" }]
+    rollback: { strategy: "Revert atomique par pack" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P3-C300", "P4-C400"], soft: [] }
+    note: "À détailler en 5-8 sous-cartes."
+
+  # Phase 7 — Shell Unifia
+  - id: "P7-C700"
+    phase: "7"
+    title: "PHASE 7 GABARIT — Shell Unifia (Code/Work/Design/Automate)"
+    status: "DEFERRED"
+    objective: "Shell unifié en SolidJS remplaçant apps/desktop OpenWork et desktop-electron du fork. Inclut Trace Panel + Permission dialogs + i18n (cf. P7-I18N-MIGRATION)."
+    rationale: "Workbench visible. Plan V3 Phase 7."
+    scope: { allowed_paths: ["packages/app/**", "packages/desktop/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands: { preflight: [], targeted_tests: ["bun test:ui"], static_checks: [] }
+    acceptance: [{ id: "AC-1", statement: "Shell démarre, navigation Code/Work/Design/Automate OK", evidence: "bun test:ui" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P6-C600"], soft: ["P7-I18N-MIGRATION"] }
+    note: "À détailler en 10-15 sous-cartes."
+
+  # Phases 8-19 : gabarits condensés
+  - id: "P8-C800"
+    phase: "8"
+    title: "PHASE 8 GABARIT — SandboxBroker multi-backend"
+    status: "DEFERRED"
+    objective: "Implémenter SandboxPort (Plan V3 §7.5) avec backends Native/Docker/WSL2/Lima. OCW-S2 (sandbox Python) en adaptateur."
+    rationale: "Plan V3 Phase 8."
+    scope: { allowed_paths: ["packages/sandbox-broker/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "SandboxBroker passe la conformance 4 backends", evidence: "bun test:sandbox" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P3-C300", "P4-C400"], soft: [] }
+
+  - id: "P9-C900"
+    phase: "9"
+    title: "PHASE 9 GABARIT — Remote bridges (Slack/Feishu)"
+    status: "DEFERRED"
+    objective: "OCW-S4 en Capability Packs remote derrière RemoteTransportPort. ApprovalBroker + AuditRuntime obligatoires."
+    rationale: "Plan V3 Phase 9. SECURITY-CRITICAL."
+    scope: { allowed_paths: ["packages/remote-bridges/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "Remote bridges passent la conformance + audit", evidence: "bun test:remote" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P3-C300"], soft: [] }
+    security_gate: true
+
+  - id: "P10-C1000"
+    phase: "10"
+    title: "PHASE 10 GABARIT — Browser + Computer Use contrôlés"
+    status: "DEFERRED"
+    objective: "DesktopAutomationBroker + screenshot redaction + allowlist apps. OCW-S3 (computer use Python) derrière broker. ApprovalBroker obligatoire."
+    rationale: "Plan V3 Phase 10. SECURITY-CRITICAL (computer use). DERNIÈRE PHASE SÉCURITÉ."
+    scope: { allowed_paths: ["packages/computer-use/**", "packages/desktop-broker/**"], max_changed_non_generated_lines: 400, max_implementation_files: 8 }
+    commands:
+      preflight: ["# gabarit — détaillé quand la phase est activée"]
+      static_checks: []
+    acceptance: [{ id: "AC-1", statement: "Computer use passe la conformance sécurité", evidence: "bun test:computer-use" }]
+    rollback: { strategy: "Revert atomique" }
+    review: { reviewer_mode: "fresh-context-read-only", max_cycles: 3 }
+    dependencies: { hard: ["P3-C300", "P8-C800"], soft: [] }
+    security_gate: true
+
+# =============================================================================
+# RÉSUMÉ
+# =============================================================================
+summary:
+  total_cards_v1: 17
+  ready: 1   # P0-C001
+  proposed: 5 # P0-C002..P0-C007 (rebrand P0)
+  blocked: 3 # P-1-I18N-USER-SOURCE, P7-I18N-MIGRATION, P7-I18N-REGRESSION
+  deferred_gabarit: 8 # P1-C100, C110, C120, P2-C200, P3-C300, P4-C400, P5-C500, P6-C600, P7-C700, P8-C800, P9-C900, P10-C1000
+  actual_deferred_gabarit: 8
+  estimated_total_subcards: 300  # quand tous les gabarits sont détaillés
+  audit_complete: "UPSTREAM_AUDIT_COMPLETE (Phase -1 done)"
+  user_overlay_pending: "USER_CUSTOM_OVERLAY_PENDING (i18n non fournie)"
+  blocked_on: []
+  decisions_default:
+    BD-2: "EXCLUDE packages/enterprise/ (par défaut, à confirmer)"
+    BD-3: "DEPRECATE packages/desktop-electron/ (par défaut, à confirmer)"
+    BD-4: "Conserver ancien Tauri ID pour v1, re-certifier post-v1 (par défaut)"
+    BD-5: "21 langues existantes uniquement, pas de nouvelles"
+    BD-6: "Provider MiniMax M3 natif (par défaut)"
+    BD-7: "origin-unifia = Rwanbt/unifia, upstream-openwork/open-cowork verrouillés Phase -1"
+
+# =============================================================================
+# CHANGELOG
+# =============================================================================
+changelog:
+  - version: "1.0"
+    date: "2026-07-31"
+    changes: "Réécriture complète alignée Plan V3. 17 cartes (vs 17 en v0.1 DRAFT). Nouvelles : 3 cartes i18n (P-1-I18N-USER-SOURCE, P7-I18N-MIGRATION, P7-I18N-REGRESSION). 8 gabarits condensés pour Phase 1-10."
+    replaces: "TASK-GRAPH-DRAFT.yaml (v0.1)"
+  - version: "0.1"
+    date: "2026-07-31"
+    changes: "DRAFT initial inventé, basé sur hypothèses. 17 cartes, scope = rebrand cosmétique Phase 0."
+    status: "DEPRECATED"
+
+# =============================================================================
+# P0-C008 — Ajout post-capture Plan V3 : drop-in brand Unifia
+# =============================================================================

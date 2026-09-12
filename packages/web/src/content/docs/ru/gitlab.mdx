@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Используйте opencode в задачах GitLab и мерж-реквестах.
+description: Используйте unifia в задачах GitLab и мерж-реквестах.
 ---
 
-opencode интегрируется с вашим рабочим процессом GitLab через конвейер GitLab CI/CD или с GitLab Duo.
+unifia интегрируется с вашим рабочим процессом GitLab через конвейер GitLab CI/CD или с GitLab Duo.
 
-В обоих случаях opencode будет работать на ваших программах GitLab.
+В обоих случаях unifia будет работать на ваших программах GitLab.
 
 ---
 
 ## GitLab
 
-opencode работает в обычном конвейере GitLab. Вы можете встроить его в конвейер как [CI-компонент](https://docs.gitlab.com/ee/ci/components/)
+unifia работает в обычном конвейере GitLab. Вы можете встроить его в конвейер как [CI-компонент](https://docs.gitlab.com/ee/ci/components/)
 
-Здесь мы используем созданный сообществом компонент CI/CD для opencode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Здесь мы используем созданный сообществом компонент CI/CD для unifia — [nagyv/gitlab-unifia](https://gitlab.com/nagyv/gitlab-unifia).
 
 ---
 
 ### Функции
 
-- **Использовать пользовательскую конфигурацию для каждого задания**. Настройте opencode с помощью пользовательского каталога конфигурации, например `./config/#custom-directory`, чтобы включать или отключать функциональность для каждого вызова opencode.
-- **Минимальная настройка**: компонент CI настраивает opencode в фоновом режиме, вам нужно только создать конфигурацию opencode и начальное приглашение.
+- **Использовать пользовательскую конфигурацию для каждого задания**. Настройте unifia с помощью пользовательского каталога конфигурации, например `./config/#custom-directory`, чтобы включать или отключать функциональность для каждого вызова unifia.
+- **Минимальная настройка**: компонент CI настраивает unifia в фоновом режиме, вам нужно только создать конфигурацию unifia и начальное приглашение.
 - **Гибкость**: компонент CI поддерживает несколько входных данных для настройки его поведения.
 
 ---
 
 ### Настройка
 
-1. Сохраните JSON аутентификации opencode как переменные среды CI типа файла в разделе **Настройки** > **CI/CD** > **Переменные**. Обязательно пометьте их как «Замаскированные и скрытые».
+1. Сохраните JSON аутентификации unifia как переменные среды CI типа файла в разделе **Настройки** > **CI/CD** > **Переменные**. Обязательно пометьте их как «Замаскированные и скрытые».
 2. Добавьте следующее в файл `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,34 +35,34 @@ opencode работает в обычном конвейере GitLab. Вы мо
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $UNIFIA_AUTH_JSON # The variable name for your Unifia authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Дополнительные сведения и варианты использования см. в документации ](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) для этого компонента.
+Дополнительные сведения и варианты использования см. в документации ](https://gitlab.com/explore/catalog/nagyv/gitlab-unifia) для этого компонента.
 
 ---
 
 ## GitLab Duo
 
-opencode интегрируется с вашим рабочим процессом GitLab.
-Упомяните `@opencode` в комментарии, и opencode выполнит задачи в вашем конвейере GitLab CI.
+unifia интегрируется с вашим рабочим процессом GitLab.
+Упомяните `@unifia` в комментарии, и unifia выполнит задачи в вашем конвейере GitLab CI.
 
 ---
 
 ### Функции
 
-- **Триаж задач (Issue Triage)**. Попросите opencode разобраться в проблеме и объяснить ее вам.
-- **Исправление и реализация**. Попросите opencode исправить проблему или реализовать функцию.
+- **Триаж задач (Issue Triage)**. Попросите unifia разобраться в проблеме и объяснить ее вам.
+- **Исправление и реализация**. Попросите unifia исправить проблему или реализовать функцию.
   Он создаст новую ветку и создаст мерж-реквест с изменениями.
-- **Безопасность**: opencode работает на ваших программах GitLab.
+- **Безопасность**: unifia работает на ваших программах GitLab.
 
 ---
 
 ### Настройка
 
-opencode работает в вашем конвейере GitLab CI/CD. Вот что вам понадобится для его настройки:
+unifia работает в вашем конвейере GitLab CI/CD. Вот что вам понадобится для его настройки:
 
 :::tip
 Ознакомьтесь с [**документацией GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) для получения актуальных инструкций.
@@ -82,7 +82,7 @@ opencode работает в вашем конвейере GitLab CI/CD. Вот 
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
+      - echo "Installing unifia"
       - npm install --global opencode-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
@@ -91,7 +91,7 @@ opencode работает в вашем конвейере GitLab CI/CD. Вот 
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Unifia auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,13 +103,13 @@ opencode работает в вашем конвейере GitLab CI/CD. Вот 
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "unifia@gitlab.com"
+      - git config --global user.name "Unifia"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Unifia"
       - |
-        opencode run "
+        unifia run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ opencode работает в вашем конвейере GitLab CI/CD. Вот 
 
 ### Примеры
 
-Вот несколько примеров того, как вы можете использовать opencode в GitLab.
+Вот несколько примеров того, как вы можете использовать unifia в GitLab.
 
 :::tip
-Вы можете настроить использование триггерной фразы, отличной от `@opencode`.
+Вы можете настроить использование триггерной фразы, отличной от `@unifia`.
 :::
 
 - **Объяснение проблемы**
@@ -169,27 +169,27 @@ opencode работает в вашем конвейере GitLab CI/CD. Вот 
   Добавьте этот комментарий в issue GitLab.
 
   ```
-  @opencode explain this issue
+  @unifia explain this issue
   ```
 
-  opencode прочитает проблему и ответит с четким объяснением.
+  unifia прочитает проблему и ответит с четким объяснением.
 
 - **Исправление проблемы**
 
   В issue GitLab напишите:
 
   ```
-  @opencode fix this
+  @unifia fix this
   ```
 
-  opencode создаст новую ветку, внедрит изменения и откроет мерж-реквест с изменениями.
+  unifia создаст новую ветку, внедрит изменения и откроет мерж-реквест с изменениями.
 
 - **Проверка Merge Request**
 
   Оставьте следующий комментарий к мерж-реквесту GitLab.
 
   ```
-  @opencode review this merge request
+  @unifia review this merge request
   ```
 
-  opencode рассмотрит мерж-реквест и предоставит отзыв.
+  unifia рассмотрит мерж-реквест и предоставит отзыв.

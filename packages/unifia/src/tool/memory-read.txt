@@ -1,0 +1,7 @@
+Read one memory note in full, by locator or by id.
+
+`memory_search` returns bounded snippets. Use this when a snippet is not enough — you need the whole reasoning, the full list, the exact wording.
+
+It also returns the note's `versionHash`, which `memory_write` requires in order to update the note. Always read a note before updating it: the write is refused if the note changed in the meantime, and that refusal is what keeps two sessions from silently overwriting each other.
+
+A note that does not exist and a note the egress policy withholds give the same answer. That is deliberate: confirming that a withheld note exists is itself a disclosure.

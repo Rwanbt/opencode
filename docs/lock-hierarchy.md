@@ -1,8 +1,8 @@
-# Lock Hierarchy — OpenCode
+# Lock Hierarchy — Unifia
 
 ## Contexte TypeScript
 
-OpenCode est un projet TypeScript/SolidJS. Il n'y a pas de mutex ou de locks système dans le sens C++/Rust.
+Unifia est un projet TypeScript/SolidJS. Il n'y a pas de mutex ou de locks système dans le sens C++/Rust.
 
 Les "locks" fonctionnels sont des **patterns async** et des **états partagés réactifs** :
 

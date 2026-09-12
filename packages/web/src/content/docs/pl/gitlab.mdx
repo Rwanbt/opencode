@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: użyj opencode w problemach z GitLabem i zastosujch scalania.
+description: użyj unifia w problemach z GitLabem i zastosujch scalania.
 ---
 
-opencode integruje się z przepływem pracy GitLab poprzez potok GitLab CI/CD lub z GitLab Duo.
+unifia integruje się z przepływem pracy GitLab poprzez potok GitLab CI/CD lub z GitLab Duo.
 
-W obu przypadkach opencode będzie modułem GitLab.
+W obu przypadkach unifia będzie modułem GitLab.
 
 ---
 
 ## GitLab CI
 
-opencode działa w zwykłym potoku GitLab. Możesz wbudować go w potok jako [komponent CI](https://docs.gitlab.com/ee/ci/components/)
+unifia działa w zwykłym potoku GitLab. Możesz wbudować go w potok jako [komponent CI](https://docs.gitlab.com/ee/ci/components/)
 
-Tutaj obowiązkowego przez społeczność komponentu CI/CD dla opencode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Tutaj obowiązkowego przez społeczność komponentu CI/CD dla unifia — [nagyv/gitlab-unifia](https://gitlab.com/nagyv/gitlab-unifia).
 
 ---
 
 ### Cechy
 
-- **Użyj konfiguracji dla każdego zadania**: Skonfiguruj opencode z niestandardowym katalogiem konfiguracyjnym, na przykładzie `./config/#custom-directory`, aby włączyć lub funkcjonalności na każde wywołanie opencode.
-- **Konfiguracja minimalna**: Komponent CI konfiguruje opencode w tle, wystarczy skonfigurować opencode i początkowy monit.
+- **Użyj konfiguracji dla każdego zadania**: Skonfiguruj unifia z niestandardowym katalogiem konfiguracyjnym, na przykładzie `./config/#custom-directory`, aby włączyć lub funkcjonalności na każde wywołanie unifia.
+- **Konfiguracja minimalna**: Komponent CI konfiguruje unifia w tle, wystarczy skonfigurować unifia i początkowy monit.
 - **Elastyczny**: Komponent CI obsługuje kilka danych, które są stosowane w celu dostosowania jego zachowania
 
 ---
 
 ### Organizować coś
 
-1. Przechowuj dane uwierzytelniające opencode w formacie JSON jako zmienne parametry CI typu pliku w specyfikacji **Ustawienia** > **CI/CD** > **Zmienne**. Zachowaj, aby być oznaczony jako „Zamaskowane i ukryte”.
+1. Przechowuj dane uwierzytelniające unifia w formacie JSON jako zmienne parametry CI typu pliku w specyfikacji **Ustawienia** > **CI/CD** > **Zmienne**. Zachowaj, aby być oznaczony jako „Zamaskowane i ukryte”.
 2. Dodaj elementy do swojego pliku `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,34 +35,34 @@ Tutaj obowiązkowego przez społeczność komponentu CI/CD dla opencode — [nag
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $UNIFIA_AUTH_JSON # The variable name for your Unifia authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Więcej danych dotyczących użycia [sprawdź opis](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) tego komponentu.
+Więcej danych dotyczących użycia [sprawdź opis](https://gitlab.com/explore/catalog/nagyv/gitlab-unifia) tego komponentu.
 
 ---
 
 ## Duet GitLab
 
-opencode integruje się z przepływem pracy GitLab.
-Wspomnij o `@opencode` w komentarzu, a opencode wykonaj zadania w ramach swojego potoku GitLab CI.
+unifia integruje się z przepływem pracy GitLab.
+Wspomnij o `@unifia` w komentarzu, a unifia wykonaj zadania w ramach swojego potoku GitLab CI.
 
 ---
 
 ### Cechy
 
-- **Problem związany z segregacją**: Poproś opencode o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
-- **Napraw i zaimplementuj**: Poproś opencode o naprawienie problemu lub zaimplementowanie funkcji.
+- **Problem związany z segregacją**: Poproś unifia o szczegółowe wyjaśnienie problemu i wyjaśnienie go.
+- **Napraw i zaimplementuj**: Poproś unifia o naprawienie problemu lub zaimplementowanie funkcji.
   Utworzył nowy oddział i zgłosi ataku ze sobą.
-- **Bezpieczny**: opencode działa na modułach GitLab.
+- **Bezpieczny**: unifia działa na modułach GitLab.
 
 ---
 
 ### Organizować coś
 
-opencode działa w potoku CI/CD GitLab. Oto, czego potrzebujesz, aby przejść do:
+unifia działa w potoku CI/CD GitLab. Oto, czego potrzebujesz, aby przejść do:
 
 :::tip
 Aktualne instrukcje dotyczące [**dokumentacji GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/).
@@ -82,7 +82,7 @@ Aktualne instrukcje dotyczące [**dokumentacji GitLab**](https://docs.gitlab.com
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
+      - echo "Installing unifia"
       - npm install --global opencode-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
@@ -91,7 +91,7 @@ Aktualne instrukcje dotyczące [**dokumentacji GitLab**](https://docs.gitlab.com
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Unifia auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,13 +103,13 @@ Aktualne instrukcje dotyczące [**dokumentacji GitLab**](https://docs.gitlab.com
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "unifia@gitlab.com"
+      - git config --global user.name "Unifia"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Unifia"
       - |
-        opencode run "
+        unifia run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ Szczegółowe instrukcje w [dokumentacji agentów GitLab CLI](https://docs.gitla
 
 ### Przykłady
 
-Oto kilka możliwości wykorzystania opencode w GitLabie.
+Oto kilka możliwości wykorzystania unifia w GitLabie.
 
 :::tip
-Można zastosować inną metodę ograniczającą niż `@opencode`.
+Można zastosować inną metodę ograniczającą niż `@unifia`.
 :::
 
 - **Wyjaśnij problem**
@@ -169,27 +169,27 @@ Można zastosować inną metodę ograniczającą niż `@opencode`.
   Dodaj dziesięć komentarzy w numerze GitLab.
 
   ```
-  @opencode explain this issue
+  @unifia explain this issue
   ```
 
-  opencode przeczytaj problem i odpowiedź z wyjaśnieniem.
+  unifia przeczytaj problem i odpowiedź z wyjaśnieniem.
 
 - **Napraw problem**
 
   W numerze GitLab powiedz:
 
   ```
-  @opencode fix this
+  @unifia fix this
   ```
 
-  opencode utworzy nową podstawę, zaimplementuje zmiany i spowoduje, że skalowanie będzie możliwe.
+  unifia utworzy nową podstawę, zaimplementuje zmiany i spowoduje, że skalowanie będzie możliwe.
 
 - **Przejrzyj prośby o połączenie**
 
   Zostaw komentarz w sprawie rozwiązania połączenia GitLab.
 
   ```
-  @opencode review this merge request
+  @unifia review this merge request
   ```
 
-  opencode sprawdzenie rozwiązania i przepuszczenie.
+  unifia sprawdzenie rozwiązania i przepuszczenie.

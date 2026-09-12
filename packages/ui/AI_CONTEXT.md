@@ -12,12 +12,12 @@ icônes, primitives de layout, et système de thèmes (tokens CSS).
 
 ## Constraints
 - Les composants Kobalte ont des quirks spécifiques — voir [reference_kobalte_slider](~/.claude/projects/d--App-OpenCode/memory/reference_kobalte_slider.md)
-- Aucune dépendance vers `packages/opencode` ou `packages/app` (dépendance descendante uniquement)
+- Aucune dépendance vers `packages/unifia` ou `packages/app` (dépendance descendante uniquement)
 - Les tokens CSS de thème sont la source de vérité — jamais de couleurs hardcodées dans les composants
 - Tailwind 4 — utiliser les nouvelles APIs (`@theme`, `@variant`) pas les anciennes (`theme.extend`)
 
 ## Forbidden
-- Jamais d'import de `packages/opencode` ou `packages/app` depuis ce package
+- Jamais d'import de `packages/unifia` ou `packages/app` depuis ce package
 - Jamais de state global dans les composants (composants purement présentationnels)
 
 ## Common failure modes

@@ -1,4 +1,4 @@
-# Android Development — OpenCode Mobile
+# Android Development — Unifia Mobile
 
 > Guide pratique pour développer, builder et déboguer l'app mobile.
 > Dernière mise à jour : 2026-06-20.
@@ -35,7 +35,7 @@ export ORT_LIB_LOCATION="$HOME/ort-android"  # Linux/Mac
 export ANDROID_KEYSTORE_PATH="$HOME/.keystores/opencode.keystore"
 
 # Signing (build release)
-export ANDROID_KEY_ALIAS="opencode"
+export ANDROID_KEY_ALIAS="unifia"
 export ANDROID_KEY_PASSWORD="..."
 export ANDROID_STORE_PASSWORD="..."
 ```
@@ -93,7 +93,7 @@ bun tauri android build --apk --target aarch64
 adb install -r app-debug.apk
 
 # Logs filtrés
-adb logcat | grep -i "opencode\|tauri\|llama"
+adb logcat | grep -i "unifia\|tauri\|llama"
 
 # Logs crash natifs (Rust panics)
 adb logcat | grep -i "rust_panic\|SIGSEGV\|CHECK failed"
@@ -206,14 +206,14 @@ Trois commandes reconnues par `handleDeepLink()` dans `entry.tsx` :
 
 | URL | Action |
 |---|---|
-| `opencode://connect?url=...&user=...&pwd=...&fp=...` | Pré-remplit le formulaire Remote mode (QR code desktop) |
-| `opencode://open?file=<path>&project=<dir>` | Dispatch `ide-open-file` CustomEvent → IDE panel |
-| `opencode://session?id=<sessionId>` | Dispatch `navigate-to-session` CustomEvent → navigation session |
+| `unifia://connect?url=...&user=...&pwd=...&fp=...` | Pré-remplit le formulaire Remote mode (QR code desktop) |
+| `unifia://open?file=<path>&project=<dir>` | Dispatch `ide-open-file` CustomEvent → IDE panel |
+| `unifia://session?id=<sessionId>` | Dispatch `navigate-to-session` CustomEvent → navigation session |
 
 Les deep-links `open` et `session` sont gérés quand l'app est déjà en mode `ready` (warm-start
 via `onOpenUrl`) ou dès le démarrage (cold-start via `getCurrentDeepLink`).
 
-> **Intent filter** : le schéma `opencode://` est déclaré dans `tauri.conf.json`
+> **Intent filter** : le schéma `unifia://` est déclaré dans `tauri.conf.json`
 > (plugin `deep-link`, section `mobile`) et généré dans `AndroidManifest.xml` par Tauri.
 
 ---
@@ -227,7 +227,7 @@ via `onOpenUrl`) ou dès le démarrage (cold-start via `getCurrentDeepLink`).
 2. Service → `Process.Builder("llama-server", ...).start()` avec les bons env vars (`LLAMA_OPENCL_PLATFORM=0`, etc.).
 3. Sidecar TS se connecte via `http://127.0.0.1:14097` (même loopback, WebView et service partagent le stack TCP local).
 
-**Ports** : `14097` pour llama-server, `14099` pour opencode-cli (définis dans `runtime/server.rs` — ne pas changer sans mettre à jour les deux côtés).
+**Ports** : `14097` pour llama-server, `14099` pour unifia-cli (définis dans `runtime/server.rs` — ne pas changer sans mettre à jour les deux côtés).
 
 **Model storage** : `/sdcard/Android/data/ai.opencode.mobile/files/models/*.gguf` (scoped storage).
 
@@ -256,7 +256,7 @@ curl -X POST http://127.0.0.1:14097/v1/chat/completions \
 - **Release APK/AAB** : nécessite `gen/android/app/keystore.properties` (gitignored) :
 
 ```properties
-keyAlias=opencode
+keyAlias=unifia
 keyPassword=${ANDROID_KEY_PASSWORD}
 storePassword=${ANDROID_STORE_PASSWORD}
 # Chemin absolu vers le keystore (machine-spécifique)
@@ -274,7 +274,7 @@ storeFile=/home/user/.keystores/opencode.keystore
 |---|---|---|
 | App crash au lancement Android 14 | Permission runtime manquante | Vérifier `MainActivity.kt:51-61` (POST_NOTIFICATIONS) ; ouvrir les permissions via l'onglet Android dans Settings |
 | llama-server se relance tout le temps | `ensureCorrectModel` loop (audit A.8) | Vérifier alias modèle, ajouter cooldown |
-| Deep-link `opencode://...` ouvre le navigateur | `assetlinks.json` manquant sur `opencode.ai` | Voir [../ANDROID_AUDIT.md §3](../ANDROID_AUDIT.md) |
+| Deep-link `unifia://...` ouvre le navigateur | `assetlinks.json` manquant sur `unifia.ai` | Voir [../ANDROID_AUDIT.md §3](../ANDROID_AUDIT.md) |
 | Inference lente après pause 2 min | Phantom process killer (A.4) | Implémenter `.LlamaService` binding |
 | Config LLM perdue au redémarrage | `localStorage` effacé par Android si low-mem | Migrer vers Tauri Store |
 | `ORT_LIB_LOCATION` not found | Env var non définie avant build | Voir §2 ci-dessus |
@@ -314,7 +314,7 @@ Les modèles GGUF sont indépendants des mises à jour de l'app. Workflow recomm
     ORT_LIB_LOCATION: ${{ runner.tool_cache }}/ort-android
 
 - name: Rust tests (host + proxy)
-  run: cargo test -p opencode --features host-tests
+  run: cargo test -p unifia --features host-tests
 ```
 
 **Job nightly** (non bloquant, AAB release signé) :
@@ -356,7 +356,7 @@ Les modèles GGUF sont indépendants des mises à jour de l'app. Workflow recomm
 
 | Niveau | Outillage | Fréquence | État |
 |---|---|---|---|
-| Tests unitaires Rust (host) | `cargo test -p opencode` | Chaque commit | ✅ 23+ tests |
+| Tests unitaires Rust (host) | `cargo test -p unifia` | Chaque commit | ✅ 23+ tests |
 | Tests TypeScript (editor store, routes) | Vitest | Chaque commit | ✅ 124+ tests |
 | Tests proxy (Rust, CI-friendly) | `cargo test` feature `proxy` | CI PR | ✅ |
 | Tests émulateur Android (runtime) | Avd + adb | Planifié | ❌ |

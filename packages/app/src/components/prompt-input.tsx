@@ -1,5 +1,5 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useFilteredList } from "@unifia/ui/hooks"
+import { useSpring } from "@unifia/ui/motion-spring"
 import { createEffect, on, type Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
@@ -16,14 +16,14 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { Button } from "@opencode-ai/ui/button"
-import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Select } from "@opencode-ai/ui/select"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@unifia/ui/button"
+import { DockShellForm, DockTray } from "@unifia/ui/dock-surface"
+import { Icon } from "@unifia/ui/icon"
+import { ProviderIcon } from "@unifia/ui/provider-icon"
+import { Tooltip, TooltipKeybind } from "@unifia/ui/tooltip"
+import { IconButton } from "@unifia/ui/icon-button"
+import { Select } from "@unifia/ui/select"
+import { useDialog } from "@unifia/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
@@ -35,6 +35,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { DebateModelSelector } from "@/components/debate-model-selector"
+import { TeamModelSelector } from "@/components/team-model-selector"
 import {
   createTextFragment,
   getCursorPosition,
@@ -63,7 +64,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { EXAMPLES } from "./prompt-input/examples"
 import { promptPlaceholder } from "./prompt-input/placeholder"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { ImagePreview } from "@unifia/ui/image-preview"
 
 interface PromptInputProps {
   class?: string
@@ -1334,7 +1335,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </TooltipKeybind>
                 </div>
                 <Show when={store.mode !== "shell"}>
-                <Show when={local.agent.current()?.name !== "debate"}>
+                <Show when={local.agent.current()?.name !== "debate" && local.agent.current()?.name !== "team"}>
                   <div data-component="prompt-model-control">
                     <Show
                       when={providers.paid().length > 0}
@@ -1410,6 +1411,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Show when={local.agent.current()?.name === "debate"}>
                   <div data-component="prompt-debate-model-control">
                     <DebateModelSelector local={local} />
+                  </div>
+                </Show>
+                <Show when={local.agent.current()?.name === "team"}>
+                  <div data-component="prompt-team-model-control">
+                    <TeamModelSelector local={local} />
                   </div>
                 </Show>
                   <div data-component="prompt-mode-control">

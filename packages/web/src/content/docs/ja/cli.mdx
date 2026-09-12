@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI のオプションとコマンド。
+description: Unifia CLI のオプションとコマンド。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI は、引数なしで実行すると、デフォルトで [TUI](/docs/tui) を開始します。
+Unifia CLI は、引数なしで実行すると、デフォルトで [TUI](/docs/tui) を開始します。
 
 ```bash
-opencode
+unifia
 ```
 
-ただし、このページに記載されているようにコマンドも受け入れます。これにより、OpenCode をプログラム的に操作できるようになります。
+ただし、このページに記載されているようにコマンドも受け入れます。これにより、Unifia をプログラム的に操作できるようになります。
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+unifia run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-OpenCode ターミナルユーザーインターフェイスを開始します。
+Unifia ターミナルユーザーインターフェイスを開始します。
 
 ```bash
-opencode [project]
+unifia [project]
 ```
 
 #### フラグ
@@ -44,36 +44,36 @@ opencode [project]
 
 ## コマンド
 
-OpenCode CLI には次のコマンドもあります。
+Unifia CLI には次のコマンドもあります。
 
 ---
 
 ### agent
 
-OpenCode のエージェントを管理します。
+Unifia のエージェントを管理します。
 
 ```bash
-opencode agent [command]
+unifia agent [command]
 ```
 
 ---
 
 ### attach
 
-`serve` または `web` コマンドを使用して起動された、すでに実行中の OpenCode バックエンドサーバーにターミナルを接続します。
+`serve` または `web` コマンドを使用して起動された、すでに実行中の Unifia バックエンドサーバーにターミナルを接続します。
 
 ```bash
-opencode attach [url]
+unifia attach [url]
 ```
 
-これにより、リモート OpenCode バックエンドで TUI を使用できるようになります。例えば：
+これにより、リモート Unifia バックエンドで TUI を使用できるようになります。例えば：
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+unifia web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+unifia attach http://10.20.30.40:4096
 ```
 
 #### フラグ
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 カスタム構成で新しいエージェントを作成します。
 
 ```bash
-opencode agent create
+unifia agent create
 ```
 
 このコマンドは、カスタムシステムプロンプトとツール構成を使用して新しいエージェントを作成する手順を示します。
@@ -102,7 +102,7 @@ opencode agent create
 利用可能なエージェントをすべてリストします。
 
 ```bash
-opencode agent list
+unifia agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 プロバイダーの資格情報とログインを管理するコマンド。
 
 ```bash
-opencode auth [command]
+unifia auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode は [Models.dev](https://models.dev) のプロバイダーリストを利用しているため、`opencode auth login` を使用して、使用したいプロバイダーの API キーを構成できます。これは `~/.local/share/opencode/auth.json` に保存されます。
+Unifia は [Models.dev](https://models.dev) のプロバイダーリストを利用しているため、`unifia auth login` を使用して、使用したいプロバイダーの API キーを構成できます。これは `~/.local/share/opencode/auth.json` に保存されます。
 
 ```bash
-opencode auth login
+unifia auth login
 ```
 
-OpenCode が起動すると、認証情報ファイルからプロバイダーがロードされます。また、環境またはプロジェクト内の `.env` ファイルで定義されたキーがあるかどうかも確認します。
+Unifia が起動すると、認証情報ファイルからプロバイダーがロードされます。また、環境またはプロジェクト内の `.env` ファイルで定義されたキーがあるかどうかも確認します。
 
 ---
 
@@ -134,13 +134,13 @@ OpenCode が起動すると、認証情報ファイルからプロバイダー�
 認証情報ファイルに保存されているすべての認証されたプロバイダーをリストします。
 
 ```bash
-opencode auth list
+unifia auth list
 ```
 
 またはショートバージョン。
 
 ```bash
-opencode auth ls
+unifia auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 資格情報ファイルからプロバイダーをクリアすることで、プロバイダーからログアウトします。
 
 ```bash
-opencode auth logout
+unifia auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 リポジトリ自動化のための GitHub エージェントを管理します。
 
 ```bash
-opencode github [command]
+unifia github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 GitHub エージェントをリポジトリにインストールします。
 
 ```bash
-opencode github install
+unifia github install
 ```
 
 これにより、必要な GitHub Actions ワークフローが設定され、構成プロセスがガイドされます。 [詳細はこちら](/docs/github)。
@@ -182,7 +182,7 @@ opencode github install
 GitHub エージェントを実行します。これは通常、GitHub Actions で使用されます。
 
 ```bash
-opencode github run
+unifia github run
 ```
 
 ##### フラグ
@@ -199,7 +199,7 @@ opencode github run
 モデルコンテキストプロトコルサーバーを管理します。
 
 ```bash
-opencode mcp [command]
+unifia mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 MCP サーバーを構成に追加します。
 
 ```bash
-opencode mcp add
+unifia mcp add
 ```
 
 このコマンドは、ローカルまたはリモートの MCP サーバーを追加する手順を示します。
@@ -221,13 +221,13 @@ opencode mcp add
 構成されているすべての MCP サーバーとその接続ステータスをリストします。
 
 ```bash
-opencode mcp list
+unifia mcp list
 ```
 
 または、短いバージョンを使用してください。
 
 ```bash
-opencode mcp ls
+unifia mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 OAuth 対応の MCP サーバーで認証します。
 
 ```bash
-opencode mcp auth [name]
+unifia mcp auth [name]
 ```
 
 サーバー名を指定しない場合は、利用可能な OAuth 対応サーバーから選択するように求められます。
@@ -245,13 +245,13 @@ opencode mcp auth [name]
 OAuth 対応サーバーとその認証ステータスを一覧表示することもできます。
 
 ```bash
-opencode mcp auth list
+unifia mcp auth list
 ```
 
 または、短いバージョンを使用してください。
 
 ```bash
-opencode mcp auth ls
+unifia mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 MCP サーバーの OAuth 資格情報を削除します。
 
 ```bash
-opencode mcp logout [name]
+unifia mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 MCP サーバーの OAuth 接続の問題をデバッグします。
 
 ```bash
-opencode mcp debug <name>
+unifia mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 構成されたプロバイダーから利用可能なすべてのモデルをリストします。
 
 ```bash
-opencode models [provider]
+unifia models [provider]
 ```
 
 このコマンドは、構成されたプロバイダー全体で利用可能なすべてのモデルを `provider/model` の形式で表示します。
@@ -291,7 +291,7 @@ opencode models [provider]
 オプションでプロバイダー ID を渡して、そのプロバイダーによってモデルをフィルターできます。
 
 ```bash
-opencode models anthropic
+unifia models anthropic
 ```
 
 #### フラグ
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | models.dev からモデルキャッシュを更新します。                   |
 | `--verbose` | より詳細なモデル出力を使用します (コストなどのメタデータを含む) |
 
-`--refresh` フラグを使用して、キャッシュされたモデルリストを更新します。これは、新しいモデルがプロバイダーに追加され、それを OpenCode で確認したい場合に便利です。
+`--refresh` フラグを使用して、キャッシュされたモデルリストを更新します。これは、新しいモデルがプロバイダーに追加され、それを Unifia で確認したい場合に便利です。
 
 ```bash
-opencode models --refresh
+unifia models --refresh
 ```
 
 ---
 
 ### run
 
-プロンプトを直接渡して、非対話モードで opencode を実行します。
+プロンプトを直接渡して、非対話モードで unifia を実行します。
 
 ```bash
-opencode run [message..]
+unifia run [message..]
 ```
 
 これは、スクリプト作成、自動化、または完全な TUI を起動せずに迅速な回答が必要な場合に便利です。例えば。
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "unifia run"
+unifia run Explain the use of context in Go
 ```
 
-実行中の `opencode serve` インスタンスにアタッチして、実行ごとの MCP サーバーのコールドブート時間を回避することもできます。
+実行中の `unifia serve` インスタンスにアタッチして、実行ごとの MCP サーバーのコールドブート時間を回避することもできます。
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+unifia serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+unifia run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### フラグ
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`     | メッセージに添付するファイル                                                              |
 | `--format`   |          | 形式: デフォルト (フォーマット済み) または json (生の JSON イベント)                      |
 | `--title`    |          | セッションのタイトル (値が指定されていない場合は、切り詰められたプロンプトが使用されます) |
-| `--attach`   |          | 実行中の opencode サーバー (http://localhost:4096 など) に接続します。                    |
+| `--attach`   |          | 実行中の unifia サーバー (http://localhost:4096 など) に接続します。                    |
 | `--port`     |          | ローカルサーバーのポート (デフォルトはランダムポート)                                     |
 
 ---
 
 ### serve
 
-API アクセスのためにヘッドレス OpenCode サーバーを起動します。完全な HTTP インターフェイスについては、[サーバーのドキュメント](/docs/server) を確認してください。
+API アクセスのためにヘッドレス Unifia サーバーを起動します。完全な HTTP インターフェイスについては、[サーバーのドキュメント](/docs/server) を確認してください。
 
 ```bash
-opencode serve
+unifia serve
 ```
 
-これにより、TUI インターフェイスを使用せずに opencode 機能への API アクセスを提供する HTTP サーバーが起動します。 `OPENCODE_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `opencode`)。
+これにより、TUI インターフェイスを使用せずに unifia 機能への API アクセスを提供する HTTP サーバーが起動します。 `UNIFIA_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `unifia`)。
 
 #### フラグ
 
@@ -375,20 +375,20 @@ opencode serve
 
 ### session
 
-OpenCode セッションを管理します。
+Unifia セッションを管理します。
 
 ```bash
-opencode session [command]
+unifia session [command]
 ```
 
 ---
 
 #### list
 
-すべての OpenCode セッションをリストします。
+すべての Unifia セッションをリストします。
 
 ```bash
-opencode session list
+unifia session list
 ```
 
 ##### フラグ
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-OpenCode セッションのトークンの使用状況とコストの統計を表示します。
+Unifia セッションのトークンの使用状況とコストの統計を表示します。
 
 ```bash
-opencode stats
+unifia stats
 ```
 
 #### フラグ
@@ -424,7 +424,7 @@ opencode stats
 セッションデータを JSON としてエクスポートします。
 
 ```bash
-opencode export [sessionID]
+unifia export [sessionID]
 ```
 
 セッション ID を指定しない場合は、利用可能なセッションから選択するように求められます。
@@ -433,30 +433,30 @@ opencode export [sessionID]
 
 ### import
 
-JSON ファイルまたは OpenCode 共有 URL からセッションデータをインポートします。
+JSON ファイルまたは Unifia 共有 URL からセッションデータをインポートします。
 
 ```bash
-opencode import <file>
+unifia import <file>
 ```
 
-ローカルファイルまたは OpenCode 共有 URL からインポートできます。
+ローカルファイルまたは Unifia 共有 URL からインポートできます。
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+unifia import session.json
+unifia import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Web インターフェイスを使用してヘッドレス OpenCode サーバーを起動します。
+Web インターフェイスを使用してヘッドレス Unifia サーバーを起動します。
 
 ```bash
-opencode web
+unifia web
 ```
 
-これにより、HTTP サーバーが起動し、Web ブラウザが開き、Web インターフェイスを通じて OpenCode にアクセスします。 `OPENCODE_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `opencode`)。
+これにより、HTTP サーバーが起動し、Web ブラウザが開き、Web インターフェイスを通じて Unifia にアクセスします。 `UNIFIA_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `unifia`)。
 
 #### フラグ
 
@@ -474,7 +474,7 @@ opencode web
 ACP (エージェントクライアントプロトコル) サーバーを起動します。
 
 ```bash
-opencode acp
+unifia acp
 ```
 
 このコマンドは、nd-JSON を使用して stdin/stdout 経由で通信する ACP サーバーを起動します。
@@ -491,10 +491,10 @@ opencode acp
 
 ### uninstall
 
-OpenCode をアンインストールし、関連ファイルをすべて削除します。
+Unifia をアンインストールし、関連ファイルをすべて削除します。
 
 ```bash
-opencode uninstall
+unifia uninstall
 ```
 
 #### フラグ
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-opencode を最新バージョンまたは特定のバージョンに更新します。
+unifia を最新バージョンまたは特定のバージョンに更新します。
 
 ```bash
-opencode upgrade [target]
+unifia upgrade [target]
 ```
 
 最新バージョンにアップグレードするには。
 
 ```bash
-opencode upgrade
+unifia upgrade
 ```
 
 特定のバージョンにアップグレードするには。
 
 ```bash
-opencode upgrade v0.1.48
+unifia upgrade v0.1.48
 ```
 
 #### フラグ
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## グローバルフラグ
 
-opencode CLI は次のグローバルフラグを受け取ります。
+unifia CLI は次のグローバルフラグを受け取ります。
 
 | フラグ         | ショート | 説明                                  |
 | -------------- | -------- | ------------------------------------- |
@@ -551,34 +551,34 @@ opencode CLI は次のグローバルフラグを受け取ります。
 
 ## 環境変数
 
-OpenCode は環境変数を使用して構成できます。
+Unifia は環境変数を使用して構成できます。
 
 | 変数                                  | タイプ   | 説明                                                                |
 | ------------------------------------- | -------- | ------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | ブール値 | セッションを自動的に共有する                                        |
-| `OPENCODE_GIT_BASH_PATH`              | 文字列   | Windows 上で実行可能な Git Bash へのパス                            |
-| `OPENCODE_CONFIG`                     | 文字列   | 構成ファイルへのパス                                                |
-| `OPENCODE_CONFIG_DIR`                 | 文字列   | config ディレクトリへのパス                                         |
-| `OPENCODE_CONFIG_CONTENT`             | 文字列   | インライン JSON 構成コンテンツ                                      |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | ブール値 | 自動更新チェックを無効にする                                        |
-| `OPENCODE_DISABLE_PRUNE`              | ブール値 | 古いデータのプルーニングを無効にする                                |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | ブール値 | ターミナルタイトルの自動更新を無効にする                            |
-| `OPENCODE_PERMISSION`                 | 文字列   | インライン化された json 権限設定                                    |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | ブール値 | デフォルトのプラグインを無効にする                                  |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | ブール値 | LSP サーバーの自動ダウンロードを無効にする                          |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | ブール値 | 実験モデルを有効にする                                              |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | ブール値 | 自動コンテキスト圧縮を無効にする                                    |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | ブール値 | `.claude` からの読み取りを無効にする (プロンプト + スキル)          |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | ブール値 | `~/.claude/CLAUDE.md` の読み取りを無効にする                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | ブール値 | `.claude/skills` のロードを無効にする                               |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | ブール値 | リモートソースからのモデルの取得を無効にする                        |
-| `OPENCODE_FAKE_VCS`                   | 文字列   | テスト目的の偽の VCS プロバイダー                                   |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | ブール値 | 最適化のためにファイル時間チェックを無効にする                      |
-| `OPENCODE_CLIENT`                     | 文字列   | クライアント識別子 (デフォルトは `cli`)                             |
-| `OPENCODE_ENABLE_EXA`                 | ブール値 | Exa Web 検索ツールを有効にする                                      |
-| `OPENCODE_SERVER_PASSWORD`            | 文字列   | `serve`/`web` の基本認証を有効にする                                |
-| `OPENCODE_SERVER_USERNAME`            | 文字列   | 基本認証ユーザー名 (デフォルト `opencode`) をオーバーライドします。 |
-| `OPENCODE_MODELS_URL`                 | 文字列   | モデル設定を取得するためのカスタム URL                              |
+| `UNIFIA_AUTO_SHARE`                 | ブール値 | セッションを自動的に共有する                                        |
+| `UNIFIA_GIT_BASH_PATH`              | 文字列   | Windows 上で実行可能な Git Bash へのパス                            |
+| `UNIFIA_CONFIG`                     | 文字列   | 構成ファイルへのパス                                                |
+| `UNIFIA_CONFIG_DIR`                 | 文字列   | config ディレクトリへのパス                                         |
+| `UNIFIA_CONFIG_CONTENT`             | 文字列   | インライン JSON 構成コンテンツ                                      |
+| `UNIFIA_DISABLE_AUTOUPDATE`         | ブール値 | 自動更新チェックを無効にする                                        |
+| `UNIFIA_DISABLE_PRUNE`              | ブール値 | 古いデータのプルーニングを無効にする                                |
+| `UNIFIA_DISABLE_TERMINAL_TITLE`     | ブール値 | ターミナルタイトルの自動更新を無効にする                            |
+| `UNIFIA_PERMISSION`                 | 文字列   | インライン化された json 権限設定                                    |
+| `UNIFIA_DISABLE_DEFAULT_PLUGINS`    | ブール値 | デフォルトのプラグインを無効にする                                  |
+| `UNIFIA_DISABLE_LSP_DOWNLOAD`       | ブール値 | LSP サーバーの自動ダウンロードを無効にする                          |
+| `UNIFIA_ENABLE_EXPERIMENTAL_MODELS` | ブール値 | 実験モデルを有効にする                                              |
+| `UNIFIA_DISABLE_AUTOCOMPACT`        | ブール値 | 自動コンテキスト圧縮を無効にする                                    |
+| `UNIFIA_DISABLE_CLAUDE_CODE`        | ブール値 | `.claude` からの読み取りを無効にする (プロンプト + スキル)          |
+| `UNIFIA_DISABLE_CLAUDE_CODE_PROMPT` | ブール値 | `~/.claude/CLAUDE.md` の読み取りを無効にする                        |
+| `UNIFIA_DISABLE_CLAUDE_CODE_SKILLS` | ブール値 | `.claude/skills` のロードを無効にする                               |
+| `UNIFIA_DISABLE_MODELS_FETCH`       | ブール値 | リモートソースからのモデルの取得を無効にする                        |
+| `UNIFIA_FAKE_VCS`                   | 文字列   | テスト目的の偽の VCS プロバイダー                                   |
+| `UNIFIA_DISABLE_FILETIME_CHECK`     | ブール値 | 最適化のためにファイル時間チェックを無効にする                      |
+| `UNIFIA_CLIENT`                     | 文字列   | クライアント識別子 (デフォルトは `cli`)                             |
+| `UNIFIA_ENABLE_EXA`                 | ブール値 | Exa Web 検索ツールを有効にする                                      |
+| `UNIFIA_SERVER_PASSWORD`            | 文字列   | `serve`/`web` の基本認証を有効にする                                |
+| `UNIFIA_SERVER_USERNAME`            | 文字列   | 基本認証ユーザー名 (デフォルト `unifia`) をオーバーライドします。 |
+| `UNIFIA_MODELS_URL`                 | 文字列   | モデル設定を取得するためのカスタム URL                              |
 
 ---
 
@@ -588,16 +588,16 @@ OpenCode は環境変数を使用して構成できます。
 
 | 変数                                            | タイプ   | 説明                                             |
 | ----------------------------------------------- | -------- | ------------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | ブール値 | すべての実験的機能を有効にする                   |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | ブール値 | アイコン検出を有効にする                         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | ブール値 | TUI で選択時のコピーを無効にする                 |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数値     | bash コマンドのデフォルトのタイムアウト (ミリ秒) |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数値     | LLM 応答の最大出力トークン                       |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | ブール値 | ディレクトリ全体のファイル監視を有効にする       |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | ブール値 | oxfmt フォーマッタを有効にする                   |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | ブール値 | 実験的な LSP ツールを有効にする                  |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | ブール値 | ファイルウォッチャーを無効にする                 |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | ブール値 | 実験的な Exa 機能を有効にする                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | ブール値 | python ファイルの TY LSP を有効にする            |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | ブール値 | 試験的な Markdown 機能を有効にする               |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | ブール値 | プランモードを有効にする                         |
+| `UNIFIA_EXPERIMENTAL`                         | ブール値 | すべての実験的機能を有効にする                   |
+| `UNIFIA_EXPERIMENTAL_ICON_DISCOVERY`          | ブール値 | アイコン検出を有効にする                         |
+| `UNIFIA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | ブール値 | TUI で選択時のコピーを無効にする                 |
+| `UNIFIA_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数値     | bash コマンドのデフォルトのタイムアウト (ミリ秒) |
+| `UNIFIA_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数値     | LLM 応答の最大出力トークン                       |
+| `UNIFIA_EXPERIMENTAL_FILEWATCHER`             | ブール値 | ディレクトリ全体のファイル監視を有効にする       |
+| `UNIFIA_EXPERIMENTAL_OXFMT`                   | ブール値 | oxfmt フォーマッタを有効にする                   |
+| `UNIFIA_EXPERIMENTAL_LSP_TOOL`                | ブール値 | 実験的な LSP ツールを有効にする                  |
+| `UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER`     | ブール値 | ファイルウォッチャーを無効にする                 |
+| `UNIFIA_EXPERIMENTAL_EXA`                     | ブール値 | 実験的な Exa 機能を有効にする                    |
+| `UNIFIA_EXPERIMENTAL_LSP_TY`                  | ブール値 | python ファイルの TY LSP を有効にする            |
+| `UNIFIA_EXPERIMENTAL_MARKDOWN`                | ブール値 | 試験的な Markdown 機能を有効にする               |
+| `UNIFIA_EXPERIMENTAL_PLAN_MODE`               | ブール値 | プランモードを有効にする                         |

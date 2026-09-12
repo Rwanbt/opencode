@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@unifia/util/path"
 import type { Session } from "../../types/sdk-shim"
 
 type SessionStore = {

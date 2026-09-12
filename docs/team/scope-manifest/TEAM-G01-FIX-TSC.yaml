@@ -1,0 +1,117 @@
+# TEAM-G01-FIX-TSC scope manifest v1 (WAVE-POST-T0-002) — base Team HEAD officiel
+# Cartographie canonique des fichiers dans le périmètre G01-FIX-TSC vs hors périmètre.
+# Aligné avec R-G01-001 + F4-G02 (D-037) + WAVE-POST-T0-002 §SCOPES.
+# Ce manifeste est vérifié avant chaque commit par G01 ScopeMonitor (via lease v1).
+scope_manifest:
+  card_id: TEAM-G01-FIX-TSC
+  generation: post-t0-002-v1
+  scope_version: 1
+  base_sha: fe6f85aebe2b537be4158b4cce8ebd5934115223
+  fencing_token: 13
+  reviewer_required_distinct_from: [TEAM-A06, TEAM-G01, TEAM-C01, TEAM-C01-RETRY, TEAM-G02]
+  absolute_prohibition: "Aucun changement de comportement observable — fix de signature de types uniquement"
+
+allowed_files:
+  modify_existing_only:
+    - path: "packages/unifia/src/team/team-cli.ts"
+      role: "Fix UNIQUEMENT de typage Bun.spawnSync — 10 erreurs connues (FIX_TYPES_ONLY, additif interdit)"
+      line_budget_max_delta: 50  # quelques lignes de correction, JAMAIS d'ajout de feature
+    - path: "packages/unifia/test/team/integration/test-08-crash-before-commit.test.ts"
+      role: "Fix erreurs typage restantes (~2)"
+    - path: "packages/unifia/test/team/integration/test-22-patch-id-drift.test.ts"
+      role: "Fix erreurs typage restantes (~2)"
+  modify_existing_allowed:
+    - path: "docs/team/scope-manifest/TEAM-G01-FIX-TSC.yaml"
+      role: "ce manifeste"
+      allowed_modifications: ["metadata only, pas de allowed_files"]
+
+forbidden_paths:
+  do_not_touch:
+    - "packages/unifia/src/team/lock-manager.ts"     # G01, JAMAIS réécrire
+    - "packages/unifia/src/team/fencing.ts"          # G01, JAMAIS réécrire
+    - "packages/unifia/src/team/scope-monitor.ts"    # G01, JAMAIS réécrire
+    - "packages/unifia/src/team/worktree-manager.ts" # G02, JAMAIS réécrire
+    - "packages/unifia/src/team/hooks.ts"            # G02, JAMAIS réécrire
+    - "packages/unifia/src/team/index.ts"            # sauf si export de team-cli affecté (rare)
+    - "packages/unifia/src/model-intelligence/**"    # C01, figé D-036
+    - "packages/unifia/src/multi-model/**"           # B01 simultané cette vague
+    - "packages/unifia/src/collective/**"            # B0X futur
+    - "packages/unifia/src/provider/models.ts"       # 1 erreur tsc pré-existante, hors périmètre
+  do_not_modify:
+    - ".github/workflows/**"
+    - "Execution/Handoffs/G0*-*"
+    - "Execution/Handoffs/C0*-*"
+
+errors_to_fix:
+  total_known: 14
+  patterns_documented:
+    - "Bun.spawnSync option 'encoding' inexistante sur l'overload utilisé (team-cli.ts:??)"
+    - "Bun.spawnSync option 'cmd' inexistante — utiliser { cmd: string[] } overload (team-cli.ts:??)"
+    - "Accès '.status' sur SyncSubprocess — utiliser .exitCode (team-cli.ts:??)"
+    - "Conversion Buffer→string non sûre — passer encoding utf-8 explicite (team-cli.ts:??)"
+  mm3_must_execute_baseline:
+    command: "cd packages/unifia && bunx tsc --noEmit -p . 2>&1 > .g01-fix-tsc-baseline.txt"
+    parse: "wc -l .g01-fix-tsc-baseline.txt  # attend 14 lignes DANS scope (10 team-cli + 2+2 tests)"
+  mm3_must_execute_after:
+    command: "cd packages/unifia && bunx tsc --noEmit -p . 2>&1 > .g01-fix-tsc-after.txt"
+    parse: "Diff .g01-fix-tsc-baseline.txt vs .g01-fix-tsc-after.txt — toute erreur team-cli.ts et test/{08,22} doit avoir disparu ; les autres erreurs (provider/models.ts) doivent rester identiques"
+
+scope_objectives:
+  primary:
+    - "Corriger les 14 erreurs tsc pré-existantes dans scope_allowed sans changer le comportement"
+    - "Aucun cast `as any` (masque l'erreur, ne la corrige pas — escalade)"
+    - "bun test test/team/ doit toujours retourner 131/131 PASS (baseline)"
+  forbidden:
+    - "Refactoring opportuniste (refactor hors scope = STOP-SCOPE-CREEP)"
+    - "Ajout de fonctionnalité (aditif interdit)"
+    - "Changement de noms de variables ou de fonctions publiquement exposées"
+
+tests:
+  baseline_required:
+    command: "cd packages/unifia && bun test test/team/ --timeout 60000"
+    expected: "131 pass / 0 fail / 289 expects"
+  commands:
+    typecheck: "bunx tsc --noEmit -p packages/unifia"
+    lint: "bunx @biomejs/biome check src/team/team-cli.ts"
+    test_team: "bun test packages/unifia/test/team/ --timeout 60000"
+  expected:
+    typecheck: "0 erreur dans src/team/** ET test/team/** (et au global OU identique hors-scope)"
+    test_team: "131/131 PASS (baseline, aucune régression)"
+    lint_team_cli: "0 warning"
+
+handoff_required:
+  at_minimum:
+    - "Execution/Handoffs/G01-FIX-TSC-attempt1.md (auteur MM3, hash canonique inclus)"
+    - "Execution/Handoffs/G01-FIX-TSC-VALIDATION-REPORT.md (auteur MM3, mentionne bunx tsc baseline + after)"
+    - "Execution/Handoffs/G01-FIX-TSC-BUNDLE.md (auteur MM3, signé)"
+    - "Execution/Handoffs/G01-FIX-TSC-CLAUDE-PROMPT.md (auteur MM3, pour re-review E2 Kimi K2.6)"
+  ready_flag:
+    - "Execution/Handoffs/G01-FIX-TSC-READY.flag créé après tsc_clean + tests baseline"
+
+integration_sequence:
+  post_review:
+    - "1) E2 review par Kimi K2.6 (priorité 1) — distinct de tous les reviewers précédents"
+    - "2) verdict APPROVED ou APPROVED_WITH_FOLLOWUP"
+    - "3) MM1-POST-T0-ORCHESTRATOR cherry-pick dans Team (worktree integration, fe6f85aebe)"
+    - "4) bunx tsc --noEmit + bun test test/team/ relancés post-cherry-pick — doivent demeurer 0 erreur scope et 131/131 PASS"
+    - "5) verdict PUBLISHED + intégration appliquée"
+    - "6) fencing_token suivant = 14 attribué via team-cli officiel"
+
+supersedes:
+  - "FOLLOWUP F4-G02 (D-037) — cette carte réalise le followup"
+  - "RISK R-G01-001 (status OPEN → CLOSED_WITH_FOLLOWUP après intégration)"
+
+f2_g02_verification_protocol:  # OBLIGATOIRE avant d'accepter G01-FIX-TSC-READY.flag
+  mandatory_pre_acceptance_checks:
+    - "git log c-G01-FIX-TSC/9aa1e550 → ≥1 commit au-dessus de fe6f85aebe"
+    - "git rev-parse <commit>^ = fe6f85aebe (parent == base_sha D-007)"
+    - "scope_manifest_check (git diff --name-only vs allowed_files — exact match pour les 3 fichiers)"
+    - "bunx tsc --noEmit -p packages/unifia → 0 erreur dans src/team/** et test/team/**"
+    - "bun test test/team/ → 131/131 PASS (baseline)"
+    - "branch livrée == c-G01-FIX-TSC/9aa1e550 (pas une autre branche)"
+    - "fencing_token attribué == 13"
+    - "diff est UNIFIQUEMENT du typage fix, JAMAIS d'ajout de feature (reviewer lecture directe code)"
+  si_0_commit_ailleurs_qu_Team_HEAD:
+    - "REJET IMMÉDIAT du rapport du worker"
+    - "Chercher activement la branche parallèle réellement utilisée"
+    - "Refaire le READY.flag seulement après confirmation que la livraison est sur c-G01-FIX-TSC/9aa1e550"

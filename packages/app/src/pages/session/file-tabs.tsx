@@ -10,16 +10,16 @@
 
 import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileSearchHandle } from "@opencode-ai/ui/file"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import type { FileSearchHandle } from "@unifia/ui/file"
+import { Tabs } from "@unifia/ui/tabs"
 import { useFile } from "@/context/file"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 // FORK: editor (ADR-0005)
 import { useEditor } from "@/context/editor"
 import { useSDK } from "@/context/sdk"
-import type { CodeMirrorHandle } from "@opencode-ai/ui/code-mirror"
-import type { LspCallbacks, LspLocation } from "@opencode-ai/ui/code-mirror-lsp"
+import type { CodeMirrorHandle } from "@unifia/ui/code-mirror"
+import type { LspCallbacks, LspLocation } from "@unifia/ui/code-mirror-lsp"
 import { createLspCallbacks } from "@/pages/session/lsp-handlers"
 import { RenameDialog } from "@/pages/session/rename-dialog"
 import { CodeActionsPanel } from "@/pages/session/code-actions-panel"
@@ -31,7 +31,7 @@ import { installFileKeybindings } from "@/pages/session/file-keybindings"
 import { requestAutoEdit as _requestAutoEdit } from "@/pages/session/auto-edit"
 import { createScrollSync } from "@/pages/session/scroll-content-sync"
 import { createLspActions } from "@/pages/session/lsp-actions"
-import { markViewerTiming } from "@opencode-ai/util/viewer-timing"
+import { markViewerTiming } from "@unifia/util/viewer-timing"
 
 // Re-export `requestAutoEdit` from auto-edit.ts so existing consumers
 // (session-side-panel.tsx) keep their import path stable.

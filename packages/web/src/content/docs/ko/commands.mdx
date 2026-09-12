@@ -44,15 +44,15 @@ Focus on the failing tests and suggest fixes.
 
 ## 구성
 
-커스텀 명령은 OpenCode 설정으로 추가하거나, `commands/` 디렉터리에 Markdown 파일을 만들어 추가할 수 있습니다.
+커스텀 명령은 Unifia 설정으로 추가하거나, `commands/` 디렉터리에 Markdown 파일을 만들어 추가할 수 있습니다.
 
 ---
 
 ### JSON
 
-OpenCode [config](/docs/config)의 `command` 옵션을 사용합니다.
+Unifia [config](/docs/config)의 `command` 옵션을 사용합니다.
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -223,7 +223,7 @@ Check for performance issues and suggest improvements.
 
 `template` 옵션은 명령 실행 시 LLM에 전달할 프롬프트를 정의합니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -241,7 +241,7 @@ Check for performance issues and suggest improvements.
 
 `description` 옵션으로 명령의 짧은 설명을 추가할 수 있습니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -261,7 +261,7 @@ Check for performance issues and suggest improvements.
 지정한 값이 [subagent](/docs/agents/#subagents)면 기본적으로 subagent 호출이 실행됩니다.
 이 동작을 끄려면 `subtask`를 `false`로 설정하세요.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Check for performance issues and suggest improvements.
 `subtask` 불리언(boolean)을 사용하면 명령이 [subagent](/docs/agents/#subagents) 호출을 강제로 트리거합니다.
 주 컨텍스트를 오염시키고 싶지 않을 때 유용하며, [agent](/docs/agents) 설정의 `mode`가 `primary`여도 subagent로 실행합니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ Check for performance issues and suggest improvements.
 
 `model` 설정으로 이 명령의 기본 모델을 오버라이드할 수 있습니다.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {

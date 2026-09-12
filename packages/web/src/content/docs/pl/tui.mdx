@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Korzystanie z interfejsu użytkownika terminala opencode.
+description: Korzystanie z interfejsu użytkownika terminala unifia.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode zapewnia interaktywny interfejs terminala lub TUI do pracy nad projektami za pomocą LLM.
+unifia zapewnia interaktywny interfejs terminala lub TUI do pracy nad projektami za pomocą LLM.
 
-Uruchomienie opencode uruchamia TUI dla bieżącego katalogu.
+Uruchomienie unifia uruchamia TUI dla bieżącego katalogu.
 
 ```bash
-opencode
+unifia
 ```
 
 Możesz też uruchomić go dla określonego katalogu roboczego.
 
 ```bash
-opencode /path/to/project
+unifia /path/to/project
 ```
 
 Gdy znajdziesz się w TUI, możesz wyświetlić monit za pomocą komunikatu.
@@ -57,7 +57,7 @@ Dane wyjściowe polecenia są dodawane do konwersacji jako wynik narzędzia.
 
 ## Komendy
 
-Korzystając z TUI opencode, możesz wpisać `/`, po którym następuje nazwa polecenia, aby szybko wykonać działania. Na przykład:
+Korzystając z TUI unifia, możesz wpisać `/`, po którym następuje nazwa polecenia, aby szybko wykonać działania. Na przykład:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Oto wszystkie dostępne slash commands:
 
 ### connect
 
-Dodaj dostawcę do opencode. Umożliwia wybór dostępnych dostawców i dodanie ich kluczy API.
+Dodaj dostawcę do unifia. Umożliwia wybór dostępnych dostawców i dodanie ich kluczy API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Otwórz zewnętrzny edytor do tworzenia wiadomości. Używa edytora ustawionego 
 
 ### exit
 
-Zamknij opencode. _Aliasy_: `/quit`, `/q`
+Zamknij unifia. _Aliasy_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -360,7 +360,7 @@ Możesz dostosować zachowanie TUI za pomocą pliku `tui.json` (lub `tui.jsonc`)
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "theme": "unifia",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -372,7 +372,7 @@ Możesz dostosować zachowanie TUI za pomocą pliku `tui.json` (lub `tui.jsonc`)
 }
 ```
 
-Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera/runtime.
+Jest to oddzielny plik od `unifia.json`, który konfiguruje zachowanie serwera/runtime.
 
 ### Opcje
 
@@ -382,7 +382,7 @@ Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera
 - `scroll_speed` - Kontroluje szybkość przewijania TUI podczas korzystania z poleceń przewijania (minimum: `0.001`, obsługuje wartości dziesiętne). Wartość domyślna to `3`. **Uwaga: jest to ignorowane, jeśli `scroll_acceleration.enabled` jest ustawione na `true`.**
 - `diff_style` - Steruje renderowaniem różnic. `"auto"` dostosowuje się do szerokości terminala, `"stacked"` zawsze pokazuje układ jednokolumnowy.
 
-Użyj `OPENCODE_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfiguracji TUI.
+Użyj `UNIFIA_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfiguracji TUI.
 
 ---
 

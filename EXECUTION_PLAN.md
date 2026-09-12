@@ -11,7 +11,7 @@
 ### 0.1 — Interdits absolus
 - **JAMAIS** `git push --force`, `git reset --hard`, `git commit --amend` sauf ordre explicite de l'utilisateur.
 - **JAMAIS** `--no-verify` sur les commits (les hooks pre-commit détectent les régressions).
-- **JAMAIS** modifier `C:/Users/barat/AppData/Local/Antigravity/` ou tuer des processus non-OpenCode (règle [CLAUDE.md](CLAUDE.md)).
+- **JAMAIS** modifier `C:/Users/barat/AppData/Local/Antigravity/` ou tuer des processus non-Unifia (règle [CLAUDE.md](CLAUDE.md)).
 - **JAMAIS** proposer un fallback CPU pour l'inference LLM (règle : GPU mandatory).
 - **JAMAIS** `bun tauri android build` sans vérification thorough du code (5+ min par build).
 - **JAMAIS** utiliser `sed` ou regex sur du code source. Utiliser `Edit` avec des anchors textuels uniques.
@@ -26,7 +26,7 @@
 ```bash
 cd d:/App/OpenCode/opencode
 bun run typecheck          # 0 erreur tolérée
-cd packages/opencode
+cd packages/unifia
 bun test                   # tests du package modifié, sauf exceptions documentées
 ```
 Si **typecheck fail** : lire l'erreur, fixer la vraie cause. **Jamais** `// @ts-ignore`, **jamais** `any` pour contourner.
@@ -100,15 +100,15 @@ Le code utilise `CHARS_PER_TOKEN = 4` partout pour estimer le nombre de tokens. 
 
 ### Cible de vérité
 - Cloud (OpenAI, Anthropic) : `js-tiktoken` (sync, déjà dans npm).
-- Local (`local-llm`) : POST `/tokenize` sur `baseURL` (cf. [local-llm-server](packages/opencode/src/local-llm-server/index.ts)).
+- Local (`local-llm`) : POST `/tokenize` sur `baseURL` (cf. [local-llm-server](packages/unifia/src/local-llm-server/index.ts)).
 - Fallback (API injoignable) : `length / 3.5` (empirique BPE).
 
 ### Étape 1 — Installer la dépendance
 ```bash
-cd d:/App/OpenCode/opencode/packages/opencode
+cd d:/App/OpenCode/opencode/packages/unifia
 bun add js-tiktoken@^1.0.20
 ```
-Vérifier que `packages/opencode/package.json` mentionne bien `"js-tiktoken"` dans `dependencies`.
+Vérifier que `packages/unifia/package.json` mentionne bien `"js-tiktoken"` dans `dependencies`.
 
 ### Étape 2 — Refactor `src/util/token.ts`
 
@@ -182,7 +182,7 @@ Pour chaque match hors de `util/token.ts`, juger si c'est le même bug. Oui pour
 
 ### Étape 4 — (Optionnel, différable) Remplacer `Token.estimate` par `Token.count` dans le chemin chaud
 
-Fichier : [packages/opencode/src/session/compaction.ts:135](packages/opencode/src/session/compaction.ts#L135)
+Fichier : [packages/unifia/src/session/compaction.ts:135](packages/unifia/src/session/compaction.ts#L135)
 
 **Avant :**
 ```ts
@@ -200,7 +200,7 @@ const estimate = Token.count(part.state.output, input.model?.id)
 ```bash
 cd d:/App/OpenCode/opencode
 bun run typecheck
-cd packages/opencode
+cd packages/unifia
 bun test src/util
 ```
 
@@ -236,11 +236,11 @@ Audit: d:/App/OpenCode/opencode/AUDIT_REPORT.md#a1
 ## A.2 — Reasoning budget capé à 1024 (fix dynamique)
 
 ### Contexte
-[packages/opencode/src/session/llm.ts:62](packages/opencode/src/session/llm.ts#L62) cape à 1024 tokens. Qwen-3-Thinking et DeepSeek-R1 produisent couramment 2-8 K tokens de raisonnement. Cap dynamique par famille de modèle requis.
+[packages/unifia/src/session/llm.ts:62](packages/unifia/src/session/llm.ts#L62) cape à 1024 tokens. Qwen-3-Thinking et DeepSeek-R1 produisent couramment 2-8 K tokens de raisonnement. Cap dynamique par famille de modèle requis.
 
 ### Étape 1 — Lire le contexte
 
-Lire [packages/opencode/src/session/llm.ts:40-70](packages/opencode/src/session/llm.ts#L40-L70) pour voir la fonction `getLocalLLMAdaptiveLimits`.
+Lire [packages/unifia/src/session/llm.ts:40-70](packages/unifia/src/session/llm.ts#L40-L70) pour voir la fonction `getLocalLLMAdaptiveLimits`.
 
 ### Étape 2 — Ajouter la helper `getThinkingCap`
 
@@ -310,7 +310,7 @@ Audit: d:/App/OpenCode/opencode/AUDIT_REPORT.md#a2
 Grep dans `packages/mobile/` et `packages/app/` pour trouver les destinations `fetch()` / `WebSocket` / `invoke` :
 
 - Pattern : `fetch\(` / `new WebSocket` / `EventSource` — type : ts, tsx
-- Noter les URLs (localhost, 127.0.0.1, huggingface.co, opencode.ai, etc.)
+- Noter les URLs (localhost, 127.0.0.1, huggingface.co, unifia.ai, etc.)
 
 À l'audit, les domaines observés sont :
 - `http://127.0.0.1:14097` (llama-server)
@@ -365,7 +365,7 @@ Audit: d:/App/OpenCode/opencode/AUDIT_REPORT.md#a10
 ## A.14 — Regex `QUANT_SUFFIX` ancrée
 
 ### Contexte
-[packages/opencode/src/local-llm-server/index.ts:135](packages/opencode/src/local-llm-server/index.ts#L135) : regex avec `.*$` peut backtracker sur noms de fichiers tordus.
+[packages/unifia/src/local-llm-server/index.ts:135](packages/unifia/src/local-llm-server/index.ts#L135) : regex avec `.*$` peut backtracker sur noms de fichiers tordus.
 
 ### Étape 1 — Anchor à chercher
 
@@ -388,7 +388,7 @@ Grep : `QUANT_SUFFIX` — type: ts. Lire chaque occurrence, s'assurer que l'usag
 ### Étape 4 — Vérification + Commit
 ```bash
 bun run typecheck
-bun test packages/opencode/src/local-llm-server
+bun test packages/unifia/src/local-llm-server
 ```
 Commit similaire aux précédents, référence `#a14`.
 
@@ -397,7 +397,7 @@ Commit similaire aux précédents, référence `#a14`.
 ## A.15 — Supprimer le tokenizer inline dupliqué
 
 ### Contexte
-[packages/opencode/src/session/llm.ts:171](packages/opencode/src/session/llm.ts#L171) redéfinit `estimateTokens = (text) => Math.ceil(text.length / 4)` inline. Duplicat de `Token.estimate`.
+[packages/unifia/src/session/llm.ts:171](packages/unifia/src/session/llm.ts#L171) redéfinit `estimateTokens = (text) => Math.ceil(text.length / 4)` inline. Duplicat de `Token.estimate`.
 
 ### Étape 1 — Anchor à chercher
 
@@ -510,7 +510,7 @@ Si `cargo check` échoue : lire l'erreur, fixer. Ne pas laisser d'avertissements
 ## A.6 — AbortSignal dans Promise.all de setup
 
 ### Contexte
-[packages/opencode/src/session/llm.ts:140-145](packages/opencode/src/session/llm.ts#L140-L145) : `Promise.all` ignore `input.abort`. Sur annulation utilisateur, les 4 promises continuent orphelines.
+[packages/unifia/src/session/llm.ts:140-145](packages/unifia/src/session/llm.ts#L140-L145) : `Promise.all` ignore `input.abort`. Sur annulation utilisateur, les 4 promises continuent orphelines.
 
 ### Étape 1 — Anchor
 
@@ -567,7 +567,7 @@ Commit référence `#a6`.
 ## A.8 — Circuit breaker pour `ensureCorrectModel`
 
 ### Contexte
-[packages/opencode/src/local-llm-server/index.ts:508-554](packages/opencode/src/local-llm-server/index.ts#L508-L554) : peut boucler restart indéfiniment si détection mismatch persistante.
+[packages/unifia/src/local-llm-server/index.ts:508-554](packages/unifia/src/local-llm-server/index.ts#L508-L554) : peut boucler restart indéfiniment si détection mismatch persistante.
 
 ### Étape 1 — Ajouter l'état module-level
 
@@ -631,11 +631,11 @@ Typecheck + commit référence `#a8`. Pas de test runtime facile (nécessite un 
 ## A.12 — Relire `owner.childPid` avant chaque kill
 
 ### Contexte
-[packages/opencode/src/local-llm-server/index.ts:480-537](packages/opencode/src/local-llm-server/index.ts#L480-L537) : `_ownedChildPid` module-level peut devenir stale si l'OS recycle le PID.
+[packages/unifia/src/local-llm-server/index.ts:480-537](packages/unifia/src/local-llm-server/index.ts#L480-L537) : `_ownedChildPid` module-level peut devenir stale si l'OS recycle le PID.
 
 ### Étape 1 — Identifier tous les `process.kill(` dans ce fichier
 
-Grep `process.kill\(` dans `packages/opencode/src/local-llm-server/`. Probable : 3-4 sites.
+Grep `process.kill\(` dans `packages/unifia/src/local-llm-server/`. Probable : 3-4 sites.
 
 ### Étape 2 — Créer un helper sûr
 
@@ -877,7 +877,7 @@ Suspect, pas confirmé. **Ne PAS** appliquer ce fix sans avoir d'abord mesuré.
 
 ### Étape 2 — Si confirmé, fix
 
-Ajouter dans [packages/opencode/src/session/llm.ts:107-119](packages/opencode/src/session/llm.ts#L107-L119) :
+Ajouter dans [packages/unifia/src/session/llm.ts:107-119](packages/unifia/src/session/llm.ts#L107-L119) :
 
 ```ts
                 const ctrl = yield* Effect.acquireRelease(
@@ -918,7 +918,7 @@ Pour brièveté, voici les anchors et remplacements directs. Mêmes règles qu'a
 - **Ne PAS** migrer aveuglément si le store n'offre pas de chiffrement at-rest — documenter le gap.
 
 ### A.17 — Ring buffer stderr 16 KB + miroir
-Fichier : [packages/opencode/src/local-llm-server/index.ts:55](packages/opencode/src/local-llm-server/index.ts#L55). Anchor `const STDERR_BUFFER_SIZE = 4096`. Remplacer par `16384`.
+Fichier : [packages/unifia/src/local-llm-server/index.ts:55](packages/unifia/src/local-llm-server/index.ts#L55). Anchor `const STDERR_BUFFER_SIZE = 4096`. Remplacer par `16384`.
 
 Pour le miroir fichier (plus de travail) : créer un helper qui écrit `fs.appendFileSync(logPath, chunk)` en parallèle du ring buffer. Path `path.join(runtimeDir, "logs", \`llama-stderr-${pid}.log\`)`. Rotation : à l'ouverture, si >5 fichiers dans logs/, supprimer le plus vieux.
 
@@ -938,7 +938,7 @@ Fichier [packages/app/src/components/dialog-local-llm.tsx:155-164](packages/app/
 ```
 
 ### A.19 — Deep-link dual scheme cleanup
-[packages/mobile/src-tauri/tauri.conf.json:44-49](packages/mobile/src-tauri/tauri.conf.json#L44-L49) : **si** l'utilisateur ne contrôle pas `opencode.ai/.well-known/assetlinks.json`, retirer l'intent-filter `https` du manifeste généré. Pour l'instant, documenter uniquement dans [ANDROID_AUDIT.md](ANDROID_AUDIT.md), **ne pas** modifier le fichier auto-généré (il sera régénéré).
+[packages/mobile/src-tauri/tauri.conf.json:44-49](packages/mobile/src-tauri/tauri.conf.json#L44-L49) : **si** l'utilisateur ne contrôle pas `unifia.ai/.well-known/assetlinks.json`, retirer l'intent-filter `https` du manifeste généré. Pour l'instant, documenter uniquement dans [ANDROID_AUDIT.md](ANDROID_AUDIT.md), **ne pas** modifier le fichier auto-généré (il sera régénéré).
 
 ---
 
@@ -947,7 +947,7 @@ Fichier [packages/app/src/components/dialog-local-llm.tsx:155-164](packages/app/
 ```bash
 cd d:/App/OpenCode/opencode
 bun run typecheck                              # 0 errors
-cd packages/opencode && bun test                # passes
+cd packages/unifia && bun test                # passes
 cd ../mobile/src-tauri && cargo check           # 0 errors
 cd ../desktop/src-tauri && cargo check          # 0 errors
 ```
@@ -962,7 +962,7 @@ Si une de ces étapes fail après un fix — **rollback le fix spécifique**, di
 - Perf : [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)
 - Android : [ANDROID_AUDIT.md](ANDROID_AUDIT.md)
 - Règles : [CLAUDE.md](CLAUDE.md)
-- Roadmap : `D:/Documents/Obsidian/IA_Dev_Brain/OpenCode/Plan Directeur — Roadmap OpenCode (7 Chantiers).md` → **Chantier 8**
+- Roadmap : `D:/Documents/Obsidian/IA_Dev_Brain/OpenCode/Plan Directeur — Roadmap Unifia (7 Chantiers).md` → **Chantier 8**
 
 ---
 

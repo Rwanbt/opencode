@@ -20,15 +20,15 @@ beforeAll(async () => {
       },
     }),
   }))
-  mock.module("@opencode-ai/ui/collapsible", () => ({
+  mock.module("@unifia/ui/collapsible", () => ({
     Collapsible: {
       Trigger: (props: { children?: unknown }) => props.children,
       Content: (props: { children?: unknown }) => props.children,
     },
   }))
-  mock.module("@opencode-ai/ui/file-icon", () => ({ FileIcon: () => null }))
-  mock.module("@opencode-ai/ui/icon", () => ({ Icon: () => null }))
-  mock.module("@opencode-ai/ui/tooltip", () => ({ Tooltip: (props: { children?: unknown }) => props.children }))
+  mock.module("@unifia/ui/file-icon", () => ({ FileIcon: () => null }))
+  mock.module("@unifia/ui/icon", () => ({ Icon: () => null }))
+  mock.module("@unifia/ui/tooltip", () => ({ Tooltip: (props: { children?: unknown }) => props.children }))
   // Stub FileTreeActions — it pulls in Kobalte (ContextMenu/DropdownMenu) which
   // touch client-only APIs at module load time. The functions under test
   // (shouldListRoot / shouldListExpanded / dirsToExpand) don't need it.

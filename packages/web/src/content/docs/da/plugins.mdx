@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Skriv dine egne plugins for at udvide OpenCode.
+description: Skriv dine egne plugins for at udvide Unifia.
 ---
 
-Plugins giver dig mulighed for at udvide OpenCode ved at tilslutte sig forskellige begivenheder og tilpasse adfærd. Du kan oprette plugins for at tilføje nye funktioner, integrere med eksterne tjenester eller ændre OpenCodes standardadfærd.
+Plugins giver dig mulighed for at udvide Unifia ved at tilslutte sig forskellige begivenheder og tilpasse adfærd. Du kan oprette plugins for at tilføje nye funktioner, integrere med eksterne tjenester eller ændre OpenCodes standardadfærd.
 
 For eksempler, tjek [plugins](/docs/ecosystem#plugins) oprettet af fællesskabet.
 
@@ -30,7 +30,7 @@ Filer i disse mapper indlæses automatisk ved opstart.
 
 Angiv npm-pakker i din konfigurationsfil.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -56,7 +56,7 @@ Gennemse tilgængelige plugins i [ecosystem](/docs/ecosystem#plugins).
 Plugins indlæses fra alle kilder, og alle hooks kører i rækkefølge. Indlæsningsrækkefølgen er:
 
 1. Global konfiguration (`~/.config/opencode/opencode.json`)
-2. Projektkonfiguration (`opencode.json`)
+2. Projektkonfiguration (`unifia.json`)
 3. Global plugin-mappe (`~/.config/opencode/plugins/`)
 4. Projekt plugin bibliotek (`.opencode/plugins/`)
 
@@ -83,7 +83,7 @@ Lokale plugins og brugerdefinerede værktøjer kan bruge eksterne npm-pakker. Ti
 }
 ```
 
-OpenCode kører `bun install` ved opstart for at installere disse. Dine plugins og værktøjer kan derefter importere dem.
+Unifia kører `bun install` ved opstart for at installere disse. Dine plugins og værktøjer kan derefter importere dem.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -118,7 +118,7 @@ Plugin-funktionen modtager:
 - `project`: Den aktuelle projektinformation.
 - `directory`: Den aktuelle arbejdsmappe.
 - `worktree`: Git worktree-stien.
-- `client`: En opencode SDK klient til interaktion med AI.
+- `client`: En unifia SDK klient til interaktion med AI.
 - `$`: Buns [shell API](https://bun.com/docs/runtime/shell) til udførelse af kommandoer.
 
 ---
@@ -128,7 +128,7 @@ Plugin-funktionen modtager:
 For TypeScript-plugins kan du importere typer fra plugin-pakken:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -211,7 +211,7 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 
 ## Eksempler
 
-Her er nogle eksempler på plugins, du kan bruge til at udvide opencode.
+Her er nogle eksempler på plugins, du kan bruge til at udvide unifia.
 
 ---
 
@@ -225,7 +225,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "unifia"'`
       }
     },
   }
@@ -235,14 +235,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Vi bruger `osascript` til at køre AppleScript på macOS. Her bruger vi det til at sende notifikationer.
 
 :::note
-Hvis du bruger OpenCode desktop-appen, kan den sende systemmeddelelser automatisk, når et svar er klar, eller når en session fejler.
+Hvis du bruger Unifia desktop-appen, kan den sende systemmeddelelser automatisk, når et svar er klar, eller når en session fejler.
 :::
 
 ---
 
 ### .env-beskyttelse
 
-Undgå opencode i at læse `.env` filer:
+Undgå unifia i at læse `.env` filer:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -277,10 +277,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Brugerdefinerede værktøjer
 
-Plugins kan også tilføje brugerdefinerede værktøjer til opencode:
+Plugins kan også tilføje brugerdefinerede værktøjer til unifia:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@unifia/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool`-hjælperen opretter et brugerdefineret værktøj, som opencode kan kalde. Det tager en Zod-skemafunktion og returnerer en værktøjsdefinition med:
+`tool`-hjælperen opretter et brugerdefineret værktøj, som unifia kan kalde. Det tager en Zod-skemafunktion og returnerer en værktøjsdefinition med:
 
 - `description`: Hvad værktøjet gør
 - `args`: Zod-skema for værktøjets argumenter
 - `execute`: Funktion, der kører, når værktøjet kaldes
 
-Dine tilpassede værktøjer vil være tilgængelige for opencode sammen med indbyggede værktøjer.
+Dine tilpassede værktøjer vil være tilgængelige for unifia sammen med indbyggede værktøjer.
 
 :::note
 Hvis et plugin-værktøj bruger samme navn som et indbygget værktøj, har plugin-værktøjet forrang.
@@ -340,7 +340,7 @@ Niveauer: `debug`, `info`, `warn`, `error`. Se [SDK documentation](https://openc
 Tilpas konteksten inkluderet, når en session komprimeres:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -364,7 +364,7 @@ Include any state that should persist across compaction:
 Du kan også erstatte komprimeringsprompten helt ved at indstille `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@unifia/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

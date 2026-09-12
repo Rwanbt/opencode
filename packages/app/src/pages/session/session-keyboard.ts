@@ -3,7 +3,7 @@
  * Extracted from session.tsx to keep that file under the 1500-LOC budget.
  */
 import { shouldFocusTerminalOnKeyDown, focusTerminalById } from "@/pages/session/helpers"
-import type { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { useDialog } from "@unifia/ui/context/dialog"
 import type { useTerminal } from "@/context/terminal"
 
 interface KeyboardHandlerDeps {

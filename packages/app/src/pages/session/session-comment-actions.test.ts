@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { previewSelectedLines } from "@unifia/ui/pierre/selection-bridge"
 import { createCommentActions } from "./session-comment-actions"
 import type { FileSelection } from "@/context/file/types"
 

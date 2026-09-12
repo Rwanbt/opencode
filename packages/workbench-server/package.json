@@ -1,0 +1,11 @@
+{
+  "name": "@unifia/workbench-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts", "./bootstrap": "./src/bootstrap.ts" },
+  "scripts": { "typecheck": "bun x tsc --noEmit", "test": "bun test test/handshake.test.ts test/server.test.ts test/bootstrap.test.ts test/topology.test.ts test/auth.test.ts test/present-link.test.ts test/operations.test.ts test/connected-surfaces.test.ts test/workspace-events.test.ts test/canonical-authority-e2e.test.ts test/e2e-full-journey.test.ts test/phase1-vertical-slice.test.ts && bunx vitest run --pool=threads --poolOptions.threads.singleThread test/security.test.ts test/cors-preflight.test.ts test/cors-contract.test.ts test/route-parity.test.ts test/capability-scope.test.ts test/surface-capability.test.ts test/artifact-isolation.test.ts test/approval-expiry.test.ts test/file-index-missing-prefix.test.ts", "test:transport": "bun test test/real-transport.test.ts --timeout 60000", "start": "bun src/bootstrap.ts" },
+  "dependencies": { "@unifia/artifact-runtime": "workspace:*", "@unifia/contracts": "workspace:*", "@unifia/spec-runtime": "workspace:*", "@unifia/workspace-runtime": "workspace:*", "@unifia/workflow-runtime": "workspace:*", "@unifia/memory-runtime": "workspace:*", "@unifia/skill-hub": "workspace:*" },
+  "devDependencies": { "@types/bun": "catalog:", "@types/node": "catalog:", "typescript": "catalog:", "@unifia/workbench-shell": "workspace:*" }
+}

@@ -9,7 +9,7 @@
 // same `SDKProvider` as `useSync()`) so each open project gets its own
 // diagnostic cache and the listener auto-tears-down on directory change.
 
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import { onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useSDK } from "./sdk"

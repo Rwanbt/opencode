@@ -12,7 +12,7 @@ import { produce, reconcile } from "solid-js/store"
 import type { Session, Message } from "../../types/sdk-shim"
 import type { useGlobalSDK } from "@/context/global-sdk"
 import type { useGlobalSync } from "@/context/global-sync"
-import { retry } from "@opencode-ai/util/retry"
+import { retry } from "@unifia/util/retry"
 import { workspaceKey } from "./helpers"
 import {
   clearSessionPrefetchInflight,
@@ -125,7 +125,7 @@ export function createPrefetchSystem(deps: PrefetchSystemDeps): PrefetchSystem {
             const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
             const sorted = mergeByID([], next)
             const stale = markPrefetched(directory, sessionID)
-            const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
+            const cursor = messages.response?.headers.get("x-next-cursor") ?? undefined
             const meta = {
               limit: sorted.length,
               cursor,

@@ -12,385 +12,68 @@ export type BadRequestError = {
   success: false
 }
 
-export type Project = {
-  id: string
-  worktree: string
-  vcs?: "git"
-  name?: string
-  icon?: {
-    url?: string
-    override?: string
-    color?: string
-  }
-  commands?: {
-    /**
-     * Startup script to run when creating a new workspace (worktree)
-     */
-    start?: string
-  }
-  time: {
-    created: number
-    updated: number
-    initialized?: number
-  }
-  sandboxes: Array<string>
-}
-
-export type EventProjectUpdated = {
-  type: "project.updated"
-  properties: Project
-}
-
-export type EventInstallationUpdated = {
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
-  }
-}
-
-export type EventServerInstanceDisposed = {
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventLspClientDiagnostics = {
-  type: "lsp.client.diagnostics"
-  properties: {
-    serverID: string
-    path: string
-  }
-}
-
-export type EventLspUpdated = {
-  type: "lsp.updated"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventMessagePartDelta = {
-  type: "message.part.delta"
-  properties: {
-    sessionID: string
-    messageID: string
-    partID: string
-    field: string
-    delta: string
-  }
-}
-
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
-  always: Array<string>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventPermissionAsked = {
-  type: "permission.asked"
-  properties: PermissionRequest
-}
-
-export type EventPermissionReplied = {
-  type: "permission.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    reply: "once" | "always" | "reject"
-  }
-}
-
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      next: number
-    }
-  | {
-      type: "busy"
-    }
-  | {
-      type: "queued"
-    }
-  | {
-      type: "blocked"
-      reason?: string
-    }
-  | {
-      type: "awaiting_input"
-      question?: string
-    }
-  | {
-      type: "completed"
-      result?: string
-    }
-  | {
-      type: "failed"
-      error?: string
-    }
-  | {
-      type: "cancelled"
-    }
-
-export type EventSessionStatus = {
-  type: "session.status"
-  properties: {
-    sessionID: string
-    status: SessionStatus
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventTaskCreated = {
-  type: "task.created"
-  properties: {
-    sessionID: string
-    parentID: string
-    agent: string
-    description: string
-  }
-}
-
-export type EventTaskCompleted = {
-  type: "task.completed"
-  properties: {
-    sessionID: string
-    parentID: string
-    result?: string
-  }
-}
-
-export type EventTaskFailed = {
-  type: "task.failed"
-  properties: {
-    sessionID: string
-    parentID: string
-    error: string
-  }
-}
-
-export type EventTaskCancelled = {
-  type: "task.cancelled"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventTaskBlocked = {
-  type: "task.blocked"
-  properties: {
-    sessionID: string
-    reason?: string
-  }
-}
-
-export type EventTaskInputNeeded = {
-  type: "task.input_needed"
-  properties: {
-    sessionID: string
-    parentID: string
-    question: string
-  }
-}
-
-export type EventTeamCompleted = {
-  type: "team.completed"
-  properties: {
-    sessionID: string
-    tasks: Array<{
-      sessionID: string
-      status: string
-      description: string
-      result?: string
-    }>
-    totalCost: number
-  }
-}
-
-export type EventSessionAllIdle = {
-  type: "session.all_idle"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type QuestionOption = {
-  /**
-   * Display text (1-5 words, concise)
-   */
-  label: string
-  /**
-   * Explanation of choice
-   */
-  description: string
-}
-
-export type QuestionInfo = {
-  /**
-   * Complete question
-   */
-  question: string
-  /**
-   * Very short label (max 30 chars)
-   */
-  header: string
-  /**
-   * Available choices
-   */
-  options: Array<QuestionOption>
-  /**
-   * Allow selecting multiple choices
-   */
-  multiple?: boolean
-  /**
-   * Allow typing a custom answer (default: true)
-   */
-  custom?: boolean
-}
-
-export type QuestionRequest = {
-  id: string
-  sessionID: string
-  /**
-   * Questions to ask
-   */
-  questions: Array<QuestionInfo>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventQuestionAsked = {
-  type: "question.asked"
-  properties: QuestionRequest
-}
-
-export type QuestionAnswer = Array<string>
-
-export type EventQuestionReplied = {
-  type: "question.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
-}
-
-export type EventQuestionRejected = {
-  type: "question.rejected"
-  properties: {
-    sessionID: string
-    requestID: string
-  }
-}
-
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventWorkspaceReady = {
-  type: "workspace.ready"
-  properties: {
-    name: string
-  }
-}
-
-export type EventWorkspaceFailed = {
-  type: "workspace.failed"
-  properties: {
-    message: string
-  }
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
-export type EventCollectiveDebateStarted = {
-  type: "collective.debate.started"
+export type EventCollectiveCanaryResult = {
+  type: "collective.canary.result"
   properties: {
     debateID: string
-    tier: "free" | "quick" | "standard" | "deep"
-    providers: Array<string>
+    detected: boolean
+  }
+}
+
+export type EventCollectiveClaimExtracted = {
+  type: "collective.claim.extracted"
+  properties: {
+    debateID: string
+    claimId: string
+    category: string
+    novelty: string
+  }
+}
+
+export type EventCollectiveConvergenceRound = {
+  type: "collective.convergence.round"
+  properties: {
+    debateID: string
+    round: number
+    claimsResubmitted: number
+  }
+}
+
+export type EventCollectiveCostUpdate = {
+  type: "collective.cost.update"
+  properties: {
+    debateID: string
+    spent: number
+    budget: number
+    percent: number
+  }
+}
+
+export type EventCollectiveDebateBudgetWarning = {
+  type: "collective.debate.budget_warning"
+  properties: {
+    debateID: string
+    percentUsed: number
+    tokensUsed: number
+    tokenLimit: number
+  }
+}
+
+export type EventCollectiveDebateCompleted = {
+  type: "collective.debate.completed"
+  properties: {
+    debateID: string
+    blindSpotCount: number
+    cost: number
+    durationMs: number
+  }
+}
+
+export type EventCollectiveDebateFailed = {
+  type: "collective.debate.failed"
+  properties: {
+    debateID: string
+    error: string
   }
 }
 
@@ -410,21 +93,22 @@ export type EventCollectiveDebatePhaseChanged = {
   }
 }
 
-export type EventCollectiveProviderStarted = {
-  type: "collective.provider.started"
+export type EventCollectiveDebateStarted = {
+  type: "collective.debate.started"
   properties: {
     debateID: string
-    provider: string
-    role?: string
-    phase:
-      | "pending"
-      | "phase1_diverge"
-      | "phase2_extract"
-      | "phase3_converge"
-      | "phase4_synthesize"
-      | "completed"
-      | "failed"
-      | "cancelled"
+    tier: "free" | "quick" | "standard" | "deep"
+    providers: Array<string>
+  }
+}
+
+export type EventCollectiveHalting = {
+  type: "collective.halting"
+  properties: {
+    debateID: string
+    reason: string
+    marginalGain: number
+    marginalCost: number
   }
 }
 
@@ -465,23 +149,21 @@ export type EventCollectiveProviderFailed = {
   }
 }
 
-export type EventCollectiveClaimExtracted = {
-  type: "collective.claim.extracted"
+export type EventCollectiveProviderStarted = {
+  type: "collective.provider.started"
   properties: {
     debateID: string
-    claimId: string
-    category: string
-    novelty: string
-  }
-}
-
-export type EventCollectiveCostUpdate = {
-  type: "collective.cost.update"
-  properties: {
-    debateID: string
-    spent: number
-    budget: number
-    percent: number
+    provider: string
+    role?: string
+    phase:
+      | "pending"
+      | "phase1_diverge"
+      | "phase2_extract"
+      | "phase3_converge"
+      | "phase4_synthesize"
+      | "completed"
+      | "failed"
+      | "cancelled"
   }
 }
 
@@ -490,61 +172,6 @@ export type EventCollectiveRedteamActivated = {
   properties: {
     debateID: string
     reason: string
-  }
-}
-
-export type EventCollectiveConvergenceRound = {
-  type: "collective.convergence.round"
-  properties: {
-    debateID: string
-    round: number
-    claimsResubmitted: number
-  }
-}
-
-export type EventCollectiveCanaryResult = {
-  type: "collective.canary.result"
-  properties: {
-    debateID: string
-    detected: boolean
-  }
-}
-
-export type EventCollectiveHalting = {
-  type: "collective.halting"
-  properties: {
-    debateID: string
-    reason: string
-    marginalGain: number
-    marginalCost: number
-  }
-}
-
-export type EventCollectiveDebateCompleted = {
-  type: "collective.debate.completed"
-  properties: {
-    debateID: string
-    blindSpotCount: number
-    cost: number
-    durationMs: number
-  }
-}
-
-export type EventCollectiveDebateFailed = {
-  type: "collective.debate.failed"
-  properties: {
-    debateID: string
-    error: string
-  }
-}
-
-export type EventCollectiveDebateBudgetWarning = {
-  type: "collective.debate.budget_warning"
-  properties: {
-    debateID: string
-    percentUsed: number
-    tokensUsed: number
-    tokenLimit: number
   }
 }
 
@@ -559,64 +186,64 @@ export type EventCollectiveShadowDivergence = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
+export type EventCommandExecuted = {
+  type: "command.executed"
   properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
+    name: string
     sessionID: string
+    arguments: string
+    messageID: string
   }
 }
 
-export type EventMcpToolsChanged = {
-  type: "mcp.tools.changed"
+export type EventFileEdited = {
+  type: "file.edited"
   properties: {
-    server: string
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
+}
+
+export type EventInstallationUpdated = {
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventLspClientDiagnostics = {
+  type: "lsp.client.diagnostics"
+  properties: {
+    serverID: string
+    path: string
+  }
+}
+
+export type EventLspUpdated = {
+  type: "lsp.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -628,278 +255,30 @@ export type EventMcpBrowserOpenFailed = {
   }
 }
 
-export type EventCommandExecuted = {
-  type: "command.executed"
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
   properties: {
-    name: string
-    sessionID: string
-    arguments: string
-    messageID: string
+    server: string
   }
 }
 
-export type FileDiff = {
-  file: string
-  before: string
-  after: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
-
-export type EventSessionDiff = {
-  type: "session.diff"
-  properties: {
-    sessionID: string
-    diff: Array<FileDiff>
-  }
-}
-
-export type ProviderAuthError = {
-  name: "ProviderAuthError"
-  data: {
-    providerID: string
-    message: string
-  }
-}
-
-export type UnknownError = {
-  name: "UnknownError"
-  data: {
-    message: string
-  }
-}
-
-export type MessageOutputLengthError = {
-  name: "MessageOutputLengthError"
-  data: {
-    [key: string]: unknown
-  }
-}
-
-export type MessageAbortedError = {
-  name: "MessageAbortedError"
-  data: {
-    message: string
-  }
-}
-
-export type StructuredOutputError = {
-  name: "StructuredOutputError"
-  data: {
-    message: string
-    retries: number
-  }
-}
-
-export type ContextOverflowError = {
-  name: "ContextOverflowError"
-  data: {
-    message: string
-    responseBody?: string
-  }
-}
-
-export type ApiError = {
-  name: "APIError"
-  data: {
-    message: string
-    statusCode?: number
-    isRetryable: boolean
-    responseHeaders?: {
-      [key: string]: string
-    }
-    responseBody?: string
-    metadata?: {
-      [key: string]: string
-    }
-  }
-}
-
-export type EventSessionError = {
-  type: "session.error"
-  properties: {
-    sessionID?: string
-    error?:
-      | ProviderAuthError
-      | UnknownError
-      | MessageOutputLengthError
-      | MessageAbortedError
-      | StructuredOutputError
-      | ContextOverflowError
-      | ApiError
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
-export type EventVcsBranchBehind = {
-  type: "vcs.branch.behind"
-  properties: {
-    branch: string
-    upstream: string
-    behind: number
-    ahead: number
-  }
-}
-
-export type Pty = {
-  id: string
-  title: string
-  command: string
-  args: Array<string>
-  cwd: string
-  status: "running" | "exited"
-  pid: number
-}
-
-export type EventPtyCreated = {
-  type: "pty.created"
-  properties: {
-    info: Pty
-  }
-}
-
-export type EventPtyUpdated = {
-  type: "pty.updated"
-  properties: {
-    info: Pty
-  }
-}
-
-export type EventPtyExited = {
-  type: "pty.exited"
-  properties: {
-    id: string
-    exitCode: number
-  }
-}
-
-export type EventPtyDeleted = {
-  type: "pty.deleted"
-  properties: {
-    id: string
-  }
-}
-
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
-  }
-}
-
-export type OutputFormatText = {
-  type: "text"
-}
-
-export type JsonSchema = {
-  [key: string]: unknown
-}
-
-export type OutputFormatJsonSchema = {
-  type: "json_schema"
-  schema: JsonSchema
-  retryCount?: number
-}
-
-export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
-
-export type UserMessage = {
-  id: string
-  sessionID: string
-  role: "user"
-  time: {
-    created: number
-  }
-  format?: OutputFormat
-  summary?: {
-    title?: string
-    body?: string
-    diffs: Array<FileDiff>
-  }
-  agent: string
-  model: {
-    providerID: string
-    modelID: string
-  }
-  system?: string
-  tools?: {
-    [key: string]: boolean
-  }
-  variant?: string
-}
-
-export type AssistantMessage = {
-  id: string
-  sessionID: string
-  role: "assistant"
-  time: {
-    created: number
-    completed?: number
-  }
-  error?:
-    | ProviderAuthError
-    | UnknownError
-    | MessageOutputLengthError
-    | MessageAbortedError
-    | StructuredOutputError
-    | ContextOverflowError
-    | ApiError
-  parentID: string
-  modelID: string
-  providerID: string
-  mode: string
-  agent: string
-  path: {
-    cwd: string
-    root: string
-  }
-  summary?: boolean
-  cost: number
-  tokens: {
-    total?: number
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  structured?: unknown
-  variant?: string
-  finish?: string
-}
-
-export type Message = UserMessage | AssistantMessage
-
-export type EventMessageUpdated = {
-  type: "message.updated"
-  properties: {
-    sessionID: string
-    info: Message
-  }
-}
-
-export type EventMessageRemoved = {
-  type: "message.removed"
+export type EventMessagePartDelta = {
+  type: "message.part.delta"
   properties: {
     sessionID: string
     messageID: string
+    partID: string
+    field: string
+    delta: string
+  }
+}
+
+export type EventMessagePartRemoved = {
+  type: "message.part.removed"
+  properties: {
+    sessionID: string
+    messageID: string
+    partID: string
   }
 }
 
@@ -1130,6 +509,22 @@ export type AgentPart = {
   }
 }
 
+export type ApiError = {
+  name: "APIError"
+  data: {
+    message: string
+    statusCode?: number
+    isRetryable: boolean
+    responseHeaders?: {
+      [key: string]: string
+    }
+    responseBody?: string
+    metadata?: {
+      [key: string]: string
+    }
+  }
+}
+
 export type RetryPart = {
   id: string
   sessionID: string
@@ -1174,12 +569,354 @@ export type EventMessagePartUpdated = {
   }
 }
 
-export type EventMessagePartRemoved = {
-  type: "message.part.removed"
+export type EventMessageRemoved = {
+  type: "message.removed"
   properties: {
     sessionID: string
     messageID: string
-    partID: string
+  }
+}
+
+export type OutputFormatText = {
+  type: "text"
+}
+
+export type JsonSchema = {
+  [key: string]: unknown
+}
+
+export type OutputFormatJsonSchema = {
+  type: "json_schema"
+  schema: JsonSchema
+  retryCount?: number
+}
+
+export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
+export type FileDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+
+export type UserMessage = {
+  id: string
+  sessionID: string
+  role: "user"
+  time: {
+    created: number
+  }
+  format?: OutputFormat
+  summary?: {
+    title?: string
+    body?: string
+    diffs: Array<FileDiff>
+  }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
+  }
+  variant?: string
+}
+
+export type ProviderAuthError = {
+  name: "ProviderAuthError"
+  data: {
+    providerID: string
+    message: string
+  }
+}
+
+export type UnknownError = {
+  name: "UnknownError"
+  data: {
+    message: string
+  }
+}
+
+export type MessageOutputLengthError = {
+  name: "MessageOutputLengthError"
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type MessageAbortedError = {
+  name: "MessageAbortedError"
+  data: {
+    message: string
+  }
+}
+
+export type StructuredOutputError = {
+  name: "StructuredOutputError"
+  data: {
+    message: string
+    retries: number
+  }
+}
+
+export type ContextOverflowError = {
+  name: "ContextOverflowError"
+  data: {
+    message: string
+    responseBody?: string
+  }
+}
+
+export type AssistantMessage = {
+  id: string
+  sessionID: string
+  role: "assistant"
+  time: {
+    created: number
+    completed?: number
+  }
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | StructuredOutputError
+    | ContextOverflowError
+    | ApiError
+  parentID: string
+  modelID: string
+  providerID: string
+  mode: string
+  agent: string
+  path: {
+    cwd: string
+    root: string
+  }
+  summary?: boolean
+  cost: number
+  tokens: {
+    total?: number
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  structured?: unknown
+  variant?: string
+  finish?: string
+}
+
+export type Message = UserMessage | AssistantMessage
+
+export type EventMessageUpdated = {
+  type: "message.updated"
+  properties: {
+    sessionID: string
+    info: Message
+  }
+}
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPermissionAsked = {
+  type: "permission.asked"
+  properties: PermissionRequest
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+  }
+}
+
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url?: string
+    override?: string
+    color?: string
+  }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
+  time: {
+    created: number
+    updated: number
+    initialized?: number
+  }
+  sandboxes: Array<string>
+}
+
+export type EventProjectUpdated = {
+  type: "project.updated"
+  properties: Project
+}
+
+export type Pty = {
+  id: string
+  title: string
+  command: string
+  args: Array<string>
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type EventPtyCreated = {
+  type: "pty.created"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyDeleted = {
+  type: "pty.deleted"
+  properties: {
+    id: string
+  }
+}
+
+export type EventPtyExited = {
+  type: "pty.exited"
+  properties: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type EventPtyUpdated = {
+  type: "pty.updated"
+  properties: {
+    info: Pty
+  }
+}
+
+export type QuestionOption = {
+  /**
+   * Display text (1-5 words, concise)
+   */
+  label: string
+  /**
+   * Explanation of choice
+   */
+  description: string
+}
+
+export type QuestionInfo = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionOption>
+  /**
+   * Allow selecting multiple choices
+   */
+  multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventQuestionAsked = {
+  type: "question.asked"
+  properties: QuestionRequest
+}
+
+export type EventQuestionRejected = {
+  type: "question.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type QuestionAnswer = Array<string>
+
+export type EventQuestionReplied = {
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventServerInstanceDisposed = {
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
+  }
+}
+
+export type EventSessionAllIdle = {
+  type: "session.all_idle"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -1235,14 +972,6 @@ export type EventSessionCreated = {
   }
 }
 
-export type EventSessionUpdated = {
-  type: "session.updated"
-  properties: {
-    sessionID: string
-    info: Session
-  }
-}
-
 export type EventSessionDeleted = {
   type: "session.deleted"
   properties: {
@@ -1251,76 +980,347 @@ export type EventSessionDeleted = {
   }
 }
 
+export type EventSessionDiff = {
+  type: "session.diff"
+  properties: {
+    sessionID: string
+    diff: Array<FileDiff>
+  }
+}
+
+export type EventSessionError = {
+  type: "session.error"
+  properties: {
+    sessionID?: string
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | StructuredOutputError
+      | ContextOverflowError
+      | ApiError
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+  | {
+      type: "queued"
+    }
+  | {
+      type: "blocked"
+      reason?: string
+    }
+  | {
+      type: "awaiting_input"
+      question?: string
+    }
+  | {
+      type: "completed"
+      result?: string
+    }
+  | {
+      type: "failed"
+      error?: string
+    }
+  | {
+      type: "cancelled"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionUpdated = {
+  type: "session.updated"
+  properties: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type EventTaskBlocked = {
+  type: "task.blocked"
+  properties: {
+    sessionID: string
+    reason?: string
+  }
+}
+
+export type EventTaskCancelled = {
+  type: "task.cancelled"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventTaskCompleted = {
+  type: "task.completed"
+  properties: {
+    sessionID: string
+    parentID: string
+    result?: string
+  }
+}
+
+export type EventTaskCreated = {
+  type: "task.created"
+  properties: {
+    sessionID: string
+    parentID: string
+    agent: string
+    description: string
+  }
+}
+
+export type EventTaskFailed = {
+  type: "task.failed"
+  properties: {
+    sessionID: string
+    parentID: string
+    error: string
+  }
+}
+
+export type EventTaskInputNeeded = {
+  type: "task.input_needed"
+  properties: {
+    sessionID: string
+    parentID: string
+    question: string
+  }
+}
+
+export type EventTeamCompleted = {
+  type: "team.completed"
+  properties: {
+    sessionID: string
+    tasks: Array<{
+      sessionID: string
+      status: string
+      description: string
+      result?: string
+    }>
+    totalCost: number
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventVcsBranchBehind = {
+  type: "vcs.branch.behind"
+  properties: {
+    branch: string
+    upstream: string
+    behind: number
+    ahead: number
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
 export type Event =
-  | EventProjectUpdated
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
-  | EventServerInstanceDisposed
-  | EventServerConnected
-  | EventGlobalDisposed
-  | EventLspClientDiagnostics
-  | EventLspUpdated
-  | EventMessagePartDelta
-  | EventPermissionAsked
-  | EventPermissionReplied
-  | EventSessionStatus
-  | EventSessionIdle
-  | EventTaskCreated
-  | EventTaskCompleted
-  | EventTaskFailed
-  | EventTaskCancelled
-  | EventTaskBlocked
-  | EventTaskInputNeeded
-  | EventTeamCompleted
-  | EventSessionAllIdle
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
-  | EventSessionCompacted
-  | EventFileWatcherUpdated
-  | EventFileEdited
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
-  | EventTodoUpdated
-  | EventCollectiveDebateStarted
-  | EventCollectiveDebatePhaseChanged
-  | EventCollectiveProviderStarted
-  | EventCollectiveProviderCompleted
-  | EventCollectiveProviderFailed
-  | EventCollectiveClaimExtracted
-  | EventCollectiveCostUpdate
-  | EventCollectiveRedteamActivated
-  | EventCollectiveConvergenceRound
   | EventCollectiveCanaryResult
-  | EventCollectiveHalting
+  | EventCollectiveClaimExtracted
+  | EventCollectiveConvergenceRound
+  | EventCollectiveCostUpdate
+  | EventCollectiveDebateBudgetWarning
   | EventCollectiveDebateCompleted
   | EventCollectiveDebateFailed
-  | EventCollectiveDebateBudgetWarning
+  | EventCollectiveDebatePhaseChanged
+  | EventCollectiveDebateStarted
+  | EventCollectiveHalting
+  | EventCollectiveProviderCompleted
+  | EventCollectiveProviderFailed
+  | EventCollectiveProviderStarted
+  | EventCollectiveRedteamActivated
   | EventCollectiveShadowDivergence
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
-  | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventGlobalDisposed
+  | EventInstallationUpdateAvailable
+  | EventInstallationUpdated
+  | EventLspClientDiagnostics
+  | EventLspUpdated
+  | EventMcpBrowserOpenFailed
+  | EventMcpToolsChanged
+  | EventMessagePartDelta
+  | EventMessagePartRemoved
+  | EventMessagePartUpdated
+  | EventMessageRemoved
+  | EventMessageUpdated
+  | EventPermissionAsked
+  | EventPermissionReplied
+  | EventProjectUpdated
+  | EventPtyCreated
+  | EventPtyDeleted
+  | EventPtyExited
+  | EventPtyUpdated
+  | EventQuestionAsked
+  | EventQuestionRejected
+  | EventQuestionReplied
+  | EventServerConnected
+  | EventServerInstanceDisposed
+  | EventSessionAllIdle
+  | EventSessionCompacted
+  | EventSessionCreated
+  | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventVcsBranchUpdated
-  | EventVcsBranchBehind
-  | EventPtyCreated
-  | EventPtyUpdated
-  | EventPtyExited
-  | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
-  | EventMessageUpdated
-  | EventMessageRemoved
-  | EventMessagePartUpdated
-  | EventMessagePartRemoved
-  | EventSessionCreated
+  | EventSessionIdle
+  | EventSessionStatus
   | EventSessionUpdated
-  | EventSessionDeleted
+  | EventTaskBlocked
+  | EventTaskCancelled
+  | EventTaskCompleted
+  | EventTaskCreated
+  | EventTaskFailed
+  | EventTaskInputNeeded
+  | EventTeamCompleted
+  | EventTodoUpdated
+  | EventTuiCommandExecute
+  | EventTuiPromptAppend
+  | EventTuiSessionSelect
+  | EventTuiToastShow
+  | EventVcsBranchBehind
+  | EventVcsBranchUpdated
+  | EventWorkspaceFailed
+  | EventWorkspaceReady
+  | EventWorktreeFailed
+  | EventWorktreeReady
 
 export type GlobalEvent = {
   directory: string
@@ -1444,7 +1444,7 @@ export type SyncEvent = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
- * Server configuration for opencode serve and web commands
+ * Server configuration for unifia serve and web commands
  */
 export type ServerConfig = {
   /**
@@ -1460,7 +1460,7 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
-   * Custom domain name for mDNS service (default: opencode.local)
+   * Custom domain name for mDNS service (default: unifia.local)
    */
   mdnsDomain?: string
   /**
@@ -1562,41 +1562,7 @@ export type AgentConfig = {
      */
     deny?: Array<string>
   }
-  [key: string]:
-    | unknown
-    | string
-    | number
-    | {
-        [key: string]: boolean
-      }
-    | boolean
-    | "subagent"
-    | "primary"
-    | "all"
-    | {
-        [key: string]: unknown
-      }
-    | string
-    | "primary"
-    | "secondary"
-    | "accent"
-    | "success"
-    | "warning"
-    | "error"
-    | "info"
-    | number
-    | PermissionConfig
-    | {
-        /**
-         * MCP server names this agent may use
-         */
-        allow?: Array<string>
-        /**
-         * MCP server names this agent may NOT use
-         */
-        deny?: Array<string>
-      }
-    | undefined
+  [key: string]: unknown
 }
 
 export type ProviderConfig = {
@@ -1662,7 +1628,7 @@ export type ProviderConfig = {
            * Disable this variant for the model
            */
           disabled?: boolean
-          [key: string]: unknown | boolean | undefined
+          [key: string]: unknown
         }
       }
     }
@@ -1688,7 +1654,7 @@ export type ProviderConfig = {
      * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
      */
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
+    [key: string]: unknown
   }
 }
 
@@ -1774,7 +1740,7 @@ export type Config = {
   logLevel?: LogLevel
   server?: ServerConfig
   /**
-   * Command configuration, see https://opencode.ai/docs/commands
+   * Command configuration, see https://github.com/Rwanbt/unifia
    */
   command?: {
     [key: string]: {
@@ -1859,7 +1825,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agents
+   * Agent configuration, see https://github.com/Rwanbt/unifia
    */
   agent?: {
     plan?: AgentConfig
@@ -1948,6 +1914,31 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+  }
+  /**
+   * Persistent memory: a vault of Markdown notes the agent recalls and records across sessions.
+   */
+  memory?: {
+    /**
+     * Enable the persistent memory vault: the memory_search / memory_read / memory_write tools and automatic recall at the start of each turn. Default: true.
+     */
+    enabled?: boolean
+    /**
+     * Directory holding the memory notes. Relative paths resolve against the project root. Default: .unifia/memory. Point it at an existing Obsidian vault to use that vault as the memory.
+     */
+    directory?: string
+    /**
+     * Allow memory notes to be sent to a remote (cloud) model. Default: false — notes stay on the machine and only a local model recalls them. This is the one switch that widens what may leave; see ADR-KNOW-0006.
+     */
+    remote_recall?: boolean
+    /**
+     * Maximum notes injected by automatic recall at the start of a turn. Default: 5.
+     */
+    max_notes?: number
+    /**
+     * Time budget in milliseconds for automatic recall. Retrieval returns what it found when the deadline passes rather than delaying the turn. Default: 1500.
+     */
+    deadline_ms?: number
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -2228,7 +2219,7 @@ export type Config = {
        */
       inject_context?: boolean
       /**
-       * Expose OpenCode tools as AnythingLLM Agent Skills via HTTP API
+       * Expose Unifia tools as AnythingLLM Agent Skills via HTTP API
        */
       expose_tools?: boolean
       /**
@@ -2295,6 +2286,7 @@ export type Config = {
       retention_days?: number
     }
   }
+  [key: string]: unknown
 }
 
 export type OAuth = {
@@ -2828,6 +2820,64 @@ export type GitBranchEntry = {
   name: string
   current: boolean
   remote: boolean
+}
+
+export type GithubIdentity = {
+  login: string
+  name?: string
+  avatarUrl?: string
+  profileUrl: string
+}
+
+export type GithubStatus = {
+  connected: boolean
+  configured: boolean
+  identity?: GithubIdentity
+}
+
+export type GithubDeviceAuthorization = {
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresInSeconds: number
+  intervalSeconds: number
+}
+
+export type GithubPollResult = {
+  status: "pending" | "slow_down" | "expired" | "denied" | "no_pending_flow" | "success" | "error"
+  nextIntervalSeconds?: number
+  identity?: GithubIdentity
+  message?: string
+}
+
+export type GithubCapabilities = {
+  apiReachable: boolean
+  authenticated: boolean
+  privateRepositoryAccess: boolean | "unknown"
+  gitHttpsAvailable: boolean
+  gitHttpsAuthenticated: boolean
+  gitSshAvailable: boolean | "unsupported"
+  lastCheckedAt: number
+}
+
+export type GitRuntimeReport = {
+  gitAvailable: boolean
+  gitVersion?: string
+  execPath?: string
+  httpsHelperFound: boolean
+  httpsHelperPath?: string
+  httpsHelperExecutable: boolean
+  httpsProbeSucceeded: boolean
+  sshAvailable: boolean
+  platform: string
+  architecture: string
+  failure?: {
+    stage: string
+    code?: number
+    signal?: string
+    category: string
+    safeMessage: string
+  }
 }
 
 export type FormatterStatus = {
@@ -3800,6 +3850,7 @@ export type ExperimentalWorkspaceListResponse =
 export type ExperimentalWorkspaceCreateData = {
   body?: {
     id?: string
+    name?: string | null
     type: string
     branch: string | null
     extra: unknown | null
@@ -6181,6 +6232,750 @@ export type DebateFeedbackResponses = {
 }
 
 export type DebateFeedbackResponse = DebateFeedbackResponses[keyof DebateFeedbackResponses]
+
+export type TeamGetConfigData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/config"
+}
+
+export type TeamGetConfigResponses = {
+  /**
+   * Team model selection
+   */
+  200: {
+    models: Array<{
+      providerID: string
+      modelID: string
+    }>
+  } | null
+}
+
+export type TeamGetConfigResponse = TeamGetConfigResponses[keyof TeamGetConfigResponses]
+
+export type TeamConfigData = {
+  body?: {
+    models: Array<{
+      providerID: string
+      modelID: string
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/config"
+}
+
+export type TeamConfigErrors = {
+  /**
+   * Selection must contain 2-8 distinct models
+   */
+  400: {
+    error: string
+  }
+}
+
+export type TeamConfigError = TeamConfigErrors[keyof TeamConfigErrors]
+
+export type TeamConfigResponses = {
+  /**
+   * Saved Team model selection
+   */
+  200: {
+    models: Array<{
+      providerID: string
+      modelID: string
+    }>
+  }
+}
+
+export type TeamConfigResponse = TeamConfigResponses[keyof TeamConfigResponses]
+
+export type TeamListRunsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+    cursor?: string
+  }
+  url: "/team/runs"
+}
+
+export type TeamListRunsErrors = {
+  /**
+   * Bad cursor, limit or query parameter
+   */
+  400: {
+    error: string
+  }
+}
+
+export type TeamListRunsError = TeamListRunsErrors[keyof TeamListRunsErrors]
+
+export type TeamListRunsResponses = {
+  /**
+   * A page of runs
+   */
+  200: {
+    schemaVersion: string
+    items: Array<{
+      runId: string
+      schemaVersion: string
+      planId: string
+      status: "pending" | "running" | "completed" | "failed" | "aborted"
+      createdAt: string
+      updatedAt: string
+      controlStatus: "running" | "paused" | "cancelled" | null
+    }>
+    nextCursor: string | null
+  }
+}
+
+export type TeamListRunsResponse = TeamListRunsResponses[keyof TeamListRunsResponses]
+
+export type TeamStartRunData = {
+  body: {
+    description: string
+    tasks: Array<{
+      id: string
+      description: string
+      prompt: string
+      agent: string
+      mode: "read" | "write"
+      required?: boolean
+      risk?: "low" | "medium" | "high" | "critical"
+      dependsOn?: Array<string>
+      readSet?: Array<string>
+      writeSet?: Array<string>
+      modelIndex?: number
+    }>
+    budget?: {
+      maxCostUsd?: number
+      maxTokens?: number
+      maxParallel?: number
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs"
+}
+
+export type TeamStartRunErrors = {
+  /**
+   * Invalid Team task graph or Git workspace
+   */
+  400: {
+    error: string
+  }
+  /**
+   * Active Team run limit reached
+   */
+  429: {
+    error: string
+  }
+}
+
+export type TeamStartRunError = TeamStartRunErrors[keyof TeamStartRunErrors]
+
+export type TeamStartRunResponses = {
+  /**
+   * Run accepted
+   */
+  202: {
+    runId: string
+    sessionId: string
+  }
+}
+
+export type TeamStartRunResponse = TeamStartRunResponses[keyof TeamStartRunResponses]
+
+export type TeamPauseRunData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}/pause"
+}
+
+export type TeamPauseRunErrors = {
+  /**
+   * Run is not active
+   */
+  409: {
+    error: string
+  }
+}
+
+export type TeamPauseRunError = TeamPauseRunErrors[keyof TeamPauseRunErrors]
+
+export type TeamPauseRunResponses = {
+  /**
+   * Paused
+   */
+  200: {
+    runId: string
+    controlStatus: "running" | "paused" | "cancelled"
+  }
+}
+
+export type TeamPauseRunResponse = TeamPauseRunResponses[keyof TeamPauseRunResponses]
+
+export type TeamResumeRunData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}/resume"
+}
+
+export type TeamResumeRunErrors = {
+  /**
+   * Run is not active
+   */
+  409: {
+    error: string
+  }
+}
+
+export type TeamResumeRunError = TeamResumeRunErrors[keyof TeamResumeRunErrors]
+
+export type TeamResumeRunResponses = {
+  /**
+   * Running
+   */
+  200: {
+    runId: string
+    controlStatus: "running" | "paused" | "cancelled"
+  }
+}
+
+export type TeamResumeRunResponse = TeamResumeRunResponses[keyof TeamResumeRunResponses]
+
+export type TeamCancelRunData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}/cancel"
+}
+
+export type TeamCancelRunErrors = {
+  /**
+   * Run is not active
+   */
+  409: {
+    error: string
+  }
+}
+
+export type TeamCancelRunError = TeamCancelRunErrors[keyof TeamCancelRunErrors]
+
+export type TeamCancelRunResponses = {
+  /**
+   * Cancelled
+   */
+  200: {
+    runId: string
+    controlStatus: "running" | "paused" | "cancelled"
+  }
+}
+
+export type TeamCancelRunResponse = TeamCancelRunResponses[keyof TeamCancelRunResponses]
+
+export type TeamGetRunData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}"
+}
+
+export type TeamGetRunErrors = {
+  /**
+   * No such run
+   */
+  404: {
+    error: string
+  }
+}
+
+export type TeamGetRunError = TeamGetRunErrors[keyof TeamGetRunErrors]
+
+export type TeamGetRunResponses = {
+  /**
+   * The run
+   */
+  200: {
+    runId: string
+    schemaVersion: string
+    planId: string
+    status: "pending" | "running" | "completed" | "failed" | "aborted"
+    createdAt: string
+    updatedAt: string
+    controlStatus: "running" | "paused" | "cancelled" | null
+  }
+}
+
+export type TeamGetRunResponse = TeamGetRunResponses[keyof TeamGetRunResponses]
+
+export type TeamListTasksData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}/tasks"
+}
+
+export type TeamListTasksErrors = {
+  /**
+   * No such run
+   */
+  404: {
+    error: string
+  }
+}
+
+export type TeamListTasksError = TeamListTasksErrors[keyof TeamListTasksErrors]
+
+export type TeamListTasksResponses = {
+  /**
+   * The run's tasks
+   */
+  200: {
+    schemaVersion: string
+    items: Array<{
+      taskId: string
+      runId: string
+      status: "pending" | "assigned" | "running" | "completed" | "blocked" | "cancelled"
+      dependsOn: Array<string>
+      scope: unknown
+      createdAt: string
+      updatedAt: string
+    }>
+    nextCursor: string | null
+  }
+}
+
+export type TeamListTasksResponse = TeamListTasksResponses[keyof TeamListTasksResponses]
+
+export type TeamListEventsData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+    cursor?: string
+  }
+  url: "/team/runs/{runID}/events"
+}
+
+export type TeamListEventsErrors = {
+  /**
+   * Bad cursor, limit or query parameter
+   */
+  400: {
+    error: string
+  }
+  /**
+   * No such run
+   */
+  404: {
+    error: string
+  }
+}
+
+export type TeamListEventsError = TeamListEventsErrors[keyof TeamListEventsErrors]
+
+export type TeamListEventsResponses = {
+  /**
+   * A page of events
+   */
+  200: {
+    schemaVersion: string
+    items: Array<{
+      eventId: string
+      runId: string
+      sequence: number
+      kind: string
+      payload: unknown
+      occurredAt: string
+    }>
+    nextCursor: string | null
+  }
+}
+
+export type TeamListEventsResponse = TeamListEventsResponses[keyof TeamListEventsResponses]
+
+export type TeamListGatesData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/runs/{runID}/gates"
+}
+
+export type TeamListGatesErrors = {
+  /**
+   * No such run
+   */
+  404: {
+    error: string
+  }
+}
+
+export type TeamListGatesError = TeamListGatesErrors[keyof TeamListGatesErrors]
+
+export type TeamListGatesResponses = {
+  /**
+   * The run's gates
+   */
+  200: {
+    schemaVersion: string
+    items: Array<{
+      gateId: string
+      runId: string
+      taskId: string | null
+      verdict: "APPROVED" | "APPROVED_WITH_FOLLOWUP" | "CHANGES_REQUESTED"
+      findings: unknown
+      decidedAt: string
+    }>
+    nextCursor: string | null
+  }
+}
+
+export type TeamListGatesResponse = TeamListGatesResponses[keyof TeamListGatesResponses]
+
+export type ModelIntelligenceListModelsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+    cursor?: number
+    providerID?: string
+    status?: "alpha" | "beta" | "active" | "deprecated" | "quarantined"
+    lifecycleStage?: string
+    modality?: "text" | "audio" | "image" | "video" | "pdf"
+  }
+  url: "/model-intelligence/models"
+}
+
+export type ModelIntelligenceListModelsErrors = {
+  /**
+   * Unknown filter, cursor or limit
+   */
+  400: {
+    error: string
+  }
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceListModelsError =
+  ModelIntelligenceListModelsErrors[keyof ModelIntelligenceListModelsErrors]
+
+export type ModelIntelligenceListModelsResponses = {
+  /**
+   * A page of models
+   */
+  200: {
+    schemaVersion: string
+    items: Array<unknown>
+    nextCursor: string | null
+    total: number
+  }
+}
+
+export type ModelIntelligenceListModelsResponse =
+  ModelIntelligenceListModelsResponses[keyof ModelIntelligenceListModelsResponses]
+
+export type ModelIntelligenceListProvidersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+    cursor?: number
+    status?: "active" | "deprecated" | "experimental"
+  }
+  url: "/model-intelligence/providers"
+}
+
+export type ModelIntelligenceListProvidersErrors = {
+  /**
+   * Unknown filter, cursor or limit
+   */
+  400: {
+    error: string
+  }
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceListProvidersError =
+  ModelIntelligenceListProvidersErrors[keyof ModelIntelligenceListProvidersErrors]
+
+export type ModelIntelligenceListProvidersResponses = {
+  /**
+   * A page of providers
+   */
+  200: {
+    schemaVersion: string
+    items: Array<unknown>
+    nextCursor: string | null
+    total: number
+  }
+}
+
+export type ModelIntelligenceListProvidersResponse =
+  ModelIntelligenceListProvidersResponses[keyof ModelIntelligenceListProvidersResponses]
+
+export type ModelIntelligenceGetModelData = {
+  body?: never
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/models/{providerID}/{modelID}"
+}
+
+export type ModelIntelligenceGetModelErrors = {
+  /**
+   * No such model
+   */
+  404: {
+    error: string
+  }
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceGetModelError = ModelIntelligenceGetModelErrors[keyof ModelIntelligenceGetModelErrors]
+
+export type ModelIntelligenceGetModelResponses = {
+  /**
+   * The model
+   */
+  200: unknown
+}
+
+export type ModelIntelligenceResolveAliasData = {
+  body?: never
+  path: {
+    alias: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/aliases/{alias}"
+}
+
+export type ModelIntelligenceResolveAliasErrors = {
+  /**
+   * No such alias
+   */
+  404: {
+    error: string
+  }
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceResolveAliasError =
+  ModelIntelligenceResolveAliasErrors[keyof ModelIntelligenceResolveAliasErrors]
+
+export type ModelIntelligenceResolveAliasResponses = {
+  /**
+   * The resolved alias
+   */
+  200: unknown
+}
+
+export type ModelIntelligenceSnapshotData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/snapshot"
+}
+
+export type ModelIntelligenceSnapshotErrors = {
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceSnapshotError = ModelIntelligenceSnapshotErrors[keyof ModelIntelligenceSnapshotErrors]
+
+export type ModelIntelligenceSnapshotResponses = {
+  /**
+   * Snapshot identity
+   */
+  200: {
+    schemaVersion: string
+    hash: string
+    byteLength: number
+  }
+}
+
+export type ModelIntelligenceSnapshotResponse =
+  ModelIntelligenceSnapshotResponses[keyof ModelIntelligenceSnapshotResponses]
+
+export type ModelIntelligenceLicensesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/licenses"
+}
+
+export type ModelIntelligenceLicensesErrors = {
+  /**
+   * Registry not loaded
+   */
+  503: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceLicensesError = ModelIntelligenceLicensesErrors[keyof ModelIntelligenceLicensesErrors]
+
+export type ModelIntelligenceLicensesResponses = {
+  /**
+   * License notices
+   */
+  200: {
+    schemaVersion: string
+    notices: string
+  }
+}
+
+export type ModelIntelligenceLicensesResponse =
+  ModelIntelligenceLicensesResponses[keyof ModelIntelligenceLicensesResponses]
+
+export type ModelIntelligenceHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/health"
+}
+
+export type ModelIntelligenceHealthResponses = {
+  /**
+   * Load state
+   */
+  200: {
+    schemaVersion: string
+    loaded: boolean
+  }
+}
+
+export type ModelIntelligenceHealthResponse = ModelIntelligenceHealthResponses[keyof ModelIntelligenceHealthResponses]
+
+export type ModelIntelligenceSyncData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/model-intelligence/sync"
+}
+
+export type ModelIntelligenceSyncErrors = {
+  /**
+   * Unknown query parameter
+   */
+  400: {
+    error: string
+  }
+  /**
+   * The source could not be fetched, parsed or validated
+   */
+  502: {
+    error: string
+  }
+}
+
+export type ModelIntelligenceSyncError = ModelIntelligenceSyncErrors[keyof ModelIntelligenceSyncErrors]
+
+export type ModelIntelligenceSyncResponses = {
+  /**
+   * Sync result
+   */
+  200: unknown
+}
 
 export type ObservabilityHealthData = {
   body?: never
@@ -8902,6 +9697,149 @@ export type GitSetCredentialsResponses = {
 }
 
 export type GitSetCredentialsResponse = GitSetCredentialsResponses[keyof GitSetCredentialsResponses]
+
+export type GithubStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/status"
+}
+
+export type GithubStatusResponses = {
+  /**
+   * Connection status
+   */
+  200: GithubStatus
+}
+
+export type GithubStatusResponse = GithubStatusResponses[keyof GithubStatusResponses]
+
+export type GithubDeviceStartData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/start"
+}
+
+export type GithubDeviceStartErrors = {
+  /**
+   * GitHub OAuth app not configured for this build
+   */
+  503: unknown
+}
+
+export type GithubDeviceStartResponses = {
+  /**
+   * Device authorization
+   */
+  200: GithubDeviceAuthorization
+}
+
+export type GithubDeviceStartResponse = GithubDeviceStartResponses[keyof GithubDeviceStartResponses]
+
+export type GithubDevicePollData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/poll"
+}
+
+export type GithubDevicePollResponses = {
+  /**
+   * Poll result
+   */
+  200: GithubPollResult
+}
+
+export type GithubDevicePollResponse = GithubDevicePollResponses[keyof GithubDevicePollResponses]
+
+export type GithubDeviceCancelData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/device/cancel"
+}
+
+export type GithubDeviceCancelResponses = {
+  /**
+   * Cancelled
+   */
+  200: unknown
+}
+
+export type GithubDisconnectData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/disconnect"
+}
+
+export type GithubDisconnectResponses = {
+  /**
+   * Disconnected
+   */
+  200: unknown
+}
+
+export type GithubTestConnectionData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/test-connection"
+}
+
+export type GithubTestConnectionErrors = {
+  /**
+   * No GitHub session connected
+   */
+  409: unknown
+}
+
+export type GithubTestConnectionResponses = {
+  /**
+   * Capabilities
+   */
+  200: GithubCapabilities
+}
+
+export type GithubTestConnectionResponse = GithubTestConnectionResponses[keyof GithubTestConnectionResponses]
+
+export type GithubDiagnosticsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/github/diagnostics"
+}
+
+export type GithubDiagnosticsResponses = {
+  /**
+   * Diagnostics report
+   */
+  200: GitRuntimeReport
+}
+
+export type GithubDiagnosticsResponse = GithubDiagnosticsResponses[keyof GithubDiagnosticsResponses]
 
 export type FormatterStatusData = {
   body?: never

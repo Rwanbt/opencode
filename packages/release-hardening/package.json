@@ -1,0 +1,36 @@
+{
+  "name": "@unifia/release-hardening",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test/hardening.test.ts"
+  },
+  "dependencies": {
+    "@unifia/contracts": "workspace:*",
+    "@unifia/document-packs": "workspace:*",
+    "@unifia/workbench-orchestrator": "workspace:*",
+    "@unifia/workspace-runtime": "workspace:*",
+    "@unifia/artifact-runtime": "workspace:*",
+    "@unifia/artifact-studio": "workspace:*",
+    "@unifia/skill-hub": "workspace:*",
+    "@unifia/computer-use-safety": "workspace:*",
+    "@unifia/mcp-ui-actions": "workspace:*",
+    "@unifia/workbench-shell": "workspace:*",
+    "@unifia/sandbox-drivers": "workspace:*",
+    "@unifia/memory-governance": "workspace:*",
+    "@unifia/remote-bridge": "workspace:*",
+    "@unifia/workflow-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/node22": "22.0.2"
+  }
+}

@@ -10,6 +10,15 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    // sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("/src/pages/workbench/design-surface")) return "workbench-design"
+          if (id.includes("/src/pages/workbench/automate-surface")) return "workbench-automate"
+          if (id.includes("/src/pages/workbench/work-surface")) return "workbench-work"
+          return undefined
+        },
+      },
+    },
   },
 })

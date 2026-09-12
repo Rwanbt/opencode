@@ -1,0 +1,23 @@
+{
+  "name": "@unifia/automate-migration-tool",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "V1 → V2 WorkflowIR migration tool (ADR-017, plan §182-185 + §222-223). Substrate-neutral mapping contract; the runtime execution step is blocked by ADR-000.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

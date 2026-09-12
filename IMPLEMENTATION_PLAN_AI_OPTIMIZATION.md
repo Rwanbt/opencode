@@ -44,10 +44,10 @@ Le prompt système pour `local-llm` passe de **~16,200 tokens à ~1,020 tokens**
 | **Total** | **~16,200** | **~1,020** |
 
 **Fichiers modifiés :**
-- `packages/opencode/src/session/prompt/local.txt` — nouveau prompt compact
-- `packages/opencode/src/session/system.ts` — routing + env réduit + skills skip
-- `packages/opencode/src/tool/registry.ts` — whitelist + skeletons + filtrage
-- `packages/opencode/src/session/llm.ts` — prompt profiler
+- `packages/unifia/src/session/prompt/local.txt` — nouveau prompt compact
+- `packages/unifia/src/session/system.ts` — routing + env réduit + skills skip
+- `packages/unifia/src/tool/registry.ts` — whitelist + skeletons + filtrage
+- `packages/unifia/src/session/llm.ts` — prompt profiler
 
 ### Speculative Decoding (P1)
 

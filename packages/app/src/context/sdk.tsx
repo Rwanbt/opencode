@@ -1,5 +1,5 @@
 import type { Event } from "../types/sdk-shim"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@unifia/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
 import { useGlobalSDK } from "./global-sdk"

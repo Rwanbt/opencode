@@ -54,8 +54,10 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+          # WHY noreply: no Unifia domain is controlled, so an @unifia.ai
+          # author address would be unroutable. This is GitHub's own bot identity.
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
 
       - name: Cache Turbo
         uses: actions/cache@v4
@@ -69,7 +71,7 @@ jobs:
       - name: Run unit tests
         run: bun turbo test:ci
         env:
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          UNIFIA_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           # Docker integration tests (ensureContainer / docker pull) are skipped on
           # Windows CI because Docker Desktop on windows-latest cannot pull images
           # reliably (network restrictions, Hub rate-limits). isDockerAvailable()
@@ -86,7 +88,7 @@ jobs:
       - name: Run structured-output integration tests (non-blocking, real API)
         if: matrix.settings.name == 'linux'
         continue-on-error: true
-        working-directory: packages/opencode
+        working-directory: packages/unifia
         run: mkdir -p .artifacts/integration && bun test test/session/structured-output-integration.test.ts --timeout 180000 --reporter=junit --reporter-outfile=.artifacts/integration/junit-structured-output.xml
         env:
           # @ai-sdk/google only reads GOOGLE_GENERATIVE_AI_API_KEY itself, so
@@ -100,7 +102,7 @@ jobs:
         with:
           # Keep optional external-integration reports out of the blocking unit check.
           # The structured-output report is stored under .artifacts/integration.
-          report_paths: packages/opencode/.artifacts/unit/junit.xml,packages/app/.artifacts/unit/junit.xml,packages/mobile/.artifacts/unit/junit.xml
+          report_paths: packages/unifia/.artifacts/unit/junit.xml,packages/app/.artifacts/unit/junit.xml,packages/mobile/.artifacts/unit/junit.xml
           check_name: "unit results (${{ matrix.settings.name }})"
           detailed_summary: true
           include_time_in_summary: true
@@ -155,7 +157,13 @@ jobs:
         # bun run build --single --baseline. An empty stub satisfies the check.
         run: |
           mkdir -p packages/desktop/src-tauri/sidecars
-          touch packages/desktop/src-tauri/sidecars/opencode-cli-x86_64-unknown-linux-gnu
+          touch packages/desktop/src-tauri/sidecars/unifia-cli-x86_64-unknown-linux-gnu
+
+      - name: Supervisor tests
+        # Own crate, own step: it deliberately links neither Tauri nor ORT, so a
+        # failure here is a failure in the ownership rules and nothing else.
+        working-directory: crates/unifia-supervisor
+        run: cargo test
 
       - name: Desktop Rust tests
         # ort uses download-binaries on Linux — downloads libonnxruntime.so at build time.

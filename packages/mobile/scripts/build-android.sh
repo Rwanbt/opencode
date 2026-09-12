@@ -3,16 +3,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Building OpenCode Mobile for Android..."
+echo "Building Unifia Mobile for Android..."
 echo "Requires: Android SDK, NDK, and JAVA_HOME set"
 echo ""
 
-# Prepare embedded runtime binaries (bun, git, bash, rg, opencode-cli.js)
+# Prepare embedded runtime binaries (bun, git, bash, rg, unifia-cli.js)
 if [ ! -f "$SCRIPT_DIR/../src-tauri/assets/runtime/bin/bun" ]; then
   echo "Preparing Android runtime (first build)..."
   bash "$SCRIPT_DIR/prepare-android-runtime.sh"
 else
-  echo "Runtime binaries already prepared. Use prepare-android-runtime.sh to refresh."
+  echo "Runtime binaries already prepared. Refreshing the embedded Unifia CLI bundle..."
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  node "$REPO_ROOT/scripts/bundle-mobile.mjs" --outdir "$SCRIPT_DIR/../src-tauri/assets/runtime"
 fi
 
 # Ensure ONNX Runtime shared library is available for Kokoro TTS.
@@ -21,7 +23,7 @@ fi
 # causes `dlopen failed: cannot locate symbol OrtGetApiBase` at launch
 # because the Android bionic linker doesn't resolve versioned symbols
 # across a DT_NEEDED gap (the .so exports OrtGetApiBase@@VERS_1.22.0 but
-# libopencode_mobile_lib.so's undefined reference is VERS_1.19.2).
+# libunifia_mobile_lib.so's undefined reference is VERS_1.19.2).
 JNILIBS="$SCRIPT_DIR/../src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
 ORT_VERSION="${ORT_VERSION:-1.19.2}"
 ORT_SHA256="${ORT_SHA256:-}"

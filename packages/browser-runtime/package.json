@@ -1,0 +1,10 @@
+{
+  "name": "@unifia/browser-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "dependencies": { "@unifia/contracts": "workspace:*", "playwright": "1.57.0" },
+  "scripts": { "typecheck": "tsc --noEmit", "test:e2e": "node --experimental-strip-types test/playwright-driver.e2e.ts" },
+  "devDependencies": { "@tsconfig/node22": "22.0.2", "typescript": "catalog:" }
+}

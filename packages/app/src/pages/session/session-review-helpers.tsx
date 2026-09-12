@@ -9,10 +9,10 @@
  */
 import { createEffect, createMemo, Show } from "solid-js"
 import type { SetStoreFunction } from "solid-js/store"
-import { Select } from "@opencode-ai/ui/select"
-import { Button } from "@opencode-ai/ui/button"
+import { Select } from "@unifia/ui/select"
+import { Button } from "@unifia/ui/button"
 import type { FileDiff } from "../../types/sdk-shim"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@unifia/util/encode"
 import type { useLayout } from "@/context/layout"
 import type { useLanguage } from "@/context/language"
 import type { useFile } from "@/context/file"

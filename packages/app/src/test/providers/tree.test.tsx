@@ -77,7 +77,7 @@ describe("AppProviders — Fix-GlobalSDK provider tree (structural guard)", () =
     expect(boundaryIdx).toBeLessThan(sdkIdx)
   })
 
-  test("AppProviders is exported from @opencode-ai/app", () => {
+  test("AppProviders is exported from @unifia/app", () => {
     // Catches accidental rename / removal of the canonical entry helper.
     const indexSrc = readFileSync(INDEX_TS, "utf-8")
     expect(indexSrc).toMatch(/export\s*\{[^}]*\bAppProviders\b[^}]*\}\s*from\s*"\.\/app"/)

@@ -1,17 +1,10 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="banniere_unifia.png" alt="Unifia Workbench banner">
 </p>
 <p align="center">オープンソースのAIコーディングエージェント。</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/Rwanbt/opencode/actions/workflows/fork-release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/opencode/fork-release.yml?style=flat-square&branch=main" /></a>
+  <a href="https://github.com/Rwanbt/unifia/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/Rwanbt/unifia?display_name=tag&style=flat-square" /></a>
+  <a href="https://github.com/Rwanbt/unifia/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Rwanbt/unifia/release.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +32,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/Rwanbt/unifia)
 
 <!-- WHY-FORK-MATRIX -->
 ## なぜこの Fork を選ぶのか？
@@ -117,10 +110,14 @@ OpenCode (フォーク) — **デスクトップ、サーバー、スマート�
 
 ```bash
 # CLI (macOS / Linux / Windows)
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia package or installer is published yet. Build from source:
+git clone https://github.com/Rwanbt/unifia.git
+cd unifia
+bun install
+bun run --cwd packages/opencode build --single
 
 # Desktop app + Android APK
-# → https://github.com/Rwanbt/opencode/releases/latest
+# → https://github.com/Rwanbt/unifia/releases/latest
 ```
 
 ### このフォークだけが同梱する 8 つのこと
@@ -139,8 +136,9 @@ curl -fsSL https://opencode.ai/install | bash
 ### 最初のタスクを実行
 
 ```bash
-opencode                                  # TUI
-opencode run "fix the failing test in src/"   # one-shot
+# This checkout still exposes the compatibility CLI name `opencode`.
+bun run --cwd packages/opencode dev
+bun run packages/opencode/src/index.ts run "fix the failing test in src/"
 ```
 
 > 💡 詳細が必要ですか？以下の各セクションはすべて折りたたまれています — 興味のある部分だけ展開してください。
@@ -157,7 +155,7 @@ opencode run "fix the failing test in src/"   # one-shot
 ## フォーク機能
 
 > これは [anomalyco/opencode](https://github.com/anomalyco/opencode) のフォークで、[Rwanbt](https://github.com/Rwanbt) がメンテナンスしています。
-> アップストリームと同期を維持。最新の変更は [dev ブランチ](https://github.com/Rwanbt/opencode/tree/dev) をご覧ください。
+> アップストリームと同期を維持。最新の変更は [dev ブランチ](https://github.com/Rwanbt/unifia/tree/dev) をご覧ください。
 
 #### ローカルファースト AI
 
@@ -649,18 +647,9 @@ OpenCode と AnythingLLM のドキュメント RAG プラットフォーム間�
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
 
 # パッケージマネージャー
-npm i -g opencode-ai@latest        # bun/pnpm/yarn でもOK
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS と Linux（推奨。常に最新）
-brew install opencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # どのOSでも
-nix run nixpkgs#opencode           # または github:anomalyco/opencode で最新 dev ブランチ
 ```
 
 > [!TIP]
@@ -668,7 +657,7 @@ nix run nixpkgs#opencode           # または github:anomalyco/opencode で最�
 
 ### デスクトップアプリ (BETA)
 
-OpenCode はデスクトップアプリとしても利用できます。[releases page](https://github.com/Rwanbt/opencode/releases) から直接ダウンロードするか、[opencode.ai/download](https://opencode.ai/download) を利用してください。
+OpenCode はデスクトップアプリとしても利用できます。[releases page](https://github.com/Rwanbt/unifia/releases) から直接ダウンロードするか、[opencode.ai/download](https://github.com/Rwanbt/unifia/releases/latest) を利用してください。
 
 | プラットフォーム      | ダウンロード                          |
 | --------------------- | ------------------------------------- |
@@ -679,7 +668,6 @@ OpenCode はデスクトップアプリとしても利用できます。[release
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
@@ -695,8 +683,8 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # 例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+# No public Unifia installer is published; use the source build documented above.
+# No public Unifia installer is published; use the source build documented above.
 ```
 
 ### Agents
@@ -712,11 +700,11 @@ OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替え
 また、複雑な検索やマルチステップのタスク向けに **general** サブ Agent も含まれています。
 内部的に使用されており、メッセージで `@general` と入力して呼び出せます。
 
-[agents](https://opencode.ai/docs/agents) の詳細はこちら。
+[agents](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/agents) の詳細はこちら。
 
 ### ドキュメント
 
-OpenCode の設定については [**ドキュメント**](https://opencode.ai/docs) を参照してください。
+OpenCode の設定については [**ドキュメント**](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs) を参照してください。
 
 ### コントリビュート
 
@@ -733,7 +721,7 @@ OpenCode に関連するプロジェクトで、名前に "opencode"（例: "ope
 機能面では Claude Code と非常に似ています。主な違いは次のとおりです。
 
 - 100% オープンソース
-- 特定のプロバイダーに依存しません。[OpenCode Zen](https://opencode.ai/zen) で提供しているモデルを推奨しますが、OpenCode は Claude、OpenAI、Google、またはローカルモデルでも利用できます。モデルが進化すると差は縮まり価格も下がるため、provider-agnostic であることが重要です。
+- 特定のプロバイダーに依存しません。[OpenCode Zen](https://github.com/Rwanbt/unifia/tree/dev/packages/web/src/content/docs/providers.mdx) で提供しているモデルを推奨しますが、OpenCode は Claude、OpenAI、Google、またはローカルモデルでも利用できます。モデルが進化すると差は縮まり価格も下がるため、provider-agnostic であることが重要です。
 - そのまま使える LSP サポート
 - TUI にフォーカス。OpenCode は neovim ユーザーと [terminal.shop](https://terminal.shop) の制作者によって作られており、ターミナルで可能なことの限界を押し広げます。
 - クライアント/サーバー構成。例えば OpenCode をあなたのPCで動かし、モバイルアプリからリモート操作できます。TUI フロントエンドは複数あるクライアントの1つにすぎません。

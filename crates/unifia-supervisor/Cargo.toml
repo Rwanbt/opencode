@@ -1,0 +1,22 @@
+[package]
+name = "unifia-supervisor"
+version = "0.0.0"
+description = "Ownership-checked process supervision for Unifia"
+edition = "2024"
+
+# Deliberately free of Tauri, ONNX and every other desktop dependency. The
+# ownership rules are the part that must never be wrong, and keeping them in
+# their own crate means their tests link almost nothing and run in a second —
+# in packages/desktop they could not run at all, because that crate's test
+# binary needs the ONNX Runtime native library at load time.
+[dependencies]
+listeners = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+thiserror = "2"
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -10,17 +10,17 @@ Wir akzeptieren keine KI-generierten Sicherheitsberichte. Wir erhalten eine gro�
 
 ### Überblick
 
-OpenCode ist ein KI-gestützter Coding-Assistent, der lokal auf Ihrem Rechner läuft. Er bietet ein Agenten-System mit Zugriff auf leistungsstarke Werkzeuge, darunter Shell-Ausführung, Datei-Operationen und Web-Zugriff.
+Unifia Workbench ist ein KI-gestützter Coding-Assistent, der lokal auf Ihrem Rechner läuft. Er bietet ein Agenten-System mit Zugriff auf leistungsstarke Werkzeuge, darunter Shell-Ausführung, Datei-Operationen und Web-Zugriff.
 
 ### Keine Sandbox
 
-OpenCode **sandboxt** den Agenten **nicht**. Das Berechtigungssystem existiert als UX-Funktion, die Nutzer über Aktionen des Agenten auf dem Laufenden hält — es fragt vor dem Ausführen von Befehlen, Schreiben von Dateien usw. nach Bestätigung. Es ist jedoch nicht auf Sicherheitsisolation ausgelegt.
+Unifia Workbench **sandboxt** den Agenten **nicht**. Das Berechtigungssystem existiert als UX-Funktion, die Nutzer über Aktionen des Agenten auf dem Laufenden hält — es fragt vor dem Ausführen von Befehlen, Schreiben von Dateien usw. nach Bestätigung. Es ist jedoch nicht auf Sicherheitsisolation ausgelegt.
 
-Für echte Isolation führen Sie OpenCode in einem Docker-Container oder einer VM aus.
+Für echte Isolation führen Sie Unifia Workbench in einem Docker-Container oder einer VM aus.
 
 ### Server-Modus
 
-Der Server-Modus ist Opt-in. Bei Aktivierung `OPENCODE_SERVER_PASSWORD` setzen, um HTTP Basic Auth zu verlangen. Ohne diese Variable läuft der Server nicht authentifiziert (mit Warnung). Die Absicherung des Servers liegt in der Verantwortung des Endnutzers — jede Funktionalität, die er bereitstellt, ist keine Schwachstelle.
+Der Server-Modus ist Opt-in. Bei Aktivierung `UNIFIA_SERVER_PASSWORD` setzen, um HTTP Basic Auth zu verlangen. Ohne diese Variable läuft der Server nicht authentifiziert (mit Warnung). Die Absicherung des Servers liegt in der Verantwortung des Endnutzers — jede Funktionalität, die er bereitstellt, ist keine Schwachstelle.
 
 ### Außerhalb des Geltungsbereichs
 
@@ -38,7 +38,7 @@ Der Server-Modus ist Opt-in. Bei Aktivierung `OPENCODE_SERVER_PASSWORD` setzen, 
 
 Wir schätzen Ihre Bemühungen um eine verantwortungsvolle Offenlegung und werden alles tun, um Ihre Beiträge zu würdigen.
 
-Nutzen Sie den Tab ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new) in GitHub Security Advisories.
+Nutzen Sie den Tab ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new) in GitHub Security Advisories.
 
 Das Team antwortet mit den nächsten Schritten. Nach der ersten Antwort hält Sie das Sicherheitsteam über den Fortschritt der Behebung und Veröffentlichung auf dem Laufenden und kann zusätzliche Informationen erbitten.
 

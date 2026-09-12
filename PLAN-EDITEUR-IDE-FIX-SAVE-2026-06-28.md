@@ -3,7 +3,7 @@ type: plan
 status: ready-for-review
 created: 2026-06-28
 updated: 2026-06-28 (post 3-AI review)
-project: opencode-desktop
+project: unifia-desktop
 issue: Manual file edits via close-guard dialog are not persisted to disk (round 3)
 review-style: adversarial / multi-angle
 reviewers: GLM 5.2, ChatGPT, DeepSeek
@@ -394,7 +394,7 @@ onSave={async () => {
 1. `bun test src/context/editor/ src/context/file/` → tous pass
 2. `bun run typecheck -F packages/app` → 0 erreurs
 3. `bun run build` + `bun run tauri build --no-bundle` (~3 min)
-4. Lance `OpenCode.exe`
+4. Lance `Unifia.exe`
 5. **Test runtime critique** :
    - Ouvre un fichier
    - Modifie du contenu
@@ -461,13 +461,13 @@ Mon analyse dit que les edits sont perdus après close (EditorTabCleanup supprim
    console.log('[editor] backend-write-send', filePath, 'len=', content.length, 'first50=', content.slice(0, 50), 'expectedHash=', effectiveHash)
    ```
 
-   **`packages/opencode/src/file/index.ts` ligne ~1018** (backend) :
+   **`packages/unifia/src/file/index.ts` ligne ~1018** (backend) :
    ```ts
    await atomicWrite(full, input.content)
    console.log('[backend] atomicWrite', full, 'len=', input.content.length, 'first50=', input.content.slice(0, 50))
    ```
 
-   **`packages/opencode/src/server/routes/file.ts` ligne ~319** :
+   **`packages/unifia/src/server/routes/file.ts` ligne ~319** :
    ```ts
    const result = await File.write(body)
    console.log('[route] file.write-OK', body.path, 'result.content.length=', result.content.length, 'first50=', result.content.slice(0, 50))

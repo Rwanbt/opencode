@@ -42,15 +42,15 @@ Focus on the failing tests and suggest fixes.
 
 ## الإعداد
 
-يمكنك إضافة أوامر مخصصة عبر إعدادات OpenCode أو بإنشاء ملفات Markdown داخل الدليل `commands/`.
+يمكنك إضافة أوامر مخصصة عبر إعدادات Unifia أو بإنشاء ملفات Markdown داخل الدليل `commands/`.
 
 ---
 
 ### JSON
 
-استخدم خيار `command` في [config](/docs/config) الخاص بـ OpenCode:
+استخدم خيار `command` في [config](/docs/config) الخاص بـ Unifia:
 
-```json title="opencode.jsonc" {4-12}
+```json title="unifia.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -221,7 +221,7 @@ Check for performance issues and suggest improvements.
 
 يُعرِّف خيار `template` المُطالبة التي ستُرسل إلى نموذج اللغة (LLM) عند تنفيذ الأمر.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -239,7 +239,7 @@ Check for performance issues and suggest improvements.
 
 استخدم خيار `description` لتقديم وصف موجز لما يفعله الأمر.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "test": {
@@ -259,7 +259,7 @@ Check for performance issues and suggest improvements.
 إذا كان هذا [subagent](/docs/agents/#subagents)، فسيؤدي الأمر افتراضيًا إلى تشغيل استدعاء subagent.
 لإيقاف هذا السلوك، عيِّن `subtask` إلى `false`.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "review": {
@@ -279,7 +279,7 @@ Check for performance issues and suggest improvements.
 يفيد هذا إذا أردت ألا يلوّث الأمر السياق الأساسي لديك، إذ سيُجبر (**force**) الـ agent على العمل كـ subagent،
 حتى لو كان `mode` مضبوطًا على `primary` في إعدادات [agent](/docs/agents).
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -297,7 +297,7 @@ Check for performance issues and suggest improvements.
 
 استخدم إعداد `model` لتجاوز النموذج الافتراضي لهذا الأمر.
 
-```json title="opencode.json"
+```json title="unifia.json"
 {
   "command": {
     "analyze": {
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ## الأوامر المضمنة
 
-يتضمن opencode عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
+يتضمن unifia عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
 
 :::note
 يمكن للأوامر المخصصة تجاوز الأوامر المضمنة.

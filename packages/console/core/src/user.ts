@@ -138,10 +138,10 @@ export namespace User {
             .then((rows) => rows[0]),
         )
 
-        const { InviteEmail } = await import("@opencode-ai/console-mail/InviteEmail.jsx")
+        const { InviteEmail } = await import("@unifia/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
-          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on OpenCode`,
+          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on Unifia`,
           body: render(
             // @ts-ignore
             InviteEmail({

@@ -1,0 +1,589 @@
+{
+  "version": "M0_UNIFIAVALUE_VECTOR_V1",
+  "source": "ADR-000 §53-§58, card M0-M06",
+  "caseCount": 50,
+  "cases": [
+    {
+      "id": "num-zero",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "0",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-one",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "1",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-minus-one",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "-1",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-max-safe-integer",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "9007199254740991",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-two-pow-53",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "9007199254740992",
+      "expect": {
+        "outcome": "pass",
+        "note": "§26 sets no 2^53 bound on an already-canonical binary64; contrast fc31b-integer-two-pow-53"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-negative-two-pow-53",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "-9007199254740992",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-half",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "0.5",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-minus-half",
+      "test": "FC-31A",
+      "encoding": "float64-decimal",
+      "payload": "-0.5",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-smallest-subnormal",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "0000000000000001",
+      "expect": {
+        "outcome": "pass",
+        "note": "smallest positive binary64 subnormal"
+      },
+      "source": "§54 / M0-M06"
+    },
+    {
+      "id": "num-smallest-normal",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "0010000000000000",
+      "expect": {
+        "outcome": "pass",
+        "note": "smallest positive binary64 normal"
+      },
+      "source": "§54 / M0-M06"
+    },
+    {
+      "id": "num-largest-finite",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "7fefffffffffffff",
+      "expect": {
+        "outcome": "pass",
+        "note": "largest finite binary64"
+      },
+      "source": "§54 / M0-M06"
+    },
+    {
+      "id": "num-negative-zero",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "8000000000000000",
+      "expect": {
+        "outcome": "pass-normalized",
+        "normalizedBits": "0000000000000000",
+        "note": "§26: -0 normalizes to +0"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-nan",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "7ff8000000000000",
+      "expect": {
+        "outcome": "reject",
+        "code": "NON_FINITE_NUMBER"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-positive-infinity",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "7ff0000000000000",
+      "expect": {
+        "outcome": "reject",
+        "code": "NON_FINITE_NUMBER"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "num-negative-infinity",
+      "test": "FC-31A",
+      "encoding": "binary64-bits",
+      "payload": "fff0000000000000",
+      "expect": {
+        "outcome": "reject",
+        "code": "NON_FINITE_NUMBER"
+      },
+      "source": "§54"
+    },
+    {
+      "id": "str-empty",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": "",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-ascii",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": "ascii",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-latin1",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": "é",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-cjk",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": "日本語",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-zwj-emoji",
+      "test": "FC-31A",
+      "encoding": "codepoints",
+      "payload": [
+        128104,
+        8205,
+        128187
+      ],
+      "expect": {
+        "outcome": "pass",
+        "note": "man technologist — ZWJ sequence, 3 code points"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-combining",
+      "test": "FC-31A",
+      "encoding": "codepoints",
+      "payload": [
+        101,
+        769
+      ],
+      "expect": {
+        "outcome": "pass",
+        "note": "e + combining acute. §29 forbids implicit NFC: must NOT become U+00E9"
+      },
+      "source": "§55 / §29"
+    },
+    {
+      "id": "str-embedded-newline",
+      "test": "FC-31A",
+      "encoding": "codepoints",
+      "payload": [
+        97,
+        10,
+        98
+      ],
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§55"
+    },
+    {
+      "id": "str-nul",
+      "test": "FC-31A",
+      "encoding": "codepoints",
+      "payload": [
+        97,
+        0,
+        98
+      ],
+      "expect": {
+        "outcome": "pass",
+        "note": "§29: U+0000 is legal and must round-trip exactly — no C-string truncation"
+      },
+      "source": "§55 / §29"
+    },
+    {
+      "id": "ctr-empty-array",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": [],
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-empty-object",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": {},
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-mixed-array",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": [
+        null,
+        true,
+        false,
+        0,
+        "x"
+      ],
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-nested-arrays",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": [
+        [
+          1,
+          [
+            2,
+            [
+              3
+            ]
+          ]
+        ],
+        []
+      ],
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-nested-objects",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": {
+        "a": {
+          "b": {
+            "c": null
+          }
+        }
+      },
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-object-with-array",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": {
+        "items": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "ctr-array-with-object",
+      "test": "FC-31A",
+      "encoding": "literal",
+      "payload": [
+        {
+          "k": "v"
+        }
+      ],
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§56"
+    },
+    {
+      "id": "fc31b-integer-max-safe",
+      "test": "FC-31B",
+      "encoding": "host-integer",
+      "payload": "9007199254740991",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-integer-min-safe",
+      "test": "FC-31B",
+      "encoding": "host-integer",
+      "payload": "-9007199254740991",
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-integer-two-pow-53",
+      "test": "FC-31B",
+      "encoding": "host-integer",
+      "payload": "9007199254740992",
+      "expect": {
+        "outcome": "reject",
+        "code": "NUMBER_OUT_OF_CANONICAL_RANGE",
+        "note": "the deliberate contrast with num-two-pow-53 — §27"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-integer-negative-two-pow-53",
+      "test": "FC-31B",
+      "encoding": "host-integer",
+      "payload": "-9007199254740992",
+      "expect": {
+        "outcome": "reject",
+        "code": "NUMBER_OUT_OF_CANONICAL_RANGE"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-int64-max",
+      "test": "FC-31B",
+      "encoding": "host-bigint",
+      "payload": "9223372036854775807",
+      "expect": {
+        "outcome": "reject",
+        "code": "NUMBER_OUT_OF_CANONICAL_RANGE",
+        "note": "Go int64 max"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-int64-min",
+      "test": "FC-31B",
+      "encoding": "host-bigint",
+      "payload": "-9223372036854775808",
+      "expect": {
+        "outcome": "reject",
+        "code": "NUMBER_OUT_OF_CANONICAL_RANGE",
+        "note": "Go int64 min"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-bigint-outside-safe",
+      "test": "FC-31B",
+      "encoding": "host-bigint",
+      "payload": "9007199254740993",
+      "expect": {
+        "outcome": "reject",
+        "code": "NUMBER_OUT_OF_CANONICAL_RANGE",
+        "note": "JS BigInt outside safe range"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-float64-two-pow-53",
+      "test": "FC-31B",
+      "encoding": "float64-decimal",
+      "payload": "9007199254740992",
+      "expect": {
+        "outcome": "pass",
+        "note": "same bits as fc31b-integer-two-pow-53, opposite verdict — §27 calls this deliberate"
+      },
+      "source": "§57"
+    },
+    {
+      "id": "fc31b-ts-epoch",
+      "test": "FC-31B",
+      "encoding": "canonical-timestamp",
+      "payload": 0,
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§58"
+    },
+    {
+      "id": "fc31b-ts-negative-day",
+      "test": "FC-31B",
+      "encoding": "canonical-timestamp",
+      "payload": -86400000,
+      "expect": {
+        "outcome": "pass",
+        "note": "pre-epoch instants are in range"
+      },
+      "source": "§58"
+    },
+    {
+      "id": "fc31b-ts-2023",
+      "test": "FC-31B",
+      "encoding": "canonical-timestamp",
+      "payload": 1672531200000,
+      "expect": {
+        "outcome": "pass"
+      },
+      "source": "§58"
+    },
+    {
+      "id": "fc31b-host-date-in-typed-field",
+      "test": "FC-31B",
+      "encoding": "host-date",
+      "payload": 1672531200000,
+      "expect": {
+        "outcome": "pass",
+        "note": "must yield the same CanonicalTimestamp under every host timezone"
+      },
+      "source": "§58"
+    },
+    {
+      "id": "fc31b-host-date-untyped",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "date",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE",
+        "note": "a generic date object outside a timestamp-typed field"
+      },
+      "source": "§58 / §30"
+    },
+    {
+      "id": "fc31b-undefined",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "undefined",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-function",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "function",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-symbol",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "symbol",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-map",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "map",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-set",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "set",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-binary",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "binary",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE",
+        "note": "must become an ArtifactRef"
+      },
+      "source": "§30"
+    },
+    {
+      "id": "fc31b-class-instance",
+      "test": "FC-31B",
+      "encoding": "host-sentinel",
+      "payload": "class-instance",
+      "expect": {
+        "outcome": "reject",
+        "code": "UNSUPPORTED_HOST_TYPE"
+      },
+      "source": "§30"
+    }
+  ]
+}

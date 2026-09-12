@@ -1,8 +1,8 @@
 <p align="center"><a href="CONTRIBUTING.md">English</a> | <a href="CONTRIBUTING.zh.md">简体中文</a> | <a href="CONTRIBUTING.zht.md">繁體中文</a> | <a href="CONTRIBUTING.ko.md">한국어</a> | <a href="CONTRIBUTING.de.md">Deutsch</a> | <a href="CONTRIBUTING.es.md">Español</a> | <a href="CONTRIBUTING.fr.md">Français</a> | <a href="CONTRIBUTING.it.md">Italiano</a> | <a href="CONTRIBUTING.da.md">Dansk</a> | <a href="CONTRIBUTING.ja.md">日本語</a> | <a href="CONTRIBUTING.pl.md">Polski</a> | <b>Русский</b> | <a href="CONTRIBUTING.bs.md">Bosanski</a> | <a href="CONTRIBUTING.ar.md">العربية</a> | <a href="CONTRIBUTING.no.md">Norsk</a> | <a href="CONTRIBUTING.br.md">Português (Brasil)</a> | <a href="CONTRIBUTING.th.md">ไทย</a> | <a href="CONTRIBUTING.tr.md">Türkçe</a> | <a href="CONTRIBUTING.uk.md">Українська</a> | <a href="CONTRIBUTING.bn.md">বাংলা</a> | <a href="CONTRIBUTING.gr.md">Ελληνικά</a> | <a href="CONTRIBUTING.vi.md">Tiếng Việt</a></p>
 
-# Вклад в OpenCode
+# Вклад в Unifia Workbench
 
-Мы хотим упростить вам внесение вклада в OpenCode. Вот самые часто мержируемые типы изменений:
+Мы хотим упростить вам внесение вклада в Unifia. Вот самые часто мержируемые типы изменений:
 
 - Исправления багов
 - Дополнительные LSP / форматтеры

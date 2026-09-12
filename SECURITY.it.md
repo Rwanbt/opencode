@@ -10,17 +10,17 @@ Non accettiamo report di sicurezza generati da IA. Ne riceviamo un gran numero e
 
 ### Panoramica
 
-OpenCode è un assistente di codifica basato su IA che gira localmente sulla tua macchina. Fornisce un sistema di agenti con accesso a strumenti potenti tra cui esecuzione shell, operazioni sui file e accesso web.
+Unifia Workbench è un assistente di codifica basato su IA che gira localmente sulla tua macchina. Fornisce un sistema di agenti con accesso a strumenti potenti tra cui esecuzione shell, operazioni sui file e accesso web.
 
 ### Nessun sandbox
 
-OpenCode **non** mette l'agente in un sandbox. Il sistema di permessi esiste come funzionalità di UX per tenere l'utente consapevole delle azioni dell'agente — chiede conferma prima di eseguire comandi, scrivere file, ecc. Tuttavia non è progettato per fornire isolamento di sicurezza.
+Unifia Workbench **non** mette l'agente in un sandbox. Il sistema di permessi esiste come funzionalità di UX per tenere l'utente consapevole delle azioni dell'agente — chiede conferma prima di eseguire comandi, scrivere file, ecc. Tuttavia non è progettato per fornire isolamento di sicurezza.
 
-Se hai bisogno di un vero isolamento, esegui OpenCode all'interno di un contenitore Docker o di una VM.
+Se hai bisogno di un vero isolamento, esegui Unifia Workbench all'interno di un contenitore Docker o di una VM.
 
 ### Modalità server
 
-La modalità server è opt-in. Quando attiva, imposta `OPENCODE_SERVER_PASSWORD` per richiedere HTTP Basic Auth. Senza, il server gira non autenticato (con avviso). È responsabilità dell'utente finale proteggere il server — qualsiasi funzionalità offerta non è una vulnerabilità.
+La modalità server è opt-in. Quando attiva, imposta `UNIFIA_SERVER_PASSWORD` per richiedere HTTP Basic Auth. Senza, il server gira non autenticato (con avviso). È responsabilità dell'utente finale proteggere il server — qualsiasi funzionalità offerta non è una vulnerabilità.
 
 ### Fuori ambito
 
@@ -38,7 +38,7 @@ La modalità server è opt-in. Quando attiva, imposta `OPENCODE_SERVER_PASSWORD`
 
 Apprezziamo gli sforzi per divulgare responsabilmente le scoperte e faremo ogni sforzo per riconoscere il contributo.
 
-Per segnalare un problema, usa la scheda ["Report a Vulnerability"](https://github.com/Rwanbt/opencode/security/advisories/new) di GitHub Security Advisory.
+Per segnalare un problema, usa la scheda ["Report a Vulnerability"](https://github.com/Rwanbt/unifia/security/advisories/new) di GitHub Security Advisory.
 
 Il team invierà una risposta con i prossimi passi. Dopo la risposta iniziale, il team di sicurezza ti terrà informato sui progressi verso una correzione e annuncio completo, e può richiedere informazioni aggiuntive.
 

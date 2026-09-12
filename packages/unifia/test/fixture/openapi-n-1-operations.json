@@ -1,0 +1,957 @@
+{
+  "note": "N-1 compatibility baseline for TEAM-L03. Captured from packages/sdk/openapi.json as it stood at Team 51025aa0b3, before the L03 regeneration. Every operation listed here must keep existing, at the same path and method: a client generated against this snapshot must keep working against any later spec. Adding operations is fine; removing or moving one is a breaking change and this fixture is what makes it loud.",
+  "capturedAt": "2026-07-28",
+  "operationCount": 190,
+  "operations": [
+    {
+      "operationId": "agentSkills.execute",
+      "method": "post",
+      "path": "/agent-skills/{toolId}/execute"
+    },
+    {
+      "operationId": "agentSkills.list",
+      "method": "get",
+      "path": "/agent-skills"
+    },
+    {
+      "operationId": "app.agents",
+      "method": "get",
+      "path": "/agent"
+    },
+    {
+      "operationId": "app.log",
+      "method": "post",
+      "path": "/log"
+    },
+    {
+      "operationId": "app.skillInstall",
+      "method": "post",
+      "path": "/skill/install"
+    },
+    {
+      "operationId": "app.skills",
+      "method": "get",
+      "path": "/skill"
+    },
+    {
+      "operationId": "app.skillUninstall",
+      "method": "delete",
+      "path": "/skill/{name}"
+    },
+    {
+      "operationId": "auth.remove",
+      "method": "delete",
+      "path": "/auth/{providerID}"
+    },
+    {
+      "operationId": "auth.set",
+      "method": "put",
+      "path": "/auth/{providerID}"
+    },
+    {
+      "operationId": "collab.listUsers",
+      "method": "get",
+      "path": "/collab/users"
+    },
+    {
+      "operationId": "collab.login",
+      "method": "post",
+      "path": "/collab/login"
+    },
+    {
+      "operationId": "collab.logout",
+      "method": "post",
+      "path": "/collab/logout"
+    },
+    {
+      "operationId": "collab.me",
+      "method": "get",
+      "path": "/collab/me"
+    },
+    {
+      "operationId": "collab.presence",
+      "method": "get",
+      "path": "/presence"
+    },
+    {
+      "operationId": "collab.refresh",
+      "method": "post",
+      "path": "/collab/refresh"
+    },
+    {
+      "operationId": "collab.register",
+      "method": "post",
+      "path": "/collab/register"
+    },
+    {
+      "operationId": "collab.wsTicket",
+      "method": "post",
+      "path": "/collab/ws-ticket"
+    },
+    {
+      "operationId": "command.list",
+      "method": "get",
+      "path": "/command"
+    },
+    {
+      "operationId": "config.get",
+      "method": "get",
+      "path": "/config"
+    },
+    {
+      "operationId": "config.providers",
+      "method": "get",
+      "path": "/config/providers"
+    },
+    {
+      "operationId": "config.update",
+      "method": "patch",
+      "path": "/config"
+    },
+    {
+      "operationId": "debate.config",
+      "method": "put",
+      "path": "/debate/config"
+    },
+    {
+      "operationId": "debate.estimate",
+      "method": "post",
+      "path": "/debate/estimate"
+    },
+    {
+      "operationId": "debate.feedback",
+      "method": "post",
+      "path": "/debate/{id}/feedback"
+    },
+    {
+      "operationId": "debate.get",
+      "method": "get",
+      "path": "/debate/{id}"
+    },
+    {
+      "operationId": "debate.getConfig",
+      "method": "get",
+      "path": "/debate/config"
+    },
+    {
+      "operationId": "debate.getSessionConfig",
+      "method": "get",
+      "path": "/debate/session/{sessionID}/config"
+    },
+    {
+      "operationId": "debate.list",
+      "method": "get",
+      "path": "/debate"
+    },
+    {
+      "operationId": "debate.sessionConfig",
+      "method": "put",
+      "path": "/debate/session/{sessionID}/config"
+    },
+    {
+      "operationId": "debate.start",
+      "method": "post",
+      "path": "/debate"
+    },
+    {
+      "operationId": "disk.get",
+      "method": "get",
+      "path": "/disk"
+    },
+    {
+      "operationId": "event.subscribe",
+      "method": "get",
+      "path": "/event"
+    },
+    {
+      "operationId": "experimental.console.get",
+      "method": "get",
+      "path": "/experimental/console"
+    },
+    {
+      "operationId": "experimental.console.listOrgs",
+      "method": "get",
+      "path": "/experimental/console/orgs"
+    },
+    {
+      "operationId": "experimental.console.switchOrg",
+      "method": "post",
+      "path": "/experimental/console/switch"
+    },
+    {
+      "operationId": "experimental.resource.list",
+      "method": "get",
+      "path": "/experimental/resource"
+    },
+    {
+      "operationId": "experimental.session.list",
+      "method": "get",
+      "path": "/experimental/session"
+    },
+    {
+      "operationId": "experimental.workspace.create",
+      "method": "post",
+      "path": "/experimental/workspace"
+    },
+    {
+      "operationId": "experimental.workspace.list",
+      "method": "get",
+      "path": "/experimental/workspace"
+    },
+    {
+      "operationId": "experimental.workspace.remove",
+      "method": "delete",
+      "path": "/experimental/workspace/{id}"
+    },
+    {
+      "operationId": "file.delete",
+      "method": "delete",
+      "path": "/file"
+    },
+    {
+      "operationId": "file.list",
+      "method": "get",
+      "path": "/file"
+    },
+    {
+      "operationId": "file.mkdir",
+      "method": "post",
+      "path": "/file/mkdir"
+    },
+    {
+      "operationId": "file.move",
+      "method": "post",
+      "path": "/file/move"
+    },
+    {
+      "operationId": "file.read",
+      "method": "get",
+      "path": "/file/content"
+    },
+    {
+      "operationId": "file.readRaw",
+      "method": "get",
+      "path": "/file/raw"
+    },
+    {
+      "operationId": "file.rename",
+      "method": "post",
+      "path": "/file/rename"
+    },
+    {
+      "operationId": "file.status",
+      "method": "get",
+      "path": "/file/status"
+    },
+    {
+      "operationId": "file.write",
+      "method": "post",
+      "path": "/file/write"
+    },
+    {
+      "operationId": "find.files",
+      "method": "get",
+      "path": "/find/file"
+    },
+    {
+      "operationId": "find.symbols",
+      "method": "get",
+      "path": "/find/symbol"
+    },
+    {
+      "operationId": "find.text",
+      "method": "get",
+      "path": "/find"
+    },
+    {
+      "operationId": "formatter.status",
+      "method": "get",
+      "path": "/formatter"
+    },
+    {
+      "operationId": "gdpr.audit.list",
+      "method": "get",
+      "path": "/audit"
+    },
+    {
+      "operationId": "gdpr.delete",
+      "method": "delete",
+      "path": "/user/data"
+    },
+    {
+      "operationId": "gdpr.export",
+      "method": "get",
+      "path": "/user/data/export"
+    },
+    {
+      "operationId": "git.add",
+      "method": "post",
+      "path": "/git/add"
+    },
+    {
+      "operationId": "git.blame",
+      "method": "get",
+      "path": "/git/blame"
+    },
+    {
+      "operationId": "git.branch",
+      "method": "post",
+      "path": "/git/branch"
+    },
+    {
+      "operationId": "git.branches",
+      "method": "get",
+      "path": "/git/branches"
+    },
+    {
+      "operationId": "git.commit",
+      "method": "post",
+      "path": "/git/commit"
+    },
+    {
+      "operationId": "git.getCredentials",
+      "method": "get",
+      "path": "/git/credentials"
+    },
+    {
+      "operationId": "git.log",
+      "method": "get",
+      "path": "/git/log"
+    },
+    {
+      "operationId": "git.pull",
+      "method": "post",
+      "path": "/git/pull"
+    },
+    {
+      "operationId": "git.push",
+      "method": "post",
+      "path": "/git/push"
+    },
+    {
+      "operationId": "git.reset",
+      "method": "post",
+      "path": "/git/reset"
+    },
+    {
+      "operationId": "git.setCredentials",
+      "method": "put",
+      "path": "/git/credentials"
+    },
+    {
+      "operationId": "git.workingStatus",
+      "method": "get",
+      "path": "/git/working-status"
+    },
+    {
+      "operationId": "global.config.get",
+      "method": "get",
+      "path": "/global/config"
+    },
+    {
+      "operationId": "global.config.update",
+      "method": "patch",
+      "path": "/global/config"
+    },
+    {
+      "operationId": "global.dispose",
+      "method": "post",
+      "path": "/global/dispose"
+    },
+    {
+      "operationId": "global.event",
+      "method": "get",
+      "path": "/global/event"
+    },
+    {
+      "operationId": "global.health",
+      "method": "get",
+      "path": "/global/health"
+    },
+    {
+      "operationId": "global.sync-event.subscribe",
+      "method": "get",
+      "path": "/global/sync-event"
+    },
+    {
+      "operationId": "global.upgrade",
+      "method": "post",
+      "path": "/global/upgrade"
+    },
+    {
+      "operationId": "instance.dispose",
+      "method": "post",
+      "path": "/instance/dispose"
+    },
+    {
+      "operationId": "lsp.codeAction",
+      "method": "post",
+      "path": "/lsp/code-action"
+    },
+    {
+      "operationId": "lsp.completion",
+      "method": "post",
+      "path": "/lsp/completion"
+    },
+    {
+      "operationId": "lsp.definition",
+      "method": "post",
+      "path": "/lsp/definition"
+    },
+    {
+      "operationId": "lsp.diagnostics",
+      "method": "get",
+      "path": "/lsp/diagnostics"
+    },
+    {
+      "operationId": "lsp.documentSymbol",
+      "method": "get",
+      "path": "/lsp/document-symbol"
+    },
+    {
+      "operationId": "lsp.executeCommand",
+      "method": "post",
+      "path": "/lsp/execute-command"
+    },
+    {
+      "operationId": "lsp.hover",
+      "method": "post",
+      "path": "/lsp/hover"
+    },
+    {
+      "operationId": "lsp.references",
+      "method": "post",
+      "path": "/lsp/references"
+    },
+    {
+      "operationId": "lsp.rename",
+      "method": "post",
+      "path": "/lsp/rename"
+    },
+    {
+      "operationId": "lsp.status",
+      "method": "get",
+      "path": "/lsp"
+    },
+    {
+      "operationId": "mcp.add",
+      "method": "post",
+      "path": "/mcp"
+    },
+    {
+      "operationId": "mcp.auth.authenticate",
+      "method": "post",
+      "path": "/mcp/{name}/auth/authenticate"
+    },
+    {
+      "operationId": "mcp.auth.callback",
+      "method": "post",
+      "path": "/mcp/{name}/auth/callback"
+    },
+    {
+      "operationId": "mcp.auth.remove",
+      "method": "delete",
+      "path": "/mcp/{name}/auth"
+    },
+    {
+      "operationId": "mcp.auth.start",
+      "method": "post",
+      "path": "/mcp/{name}/auth"
+    },
+    {
+      "operationId": "mcp.connect",
+      "method": "post",
+      "path": "/mcp/{name}/connect"
+    },
+    {
+      "operationId": "mcp.disconnect",
+      "method": "post",
+      "path": "/mcp/{name}/disconnect"
+    },
+    {
+      "operationId": "mcp.remove",
+      "method": "delete",
+      "path": "/mcp/{name}"
+    },
+    {
+      "operationId": "mcp.status",
+      "method": "get",
+      "path": "/mcp"
+    },
+    {
+      "operationId": "observability.compare",
+      "method": "get",
+      "path": "/observability/compare"
+    },
+    {
+      "operationId": "observability.data.delete",
+      "method": "delete",
+      "path": "/observability/data"
+    },
+    {
+      "operationId": "observability.events.get",
+      "method": "get",
+      "path": "/observability/events/{eventId}"
+    },
+    {
+      "operationId": "observability.events.list",
+      "method": "get",
+      "path": "/observability/events"
+    },
+    {
+      "operationId": "observability.export",
+      "method": "get",
+      "path": "/observability/export"
+    },
+    {
+      "operationId": "observability.exporters.config",
+      "method": "get",
+      "path": "/observability/exporters/config"
+    },
+    {
+      "operationId": "observability.exporters.preview",
+      "method": "get",
+      "path": "/observability/exporters/preview/{eventId}"
+    },
+    {
+      "operationId": "observability.exporters.test",
+      "method": "post",
+      "path": "/observability/exporters/test"
+    },
+    {
+      "operationId": "observability.health",
+      "method": "get",
+      "path": "/observability/health"
+    },
+    {
+      "operationId": "observability.privacy.get",
+      "method": "get",
+      "path": "/observability/privacy"
+    },
+    {
+      "operationId": "observability.privacy.revoke",
+      "method": "post",
+      "path": "/observability/privacy/revoke"
+    },
+    {
+      "operationId": "observability.privacy.set",
+      "method": "put",
+      "path": "/observability/privacy"
+    },
+    {
+      "operationId": "observability.sessions.list",
+      "method": "get",
+      "path": "/observability/sessions"
+    },
+    {
+      "operationId": "observability.settings",
+      "method": "get",
+      "path": "/observability/settings"
+    },
+    {
+      "operationId": "observability.summary",
+      "method": "get",
+      "path": "/observability/summary"
+    },
+    {
+      "operationId": "observability.summaryAggregate",
+      "method": "get",
+      "path": "/observability/summary/aggregate"
+    },
+    {
+      "operationId": "observability.trace.get",
+      "method": "get",
+      "path": "/observability/trace/{traceId}"
+    },
+    {
+      "operationId": "part.delete",
+      "method": "delete",
+      "path": "/session/{sessionID}/message/{messageID}/part/{partID}"
+    },
+    {
+      "operationId": "part.update",
+      "method": "patch",
+      "path": "/session/{sessionID}/message/{messageID}/part/{partID}"
+    },
+    {
+      "operationId": "path.get",
+      "method": "get",
+      "path": "/path"
+    },
+    {
+      "operationId": "permission.list",
+      "method": "get",
+      "path": "/permission"
+    },
+    {
+      "operationId": "permission.reply",
+      "method": "post",
+      "path": "/permission/{requestID}/reply"
+    },
+    {
+      "operationId": "permission.respond",
+      "method": "post",
+      "path": "/session/{sessionID}/permissions/{permissionID}"
+    },
+    {
+      "operationId": "project.current",
+      "method": "get",
+      "path": "/project/current"
+    },
+    {
+      "operationId": "project.initGit",
+      "method": "post",
+      "path": "/project/git/init"
+    },
+    {
+      "operationId": "project.list",
+      "method": "get",
+      "path": "/project"
+    },
+    {
+      "operationId": "project.update",
+      "method": "patch",
+      "path": "/project/{projectID}"
+    },
+    {
+      "operationId": "provider.auth",
+      "method": "get",
+      "path": "/provider/auth"
+    },
+    {
+      "operationId": "provider.list",
+      "method": "get",
+      "path": "/provider"
+    },
+    {
+      "operationId": "provider.oauth.authorize",
+      "method": "post",
+      "path": "/provider/{providerID}/oauth/authorize"
+    },
+    {
+      "operationId": "provider.oauth.callback",
+      "method": "post",
+      "path": "/provider/{providerID}/oauth/callback"
+    },
+    {
+      "operationId": "provider.refresh",
+      "method": "post",
+      "path": "/provider/refresh"
+    },
+    {
+      "operationId": "pty.connect",
+      "method": "get",
+      "path": "/pty/{ptyID}/connect"
+    },
+    {
+      "operationId": "pty.create",
+      "method": "post",
+      "path": "/pty"
+    },
+    {
+      "operationId": "pty.get",
+      "method": "get",
+      "path": "/pty/{ptyID}"
+    },
+    {
+      "operationId": "pty.list",
+      "method": "get",
+      "path": "/pty"
+    },
+    {
+      "operationId": "pty.remove",
+      "method": "delete",
+      "path": "/pty/{ptyID}"
+    },
+    {
+      "operationId": "pty.tail",
+      "method": "get",
+      "path": "/pty/{ptyID}/tail"
+    },
+    {
+      "operationId": "pty.update",
+      "method": "put",
+      "path": "/pty/{ptyID}"
+    },
+    {
+      "operationId": "question.list",
+      "method": "get",
+      "path": "/question"
+    },
+    {
+      "operationId": "question.reject",
+      "method": "post",
+      "path": "/question/{requestID}/reject"
+    },
+    {
+      "operationId": "question.reply",
+      "method": "post",
+      "path": "/question/{requestID}/reply"
+    },
+    {
+      "operationId": "session.abort",
+      "method": "post",
+      "path": "/session/{sessionID}/abort"
+    },
+    {
+      "operationId": "session.children",
+      "method": "get",
+      "path": "/session/{sessionID}/children"
+    },
+    {
+      "operationId": "session.command",
+      "method": "post",
+      "path": "/session/{sessionID}/command"
+    },
+    {
+      "operationId": "session.create",
+      "method": "post",
+      "path": "/session"
+    },
+    {
+      "operationId": "session.delete",
+      "method": "delete",
+      "path": "/session/{sessionID}"
+    },
+    {
+      "operationId": "session.deleteMessage",
+      "method": "delete",
+      "path": "/session/{sessionID}/message/{messageID}"
+    },
+    {
+      "operationId": "session.diff",
+      "method": "get",
+      "path": "/session/{sessionID}/diff"
+    },
+    {
+      "operationId": "session.fork",
+      "method": "post",
+      "path": "/session/{sessionID}/fork"
+    },
+    {
+      "operationId": "session.get",
+      "method": "get",
+      "path": "/session/{sessionID}"
+    },
+    {
+      "operationId": "session.init",
+      "method": "post",
+      "path": "/session/{sessionID}/init"
+    },
+    {
+      "operationId": "session.list",
+      "method": "get",
+      "path": "/session"
+    },
+    {
+      "operationId": "session.message",
+      "method": "get",
+      "path": "/session/{sessionID}/message/{messageID}"
+    },
+    {
+      "operationId": "session.messages",
+      "method": "get",
+      "path": "/session/{sessionID}/message"
+    },
+    {
+      "operationId": "session.prompt",
+      "method": "post",
+      "path": "/session/{sessionID}/message"
+    },
+    {
+      "operationId": "session.prompt_async",
+      "method": "post",
+      "path": "/session/{sessionID}/prompt_async"
+    },
+    {
+      "operationId": "session.revert",
+      "method": "post",
+      "path": "/session/{sessionID}/revert"
+    },
+    {
+      "operationId": "session.share",
+      "method": "post",
+      "path": "/session/{sessionID}/share"
+    },
+    {
+      "operationId": "session.shell",
+      "method": "post",
+      "path": "/session/{sessionID}/shell"
+    },
+    {
+      "operationId": "session.status",
+      "method": "get",
+      "path": "/session/status"
+    },
+    {
+      "operationId": "session.summarize",
+      "method": "post",
+      "path": "/session/{sessionID}/summarize"
+    },
+    {
+      "operationId": "session.todo",
+      "method": "get",
+      "path": "/session/{sessionID}/todo"
+    },
+    {
+      "operationId": "session.unrevert",
+      "method": "post",
+      "path": "/session/{sessionID}/unrevert"
+    },
+    {
+      "operationId": "session.unshare",
+      "method": "delete",
+      "path": "/session/{sessionID}/share"
+    },
+    {
+      "operationId": "session.update",
+      "method": "patch",
+      "path": "/session/{sessionID}"
+    },
+    {
+      "operationId": "task.cancel",
+      "method": "post",
+      "path": "/task/{id}/cancel"
+    },
+    {
+      "operationId": "task.followup",
+      "method": "post",
+      "path": "/task/{id}/followup"
+    },
+    {
+      "operationId": "task.get",
+      "method": "get",
+      "path": "/task/{id}"
+    },
+    {
+      "operationId": "task.list",
+      "method": "get",
+      "path": "/task"
+    },
+    {
+      "operationId": "task.messages",
+      "method": "get",
+      "path": "/task/{id}/messages"
+    },
+    {
+      "operationId": "task.promote",
+      "method": "post",
+      "path": "/task/{id}/promote"
+    },
+    {
+      "operationId": "task.resume",
+      "method": "post",
+      "path": "/task/{id}/resume"
+    },
+    {
+      "operationId": "task.team",
+      "method": "get",
+      "path": "/task/{id}/team"
+    },
+    {
+      "operationId": "tool.ids",
+      "method": "get",
+      "path": "/experimental/tool/ids"
+    },
+    {
+      "operationId": "tool.list",
+      "method": "get",
+      "path": "/experimental/tool"
+    },
+    {
+      "operationId": "tui.appendPrompt",
+      "method": "post",
+      "path": "/tui/append-prompt"
+    },
+    {
+      "operationId": "tui.clearPrompt",
+      "method": "post",
+      "path": "/tui/clear-prompt"
+    },
+    {
+      "operationId": "tui.control.next",
+      "method": "get",
+      "path": "/tui/control/next"
+    },
+    {
+      "operationId": "tui.control.response",
+      "method": "post",
+      "path": "/tui/control/response"
+    },
+    {
+      "operationId": "tui.executeCommand",
+      "method": "post",
+      "path": "/tui/execute-command"
+    },
+    {
+      "operationId": "tui.openHelp",
+      "method": "post",
+      "path": "/tui/open-help"
+    },
+    {
+      "operationId": "tui.openModels",
+      "method": "post",
+      "path": "/tui/open-models"
+    },
+    {
+      "operationId": "tui.openSessions",
+      "method": "post",
+      "path": "/tui/open-sessions"
+    },
+    {
+      "operationId": "tui.openThemes",
+      "method": "post",
+      "path": "/tui/open-themes"
+    },
+    {
+      "operationId": "tui.publish",
+      "method": "post",
+      "path": "/tui/publish"
+    },
+    {
+      "operationId": "tui.selectSession",
+      "method": "post",
+      "path": "/tui/select-session"
+    },
+    {
+      "operationId": "tui.showToast",
+      "method": "post",
+      "path": "/tui/show-toast"
+    },
+    {
+      "operationId": "tui.submitPrompt",
+      "method": "post",
+      "path": "/tui/submit-prompt"
+    },
+    {
+      "operationId": "vcs.diff",
+      "method": "get",
+      "path": "/vcs/diff"
+    },
+    {
+      "operationId": "vcs.get",
+      "method": "get",
+      "path": "/vcs"
+    },
+    {
+      "operationId": "worktree.create",
+      "method": "post",
+      "path": "/experimental/worktree"
+    },
+    {
+      "operationId": "worktree.list",
+      "method": "get",
+      "path": "/experimental/worktree"
+    },
+    {
+      "operationId": "worktree.remove",
+      "method": "delete",
+      "path": "/experimental/worktree"
+    },
+    {
+      "operationId": "worktree.reset",
+      "method": "post",
+      "path": "/experimental/worktree/reset"
+    }
+  ]
+}

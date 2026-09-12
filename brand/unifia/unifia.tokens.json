@@ -1,0 +1,37 @@
+{
+  "color": {
+    "brand": {
+      "code": "#4885F3",
+      "indigo": "#424BD5",
+      "design": "#9068E9",
+      "bridge": "#BD5852",
+      "work": "#EC7C39",
+      "amber": "#FAAB52"
+    },
+    "surface": {
+      "canvas": "#070A13",
+      "panel": "#111422",
+      "card": "#1D202F",
+      "elevated": "#2C2E3E"
+    },
+    "text": {
+      "primary": "#F2EFED",
+      "secondary": "#B6B3C2",
+      "tertiary": "#73707E"
+    }
+  },
+  "typography": {
+    "wordmarkReference": "ITC Bauhaus",
+    "ui": [
+      "Manrope",
+      "Inter",
+      "Noto Sans",
+      "sans-serif"
+    ],
+    "codeAndTerminal": [
+      "Roboto Mono",
+      "Cascadia Mono",
+      "monospace"
+    ]
+  }
+}

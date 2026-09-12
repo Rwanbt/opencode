@@ -20,7 +20,7 @@ describe("canonical()", () => {
 
     test("mixed separators normalize to forward slashes", () => {
       // The file lives INSIDE root's last segment; the relative key drops that segment.
-      expect(canonical("D:\\dev\\projects/opencode\\README.md", "D:\\dev\\projects\\opencode")).toBe("README.md")
+      expect(canonical("D:\\dev\\projects/unifia\\README.md", "D:\\dev\\projects\\unifia")).toBe("README.md")
     })
 
     test("Windows case-insensitive root matching", () => {
