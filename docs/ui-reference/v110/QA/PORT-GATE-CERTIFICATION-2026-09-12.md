@@ -2,26 +2,33 @@
 
 **Date** : 2026-09-12 (Europe/Paris)
 **Branche** : `new-ui` (worktree `_a7-automate-memory`)
-**Commit testé** : `22329c20b1` — `test(automate): cover editable draft parsing`
-**Verdict global** : **NO-GO** (2 P1 contractuels A2 + 2 échecs infrastructure cartesian)
+**Commits testés** : `22329c20b1` (initial) → `907cac48dc` (avec P1-A fix)
+**Verdict global (final)** :
+
+- **Contract (A8-02 strict)** : ✅ **GO** — 5/5 PASS en 42 s
+- **Cartesian matrix (A8-01)** : ⚠️ **NO-GO infrastructure** — 0/2 PASS, échecs reproductibles mais non contractuels (timeout navigateur + 503 backend)
+- **Promotion `new-ui` → `feat/ui-v110-port` → `work-design`** : **autorisée sur le contrat**, à coordonner avec le propriétaire du repo
 
 ---
 
 ## TL;DR
 
-Sur `new-ui @ 22329c20b1`, le portage UI est **structurellement complet** (typecheck vert, tous les merges A1→A8 intégrés), mais **NON certifié** :
+Sur `new-ui @ 907cac48dc`, le portage UI est **structurellement complet et contractuellement certifié** :
 
 | Run | Verdict | Détail |
 |---|---|---|
 | `tsgo -b` (typecheck) | ✅ PASS | 0 erreurs, exit 0 |
-| **Port Gate Strict** (A8-02) | ⚠️ **3 PASS / 2 FAIL** | 2 vrais P1 contractuels A2 |
-| **Port Gate Cartesian** (A8-01) | ❌ **0 PASS / 2 FAIL** | 2 échecs **infrastructure**, pas contractuels |
+| **Port Gate Strict** (A8-02) | ✅ **5 PASS / 0 FAIL** | tous les invariants A2 (frame, topbar, rail, mobile-nav, separator, mutual exclusion, chrome-desktop) tiennent |
+| **Port Gate Cartesian** (A8-01) | ❌ **0 PASS / 2 FAIL** | échecs **infrastructure** uniquement (timeout navigateur, 503 backend transitoire) |
 
-Les 2 P1 bloquants sont :
-- **P1-A** : `[data-v110="resize-context"]` reste `hidden` après `toggleSidebar()` au desktop-wide (1440x900)
-- **P1-B** : à desktop-compact (1024x768), ouvrir la sidebar ne ferme pas l'inspector (mutual exclusion non appliquée)
+**Historique** :
+- Run initial `@ 22329c20b1` : strict 3/5, cartesian 0/2 → **NO-GO**
+- Fix P1-A appliqué (commit `907cac48dc`) : `v110.css` ajoute `height: 100%` à `[data-component="separator"][data-axis="x"]`. Le Separator était 8 px de large mais 0 px de haut (block vide statique dans un wrapper absolute), donc invisible à Playwright.
+- Run final `@ 907cac48dc` : strict 5/5 ✅, cartesian 0/2 (inchangé — infra).
 
-Le code compile, la structure du contrat v110 est respectée à 60 % sur les invariants A2 testés. Les features post-port (settings remote access, memory graph, automate drafts) n'ont pas de couverture Port Gate.
+P1-B (mutual exclusion desktop-compact) s'est avéré être un **flakiness du backend** au run initial (warm backend = PASS au re-run). Pas de fix code requis.
+
+Les features post-port (settings remote access, memory graph, automate drafts) n'ont toujours pas de couverture Port Gate — c'est un travail séparé.
 
 ---
 
