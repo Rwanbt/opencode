@@ -569,6 +569,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Projeler ve oturumlar",
   "sidebar.settings": "Ayarlar",
   "sidebar.help": "Yardım",
+  "sidebar.resize": "Kenar çubuğunu yeniden boyutlandır",
+  "inspector.resize": "Denetçiyi yeniden boyutlandır",
   "sidebar.workspaces.enable": "Çalışma alanlarını etkinleştir",
   "sidebar.workspaces.disable": "Çalışma alanlarını devre dışı bırak",
   "sidebar.gettingStarted.title": "Başlarken",
