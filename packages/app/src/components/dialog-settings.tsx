@@ -18,6 +18,7 @@ import { SettingsAndroid } from "./settings-android"
 import { SettingsObservability } from "./settings-observability"
 import { SettingsMemory } from "./settings-memory"
 import { SettingsRemoteAccess } from "./settings-remote-access"
+import { SettingsCollaborativeAuth } from "./settings-collaborative-auth"
 
 export const DialogSettings: Component = () => {
   const mobileLayout = useMobileLayout()
@@ -78,6 +79,10 @@ const DialogSettingsDesktop: Component = () => {
                     <Icon name="globe" />
                     {language.t("settings.desktop.section.remote")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="account">
+                    <Icon name="shield" />
+                    {language.t("auth.signIn")}
+                  </Tabs.Trigger>
                   <Tabs.Trigger value="benchmark">
                     <Icon name="speedometer" />
                     {language.t("settings.fork.benchmark.title")}
@@ -130,6 +135,9 @@ const DialogSettingsDesktop: Component = () => {
       </Tabs.Content>
       <Tabs.Content value="remote" class="no-scrollbar">
         <SettingsRemoteAccess />
+      </Tabs.Content>
+      <Tabs.Content value="account" class="no-scrollbar">
+        <SettingsCollaborativeAuth />
       </Tabs.Content>
       <Tabs.Content value="benchmark" class="no-scrollbar">
         <SettingsBenchmark />

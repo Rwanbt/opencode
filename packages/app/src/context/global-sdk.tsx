@@ -2,12 +2,13 @@ import type { Event } from "../types/sdk-shim"
 import { createSimpleContext } from "@unifia/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createMemo, onCleanup, onMount } from "solid-js"
 import z from "zod"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
+import { useCollaborativeAuth } from "./collaborative-auth"
 
 const abortError = z.object({
   name: z.literal("AbortError"),
@@ -19,6 +20,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const language = useLanguage()
     const server = useServer()
     const platform = usePlatform()
+    const collaborativeAuth = useCollaborativeAuth()
     const abort = new AbortController()
 
     const eventFetch = (() => {
@@ -41,11 +43,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const currentServer = server.current
     if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
 
-    const eventSdk = createSdkForServer({
-      signal: abort.signal,
-      fetch: eventFetch,
-      server: currentServer.http,
-    })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
     }>()
@@ -142,7 +139,14 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           }
           abort.signal.addEventListener("abort", onAbort)
           try {
-            const events = await eventSdk.global.event({
+            const events = await createSdkForServer({
+              signal: abort.signal,
+              fetch: eventFetch,
+              server: currentServer.http,
+              headers: collaborativeAuth.authorization()
+                ? { Authorization: collaborativeAuth.authorization()! }
+                : undefined,
+            }).global.event({
               signal: attempt.signal,
               onSseError: (error) => {
                 if (aborted(error)) return
@@ -233,19 +237,24 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       flush()
     })
 
-    const sdk = createSdkForServer({
-      server: server.current.http,
+    const sdk = createMemo(() => createSdkForServer({
+      server: currentServer.http,
       fetch: platform.fetch,
+      headers: collaborativeAuth.authorization()
+        ? { Authorization: collaborativeAuth.authorization()! }
+        : undefined,
       // FORK (Phase 4.4 — R-code&conv): the global SDK client is now
       // non-throwing by default (see packages/sdk/js/src/v2/client.ts).
       // We omit throwOnError here so it inherits the new default — every
       // consumer of `useGlobalSDK().client` must inspect `res.data` /
       // `res.error` instead of catching throws.
-    })
+    }))
 
     return {
       url: currentServer.http.url,
-      client: sdk,
+      get client() {
+        return sdk()
+      },
       event: {
         on: emitter.on.bind(emitter),
         listen: emitter.listen.bind(emitter),
@@ -258,6 +267,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           server: s.http,
           fetch: platform.fetch,
           ...opts,
+          headers: {
+            ...(collaborativeAuth.authorization() ? { Authorization: collaborativeAuth.authorization()! } : {}),
+            ...opts.headers,
+          },
         })
       },
     }

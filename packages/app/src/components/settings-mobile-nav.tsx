@@ -16,6 +16,7 @@ import { SettingsAndroid } from "./settings-android"
 import { SettingsObservability } from "./settings-observability"
 import { SettingsMemory } from "./settings-memory"
 import { SettingsRemoteAccess } from "./settings-remote-access"
+import { SettingsCollaborativeAuth } from "./settings-collaborative-auth"
 
 type CategoryId =
   | "general"
@@ -25,6 +26,7 @@ type CategoryId =
   | "models"
   | "configuration"
   | "remote"
+  | "account"
   | "benchmark"
   | "plugins"
   | "memory"
@@ -48,6 +50,7 @@ export const SettingsMobileNav: Component = () => {
     { value: "models" as const, icon: "models" as const, label: language.t("settings.models.title") },
     { value: "configuration" as const, icon: "console" as const, label: language.t("settings.localConfig.title") },
     { value: "remote" as const, icon: "globe" as const, label: language.t("settings.desktop.section.remote") },
+    { value: "account" as const, icon: "shield" as const, label: language.t("auth.signIn") },
     { value: "benchmark" as const, icon: "speedometer" as const, label: language.t("settings.fork.benchmark.title") },
     { value: "memory" as const, icon: "brain" as const, label: language.t("settings.fork.memory.title") },
     { value: "plugins" as const, icon: "mcp" as const, label: language.t("settings.fork.plugins.title") },
@@ -75,6 +78,8 @@ export const SettingsMobileNav: Component = () => {
         return <SettingsConfiguration />
       case "remote":
         return <SettingsRemoteAccess />
+      case "account":
+        return <SettingsCollaborativeAuth />
       case "benchmark":
         return <SettingsBenchmark />
       case "plugins":

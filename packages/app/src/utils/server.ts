@@ -16,7 +16,9 @@ export function createSdkForServer({
 
   return createUnifiaClient({
     ...config,
-    headers: { ...config.headers, ...auth },
+    // An explicit Bearer session must take precedence over legacy Basic
+    // connection credentials. Basic remains the fallback for unmodified flows.
+    headers: { ...auth, ...config.headers },
     baseUrl: server.url,
   })
 }

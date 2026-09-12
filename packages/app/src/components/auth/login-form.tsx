@@ -2,8 +2,9 @@ import { createSignal, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 
 export interface LoginFormProps {
-  onLogin: (tokens: { accessToken: string; refreshToken: string; user: { id: string; username: string; role: string } }) => void
+  onLogin: (tokens: { accessToken: string; refreshToken: string; user: { id: string; username: string; role: "admin" | "member" | "viewer" } }) => void
   serverUrl: string
+  fetch?: typeof fetch
 }
 
 /**
@@ -34,7 +35,7 @@ export function LoginForm(props: LoginFormProps) {
       }
       if (mode() === "register" && email()) body.email = email()
 
-      const res = await fetch(`${props.serverUrl}${endpoint}`, {
+      const res = await (props.fetch ?? fetch)(`${props.serverUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

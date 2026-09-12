@@ -31,6 +31,7 @@ import { CommandPaletteMount } from "@/components/dialog-command-palette"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
+import { CollaborativeAuthProvider } from "@/context/collaborative-auth"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -396,21 +397,23 @@ export function AppProviders(props: ParentProps<{
           <LanguageProvider locale={props.locale}>
             <UiI18nBridge>
               <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-                <GlobalSDKProvider>
-                  <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-                    <ServerKey>
-                      <GlobalSyncProvider>
-                        <AppBaseProviders>
-                          <AppInterface
-                            router={props.router}
-                          >
-                            {props.children}
-                          </AppInterface>
-                        </AppBaseProviders>
-                      </GlobalSyncProvider>
-                    </ServerKey>
-                  </ConnectionGate>
-                </GlobalSDKProvider>
+                <CollaborativeAuthProvider>
+                  <GlobalSDKProvider>
+                    <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+                      <ServerKey>
+                        <GlobalSyncProvider>
+                          <AppBaseProviders>
+                            <AppInterface
+                              router={props.router}
+                            >
+                              {props.children}
+                            </AppInterface>
+                          </AppBaseProviders>
+                        </GlobalSyncProvider>
+                      </ServerKey>
+                    </ConnectionGate>
+                  </GlobalSDKProvider>
+                </CollaborativeAuthProvider>
               </ErrorBoundary>
             </UiI18nBridge>
           </LanguageProvider>
