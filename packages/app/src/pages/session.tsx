@@ -63,6 +63,7 @@ import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 import { useViewMode } from "@/hooks/use-view-mode"
 import { useShell, useViewport } from "@/shell/v110-store"
+import { useArtifactLoader } from "@/pages/session/use-artifact-loader"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -84,32 +85,16 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const navigate = useNavigate()
   const workbench = useWorkspaceWorkbench()
-  const [artifactDocument, setArtifactDocument] = createSignal<{ filename: string; content: string }>()
   // Read-only capture of the message-timeline scroll viewport for
   // PromptIndex (A3-01). Wraps setScrollRef below rather than reaching
   // into createSessionScroll/createAutoScroll internals: this signal
   // has no write path back into the existing scroll machinery.
   const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
-  const [artifactError, setArtifactError] = createSignal<string>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   // FORK: ADR-0005 dual-mode layout effect (Agent ⇄ IDE toggle).
   useViewMode()
 
-  createEffect(() => {
-    const artifactId = (searchParams as { artifact?: string }).artifact
-    const connection = workbench.connection()
-    if (!artifactId || !connection) {
-      setArtifactDocument(undefined)
-      return
-    }
-    setArtifactError(undefined)
-    void connection.client.getArtifact(connection.workspaceId, artifactId)
-      .then((result) => {
-        const bytes = Uint8Array.from(atob(result.content), (value) => value.charCodeAt(0))
-        setArtifactDocument({ filename: result.artifact.filename, content: new TextDecoder().decode(bytes) })
-      })
-      .catch((error) => setArtifactError(error instanceof Error ? error.message : "Artifact could not be loaded"))
-  })
+  const { artifactDocument, artifactError } = useArtifactLoader(() => (searchParams as { artifact?: string }).artifact)
 
   createEffect(() => {
     if (!prompt.ready()) return
