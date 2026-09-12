@@ -29,6 +29,21 @@ export function memoryTitle(path: string): string {
   return filename || path
 }
 
+/** First non-empty paragraph of the body, truncated to a single line. Used
+ * for hover previews in the vault and the links-context panel. */
+export function memoryExcerpt(body: string, max = 120): string {
+  const collapsed = body
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "") // strip images
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1") // unwrap links to text
+    .replace(/[`*_>#~-]+/g, " ") // strip inline markdown noise
+    .replace(/\s+/g, " ")
+    .trim()
+  if (collapsed.length <= max) return collapsed
+  const slice = collapsed.slice(0, max)
+  const lastSpace = slice.lastIndexOf(" ")
+  return (lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd() + "…"
+}
+
 export function parseMemoryNote(path: string, raw: string): MemoryNoteDocument {
   const withoutFrontmatter = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
   const headingMatch = withoutFrontmatter.match(/^#\s+(.+)(?:\r?\n|$)/)

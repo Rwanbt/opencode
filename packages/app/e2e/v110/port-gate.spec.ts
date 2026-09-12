@@ -27,35 +27,45 @@ import { WAVE05 } from "./matrix"
 import { goto, keys, modes, overflow, panels, shot, track } from "./gate"
 
 test.describe("v110 port gate (Wave 0.5 skeleton)", () => {
-  // A8-01 cartesian: 16 viewports in a single worker; bump timeout so
-  // the loop survives the warm-backend phase without the page/browser
-  // closing mid-test past roughly the 10th case (the failure mode
-  // documented in the file header).
+  // A8-01 cartesian: the original loop put all 16 WAVE05 viewports into
+  // one test, but a single worker reproducibly drove the page/browser to
+  // close mid-test past roughly the 10th case (see the header comment in
+  // the previous version of this file). Splitting into four 4-viewport
+  // tests gives each group a fresh page so the browser memory pressure
+  // resets between groups, while still keeping the same coverage matrix.
   test.setTimeout(180_000)
-  test("every WAVE05 viewport renders without errors or overflow", async ({ page, gotoSession }) => {
-    const t = track(page)
-    await gotoSession()
-    await expect(page.locator(promptSelector).first()).toBeVisible()
+  const groups: { label: string; cases: typeof WAVE05 }[] = [
+    { label: "mission viewports (desktop + tablet + phone)", cases: WAVE05.slice(0, 4) },
+    { label: "edge cases — wide breakpoints", cases: WAVE05.slice(4, 8) },
+    { label: "edge cases — narrow breakpoints", cases: WAVE05.slice(8, 12) },
+    { label: "edge cases — landscape + tablet", cases: WAVE05.slice(12, 16) },
+  ]
+  for (const group of groups) {
+    test(`every WAVE05 viewport renders without errors or overflow (${group.label})`, async ({ page, gotoSession }) => {
+      const t = track(page)
+      await gotoSession()
+      await expect(page.locator(promptSelector).first()).toBeVisible()
 
-    for (const c of WAVE05) {
-      await page.setViewportSize({ width: c.width, height: c.height })
-      expect(classify(c.width, c.height), c.name + ": matrix id drifts from A1 contract").toBe(c.id)
-      const over = await overflow(page)
-      expect(over.dx, c.name + ": global x-overflow " + over.dx + "px exceeds 6px").toBeLessThanOrEqual(6)
-      const got = await modes(page)
-      expect(got, c.name).toContain("code")
-      expect(got, c.name).toContain("work")
-      expect(got, c.name).toContain("design")
-      expect(got.length, c.name + ": rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
-      await panels(page)
-      await keys(page)
-      await shot(page, c.name)
-    }
+      for (const c of group.cases) {
+        await page.setViewportSize({ width: c.width, height: c.height })
+        expect(classify(c.width, c.height), c.name + ": matrix id drifts from A1 contract").toBe(c.id)
+        const over = await overflow(page)
+        expect(over.dx, c.name + ": global x-overflow " + over.dx + "px exceeds 6px").toBeLessThanOrEqual(6)
+        const got = await modes(page)
+        expect(got, c.name).toContain("code")
+        expect(got, c.name).toContain("work")
+        expect(got, c.name).toContain("design")
+        expect(got.length, c.name + ": rail must expose at most 4 shell modes, saw " + got.join(",")).toBeLessThanOrEqual(4)
+        await panels(page)
+        await keys(page)
+        await shot(page, c.name)
+      }
 
-    t.stop()
-    expect(t.pages, "pageerrors: " + t.pages.join(" | ")).toEqual([])
-    expect(t.logs, "console errors: " + t.logs.join(" | ")).toEqual([])
-  })
+      t.stop()
+      expect(t.pages, "pageerrors: " + t.pages.join(" | ")).toEqual([])
+      expect(t.logs, "console errors: " + t.logs.join(" | ")).toEqual([])
+    })
+  }
 
   test("navigation reaches work design and back to code", async ({ page, gotoSession }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
