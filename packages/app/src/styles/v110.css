@@ -38,6 +38,24 @@
   --v110-layout: 650ms;
   --v110-split: 680ms;
   --v110-ease: cubic-bezier(0.16, 0.84, 0.2, 1);
+
+  /* Semantic colour tokens — Phase 38 (ADR-038 visual parity scope).
+   * Source-of-truth: tokens/semantic.ts. Values here must mirror the
+   * JS dictionary; tests guard the parity. Phase 35 block above uses
+   * these via var() with a sensible fallback until the theme layer
+   * picks them up. */
+  --text-danger: rgb(220, 80, 80);
+  --text-warning: rgb(220, 170, 60);
+  --text-success: rgb(80, 170, 100);
+  --text-info: rgb(80, 140, 200);
+  --bg-danger: rgba(220, 80, 80, 0.12);
+  --bg-warning: rgba(220, 170, 60, 0.12);
+  --bg-success: rgba(80, 170, 100, 0.12);
+  --bg-info: rgba(80, 140, 200, 0.12);
+  --accent-base: rgb(120, 140, 220);
+  --accent-strong: rgb(140, 160, 240);
+  --shadow-overlay: rgba(0, 0, 0, 0.32);
+  --shadow-floating: rgba(0, 0, 0, 0.18);
 }
 
 /* Narrow-desktop panel overrides (maquette media max-width 1360px). */
