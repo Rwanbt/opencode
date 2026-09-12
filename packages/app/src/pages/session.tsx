@@ -16,7 +16,6 @@ import {
   untrack,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
 import { useFile } from "@/context/file"
@@ -63,6 +62,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 import { useViewMode } from "@/hooks/use-view-mode"
+import { useShell, useViewport } from "@/shell/v110-store"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -174,7 +174,8 @@ export default function Page() {
     ),
   )
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const shell = useShell(useViewport())
+  const isDesktop = createMemo(() => shell.kind() !== "overlay")
   const platformCtx = usePlatform()
   const isMobileDevice = createMemo(() => platformCtx.platform === "mobile")
   const size = createSizing()
@@ -929,7 +930,7 @@ export default function Page() {
         </section>
       </Show>
       <div data-component="session-workspace" class="relative flex-1 min-h-0 flex flex-col">
-        <div data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col md:flex-row">
+        <div data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col shell:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
@@ -958,7 +959,7 @@ export default function Page() {
         {/* Session panel */}
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 shell:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}

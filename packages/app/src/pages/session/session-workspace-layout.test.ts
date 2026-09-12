@@ -12,7 +12,7 @@ describe("session workspace layout", () => {
   test("the workspace remains the positioning context for mobile overlays", async () => {
     const source = await Bun.file(new URL("../session.tsx", import.meta.url)).text()
     expect(source).toContain('data-component="session-workspace" class="relative flex-1 min-h-0 flex flex-col"')
-    expect(source).toContain('data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col md:flex-row"')
+    expect(source).toContain('data-component="session-workspace-main" class="flex-1 min-h-0 flex flex-col shell:flex-row"')
   })
 
   test("overlay panels are styled by the web bundle, not Android-only CSS", async () => {
@@ -31,6 +31,13 @@ describe("session workspace layout", () => {
     expect(source).toContain('const isOverlay = createMemo(() => shell.kind() === "overlay")')
     expect(source).not.toContain('createMediaQuery("(min-width: 768px)")')
     expect(source).not.toContain("isMobile()")
+  })
+
+  test("session coordinator uses the same viewport contract as the inspector", async () => {
+    const source = await Bun.file(new URL("../session.tsx", import.meta.url)).text()
+    expect(source).toContain('const isDesktop = createMemo(() => shell.kind() !== "overlay")')
+    expect(source).toContain("shell:flex-none")
+    expect(source).not.toContain('createMediaQuery("(min-width: 768px)")')
   })
 
   test("terminal resize handle follows the platform, not a width breakpoint", async () => {
