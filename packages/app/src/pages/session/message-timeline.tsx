@@ -44,9 +44,36 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
-type UserActions = {
+export type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+}
+
+/** Public prop type for MessageTimeline. Exported as part of the P1-5
+ * split prerequisite (ADR-037 Vague 3) so SessionTimelineSection can
+ * wrap MessageTimeline with full type safety. */
+export interface MessageTimelineProps {
+  mobileChanges: boolean
+  mobileFallback: JSX.Element
+  actions?: UserActions
+  scroll: { overflow: boolean; bottom: boolean; jump: boolean }
+  onResumeScroll: () => void
+  setScrollRef: (el: HTMLDivElement | undefined) => void
+  onScheduleScrollState: (el: HTMLDivElement) => void
+  onAutoScrollHandleScroll: () => void
+  onMarkScrollGesture: (target?: EventTarget | null) => void
+  hasScrollGesture: () => boolean
+  onUserScroll: () => void
+  onTurnBackfillScroll: () => void
+  onAutoScrollInteraction: (event: MouseEvent) => void
+  centered: boolean
+  setContentRef: (el: HTMLDivElement) => void
+  turnStart: number
+  historyMore: boolean
+  historyLoading: boolean
+  onLoadEarlier: () => void
+  renderedUserMessages: UserMessage[]
+  anchor: (id: string) => string
 }
 
 const messageComments = (parts: Part[]): MessageComment[] =>
@@ -196,29 +223,7 @@ function createTimelineStaging(input: TimelineStageInput) {
   return { messages: stagedUserMessages, isStaging }
 }
 
-export function MessageTimeline(props: {
-  mobileChanges: boolean
-  mobileFallback: JSX.Element
-  actions?: UserActions
-  scroll: { overflow: boolean; bottom: boolean; jump: boolean }
-  onResumeScroll: () => void
-  setScrollRef: (el: HTMLDivElement | undefined) => void
-  onScheduleScrollState: (el: HTMLDivElement) => void
-  onAutoScrollHandleScroll: () => void
-  onMarkScrollGesture: (target?: EventTarget | null) => void
-  hasScrollGesture: () => boolean
-  onUserScroll: () => void
-  onTurnBackfillScroll: () => void
-  onAutoScrollInteraction: (event: MouseEvent) => void
-  centered: boolean
-  setContentRef: (el: HTMLDivElement) => void
-  turnStart: number
-  historyMore: boolean
-  historyLoading: boolean
-  onLoadEarlier: () => void
-  renderedUserMessages: UserMessage[]
-  anchor: (id: string) => string
-}) {
+export function MessageTimeline(props: MessageTimelineProps) {
   let touchGesture: number | undefined
 
   const navigate = useNavigate()

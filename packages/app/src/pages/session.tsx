@@ -26,6 +26,7 @@ import { createSessionScroll } from "@/pages/session/session-scroll"
 import { showToast } from "@unifia/ui/toast"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { SessionTimelineSection } from "@/pages/session/session-timeline-section"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -953,15 +954,11 @@ export default function Page() {
             <Switch>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
-                  <MessageTimeline
+                  <SessionTimelineSection
                     mobileChanges={mobileChanges()}
                     mobileFallback={reviewContent({
                       diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
+                      classes: { root: "pb-8", header: "px-4", container: "px-4" },
                       loadingClass: "px-4 py-4 text-text-weak",
                       emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                     })}
@@ -979,19 +976,20 @@ export default function Page() {
                     onUserScroll={markUserScroll}
                     onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
+                    centered={centered}
                     setContentRef={setContentRef}
-
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
+                    turnStart={historyWindow.turnStart}
+                    historyMore={historyMore}
+                    historyLoading={historyLoading}
                     onLoadEarlier={() => {
                       void historyWindow.loadAndReveal()
                     }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
+                    renderedUserMessages={() => historyWindow.renderedUserMessages()}
+                    visibleUserMessages={visibleUserMessages}
+                    messagesReady={messagesReady}
+                    scrollEl={scrollEl}
                     anchor={anchor}
                   />
-                  <PromptIndex messages={visibleUserMessages} scrollEl={scrollEl} />
                 </Show>
               </Match>
               <Match when={true}>
