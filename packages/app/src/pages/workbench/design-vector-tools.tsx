@@ -111,15 +111,35 @@ export function DesignSelectionHandles(props: {
   )
 }
 
-export function DesignBezierPath(props: { points: readonly { x: number; y: number }[] }): JSX.Element {
-  // Minimal cubic Bezier renderer: each point becomes an anchor, every
-  // pair in between yields a control point at the midpoint. The contract
-  // ships a single Bezier shape (D06); multi-segment paths belong to
-  // the canvas runtime.
+export function DesignBezierPath(props: {
+  points: readonly { x: number; y: number }[]
+  /** Optional explicit control points between anchors. When supplied,
+   * the renderer emits cubic segments (`C`) instead of the default
+   * midpoint quadratic (`Q`/`T`). Length should be points.length - 1. */
+  controls?: readonly ({ x: number; y: number } | null)[]
+}): JSX.Element {
+  // Two render modes:
+  // 1. points only: emit a quadratic path with midpoints between anchors
+  //    (cheap default, supports arbitrary anchor counts).
+  // 2. points + controls: emit a cubic path. Null control entries fall
+  //    back to the midpoint, so callers can mix-and-match segments.
   const path = (): string => {
     const points = props.points
+    const controls = props.controls
     if (points.length < 2) return ""
     const head = `M ${points[0].x} ${points[0].y}`
+    if (controls && controls.length > 0) {
+      const segments: string[] = [head]
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const anchor = points[i + 1]
+        const explicit = controls[i]
+        const prev = points[i]
+        const c1 = explicit ?? { x: (prev.x + anchor.x) / 2, y: (prev.y + anchor.y) / 2 }
+        const c2 = explicit ?? c1
+        segments.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${anchor.x} ${anchor.y}`)
+      }
+      return segments.join(" ")
+    }
     if (points.length === 2) {
       const mid = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
       return `${head} Q ${points[1].x} ${points[1].y} ${mid.x} ${mid.y}`
@@ -134,6 +154,50 @@ export function DesignBezierPath(props: { points: readonly { x: number; y: numbe
     return [head, ...rest, tail].join(" ")
   }
   return <path d={path()} fill="none" stroke="currentColor" stroke-width="1.5" data-v110="design-bezier" />
+}
+
+/** Render the editable control points (handles) of a multi-segment Bezier.
+ * Each anchor plus each explicit control point gets a draggable handle,
+ * so the canvas runtime can wire pointer-driven Bezier editing without
+ * reimplementing the geometry. */
+export function DesignBezierHandles(props: {
+  points: readonly { x: number; y: number }[]
+  controls: readonly ({ x: number; y: number } | null)[]
+}): JSX.Element {
+  return (
+    <g data-v110="design-bezier-handles">
+      <For each={props.points}>
+        {(point, index) => (
+          <rect
+            x={point.x - 3}
+            y={point.y - 3}
+            width={6}
+            height={6}
+            fill="var(--background-base)"
+            stroke="currentColor"
+            stroke-width="1"
+            data-design-bezier-anchor={index()}
+          />
+        )}
+      </For>
+      <For each={props.controls}>
+        {(control, index) => {
+          if (!control) return null
+          return (
+            <circle
+              cx={control.x}
+              cy={control.y}
+              r={3}
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1"
+              data-design-bezier-control={index()}
+            />
+          )
+        }}
+      </For>
+    </g>
+  )
 }
 
 /** Convenience: full MVP canvas with a tool selector and selection box. */

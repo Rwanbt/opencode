@@ -131,3 +131,133 @@ html[data-ui-animations="off"] *::after {
   animation: none;
   transition: none;
 }
+
+/* A4 Code chrome — terminal + diff + code panel v110 surface.
+ * Geometry stays owned by the host components; this sheet only supplies
+ * the chrome tokens (background, border, focus, motion). The intent is
+ * parity with shell rhythm without duplicating any Tailwind utility. */
+[data-v110="terminal"] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-sm);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="terminal"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-v110="terminal"] .xterm-viewport,
+[data-v110="terminal"] .xterm-screen {
+  background: transparent;
+  border-radius: var(--v110-radius-sm);
+}
+
+[data-v110="mobile-diff"] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-sm);
+  background: var(--background-stronger);
+}
+
+[data-v110="mobile-diff"] [class*="bg-surface"] {
+  background: var(--background-base);
+}
+
+[data-v110="mobile-diff"] button:disabled {
+  opacity: 0.4;
+}
+
+/* A6 Design MVP chrome — layers panel + vector toolbar + canvas.
+ * The v110 contract puts the layers panel on the right rail at desktop,
+ * collapses to a sheet at overlay. Vector tools live in a single row
+ * above the canvas. Motion stays on the layout curve. */
+[data-v110="design-layers-panel"] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  background: var(--background-stronger);
+  transition: border-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-layers-panel"]:focus-within {
+  border-color: var(--border-focus);
+}
+
+[data-v110="design-layers-panel"] [data-design-layer-id] {
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-layers-panel"] [data-design-layer-id]:hover {
+  background: var(--background-base);
+}
+
+[data-v110="design-layers-panel"] [data-design-layer-action] {
+  min-width: var(--v110-target);
+  min-height: var(--v110-target);
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-vector-toolbar"] {
+  border-bottom: 1px solid var(--border-base);
+  background: var(--background-stronger);
+  border-radius: var(--v110-radius-sm) var(--v110-radius-sm) 0 0;
+}
+
+[data-v110="design-vector-toolbar"] [data-design-vector-tool] {
+  min-width: var(--v110-target);
+  min-height: var(--v110-target);
+  border-radius: var(--v110-radius-sm);
+  transition: background-color var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-vector-toolbar"] [data-design-vector-tool][aria-pressed="true"] {
+  background: var(--background-base);
+  color: var(--text-strong);
+}
+
+[data-v110="design-vector-canvas"] {
+  border: 1px solid var(--border-base);
+  border-radius: var(--v110-radius-md);
+  background: var(--background-base);
+}
+
+[data-v110="design-vector-canvas"] [data-v110="design-bezier"] {
+  stroke: currentColor;
+  transition: stroke var(--v110-fast) var(--v110-ease);
+}
+
+[data-v110="design-vector-canvas"] [data-v110="design-selection-handles"] {
+  color: var(--border-focus);
+}
+
+/* Mobile: layers panel + vector canvas stack vertically. */
+@media (max-width: 599px) and (orientation: portrait) {
+  [data-v110="design-layers-panel"] {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  [data-v110="design-vector-toolbar"] {
+    border-radius: 0;
+  }
+  [data-v110="design-vector-canvas"] {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+/* Memory panel v110 hover preview styling — the title attribute is
+ * native browser tooltip, but the link buttons gain a subtle hover
+ * outline that hints there is more information on hover. */
+[data-memory-note-pane] a[title],
+[data-memory-links] button[title],
+[data-memory-vault] button[title] {
+  cursor: help;
+}
+
+[data-memory-links] button[title]:hover,
+[data-memory-vault] button[title]:hover {
+  text-decoration: underline dotted var(--text-weak);
+  text-underline-offset: 3px;
+}

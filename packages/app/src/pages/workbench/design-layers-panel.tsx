@@ -1,15 +1,14 @@
 /* SPDX-License-Identifier: MIT */
 
-import { For, type JSX, createSignal } from "solid-js"
+import { For, type JSX, createSignal, onCleanup } from "solid-js"
 import { applyLayers, defaultLayers, type Layer, type LayerChange } from "./design-layers-model"
 
 /**
  * A6-D02 Layers panel MVP — v110 surface.
  *
  * Renders the four canonical layers (background / structure / content /
- * annotations) with rename, visibility, lock, and up/down reorder. The
- * contract calls for drag-reorder too; that ships behind the buttons here
- * while a full pointer-based DnD wiring lives with the canvas runtime.
+ * annotations) with rename, visibility, lock, up/down reorder, and
+ * pointer-based drag-reorder (locked layers are not draggable).
  */
 export function DesignLayersPanel(props: {
   layers: readonly Layer[]
@@ -17,6 +16,8 @@ export function DesignLayersPanel(props: {
 }): JSX.Element {
   const [editingId, setEditingId] = createSignal<string>()
   const [draftName, setDraftName] = createSignal("")
+  const [draggingId, setDraggingId] = createSignal<string>()
+  const [dropIndex, setDropIndex] = createSignal<number | undefined>()
   const startEdit = (layer: Layer): void => {
     setEditingId(layer.id)
     setDraftName(layer.name)
@@ -31,6 +32,59 @@ export function DesignLayersPanel(props: {
     if (index < 0) return
     props.onChange({ kind: "reorder", id, toIndex: index + delta })
   }
+
+  // Pointer-based DnD. We compute the drop target by counting how many
+  // rows the pointer has crossed (each row contributes its measured height
+  // to the index). The contract forbids dragging a locked layer, mirroring
+  // Figma/Sketch behaviour.
+  const startDrag = (event: PointerEvent, layer: Layer): void => {
+    if (layer.locked) return
+    setDraggingId(layer.id)
+    setDropIndex(props.layers.findIndex((row) => row.id === layer.id))
+    const target = event.currentTarget as HTMLElement | null
+    target?.setPointerCapture?.(event.pointerId)
+  }
+  const onPointerMove = (event: PointerEvent): void => {
+    const id = draggingId()
+    if (!id) return
+    const list = event.currentTarget instanceof Element ? event.currentTarget : null
+    const rows = (list ?? document).querySelectorAll<HTMLLIElement>("[data-design-layer-id]")
+    const pointerY = event.clientY
+    let target: number | undefined
+    for (let i = 0; i < rows.length; i += 1) {
+      const rect = rows[i].getBoundingClientRect()
+      const midpoint = rect.top + rect.height / 2
+      if (pointerY < midpoint) {
+        target = i
+        break
+      }
+      target = i + 1
+    }
+    setDropIndex(target)
+  }
+  const endDrag = (event: PointerEvent): void => {
+    const id = draggingId()
+    const target = dropIndex()
+    if (id && target !== undefined) {
+      const currentIndex = props.layers.findIndex((layer) => layer.id === id)
+      if (currentIndex >= 0 && currentIndex !== target) {
+        const clamped = Math.max(0, Math.min(target, props.layers.length - 1))
+        if (clamped !== currentIndex) props.onChange({ kind: "reorder", id, toIndex: clamped })
+      }
+    }
+    setDraggingId(undefined)
+    setDropIndex(undefined)
+    const node = event.currentTarget as HTMLElement | null
+    node?.releasePointerCapture?.(event.pointerId)
+  }
+
+  if (typeof window !== "undefined") {
+    onCleanup(() => {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", endDrag)
+    })
+  }
+
   return (
     <aside
       class="flex w-full min-w-44 flex-col gap-1 border border-border-base bg-background-stronger p-2"
@@ -41,17 +95,34 @@ export function DesignLayersPanel(props: {
         <h2 class="text-12-medium">Layers</h2>
         <span class="text-10-regular text-text-weak">{props.layers.length}</span>
       </header>
-      <ol class="flex flex-col gap-1" data-design-layers-list>
+      <ol
+        class="flex flex-col gap-1"
+        data-design-layers-list
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+      >
         <For each={props.layers}>
           {(layer, index) => {
             const isEditing = (): boolean => editingId() === layer.id
+            const isDragging = (): boolean => draggingId() === layer.id
+            const isDropTarget = (): boolean => {
+              const target = dropIndex()
+              return target !== undefined && target === index() && draggingId() !== layer.id
+            }
             return (
               <li
-                class="flex items-center gap-1 rounded px-2 py-1 hover:bg-background-base"
-                classList={{ "bg-background-base": index() === 0 }}
+                class="flex items-center gap-1 rounded px-2 py-1 hover:bg-background-base motion-safe:transition-colors"
+                classList={{
+                  "bg-background-base": index() === 0,
+                  "opacity-60 cursor-grabbing": isDragging(),
+                  "cursor-grab": !layer.locked && !isDragging(),
+                  "cursor-not-allowed": layer.locked,
+                  "border-t-2 border-border-focus": isDropTarget(),
+                }}
                 data-design-layer-id={layer.id}
                 data-design-layer-visible={layer.visible}
                 data-design-layer-locked={layer.locked}
+                onPointerDown={(event) => startDrag(event, layer)}
               >
                 <button
                   type="button"

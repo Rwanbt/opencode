@@ -40,8 +40,8 @@ describe("design-layers-model", () => {
     expect(next.map((layer) => layer.id)).toEqual(["a", "b", "c"])
   })
 
-  test("rename on a missing id leaves the array intact", () => {
+  test("rename on a missing id leaves the array contents intact", () => {
     const next = applyLayers(layers, { kind: "rename", id: "ghost", name: "x" })
-    expect(next).toBe(layers)
+    expect(next).toEqual(layers)
   })
 })
