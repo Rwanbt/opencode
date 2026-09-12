@@ -1,14 +1,13 @@
 /* SPDX-License-Identifier: MIT */
 
-// A5-01/A5-02/A5-03/A5-04: the Work surface's hero status badge, its 6-tab
+// A5-01..A5-05: the Work surface's hero status badge, its full 6-tab
 // view-switcher (mirroring the v110 mockup's viewDefs), and the Team-backed
-// panels behind the Overview/Tasks/Board/Runs tabs already built (Timeline/
-// Activity land in a later PR, so their tabs don't render yet — a tab only
-// appears once it opens onto something real). No Team run exists in this
-// harness, so the honest assertion is the gated/empty copy — never a
-// fabricated percentage, task list, or next action — plus a regression guard
-// that the pre-existing operations grid (data-workbench-operation, count 11,
-// export) survived being relocated underneath the new panels unchanged.
+// panels behind every tab (Overview/Tasks/Board/Timeline/Activity/Runs). No
+// Team run exists in this harness, so the honest assertion is the
+// gated/empty copy — never a fabricated percentage, task list, event, or
+// next action — plus a regression guard that the pre-existing operations
+// grid (data-workbench-operation, count 11, export) survived being
+// relocated underneath the new panels unchanged.
 
 import { test, expect } from "../fixtures"
 import { dirPath } from "../utils"
@@ -24,13 +23,14 @@ test("work surface's view-switcher gates the real Team-backed panels, empty stat
 
   await expect(page.locator('[data-v110="work-active-runs"]')).toBeVisible()
 
-  // Only the shipped views render tabs — Timeline/Activity aren't in this
-  // list yet, per the incremental-shipping rule above.
+  // All six mockup views now render tabs.
   const tabs = page.locator('[data-work-view-tablist] [role="tab"]')
-  await expect(tabs).toHaveCount(4)
+  await expect(tabs).toHaveCount(6)
   await expect(page.locator('[data-work-view="overview"]')).toBeVisible()
   await expect(page.locator('[data-work-view="tasks"]')).toBeVisible()
   await expect(page.locator('[data-work-view="board"]')).toBeVisible()
+  await expect(page.locator('[data-work-view="timeline"]')).toBeVisible()
+  await expect(page.locator('[data-work-view="activity"]')).toBeVisible()
   await expect(page.locator('[data-work-view="runs"]')).toBeVisible()
 
   // Overview (default tab): Progression + Next safe action, honest empty state.
@@ -64,6 +64,24 @@ test("work surface's view-switcher gates the real Team-backed panels, empty stat
   // No "review" column: the mockup's Board has one, the real status enum
   // does not.
   await expect(page.locator('[data-v110="work-board-column"][data-status="review"]')).toHaveCount(0)
+
+  // Timeline tab: real event feed, honest empty state (no run means no events).
+  await page.locator('[data-work-view="timeline"]').click()
+  await expect(page.locator('[data-work-view="timeline"]')).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator('[data-v110="work-timeline-panel"]')).toBeVisible()
+  await expect(
+    page.locator('[data-v110="work-timeline-panel"]').getByText(/no events|aucun événement/i),
+  ).toBeVisible()
+
+  // Activity tab: the same event feed, with a real-kind filter (not the
+  // mockup's fictional edit/run/approval/artifact taxonomy).
+  await page.locator('[data-work-view="activity"]').click()
+  await expect(page.locator('[data-work-view="activity"]')).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator('[data-v110="work-activity-panel"]')).toBeVisible()
+  await expect(page.locator('[data-v110="work-activity-filter"]')).toBeVisible()
+  await expect(
+    page.locator('[data-v110="work-activity-panel"]').getByText(/no events|aucun événement/i),
+  ).toBeVisible()
 
   // Runs tab: the real Runs list + "Open Team" reaching the real Team dialog.
   await page.locator('[data-work-view="runs"]').click()
