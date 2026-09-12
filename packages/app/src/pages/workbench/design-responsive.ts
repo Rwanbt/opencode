@@ -5,23 +5,25 @@
 // No DOM reads, no signal access: every function takes a numeric
 // viewport width plus the persisted user preference and returns a
 // `ResponsiveLayout` describing what the split should render. The
-// caller (DesignSplit) is responsible for reading the actual viewport
+// caller (DesignSplit) is responsible for reading the actual viewport size
 // from the DOM and feeding it in. The model never reads `window`.
 //
 // The contract:
 //
-//   mobile  : width < MOBILE_BREAKPOINT     (one surface + switcher)
-//   tablet  : MOBILE_BREAKPOINT..DESKTOP_BREAKPOINT  (assistant + atelier, no third column)
-//   desktop : width >= DESKTOP_BREAKPOINT  (current split, resizable)
+//   mobile  : v110 overlay                 (one surface + switcher)
+//   tablet  : v110 compact/split           (assistant + atelier, no third column)
+//   desktop : v110 desktop-wide            (current split, resizable)
 //
 // The plan's §4 decisions 1-4 are encoded here:
-//   - Desktop >=1024 : assistant + atelier side by side, splitter resizable
-//   - Tablet 768-1023 : assistant + atelier, no third column
-//   - Mobile <768 : one surface visible, switcher persisted
+//   - Desktop-wide >=1200 : assistant + atelier side by side, splitter resizable
+//   - Desktop-compact / compact-landscape : assistant + atelier, no third column
+//   - Overlay portrait : one surface visible, switcher persisted
 //   - No minimum width can exceed the viewport
 
-export const MOBILE_BREAKPOINT = 768
-export const DESKTOP_BREAKPOINT = 1024
+import { TABLET, WIDE, classify } from "@/tokens/viewport"
+
+export const MOBILE_BREAKPOINT = TABLET
+export const DESKTOP_BREAKPOINT = WIDE
 
 export type ViewportKind = "mobile" | "tablet" | "desktop"
 
@@ -41,11 +43,11 @@ export type ResponsiveLayout = {
   resizable: boolean
 }
 
-export function classifyViewport(width: number): ViewportKind {
-  if (!Number.isFinite(width) || width < 0) return "desktop"
-  if (width < MOBILE_BREAKPOINT) return "mobile"
-  if (width < DESKTOP_BREAKPOINT) return "tablet"
-  return "desktop"
+export function classifyViewport(width: number, height: number): ViewportKind {
+  const viewport = classify(width, height)
+  if (viewport === "desktop-wide") return "desktop"
+  if (viewport === "desktop-compact" || viewport === "compact-landscape") return "tablet"
+  return "mobile"
 }
 
 const TABLET_CHAT_WIDTH = 280
@@ -58,8 +60,8 @@ const MIN_WORKSPACE_WIDTH = 200
  * preference; on smaller viewports the function downgrades it
  * gracefully instead of letting it overflow.
  */
-export function resolveLayout(viewport: number, persistedChatWidth: number): ResponsiveLayout {
-  const kind = classifyViewport(viewport)
+export function resolveLayout(viewport: number, height: number, persistedChatWidth: number): ResponsiveLayout {
+  const kind = classifyViewport(viewport, height)
   if (kind === "mobile") {
     return {
       kind,
@@ -100,7 +102,7 @@ export function resolveLayout(viewport: number, persistedChatWidth: number): Res
  * Used by the surface switcher to restore the user's last selection
  * without overwriting it on a resize that crossed a breakpoint.
  */
-export function pickMobileSurface(persisted: Surface | undefined, width: number): Surface {
-  if (classifyViewport(width) !== "mobile") return "assistant"
+export function pickMobileSurface(persisted: Surface | undefined, width: number, height: number): Surface {
+  if (classifyViewport(width, height) !== "mobile") return "assistant"
   return persisted ?? "assistant"
 }

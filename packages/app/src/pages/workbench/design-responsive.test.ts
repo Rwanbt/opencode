@@ -11,47 +11,46 @@ import {
 } from "./design-responsive"
 
 // V05 — the responsive model must give a total layout for every
-// breakpoint the plan names (320 / 375 / 767 / 768 / 1023 / 1024 /
-// 1280 / 1440), respect the persisted chat width on desktop, downgrade
+// breakpoint the v110 contract names, respect the persisted chat width on desktop, downgrade
 // gracefully on smaller viewports, and never let any minimum exceed
 // the viewport.
 describe("V05 — classifyViewport", () => {
-  test("320 / 375 / 767 are mobile", () => {
-    expect(classifyViewport(320)).toBe("mobile")
-    expect(classifyViewport(375)).toBe("mobile")
-    expect(classifyViewport(767)).toBe("mobile")
+  test("portrait overlay viewports use the one-surface switcher", () => {
+    expect(classifyViewport(320, 900)).toBe("mobile")
+    expect(classifyViewport(600, 900)).toBe("mobile")
+    expect(classifyViewport(768, 1024)).toBe("mobile")
   })
 
-  test("768 / 1023 are tablet", () => {
-    expect(classifyViewport(768)).toBe("tablet")
-    expect(classifyViewport(1023)).toBe("tablet")
+  test("desktop compact and compact landscape keep the non-resizable split", () => {
+    expect(classifyViewport(900, 700)).toBe("tablet")
+    expect(classifyViewport(1024, 768)).toBe("tablet")
+    expect(classifyViewport(844, 390)).toBe("tablet")
   })
 
-  test("1024 / 1280 / 1440 are desktop", () => {
-    expect(classifyViewport(1024)).toBe("desktop")
-    expect(classifyViewport(1280)).toBe("desktop")
-    expect(classifyViewport(1440)).toBe("desktop")
+  test("desktop-wide retains the resizable split", () => {
+    expect(classifyViewport(1200, 800)).toBe("desktop")
+    expect(classifyViewport(1440, 900)).toBe("desktop")
   })
 
-  test("non-finite or negative widths fall back to desktop (a safe default, not a crash)", () => {
-    expect(classifyViewport(NaN)).toBe("desktop")
-    expect(classifyViewport(-1)).toBe("desktop")
+  test("invalid dimensions fall back to desktop (a safe default, not a crash)", () => {
+    expect(classifyViewport(NaN, 900)).toBe("desktop")
+    expect(classifyViewport(-1, 900)).toBe("desktop")
   })
 
   test("breakpoints are at the documented values", () => {
-    // WHY: the plan names 768 and 1024 as the boundaries. If a refactor
+    // WHY: v110 names 600 and 1200 as the boundaries. If a refactor
     // ever changes them, the design contract changes — this test makes
     // the change a one-line edit in two places.
-    expect(MOBILE_BREAKPOINT).toBe(768)
-    expect(DESKTOP_BREAKPOINT).toBe(1024)
+    expect(MOBILE_BREAKPOINT).toBe(600)
+    expect(DESKTOP_BREAKPOINT).toBe(1200)
   })
 })
 
 describe("V05 — resolveLayout never overflows the viewport", () => {
-  const widths = [320, 375, 767, 768, 1023, 1024, 1280, 1440] as const
-  for (const width of widths) {
-    test(`width=${width}: chatWidth + workspaceWidth + handle <= viewport`, () => {
-      const layout = resolveLayout(width, 460)
+  const cases = [[320, 900], [600, 900], [768, 1024], [900, 700], [1024, 768], [844, 390], [1200, 800], [1440, 900]] as const
+  for (const [width, height] of cases) {
+    test(`viewport=${width}x${height}: chatWidth + workspaceWidth + handle <= width`, () => {
+      const layout = resolveLayout(width, height, 460)
       const handle = layout.kind === "desktop" ? 8 : 0
       const total = layout.chatWidth + layout.workspaceWidth + handle
       // Mobile collapses to one full-width surface; the others
@@ -65,7 +64,7 @@ describe("V05 — resolveLayout never overflows the viewport", () => {
   }
 
   test("mobile: switcher is on, surface is assistant, no chat width", () => {
-    const layout = resolveLayout(375, 460)
+    const layout = resolveLayout(375, 844, 460)
     expect(layout.switcher).toBe(true)
     expect(layout.resizable).toBe(false)
     expect(layout.chatWidth).toBe(0)
@@ -73,7 +72,7 @@ describe("V05 — resolveLayout never overflows the viewport", () => {
   })
 
   test("tablet: no switcher, no resize, compact chat (<= 280)", () => {
-    const layout = resolveLayout(900, 460)
+    const layout = resolveLayout(900, 700, 460)
     expect(layout.switcher).toBe(false)
     expect(layout.resizable).toBe(false)
     expect(layout.chatWidth).toBeLessThanOrEqual(280)
@@ -81,7 +80,7 @@ describe("V05 — resolveLayout never overflows the viewport", () => {
   })
 
   test("desktop: switcher off, resize on, chat respects persisted preference", () => {
-    const layout = resolveLayout(1440, 460)
+    const layout = resolveLayout(1440, 900, 460)
     expect(layout.switcher).toBe(false)
     expect(layout.resizable).toBe(true)
     expect(layout.chatWidth).toBe(460)
@@ -91,7 +90,7 @@ describe("V05 — resolveLayout never overflows the viewport", () => {
     // The plan's §4 decision 4: no minimum can exceed the viewport.
     // A user who picked 600px chat on a 1280 monitor and resizes to
     // 600 should get the maximum the viewport allows, not the raw 600.
-    const layout = resolveLayout(600, 460)
+    const layout = resolveLayout(600, 900, 460)
     expect(layout.chatWidth).toBeLessThanOrEqual(600 - 200 - 8)
   })
 })
@@ -101,14 +100,14 @@ describe("V05 — pickMobileSurface restores the user's choice", () => {
   const assistant: Surface = "assistant"
 
   test("a mobile viewport returns the persisted surface, or assistant by default", () => {
-    expect(pickMobileSurface(undefined, 375)).toBe("assistant")
-    expect(pickMobileSurface(assistant, 375)).toBe("assistant")
-    expect(pickMobileSurface(atelier, 375)).toBe("atelier")
+    expect(pickMobileSurface(undefined, 375, 844)).toBe("assistant")
+    expect(pickMobileSurface(assistant, 375, 844)).toBe("assistant")
+    expect(pickMobileSurface(atelier, 375, 844)).toBe("atelier")
   })
 
   test("a non-mobile viewport always returns assistant (the split is the only surface)", () => {
-    expect(pickMobileSurface(atelier, 1024)).toBe("assistant")
-    expect(pickMobileSurface(atelier, 1440)).toBe("assistant")
-    expect(pickMobileSurface(atelier, 900)).toBe("assistant")
+    expect(pickMobileSurface(atelier, 1024, 768)).toBe("assistant")
+    expect(pickMobileSurface(atelier, 1440, 900)).toBe("assistant")
+    expect(pickMobileSurface(atelier, 900, 700)).toBe("assistant")
   })
 })
